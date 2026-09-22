@@ -86,6 +86,9 @@ let currentUser = null;
 let selectedUnitIndex = 0;
 let currentEditorStep = 0;
 let toastTimer;
+let historyItems = [];
+let historyPage = 1;
+const HISTORY_PAGE_SIZE = 6;
 
 const editorSteps = ['Campo', 'Produção', 'Apontamentos e Mudanças', 'Precipitação'];
 
@@ -312,10 +315,16 @@ function renderUnitSelection() {
   const selector = document.querySelector('#unit-selector');
   if (selector) selector.innerHTML = units.map((unit, index) => unitSelectorButton(unit, index)).join('');
 
+  const unit = units[selectedUnitIndex];
   const previewLabel = document.querySelector('#preview-unit-label');
   if (previewLabel) {
-    const unit = units[selectedUnitIndex];
     previewLabel.textContent = `Exibindo ${unit.code} — ${unit.name}`;
+  }
+
+  const fillButton = document.querySelector('#open-data-modal');
+  if (fillButton) {
+    fillButton.textContent = `Preencher ${unit.code}`;
+    fillButton.setAttribute('aria-label', `Preencher informações da unidade ${unit.code} — ${unit.name}`);
   }
 }
 
@@ -643,22 +652,56 @@ function historyItemHtml(item) {
     </article>`;
 }
 
-async function loadHistory() {
+function renderHistoryPage() {
   const list = document.querySelector('#history-list');
+  const pagination = document.querySelector('#history-pagination');
+  const pageInfo = document.querySelector('#history-page-info');
+  const previousButton = document.querySelector('#history-page-prev');
+  const nextButton = document.querySelector('#history-page-next');
+  if (!list || !pagination || !pageInfo || !previousButton || !nextButton) return;
+
+  const totalItems = historyItems.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / HISTORY_PAGE_SIZE));
+  historyPage = Math.min(Math.max(historyPage, 1), totalPages);
+
+  if (!totalItems) {
+    list.innerHTML = '<div class="history-empty">Nenhuma alteração registrada.</div>';
+    pagination.hidden = true;
+    return;
+  }
+
+  const start = (historyPage - 1) * HISTORY_PAGE_SIZE;
+  const pageItems = historyItems.slice(start, start + HISTORY_PAGE_SIZE);
+  list.innerHTML = pageItems.map(historyItemHtml).join('');
+
+  const firstItem = start + 1;
+  const lastItem = Math.min(start + HISTORY_PAGE_SIZE, totalItems);
+  pageInfo.textContent = `${firstItem}–${lastItem} de ${totalItems} · Página ${historyPage} de ${totalPages}`;
+  previousButton.disabled = historyPage <= 1;
+  nextButton.disabled = historyPage >= totalPages;
+  pagination.hidden = totalPages <= 1;
+}
+
+async function loadHistory({ resetPage = true } = {}) {
+  const list = document.querySelector('#history-list');
+  const pagination = document.querySelector('#history-pagination');
   if (!list) return;
   const unit = document.querySelector('#history-unit-filter')?.value || '';
+  if (resetPage) historyPage = 1;
   list.innerHTML = '<div class="history-loading">Carregando histórico...</div>';
+  if (pagination) pagination.hidden = true;
+
   try {
     const query = new URLSearchParams({ limit: '150' });
     if (unit) query.set('unit', unit);
     const data = await apiRequest(`/api/history?${query.toString()}`);
-    const history = Array.isArray(data.history) ? data.history : [];
-    list.innerHTML = history.length
-      ? history.map(historyItemHtml).join('')
-      : '<div class="history-empty">Nenhuma alteração registrada.</div>';
+    historyItems = Array.isArray(data.history) ? data.history : [];
+    renderHistoryPage();
   } catch (error) {
     console.error(error);
+    historyItems = [];
     list.innerHTML = '<div class="history-empty">Não foi possível carregar o histórico.</div>';
+    if (pagination) pagination.hidden = true;
   }
 }
 
@@ -682,6 +725,40 @@ async function createManualBackup() {
 }
 
 
+
+function normalizeUserSearch(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function filterUsersList() {
+  const input = document.querySelector('#users-search');
+  const list = document.querySelector('#users-list');
+  const count = document.querySelector('#users-search-count');
+  const empty = document.querySelector('#users-search-empty');
+  if (!list) return;
+
+  const items = Array.from(list.querySelectorAll('.user-list-item'));
+  const term = normalizeUserSearch(input?.value);
+  let visible = 0;
+
+  items.forEach(item => {
+    const matches = !term || normalizeUserSearch(item.textContent).includes(term);
+    item.hidden = !matches;
+    if (matches) visible += 1;
+  });
+
+  if (count) {
+    if (!items.length) count.textContent = '';
+    else if (term) count.textContent = `${visible} de ${items.length} ${items.length === 1 ? 'usuário' : 'usuários'}`;
+    else count.textContent = `${items.length} ${items.length === 1 ? 'usuário' : 'usuários'}`;
+  }
+
+  if (empty) empty.hidden = !term || visible > 0 || items.length === 0;
+}
 
 function userItemHtml(user) {
   const isCurrent = Number(user.id) === Number(currentUser?.id);
@@ -720,15 +797,22 @@ async function loadUsers() {
     return;
   }
   list.innerHTML = '<div class="history-loading">Carregando usuários...</div>';
+  const count = document.querySelector('#users-search-count');
+  const empty = document.querySelector('#users-search-empty');
+  if (count) count.textContent = '';
+  if (empty) empty.hidden = true;
   try {
     const data = await apiRequest('/api/users');
     const usersList = Array.isArray(data.users) ? data.users : [];
     list.innerHTML = usersList.length
       ? usersList.map(userItemHtml).join('')
       : '<div class="history-empty">Nenhum usuário cadastrado.</div>';
+    filterUsersList();
   } catch (error) {
     console.error(error);
     list.innerHTML = `<div class="history-empty">${escapeHtml(error.message || 'Não foi possível carregar os usuários.')}</div>`;
+    const count = document.querySelector('#users-search-count');
+    if (count) count.textContent = '';
   }
 }
 
@@ -737,6 +821,8 @@ async function openUsersModal() {
     showToast('Acesso exclusivo do Administrador.');
     return;
   }
+  const searchInput = document.querySelector('#users-search');
+  if (searchInput) searchInput.value = '';
   openModal('users-modal');
   await loadUsers();
 }
@@ -1488,9 +1574,21 @@ function setupEvents() {
   document.querySelector('#save-jpg').addEventListener('click', saveJpgReport);
   document.querySelector('#open-history')?.addEventListener('click', openHistoryModal);
   document.querySelector('#open-users')?.addEventListener('click', openUsersModal);
-  document.querySelector('#history-unit-filter')?.addEventListener('change', loadHistory);
+  document.querySelector('#history-unit-filter')?.addEventListener('change', () => loadHistory({ resetPage: true }));
+  document.querySelector('#history-page-prev')?.addEventListener('click', () => {
+    if (historyPage <= 1) return;
+    historyPage -= 1;
+    renderHistoryPage();
+  });
+  document.querySelector('#history-page-next')?.addEventListener('click', () => {
+    const totalPages = Math.max(1, Math.ceil(historyItems.length / HISTORY_PAGE_SIZE));
+    if (historyPage >= totalPages) return;
+    historyPage += 1;
+    renderHistoryPage();
+  });
   document.querySelector('#create-backup')?.addEventListener('click', createManualBackup);
   document.querySelector('#quick-user-form')?.addEventListener('submit', createQuickUser);
+  document.querySelector('#users-search')?.addEventListener('input', filterUsersList);
   document.querySelector('#users-list')?.addEventListener('click', event => {
     const button = event.target.closest('[data-user-action]');
     if (!button) return;
@@ -1599,12 +1697,6 @@ function setupEvents() {
 
   document.querySelectorAll('[data-close-modal]').forEach(button => {
     button.addEventListener('click', () => closeModal(button.dataset.closeModal));
-  });
-
-  document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
-    backdrop.addEventListener('mousedown', event => {
-      if (event.target === backdrop) closeModal(backdrop.id);
-    });
   });
 
   document.addEventListener('keydown', event => {

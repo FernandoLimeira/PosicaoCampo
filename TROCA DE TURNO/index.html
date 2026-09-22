@@ -4,11 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#0b7a36" />
-  <meta name="app-build" content="20260922-notes-vertical-v10" />
+  <meta name="app-build" content="20260922-modal-safe-v14" />
   <title>Posição de Campo</title>
-  <link rel="stylesheet" href="/css/style.css?v=20260922-notes-vertical-v10" />
+  <link rel="stylesheet" href="/css/style.css?v=20260922-modal-safe-v14" />
 </head>
-<body data-app-build="20260922-notes-vertical-v10">
+<body data-app-build="20260922-modal-safe-v14">
   <main id="dashboard" class="dashboard-shell">
     <nav class="app-navbar" aria-label="Navegação principal">
       <div class="nav-brand">
@@ -27,7 +27,6 @@
       </div>
 
       <div class="nav-actions">
-        <button id="open-data-modal" class="nav-link" type="button">Preencher</button>
         <button id="save-jpg" class="nav-link" type="button">Gerar mensagem JPG</button>
         <button id="open-history" class="nav-link" type="button">Histórico</button>
         <button id="open-users" class="nav-link" type="button" hidden>Usuários</button>
@@ -40,12 +39,15 @@
 
     <div class="app-content">
       <section class="dashboard-preview-heading">
-      <div>
-        <p>VISUALIZAÇÃO</p>
-        <h2>Painel consolidado</h2>
-      </div>
-      <span id="preview-unit-label">Exibindo a unidade selecionada</span>
-    </section>
+        <div class="dashboard-heading-copy">
+          <p>VISUALIZAÇÃO</p>
+          <h2>Painel consolidado</h2>
+        </div>
+        <div class="dashboard-heading-actions">
+          <span id="preview-unit-label">Exibindo a unidade selecionada</span>
+          <button id="open-data-modal" class="dashboard-fill-button" type="button">Preencher</button>
+        </div>
+      </section>
 
       <section id="units-grid" class="units-grid" aria-live="polite"></section>
 
@@ -205,6 +207,11 @@
       </div>
       <div class="history-content">
         <div id="history-list" class="history-list" aria-live="polite"></div>
+        <nav id="history-pagination" class="history-pagination" aria-label="Paginação do histórico" hidden>
+          <button id="history-page-prev" class="history-page-button" type="button">Anterior</button>
+          <span id="history-page-info" class="history-page-info">Página 1 de 1</span>
+          <button id="history-page-next" class="history-page-button" type="button">Próxima</button>
+        </nav>
       </div>
       <footer class="modal-footer">
         <div class="wizard-footer-info">
@@ -240,7 +247,17 @@
           </label>
           <button class="modal-button save" type="submit">Criar conta</button>
         </form>
+
+        <div class="users-search-bar">
+          <label class="users-search-field" for="users-search">
+            <span>Buscar usuário</span>
+            <input id="users-search" type="search" autocomplete="off" placeholder="Digite o nome do usuário" />
+          </label>
+          <span id="users-search-count" class="users-search-count" aria-live="polite"></span>
+        </div>
+
         <div id="users-list" class="users-list" aria-live="polite"></div>
+        <div id="users-search-empty" class="users-search-empty" hidden>Nenhum usuário encontrado.</div>
       </div>
       <footer class="modal-footer">
         <div class="wizard-footer-info">
@@ -256,6 +273,6 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="/js/app.js?v=20260922-notes-vertical-v10"></script>
+  <script src="/js/app.js?v=20260922-modal-safe-v14"></script>
 </body>
 </html>
