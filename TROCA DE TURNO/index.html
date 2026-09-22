@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#0b7a36" />
   <title>Posição de Campo</title>
-  <link rel="stylesheet" href="css/style.css?v=20260922-hardening-v1" />
+  <link rel="stylesheet" href="css/style.css?v=20260922-sidebar-clean" />
 </head>
 <body>
   <main id="dashboard" class="dashboard-shell">
@@ -37,25 +37,8 @@
       </div>
     </nav>
 
-    <div id="connection-status" class="connection-status" role="alert" aria-live="assertive">
-      Verificando conexão com o servidor…
-    </div>
-
-    <header class="hero">
-      <div class="hero-content">
-        <p class="eyebrow">CONTROLE OPERACIONAL</p>
-        <h1>Posição de campo <span>atualizada</span></h1>
-        <p class="hero-subtitle">Segurança e qualidade em nossas operações.</p>
-
-        <div class="legend" aria-label="Legenda de status">
-          <div><i class="dot green"></i> Em atividade</div>
-          <div><i class="dot yellow"></i> Solo úmido ou mudança</div>
-          <div><i class="dot red"></i> Todas as frentes em solo úmido</div>
-        </div>
-      </div>
-    </header>
-
-    <section class="dashboard-preview-heading">
+    <div class="app-content">
+      <section class="dashboard-preview-heading">
       <div>
         <p>VISUALIZAÇÃO</p>
         <h2>Painel consolidado</h2>
@@ -63,12 +46,13 @@
       <span id="preview-unit-label">Exibindo a unidade selecionada</span>
     </section>
 
-    <section id="units-grid" class="units-grid" aria-live="polite"></section>
+      <section id="units-grid" class="units-grid" aria-live="polite"></section>
 
-    <footer class="footer">
-      <span>COA · COCAL · SAFRA 2026</span>
-      <strong>Segurança · Qualidade · Pessoas · Resultados</strong>
-    </footer>
+      <footer class="footer">
+        <span>COA · COCAL · SAFRA 2026</span>
+        <strong>Segurança · Qualidade · Pessoas · Resultados</strong>
+      </footer>
+    </div>
   </main>
 
   <!-- Layout exclusivo para impressão/PDF. No navegador ele permanece oculto. -->
@@ -251,7 +235,7 @@
           </label>
           <label class="field">
             <span>Senha</span>
-            <input id="quick-user-password" type="password" minlength="8" maxlength="256" required placeholder="Senha (mín. 8 caracteres)" />
+            <input id="quick-user-password" type="password" required placeholder="Senha" />
           </label>
           <button class="modal-button save" type="submit">Criar conta</button>
         </form>
@@ -271,6 +255,6 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="js/app.js?v=20260922-hardening-v1"></script>
+  <script src="js/app.js?v=20260916-admin-observacao-completa-v1"></script>
 </body>
 </html>
