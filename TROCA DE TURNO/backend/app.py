@@ -177,7 +177,7 @@ def _file(start_response, path: Path):
     mime, _ = mimetypes.guess_type(str(path))
     data = path.read_bytes()
     content_type = f"{mime}; charset=utf-8" if (mime or "").startswith("text/") else (mime or "application/octet-stream")
-    cache_control = "no-store" if path.suffix in {".html", ".js"} else "public, max-age=3600"
+    cache_control = "no-store" if path.suffix in {".html", ".css", ".js"} else "public, max-age=3600"
     return _respond(
         start_response,
         HTTPStatus.OK,

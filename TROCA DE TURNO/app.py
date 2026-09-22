@@ -34,67 +34,49 @@ PUBLIC_STATIC_FILES = {
 }
 LOGIN_WINDOW_SECONDS = 5 * 60
 LOGIN_MAX_FAILURES = 10
-LOGIN_MAX_FAILURES_PER_IP = 30
 LOGIN_TRACKED_KEYS_MAX = 5000
 _login_failures = {}
-_login_ip_failures = {}
 _login_lock = threading.Lock()
 
 
-def _client_ip(environ):
-    return environ.get("REMOTE_ADDR", "unknown")
-
-
 def _client_key(environ, username=""):
-    return (_client_ip(environ), username.strip().casefold())
-
-
-def _prune_failure_map(store, now, max_failures):
-    stale_keys = []
-    for key, stamps in store.items():
-        fresh = [stamp for stamp in stamps if now - stamp < LOGIN_WINDOW_SECONDS]
-        if fresh:
-            store[key] = fresh[-max_failures:]
-        else:
-            stale_keys.append(key)
-    for key in stale_keys:
-        store.pop(key, None)
-
-    if len(store) > LOGIN_TRACKED_KEYS_MAX:
-        ordered = sorted(store, key=lambda key: store[key][-1])
-        for key in ordered[: len(store) - LOGIN_TRACKED_KEYS_MAX]:
-            store.pop(key, None)
+    return (environ.get("REMOTE_ADDR", "unknown"), username.strip().casefold())
 
 
 def _prune_login_failures(now):
-    _prune_failure_map(_login_failures, now, LOGIN_MAX_FAILURES)
-    _prune_failure_map(_login_ip_failures, now, LOGIN_MAX_FAILURES_PER_IP)
+    stale_keys = []
+    for key, stamps in _login_failures.items():
+        fresh = [stamp for stamp in stamps if now - stamp < LOGIN_WINDOW_SECONDS]
+        if fresh:
+            _login_failures[key] = fresh[-LOGIN_MAX_FAILURES:]
+        else:
+            stale_keys.append(key)
+    for key in stale_keys:
+        _login_failures.pop(key, None)
+
+    if len(_login_failures) > LOGIN_TRACKED_KEYS_MAX:
+        ordered = sorted(_login_failures, key=lambda key: _login_failures[key][-1])
+        for key in ordered[: len(_login_failures) - LOGIN_TRACKED_KEYS_MAX]:
+            _login_failures.pop(key, None)
 
 
 def _login_blocked(environ, username):
     key = _client_key(environ, username)
-    ip = _client_ip(environ)
     now = time.time()
     with _login_lock:
         _prune_login_failures(now)
-        user_attempts = _login_failures.get(key, [])
-        ip_attempts = _login_ip_failures.get(ip, [])
-        return len(user_attempts) >= LOGIN_MAX_FAILURES or len(ip_attempts) >= LOGIN_MAX_FAILURES_PER_IP
+        attempts = _login_failures.get(key, [])
+        return len(attempts) >= LOGIN_MAX_FAILURES
 
 
 def _record_login_failure(environ, username):
     key = _client_key(environ, username)
-    ip = _client_ip(environ)
     now = time.time()
     with _login_lock:
         _prune_login_failures(now)
-        user_attempts = list(_login_failures.get(key, []))
-        user_attempts.append(now)
-        _login_failures[key] = user_attempts[-LOGIN_MAX_FAILURES:]
-
-        ip_attempts = list(_login_ip_failures.get(ip, []))
-        ip_attempts.append(now)
-        _login_ip_failures[ip] = ip_attempts[-LOGIN_MAX_FAILURES_PER_IP:]
+        attempts = list(_login_failures.get(key, []))
+        attempts.append(now)
+        _login_failures[key] = attempts[-LOGIN_MAX_FAILURES:]
 
 
 def _clear_login_failures(environ, username):
@@ -195,7 +177,7 @@ def _file(start_response, path: Path):
     mime, _ = mimetypes.guess_type(str(path))
     data = path.read_bytes()
     content_type = f"{mime}; charset=utf-8" if (mime or "").startswith("text/") else (mime or "application/octet-stream")
-    cache_control = "no-store" if path.suffix in {".html", ".js"} else "public, max-age=3600"
+    cache_control = "no-store" if path.suffix in {".html", ".css", ".js"} else "public, max-age=3600"
     return _respond(
         start_response,
         HTTPStatus.OK,
@@ -204,23 +186,17 @@ def _file(start_response, path: Path):
     )
 
 
-def _request_is_https(environ):
-    return str(environ.get("wsgi.url_scheme", "http")).lower() == "https"
-
-
-def _auth_cookie(token, environ):
-    secure = "; Secure" if _request_is_https(environ) else ""
+def _auth_cookie(token):
     return (
         "Set-Cookie",
-        f"{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_TTL_SECONDS}{secure}",
+        f"{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_TTL_SECONDS}",
     )
 
 
-def _clear_auth_cookie(environ):
-    secure = "; Secure" if _request_is_https(environ) else ""
+def _clear_auth_cookie():
     return (
         "Set-Cookie",
-        f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0{secure}",
+        f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0",
     )
 
 
@@ -259,12 +235,12 @@ def application(environ, start_response):
             return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Nome ou senha inválidos."})
         _clear_login_failures(environ, username)
         token = create_session(logged["id"])
-        return _json(start_response, HTTPStatus.OK, {"user": logged}, [_auth_cookie(token, environ)])
+        return _json(start_response, HTTPStatus.OK, {"user": logged}, [_auth_cookie(token)])
 
     if path == "/api/auth/logout" and method == "POST":
         token = _cookies(environ).get(SESSION_COOKIE)
         delete_session(token)
-        return _json(start_response, HTTPStatus.OK, {"ok": True}, [_clear_auth_cookie(environ)])
+        return _json(start_response, HTTPStatus.OK, {"ok": True}, [_clear_auth_cookie()])
 
     if path == "/api/auth/me" and method == "GET":
         if not user:
@@ -349,8 +325,8 @@ def application(environ, start_response):
             expected_version = int(expected_version_raw) if expected_version_raw is not None else None
             if not isinstance(unit, dict) or str(unit.get("code", "")).upper() != code:
                 raise ValueError("Unidade inválida.")
-            result = save_unit(unit, position, user["id"], expected_version)
             create_backup()
+            result = save_unit(unit, position, user["id"], expected_version)
             return _json(start_response, HTTPStatus.OK, {"ok": True, **result})
         except UnitConflictError as exc:
             return _json(

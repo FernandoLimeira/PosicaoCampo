@@ -352,34 +352,49 @@ function unitCard(unit) {
 
   return `
     <article class="unit-card ${escapeHtml(unit.border)}">
-      <div class="unit-header">
-        <div class="unit-title">
-          <strong>${escapeHtml(unit.code)}</strong>
-          <span>${escapeHtml(unit.name)}</span>
-        </div>
-        <div class="unit-header-status">
-          <span class="unit-state">${escapeHtml(getUnitStateLabel(unit.border))}</span>
-          <small class="unit-updated">${escapeHtml(updateText)}</small>
-        </div>
-      </div>
+      <div class="unit-layout-grid">
+        <section class="dashboard-block unit-main-block">
+          <div class="unit-header">
+            <div class="unit-title">
+              <strong>${escapeHtml(unit.code)}</strong>
+              <span>${escapeHtml(unit.name)}</span>
+            </div>
+            <div class="unit-header-status">
+              <span class="unit-state">${escapeHtml(getUnitStateLabel(unit.border))}</span>
+              <small class="unit-updated">${escapeHtml(updateText)}</small>
+            </div>
+          </div>
 
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr><th>Frente</th><th>Setor</th><th>Status</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
+          <div class="table-wrap status-table-wrap">
+            <table class="data-table">
+              <thead><tr><th>Frente</th><th>Setor</th><th>Status</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
 
-      <div class="metrics-grid">${metrics}</div>
+          <div class="unit-metrics-strip" aria-label="Indicadores da unidade">
+            <div class="metrics-grid">${metrics}</div>
+          </div>
+        </section>
 
-      <div class="unit-bottom">
-        <div class="notes">
-          <h3>Observação</h3><p>${escapeHtml(unit.observation || '-')}</p>
-          <h3>Mudanças</h3><p>${escapeHtml(unit.changes || '-')}</p>
-        </div>
-        <div class="rain-box">
-          <div class="rain-title">Chuva turno / acum. (mm)</div>
-          ${rain}
+        <div class="unit-side-stack">
+          <section class="dashboard-block rain-turn-block">
+            <div class="compact-block-title">Chuva turno / acum. (mm)</div>
+            <div class="rain-box">${rain}</div>
+          </section>
+
+          <section class="dashboard-block notes-changes-block">
+            <div class="notes-changes-grid">
+              <div class="text-panel">
+                <h4>Observação</h4>
+                <p>${escapeHtml(unit.observation || '-')}</p>
+              </div>
+              <div class="text-panel">
+                <h4>Mudanças</h4>
+                <p>${escapeHtml(unit.changes || '-')}</p>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </article>

@@ -4,10 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#0b7a36" />
+  <meta name="app-build" content="20260922-notes-vertical-v10" />
   <title>Posição de Campo</title>
-  <link rel="stylesheet" href="css/style.css?v=20260922-sidebar-clean" />
+  <link rel="stylesheet" href="/css/style.css?v=20260922-notes-vertical-v10" />
 </head>
-<body>
+<body data-app-build="20260922-notes-vertical-v10">
   <main id="dashboard" class="dashboard-shell">
     <nav class="app-navbar" aria-label="Navegação principal">
       <div class="nav-brand">
@@ -57,25 +58,21 @@
 
   <!-- Layout exclusivo para impressão/PDF. No navegador ele permanece oculto. -->
   <div id="data-modal" class="modal-backdrop" hidden>
-    <section class="editor-modal" role="dialog" aria-modal="true" aria-labelledby="data-modal-title">
-      <header class="modal-header">
-        <div>
+    <section class="editor-modal operation-editor-modal" role="dialog" aria-modal="true" aria-labelledby="data-modal-title">
+      <header class="modal-header operation-modal-header">
+        <div class="operation-modal-heading">
           <span class="modal-kicker">Atualização operacional</span>
           <h2 id="data-modal-title">Preencher informações</h2>
+          <div class="editor-unit-summary">
+            <span>Unidade em edição</span>
+            <strong id="form-unit-name">PPT — PARAGUAÇU PAULISTA</strong>
+          </div>
         </div>
         <button class="modal-close" type="button" data-close-modal="data-modal" aria-label="Fechar">×</button>
       </header>
 
       <form id="operation-form" class="operation-form">
-        <div class="form-toolbar">
-          <input id="unit-select" name="unit" type="hidden" value="0" />
-
-          <div class="editor-unit-summary">
-            <span>Unidade selecionada</span>
-            <strong id="form-unit-name">PPT — PARAGUAÇU PAULISTA</strong>
-          </div>
-
-        </div>
+        <input id="unit-select" name="unit" type="hidden" value="0" />
 
         <nav class="form-stepper" aria-label="Etapas do preenchimento">
           <div class="form-step is-active" data-step-indicator="0" aria-current="step">
@@ -102,6 +99,7 @@
               <div>
                 <span>Etapa 1 de 4 · Campo</span>
                 <h3>Frentes, setores e status</h3>
+                <p class="section-description">Organize as frentes ativas e informe a situação atual de cada setor.</p>
               </div>
               <button id="add-front-row" class="section-action" type="button">Adicionar frente</button>
             </div>
@@ -126,6 +124,7 @@
               <div>
                 <span>Etapa 2 de 4 · Produção</span>
                 <h3>Indicadores do turno</h3>
+                <p class="section-description">Atualize apenas os números operacionais disponíveis neste turno.</p>
               </div>
             </div>
             <div id="metrics-form" class="metrics-form metrics-form-wizard"></div>
@@ -135,7 +134,8 @@
             <div class="section-heading">
               <div>
                 <span>Etapa 3 de 4 · Apontamentos e Mudanças</span>
-                <h3>Registre as informações operacionais</h3>
+                <h3>Observações e mudanças</h3>
+                <p class="section-description">Separe o que foi observado do que mudou ou está previsto mudar.</p>
               </div>
             </div>
 
@@ -156,7 +156,8 @@
             <div class="section-heading">
               <div>
                 <span>Etapa 4 de 4 · Precipitação</span>
-                <h3>Chuva turno / acumulado (mm)</h3>
+                <h3>Chuva do turno e acumulado</h3>
+                <p class="section-description">Informe os equipamentos e os volumes medidos em milímetros.</p>
               </div>
               <button id="add-rain-row" class="section-action" type="button">Adicionar equipamento</button>
             </div>
@@ -167,13 +168,13 @@
         <footer class="modal-footer wizard-footer">
           <div class="wizard-footer-info">
             <strong id="wizard-step-label">Etapa 1 de 4 · Campo</strong>
-            <p>Os dados ficam salvos no servidor.</p>
+            <p>Revise a etapa atual antes de avançar.</p>
           </div>
           <div class="modal-footer-actions wizard-actions">
             <button class="modal-button secondary" type="button" data-close-modal="data-modal">Cancelar</button>
             <button id="wizard-prev" class="modal-button secondary" type="button" hidden>Voltar</button>
-            <button id="wizard-next" class="modal-button save" type="button">Avançar</button>
-            <button id="wizard-save" class="modal-button save" type="submit" hidden>Salvar no painel</button>
+            <button id="wizard-next" class="modal-button save" type="button">Próxima etapa</button>
+            <button id="wizard-save" class="modal-button save" type="submit" hidden>Salvar atualização</button>
           </div>
         </footer>
       </form>
@@ -255,6 +256,6 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="js/app.js?v=20260916-admin-observacao-completa-v1"></script>
+  <script src="/js/app.js?v=20260922-notes-vertical-v10"></script>
 </body>
 </html>
