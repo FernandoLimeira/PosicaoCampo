@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#0b7a36" />
   <title>Posição de Campo</title>
-  <link rel="stylesheet" href="css/style.css?v=20260916-admin-v1" />
+  <link rel="stylesheet" href="css/style.css?v=20260922-hardening-v1" />
 </head>
 <body>
   <main id="dashboard" class="dashboard-shell">
@@ -36,6 +36,10 @@
         </div>
       </div>
     </nav>
+
+    <div id="connection-status" class="connection-status" role="alert" aria-live="assertive">
+      Verificando conexão com o servidor…
+    </div>
 
     <header class="hero">
       <div class="hero-content">
@@ -247,7 +251,7 @@
           </label>
           <label class="field">
             <span>Senha</span>
-            <input id="quick-user-password" type="password" required placeholder="Senha" />
+            <input id="quick-user-password" type="password" minlength="8" maxlength="256" required placeholder="Senha (mín. 8 caracteres)" />
           </label>
           <button class="modal-button save" type="submit">Criar conta</button>
         </form>
@@ -267,6 +271,6 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="js/app.js?v=20260916-admin-observacao-completa-v1"></script>
+  <script src="js/app.js?v=20260922-hardening-v1"></script>
 </body>
 </html>

@@ -8,8 +8,8 @@ PRIMEIRA CONFIGURAÇÃO NO WINDOWS
 1. Extraia a pasta completa do projeto.
 2. Execute criar-admin.bat no computador servidor.
 3. Informe o nome do Administrador e a senha.
-   - Não há exigência de complexidade.
-   - A senha não pode ficar vazia.
+   - A senha deve ter pelo menos 8 caracteres.
+   - Senhas existentes continuam válidas; a regra é aplicada na criação/redefinição.
 4. Execute iniciar-servidor.bat.
 5. Abra http://localhost:8000 no navegador.
 6. Entre com a conta de Administrador.
@@ -34,7 +34,7 @@ ADMINISTRADOR
 
 USUÁRIOS
 - Criados somente pelo Administrador.
-- A senha pode ser simples, mas deve estar preenchida.
+- Novas senhas e redefinições devem ter pelo menos 8 caracteres.
 - O Administrador pode:
   - criar conta;
   - ativar/desativar conta;
@@ -49,18 +49,18 @@ RECURSOS
 - Preenchimento das quatro unidades.
 - Histórico de cada salvamento com usuário, unidade, versão e horário.
 - Controle de edição concorrente para evitar sobrescrita silenciosa.
-- Backup automático diário em data/backups/.
+- Backup automático periódico (a cada 4 horas quando houver atividade) em data/backups/.
 - Backup manual exclusivo do Administrador.
 - Retenção automática de backups por 30 dias.
 - Servidor HTTP com threads para acessos simultâneos em rede local.
 - SQLite com WAL e busy_timeout.
-- Limite de tentativas de login.
+- Limite de tentativas de login por usuário e também por endereço IP.
 - Verificação de origem em operações de gravação.
 - Cabeçalhos básicos de segurança no navegador.
 
 BANCO DE DADOS
 - Principal: data/posicao_campo.db
-- Backups: data/backups/posicao_campo-AAAA-MM-DD.db
+- Backups: data/backups/posicao_campo-AAAA-MM-DD-HHMMSS.db
 - Migrações de role/is_active são aplicadas automaticamente em bancos existentes.
 - Contas antigas continuam como Usuário comum; execute criar-admin.bat para definir o Administrador.
 
@@ -96,6 +96,12 @@ ROTAS EXCLUSIVAS DO ADMINISTRADOR
 - PUT /api/users/{id}/password
 - POST /api/backup
 
+TESTES AUTOMATIZADOS
+Na pasta do projeto, execute:
+python -m unittest discover -s tests -v
+
+Os testes básicos cobrem senha mínima, conflito de edição concorrente e backup periódico com o estado atual do banco.
+
 REDE LOCAL
 O servidor escuta em 0.0.0.0:8000 por padrão.
 Em outro computador da mesma rede, use o IP do computador servidor, por exemplo:
@@ -105,3 +111,9 @@ O Firewall do Windows pode solicitar autorização na primeira execução.
 
 INTERNET
 Esta versão é destinada à rede local. Antes de expor na internet, configure HTTPS e um servidor/proxy apropriado.
+Quando a aplicação estiver realmente servida por HTTPS, o cookie de sessão passa a usar a marca Secure automaticamente.
+
+CACHE LOCAL
+- O navegador mantém uma cópia local somente como cache.
+- Se o servidor não puder ser confirmado, o painel exibe um aviso destacado de dados em cache e bloqueia preenchimento, geração do JPG e histórico.
+- Em banco novo, a inicialização usa somente os valores-padrão do sistema; dados antigos do localStorage não são enviados ao servidor.

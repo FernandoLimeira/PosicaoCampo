@@ -15,6 +15,8 @@ del /q "css\relatorio.css" 2>nul
 del /q "js\relatorio.js" 2>nul
 del /q "js\template-export-data.js" 2>nul
 del /q "assets\template-export.png" 2>nul
+del /q "download" 2>nul
+del /q "..\package-lock.json" 2>nul
 if exist "posicao-campo-v1-auditoria-correcoes" rmdir /s /q "posicao-campo-v1-auditoria-correcoes"
 
 echo Limpeza concluida. Os arquivos atuais do sistema foram preservados.
