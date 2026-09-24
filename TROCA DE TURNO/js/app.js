@@ -1504,6 +1504,19 @@ function drawUnitOnCanvas(ctx, unit, layout) {
   drawRainBox(ctx, unit, layout, geometry);
 }
 
+function removeReportHeaderLogo(ctx, template) {
+  // Reaproveita uma faixa limpa do próprio cabeçalho para cobrir somente o logo Cocal.
+  // A transição da borda esquerda é suavizada para não criar uma emenda visível.
+  ctx.drawImage(template, 520, 0, 244, 64, 780, 0, 244, 64);
+
+  ctx.save();
+  for (let offset = 0; offset < 30; offset += 1) {
+    ctx.globalAlpha = (offset + 1) / 30;
+    ctx.drawImage(template, 490 + offset, 0, 1, 64, 750 + offset, 0, 1, 64);
+  }
+  ctx.restore();
+}
+
 async function generateReportJpegBlob() {
   const canvas = document.createElement('canvas');
   canvas.width = 1024;
@@ -1513,6 +1526,7 @@ async function generateReportJpegBlob() {
 
   const template = await loadReportTemplateImage();
   ctx.drawImage(template, 0, 0, canvas.width, canvas.height);
+  removeReportHeaderLogo(ctx, template);
   if (typeof template.close === 'function') template.close();
 
   const { greeting, date } = getHeaderDataForExport(new Date());
