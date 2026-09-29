@@ -1,5 +1,6 @@
 import json
 import mimetypes
+import re
 import threading
 import time
 from http import HTTPStatus
@@ -7,6 +8,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .config import BASE_DIR, MAX_BODY_BYTES, SESSION_COOKIE, SESSION_TTL_SECONDS
+from .excel_reports import MAX_EXCEL_UPLOAD_BYTES, analyze_excel_report
 from .database import (
     UnitConflictError,
     authenticate_user,
@@ -124,6 +126,52 @@ def _session_user(environ):
 
 def _is_admin(user):
     return bool(user and user.get("role") == "admin" and user.get("is_active", True))
+
+
+def _multipart_file(environ, field_name="file"):
+    content_type = environ.get("CONTENT_TYPE", "")
+    if "multipart/form-data" not in content_type:
+        raise ValueError("Envie a planilha usando multipart/form-data.")
+
+    boundary_match = None
+    for part in content_type.split(";"):
+        part = part.strip()
+        if part.startswith("boundary="):
+            boundary_match = part.split("=", 1)[1].strip().strip('"')
+            break
+    if not boundary_match:
+        raise ValueError("Limite multipart inválido.")
+
+    raw_length = environ.get("CONTENT_LENGTH") or "0"
+    try:
+        length = int(raw_length)
+    except ValueError as exc:
+        raise ValueError("Tamanho de requisição inválido.") from exc
+    if length <= 0:
+        raise ValueError("Selecione uma planilha XLSX.")
+    if length > MAX_EXCEL_UPLOAD_BYTES + 256 * 1024:
+        raise ValueError("A planilha excede o limite de 10 MB.")
+
+    body = environ["wsgi.input"].read(length)
+    boundary = ("--" + boundary_match).encode("utf-8")
+    for chunk in body.split(boundary):
+        chunk = chunk.lstrip(b"\r\n")
+        if chunk.endswith(b"--\r\n"):
+            chunk = chunk[:-4]
+        elif chunk.endswith(b"--"):
+            chunk = chunk[:-2]
+        if not chunk or b"\r\n\r\n" not in chunk:
+            continue
+        header_bytes, content = chunk.split(b"\r\n\r\n", 1)
+        headers = header_bytes.decode("utf-8", errors="replace")
+        disposition = next((line for line in headers.split("\r\n") if line.lower().startswith("content-disposition:")), "")
+        name_match = re.search(r'name="([^"]+)"', disposition)
+        if not name_match or name_match.group(1) != field_name:
+            continue
+        filename_match = re.search(r'filename="([^"]*)"', disposition)
+        filename = filename_match.group(1) if filename_match else "planilha.xlsx"
+        return filename, content[:-2] if content.endswith(b"\r\n") else content
+    raise ValueError("Arquivo XLSX não encontrado na requisição.")
 
 
 def _json_body(environ):
@@ -336,6 +384,19 @@ def application(environ, start_response):
             )
         except (ValueError, TypeError) as exc:
             return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path == "/api/reports/excel/analyze" and method == "POST":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            filename, file_bytes = _multipart_file(environ)
+            report = analyze_excel_report(file_bytes, filename)
+            return _json(start_response, HTTPStatus.OK, {"report": report})
+        except ValueError as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+        except Exception as exc:
+            print(f"Erro ao processar relatório Excel: {exc}")
+            return _json(start_response, HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "Não foi possível processar a planilha."})
 
     if path == "/api/history" and method == "GET":
         if not user:

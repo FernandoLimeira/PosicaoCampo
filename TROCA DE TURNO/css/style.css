@@ -1481,3 +1481,308 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   .user-actions { width: 100%; justify-content: flex-start; }
   .user-password-form { width: 100%; grid-template-columns: 1fr; }
 }
+
+/* RELATÓRIOS CSV — ACONTECIMENTOS OPERACIONAIS */
+.app-view { display: none; }
+.app-view.is-active { display: block; }
+.app-view[hidden] { display: none !important; }
+.nav-link.is-active {
+  background: rgba(255, 255, 255, .13);
+  border-color: rgba(255, 255, 255, .2);
+  color: #fff;
+}
+.excel-report-page {
+  width: var(--content-max);
+  margin: 0 auto;
+  padding: 18px clamp(14px, 2vw, 26px) 28px;
+}
+.excel-page-header,
+.excel-upload-panel,
+.excel-filter-panel,
+.excel-browser-section {
+  border: 1px solid #dbe7df;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(23, 67, 43, .05);
+}
+.excel-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 22px;
+  margin-bottom: 14px;
+  padding: 18px 20px;
+  background: linear-gradient(135deg, #ffffff 0%, #f4faf6 100%);
+}
+.excel-page-header > div { min-width: 0; }
+.excel-page-kicker,
+.excel-section-heading span,
+.excel-detail-header > div > span,
+.excel-filter-heading span {
+  display: block;
+  margin-bottom: 4px;
+  color: #72847a;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.excel-page-header h1 {
+  margin: 0;
+  color: #173b29;
+  font-size: clamp(18px, 2vw, 28px);
+  line-height: 1.1;
+}
+.excel-page-header p,
+.excel-section-heading p,
+.excel-detail-header p {
+  margin: 7px 0 0;
+  color: #718078;
+  font-size: 9px;
+  line-height: 1.45;
+}
+.excel-page-back,
+.excel-filter-reset {
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid #cddbd2;
+  border-radius: 8px;
+  background: #fff;
+  color: #365344;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.excel-page-back:hover,
+.excel-filter-reset:hover { border-color: #91b39e; background: #f7fbf8; }
+.excel-upload-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(290px, .55fr);
+  gap: 20px;
+  padding: 16px 18px;
+}
+.excel-upload-copy { min-width: 0; }
+.excel-upload-copy > strong { color: #28483a; font-size: 11px; }
+.excel-upload-copy > p { margin: 5px 0 0; color: #74837b; font-size: 8px; line-height: 1.45; }
+.excel-shift-rules { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.excel-shift-rules span {
+  padding: 5px 8px;
+  border: 1px solid #dbe7df;
+  border-radius: 999px;
+  background: #f8fbf9;
+  color: #63746a;
+  font-size: 8px;
+}
+.excel-shift-rules b { color: var(--green-strong); }
+.excel-team-rule {
+  margin-top: 10px !important;
+  padding: 8px 10px;
+  border-left: 3px solid #d7b52b;
+  border-radius: 7px;
+  background: #fffaf0;
+}
+.excel-team-rule strong { color: #5f511e; }
+.excel-upload-form { display: grid; align-content: center; gap: 9px; }
+.excel-file-field { display: flex; flex-direction: column; gap: 7px; }
+.excel-file-field > span,
+.excel-filter-grid label > span {
+  color: #51675b;
+  font-size: 8px;
+  font-weight: 800;
+}
+.excel-file-field input,
+.excel-filter-grid select {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid #cad8cf;
+  border-radius: 8px;
+  background: #fff;
+  color: #29483a;
+  font: inherit;
+  font-size: 9px;
+  outline: none;
+}
+.excel-file-field input:focus,
+.excel-filter-grid select:focus { border-color: #0b7a36; box-shadow: 0 0 0 3px rgba(11, 122, 54, .08); }
+.excel-file-field small { color: #7e8b84; font-size: 8px; line-height: 1.35; }
+.excel-report-status { min-height: 18px; padding: 8px 2px 0; color: #6f7e76; font-size: 8px; }
+.excel-report-status.is-error { color: #b43a44; }
+.excel-report-status.is-success { color: #19743d; }
+.excel-report-results { margin-top: 12px; display: grid; gap: 12px; }
+.excel-report-results[hidden] { display: none !important; }
+.excel-report-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.excel-report-meta > div {
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid #e1e9e4;
+  border-radius: 10px;
+  background: #fbfdfc;
+}
+.excel-report-meta span { display: block; color: #849189; font-size: 7px; text-transform: uppercase; letter-spacing: .08em; }
+.excel-report-meta strong { display: block; margin-top: 3px; color: #2f4c3e; font-size: 9px; line-height: 1.35; overflow-wrap: anywhere; }
+.excel-filter-panel { padding: 12px 13px; }
+.excel-filter-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 9px; }
+.excel-filter-heading strong { display: block; color: #284638; font-size: 10px; }
+.excel-filter-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.excel-filter-grid label { display: grid; gap: 5px; min-width: 0; }
+.excel-kpis,
+.excel-detail-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.excel-detail-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.excel-kpi {
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid #e0e9e3;
+  border-left: 4px solid #7a8b82;
+  border-radius: 10px;
+  background: #fff;
+}
+.excel-kpi small { display: block; color: #7f8d85; font-size: 7px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; }
+.excel-kpi strong { display: block; margin-top: 4px; color: #183c29; font-size: 16px; line-height: 1; }
+.excel-kpi span { display: block; margin-top: 4px; color: #829088; font-size: 7px; line-height: 1.35; }
+.excel-kpi.is-positive { border-left-color: #2f9b58; }
+.excel-kpi.is-warning { border-left-color: #d8a400; }
+.excel-kpi.is-danger { border-left-color: #d84b58; }
+.excel-browser-section { padding: 14px; }
+.excel-section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 11px; }
+.excel-section-heading h3,
+.excel-detail-header h3 { margin: 0; color: #244234; font-size: 13px; }
+.excel-section-heading-actions { align-items: center; }
+.excel-browser-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.excel-browser-column { min-width: 0; border: 1px solid #e2ebe5; border-radius: 11px; overflow: hidden; background: #fbfdfc; }
+.excel-browser-title { display: flex; align-items: center; justify-content: space-between; padding: 9px 10px; border-bottom: 1px solid #e6ece8; background: #f4f8f5; }
+.excel-browser-title strong { color: #2d4b3c; font-size: 10px; }
+.excel-browser-title span { min-width: 22px; padding: 2px 6px; border-radius: 999px; background: #e4eee8; color: #496357; font-size: 8px; font-weight: 900; text-align: center; }
+.excel-entity-list { max-height: 430px; overflow-y: auto; }
+.excel-entity-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto 14px;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 0;
+  border-bottom: 1px solid #edf2ef;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.excel-entity-row:last-child { border-bottom: 0; }
+.excel-entity-row:hover { background: #f3faf5; }
+.excel-entity-icon { font-size: 16px; text-align: center; }
+.excel-entity-copy { min-width: 0; }
+.excel-entity-copy strong { display: block; color: #29483a; font-size: 9px; overflow-wrap: anywhere; }
+.excel-entity-copy small { display: block; margin-top: 3px; color: #7f8d85; font-size: 7px; }
+.excel-entity-metric { text-align: right; }
+.excel-entity-metric strong { display: block; color: #246b42; font-size: 10px; }
+.excel-entity-metric small { display: block; color: #87938d; font-size: 7px; }
+.excel-entity-chevron { color: #819087; font-size: 17px; }
+.excel-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 12px; border-bottom: 1px solid #e7ece9; }
+.excel-detail-header > div { min-width: 0; }
+.excel-detail-kpis { margin-top: 12px; }
+.excel-detail-section { margin-top: 14px; padding-top: 13px; border-top: 1px solid #e6ece8; }
+.excel-three-operator-comparison { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.excel-comparison-card {
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid #dfe8e2;
+  border-radius: 11px;
+  background: #fbfdfc;
+}
+.excel-comparison-card.is-best { border-color: #8ccba2; background: #f1faf4; }
+.excel-comparison-card.is-low { border-color: #e4b4b9; background: #fff7f7; }
+.excel-comparison-card.is-empty { opacity: .72; }
+.excel-comparison-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.excel-comparison-card-head span { color: #577063; font-size: 8px; font-weight: 900; text-transform: uppercase; }
+.excel-comparison-card-head b { color: #2c7549; font-size: 7px; }
+.excel-comparison-card.is-low .excel-comparison-card-head b { color: #a3444d; }
+.excel-comparison-card h4 { margin: 8px 0 0; color: #254536; font-size: 11px; }
+.excel-comparison-card p { margin: 3px 0 0; color: #7b8a82; font-size: 8px; }
+.excel-comparison-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+.excel-comparison-metrics span { padding: 7px; border-radius: 8px; background: #fff; border: 1px solid #e8eeea; }
+.excel-comparison-metrics small { display: block; color: #849188; font-size: 7px; }
+.excel-comparison-metrics strong { display: block; margin-top: 2px; color: #345443; font-size: 9px; }
+.excel-occurrence-list { display: grid; gap: 7px; }
+.excel-occurrence-item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid #e2e9e5;
+  border-left: 4px solid #85958c;
+  border-radius: 9px;
+  background: #fff;
+}
+.excel-occurrence-item.is-positive { border-left-color: #2f9b58; background: #f8fcf9; }
+.excel-occurrence-item.is-warning { border-left-color: #d8a400; background: #fffdf7; }
+.excel-occurrence-icon { font-size: 15px; line-height: 1.2; }
+.excel-occurrence-item p { margin: 0; color: #304e3f; font-size: 9px; line-height: 1.45; }
+.excel-occurrence-item small { display: block; margin-top: 3px; color: #7f8d85; font-size: 7px; line-height: 1.35; }
+.excel-empty-state { padding: 16px; color: #819087; font-size: 8px; text-align: center; }
+.excel-unclassified { padding: 10px 11px; border: 1px solid #eedda8; border-radius: 9px; background: #fffaf0; color: #7e6428; font-size: 8px; line-height: 1.45; }
+.excel-unclassified[hidden] { display: none !important; }
+
+@media (max-width: 1180px) {
+  .excel-filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .excel-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .excel-detail-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 980px) {
+  .excel-upload-panel { grid-template-columns: 1fr; }
+  .excel-report-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .excel-browser-grid { grid-template-columns: 1fr; }
+  .excel-three-operator-comparison { grid-template-columns: 1fr; }
+}
+@media (max-width: 680px) {
+  .excel-report-page { padding: 12px 10px 20px; }
+  .excel-page-header,
+  .excel-detail-header,
+  .excel-section-heading-actions,
+  .excel-filter-heading { flex-direction: column; }
+  .excel-page-back,
+  .excel-detail-header .excel-filter-reset,
+  .excel-section-heading-actions .modal-button,
+  .excel-filter-reset { width: 100%; }
+  .excel-upload-panel { padding: 13px; gap: 13px; }
+  .excel-report-meta,
+  .excel-kpis,
+  .excel-detail-kpis,
+  .excel-filter-grid { grid-template-columns: 1fr; }
+  .excel-entity-row { grid-template-columns: 26px minmax(0, 1fr) auto 12px; padding: 9px 8px; }
+}
+
+
+/* DETALHES DE PRODUTIVIDADE EM POPUP */
+.excel-productivity-modal {
+  width: min(1180px, 100%);
+  max-height: calc(100vh - 42px);
+}
+.excel-productivity-modal-header { flex: 0 0 auto; }
+.excel-productivity-modal-header > div { min-width: 0; }
+.excel-productivity-modal-header p {
+  margin: 7px 0 0;
+  color: #718078;
+  font-size: 9px;
+  line-height: 1.45;
+}
+.excel-productivity-modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 18px 18px;
+  background: #fbfdfc;
+}
+.excel-productivity-modal .excel-detail-kpis { margin-top: 0; }
+.excel-productivity-modal .excel-detail-section {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #e1e9e4;
+  border-radius: 12px;
+  background: #fff;
+}
+.excel-productivity-modal-footer { flex: 0 0 auto; }
+@media (max-width: 760px) {
+  .excel-productivity-modal { max-height: calc(100dvh - 20px); }
+  .excel-productivity-modal-body { padding: 12px; }
+}

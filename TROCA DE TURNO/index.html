@@ -4,11 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#0b7a36" />
-  <meta name="app-build" content="20260924-jpg-sem-logo-v15" />
+  <meta name="app-build" content="20260924-produtividade-popup-v19-3" />
   <title>Posição de Campo</title>
-  <link rel="stylesheet" href="/css/style.css?v=20260924-jpg-sem-logo-v15" />
+  <link rel="stylesheet" href="/css/style.css?v=20260924-produtividade-popup-v19-3" />
 </head>
-<body data-app-build="20260924-jpg-sem-logo-v15">
+<body data-app-build="20260924-produtividade-popup-v19-3">
   <main id="dashboard" class="dashboard-shell">
     <nav class="app-navbar" aria-label="Navegação principal">
       <div class="nav-brand">
@@ -27,8 +27,9 @@
       </div>
 
       <div class="nav-actions">
-        <button id="save-jpg" class="nav-link" type="button">Gerar mensagem JPG</button>
+        <button id="save-jpg" class="nav-link" type="button">Gerar imagem HD</button>
         <button id="open-history" class="nav-link" type="button">Histórico</button>
+        <button id="open-excel-reports" class="nav-link" type="button" data-app-view-target="excel">Relatórios</button>
         <button id="open-users" class="nav-link" type="button" hidden>Usuários</button>
         <div class="nav-user" aria-label="Usuário conectado">
           <span id="current-user">Usuário</span>
@@ -38,18 +39,98 @@
     </nav>
 
     <div class="app-content">
-      <section class="dashboard-preview-heading">
-        <div class="dashboard-heading-copy">
-          <p>VISUALIZAÇÃO</p>
-          <h2>Painel consolidado</h2>
-        </div>
-        <div class="dashboard-heading-actions">
-          <span id="preview-unit-label">Exibindo a unidade selecionada</span>
-          <button id="open-data-modal" class="dashboard-fill-button" type="button">Preencher</button>
-        </div>
-      </section>
+      <div id="dashboard-view" class="app-view is-active" aria-hidden="false">
+        <section class="dashboard-preview-heading">
+          <div class="dashboard-heading-copy">
+            <p>VISUALIZAÇÃO</p>
+            <h2>Painel consolidado</h2>
+          </div>
+          <div class="dashboard-heading-actions">
+            <span id="preview-unit-label">Exibindo a unidade selecionada</span>
+            <button id="open-data-modal" class="dashboard-fill-button" type="button">Preencher</button>
+          </div>
+        </section>
 
-      <section id="units-grid" class="units-grid" aria-live="polite"></section>
+        <section id="units-grid" class="units-grid" aria-live="polite"></section>
+      </div>
+
+      <section id="excel-report-view" class="app-view excel-report-page" aria-hidden="true" aria-labelledby="excel-report-title">
+        <header class="excel-page-header">
+          <div>
+            <span class="excel-page-kicker">Análise operacional</span>
+            <h1 id="excel-report-title">Acontecimentos de produtividade por frota e operador</h1>
+            <p>Selecione uma frota ou um operador para abrir o comparativo dos turnos A, B e C e a linha cronológica dos principais acontecimentos.</p>
+          </div>
+          <button id="excel-back-dashboard" class="excel-page-back" type="button" data-app-view-target="dashboard">Voltar ao painel</button>
+        </header>
+
+        <section class="excel-upload-panel">
+          <div class="excel-upload-copy">
+            <strong>Importar dados operacionais</strong>
+            <p>Selecione um arquivo CSV ou Excel. O processamento separa frente, frota, operador e turno, preservando o horário real de cada atividade.</p>
+            <div class="excel-shift-rules" aria-label="Regras dos turnos">
+              <span><b>Turno A</b> 00:00–07:20</span>
+              <span><b>Turno B</b> 07:20–15:40</span>
+              <span><b>Turno C</b> 15:40–00:00</span>
+            </div>
+            <p class="excel-team-rule"><strong>Equipe da frente:</strong> 2 dias ou mais na mesma frente e semana. Com apenas 1 dia, o operador aparece como apoio eventual.</p>
+          </div>
+          <form id="excel-report-form" class="excel-upload-form">
+            <label class="excel-file-field" for="excel-report-file">
+              <span>Arquivo CSV ou Excel</span>
+              <input id="excel-report-file" type="file" accept=".csv,.xlsx,.xlsm,text/csv,application/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" required />
+              <small id="excel-report-file-name">Nenhum arquivo selecionado</small>
+            </label>
+            <button id="excel-report-process" class="modal-button save" type="submit">Processar dados</button>
+          </form>
+        </section>
+
+        <div id="excel-report-status" class="excel-report-status" aria-live="polite"></div>
+
+        <section id="excel-report-results" class="excel-report-results" hidden>
+          <div class="excel-report-meta">
+            <div><span>Arquivo</span><strong id="excel-meta-file">-</strong></div>
+            <div><span>Período</span><strong id="excel-meta-period">-</strong></div>
+            <div><span>Unidade / Frente</span><strong id="excel-meta-scope">-</strong></div>
+            <div><span>Registros / Operadores / Frotas</span><strong id="excel-meta-counts">-</strong></div>
+          </div>
+
+          <section class="excel-filter-panel" aria-label="Filtros do relatório">
+            <div class="excel-filter-heading">
+              <div><span>Filtros</span><strong>Refine antes de abrir uma frota ou operador</strong></div>
+              <button id="excel-filter-reset" class="excel-filter-reset" type="button">Limpar filtros</button>
+            </div>
+            <div class="excel-filter-grid">
+              <label><span>Frente</span><select id="excel-filter-front"><option value="">Todas</option></select></label>
+              <label><span>Turno</span><select id="excel-filter-shift"><option value="">Todos</option><option value="A">Turno A</option><option value="B">Turno B</option><option value="C">Turno C</option></select></label>
+              <label><span>Operador</span><select id="excel-filter-operator"><option value="">Todos</option></select></label>
+              <label><span>Frota</span><select id="excel-filter-equipment"><option value="">Todas</option></select></label>
+              <label><span>Situação</span><select id="excel-filter-team"><option value="">Todos</option><option value="team">Equipe</option><option value="occasional">Apoio eventual</option></select></label>
+              <label><span>Data</span><select id="excel-filter-date"><option value="">Todas</option></select></label>
+            </div>
+          </section>
+
+          <div id="excel-kpis" class="excel-kpis"></div>
+
+          <section class="excel-browser-section">
+            <div class="excel-section-heading">
+              <div><span>Navegação do relatório</span><h3>Escolha o que deseja analisar</h3><p>Os detalhes e acontecimentos só aparecem depois do clique.</p></div>
+            </div>
+            <div class="excel-browser-grid">
+              <div class="excel-browser-column">
+                <div class="excel-browser-title"><strong>Frotas</strong><span id="excel-fleet-list-count">0</span></div>
+                <div id="excel-fleet-list" class="excel-entity-list"></div>
+              </div>
+              <div class="excel-browser-column">
+                <div class="excel-browser-title"><strong>Operadores</strong><span id="excel-operator-list-count">0</span></div>
+                <div id="excel-operator-list" class="excel-entity-list"></div>
+              </div>
+            </div>
+          </section>
+
+          <div id="excel-unclassified" class="excel-unclassified" hidden></div>
+        </section>
+      </section>
 
       <footer class="footer">
         <span>COA · COCAL · SAFRA 2026</span>
@@ -59,6 +140,45 @@
   </main>
 
   <!-- Layout exclusivo para impressão/PDF. No navegador ele permanece oculto. -->
+  <div id="excel-detail-modal" class="modal-backdrop" hidden>
+    <section class="editor-modal excel-productivity-modal" role="dialog" aria-modal="true" aria-labelledby="excel-detail-title">
+      <header class="modal-header excel-productivity-modal-header">
+        <div>
+          <span id="excel-detail-kicker" class="modal-kicker">Análise selecionada</span>
+          <h2 id="excel-detail-title">-</h2>
+          <p id="excel-detail-subtitle">-</p>
+        </div>
+        <button class="modal-close" type="button" data-close-modal="excel-detail-modal" aria-label="Fechar">×</button>
+      </header>
+
+      <div class="excel-productivity-modal-body">
+        <div id="excel-detail-kpis" class="excel-detail-kpis"></div>
+
+        <section class="excel-detail-section">
+          <div class="excel-section-heading">
+            <div><span>Comparativo</span><h3>Operadores dos turnos A, B e C</h3><p>Para cada turno, aparece o operador que acumulou mais tempo na frota analisada.</p></div>
+          </div>
+          <div id="excel-three-operator-comparison" class="excel-three-operator-comparison"></div>
+        </section>
+
+        <section class="excel-detail-section">
+          <div class="excel-section-heading excel-section-heading-actions">
+            <div><span>Acontecimentos</span><h3>Linha cronológica operacional</h3><p>Alertas e fatos relevantes são montados a partir dos horários e classificações do arquivo importado.</p></div>
+            <button id="excel-download-timeline-csv" class="modal-button secondary" type="button">Baixar linha do tempo CSV</button>
+          </div>
+          <div id="excel-occurrence-list" class="excel-occurrence-list"></div>
+        </section>
+      </div>
+
+      <footer class="modal-footer excel-productivity-modal-footer">
+        <p>Detalhes exibidos somente para a frota ou operador selecionado.</p>
+        <div class="modal-footer-actions">
+          <button class="modal-button secondary" type="button" data-close-modal="excel-detail-modal">Fechar</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+
   <div id="data-modal" class="modal-backdrop" hidden>
     <section class="editor-modal operation-editor-modal" role="dialog" aria-modal="true" aria-labelledby="data-modal-title">
       <header class="modal-header operation-modal-header">
@@ -273,6 +393,6 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="/js/app.js?v=20260924-jpg-sem-logo-v15"></script>
+  <script src="/js/app.js?v=20260924-produtividade-popup-v19-3"></script>
 </body>
 </html>
