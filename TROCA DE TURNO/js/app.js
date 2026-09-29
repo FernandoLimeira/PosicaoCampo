@@ -506,11 +506,29 @@ function frontRowHtml(front = '', sector = '', status = 'EM ATIVIDADE') {
   `;
 }
 
+function compareFrontLabels(a, b) {
+  const left = String(a ?? '').trim();
+  const right = String(b ?? '').trim();
+  if (!left && !right) return 0;
+  if (!left) return 1;
+  if (!right) return -1;
+  return left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' });
+}
+
+function sortFrontRows(rows = []) {
+  return [...rows].sort((a, b) => compareFrontLabels(a?.[0], b?.[0]));
+}
+
 function renderFrontRows(rows) {
   const tbody = document.querySelector('#front-rows');
-  tbody.innerHTML = rows.length
-    ? rows.map(([front, sector, , status]) => frontRowHtml(front, sector, status)).join('')
+  const sortedRows = sortFrontRows(rows);
+  tbody.innerHTML = sortedRows.length
+    ? sortedRows.map(([front, sector, , status]) => frontRowHtml(front, sector, status)).join('')
     : frontRowHtml();
+}
+
+function reorderFrontForm() {
+  renderFrontRows(collectFrontRows());
 }
 
 function renderMetricsForm(unit) {
@@ -548,11 +566,39 @@ function rainRowHtml(eq = '', turn = 0, accum = 0) {
   `;
 }
 
+function rainSortKey(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/^eq(?:uipamento)?[.\s:-]*/i, '')
+    .trim();
+}
+
+function sortRainRows(rain = []) {
+  return [...rain].sort((a, b) => compareFrontLabels(rainSortKey(a?.[0]), rainSortKey(b?.[0])));
+}
+
 function renderRainForm(rain) {
   const container = document.querySelector('#rain-form');
-  container.innerHTML = rain.length
-    ? rain.map(([eq, turn, accum]) => rainRowHtml(eq, turn, accum)).join('')
+  const sortedRain = sortRainRows(rain);
+  container.innerHTML = sortedRain.length
+    ? sortedRain.map(([eq, turn, accum]) => rainRowHtml(eq, turn, accum)).join('')
     : rainRowHtml();
+}
+
+function reorderRainForm() {
+  renderRainForm(collectRainRows());
+}
+
+function autoResizeTextarea(textarea) {
+  if (!textarea) return;
+  textarea.style.height = 'auto';
+  const minHeight = 96;
+  textarea.style.height = `${Math.max(minHeight, textarea.scrollHeight)}px`;
+}
+
+function resizeEditorTextareas() {
+  autoResizeTextarea(document.querySelector('#observation-input'));
+  autoResizeTextarea(document.querySelector('#changes-input'));
 }
 
 function loadUnitEditor(index) {
@@ -569,6 +615,7 @@ function loadUnitEditor(index) {
   if (formUnitName) formUnitName.textContent = `${unit.code} — ${unit.name}`;
   if (observationInput) observationInput.value = unit.observation === '-' ? '' : unit.observation || '';
   if (changesInput) changesInput.value = unit.changes === '-' ? '' : unit.changes || '';
+  resizeEditorTextareas();
 
   renderFrontRows(unit.rows);
   renderMetricsForm(unit);
@@ -576,7 +623,7 @@ function loadUnitEditor(index) {
 }
 
 function collectFrontRows() {
-  return [...document.querySelectorAll('.front-edit-row')]
+  const rows = [...document.querySelectorAll('.front-edit-row')]
     .map(row => {
       const front = row.querySelector('.front-input').value.trim();
       const sector = row.querySelector('.sector-input').value.trim();
@@ -584,6 +631,8 @@ function collectFrontRows() {
       return [front, sector, getStatusColor(status), status];
     })
     .filter(([front, sector]) => front || sector);
+
+  return sortFrontRows(rows);
 }
 
 function collectMetrics() {
@@ -595,7 +644,7 @@ function collectMetrics() {
 }
 
 function collectRainRows() {
-  return [...document.querySelectorAll('.rain-edit-row')]
+  const rows = [...document.querySelectorAll('.rain-edit-row')]
     .map(row => {
       const eq = row.querySelector('.rain-eq').value.trim();
       const turn = normalizeNumber(row.querySelector('.rain-turn').value);
@@ -603,6 +652,8 @@ function collectRainRows() {
       return [eq, turn, accum];
     })
     .filter(([eq, turn, accum]) => eq || turn || accum);
+
+  return sortRainRows(rows);
 }
 
 function openModal(id) {
@@ -2308,13 +2359,29 @@ function setupEvents() {
     const button = event.target.closest('.remove-front-row');
     if (!button) return;
     button.closest('.front-edit-row')?.remove();
+    reorderFrontForm();
   });
 
+  document.querySelector('#front-rows').addEventListener('change', event => {
+    if (!event.target.closest('.front-input')) return;
+    reorderFrontForm();
+  });
 
   document.querySelector('#rain-form').addEventListener('click', event => {
     const button = event.target.closest('.remove-rain-row');
     if (!button) return;
     button.closest('.rain-edit-row')?.remove();
+    reorderRainForm();
+  });
+
+  document.querySelector('#rain-form').addEventListener('change', event => {
+    if (!event.target.closest('.rain-eq')) return;
+    reorderRainForm();
+  });
+
+  ['#observation-input', '#changes-input'].forEach(selector => {
+    const textarea = document.querySelector(selector);
+    textarea?.addEventListener('input', () => autoResizeTextarea(textarea));
   });
 
   document.querySelector('#operation-form').addEventListener('submit', async event => {

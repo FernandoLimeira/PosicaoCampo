@@ -184,7 +184,6 @@
       <header class="modal-header operation-modal-header">
         <div class="operation-modal-heading">
           <span class="modal-kicker">Atualização operacional</span>
-          <h2 id="data-modal-title">Preencher informações</h2>
           <div class="editor-unit-summary">
             <span>Unidade em edição</span>
             <strong id="form-unit-name">PPT — PARAGUAÇU PAULISTA</strong>
@@ -221,7 +220,6 @@
               <div>
                 <span>Etapa 1 de 4 · Campo</span>
                 <h3>Frentes, setores e status</h3>
-                <p class="section-description">Organize as frentes ativas e informe a situação atual de cada setor.</p>
               </div>
               <button id="add-front-row" class="section-action" type="button">Adicionar frente</button>
             </div>
@@ -246,7 +244,6 @@
               <div>
                 <span>Etapa 2 de 4 · Produção</span>
                 <h3>Indicadores do turno</h3>
-                <p class="section-description">Atualize apenas os números operacionais disponíveis neste turno.</p>
               </div>
             </div>
             <div id="metrics-form" class="metrics-form metrics-form-wizard"></div>
@@ -257,19 +254,18 @@
               <div>
                 <span>Etapa 3 de 4 · Apontamentos e Mudanças</span>
                 <h3>Observações e mudanças</h3>
-                <p class="section-description">Separe o que foi observado do que mudou ou está previsto mudar.</p>
               </div>
             </div>
 
             <div class="notes-form-grid">
               <label class="field">
                 <span>Observação</span>
-                <textarea id="observation-input" rows="7" placeholder="Digite a observação do turno"></textarea>
+                <textarea id="observation-input" rows="3" placeholder="Digite a observação do turno" style="overflow-y:hidden; resize:none; min-height:96px;"></textarea>
               </label>
 
               <label class="field">
                 <span>Mudanças</span>
-                <textarea id="changes-input" rows="7" placeholder="Digite mudanças previstas ou realizadas"></textarea>
+                <textarea id="changes-input" rows="3" placeholder="Digite mudanças previstas ou realizadas" style="overflow-y:hidden; resize:none; min-height:96px;"></textarea>
               </label>
             </div>
           </section>
@@ -279,7 +275,6 @@
               <div>
                 <span>Etapa 4 de 4 · Precipitação</span>
                 <h3>Chuva do turno e acumulado</h3>
-                <p class="section-description">Informe os equipamentos e os volumes medidos em milímetros.</p>
               </div>
               <button id="add-rain-row" class="section-action" type="button">Adicionar equipamento</button>
             </div>
