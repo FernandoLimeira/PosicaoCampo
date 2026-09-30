@@ -245,7 +245,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   min-height: 40px;
   padding: 0 18px;
   border: 1px solid var(--green);
-  border-radius: 9px;
+  border-radius: 4px;
   background: var(--green);
   color: #fff;
   font-size: 11px;
@@ -294,7 +294,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   min-width: 0;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 4px;
   box-shadow: 0 8px 24px rgba(25, 69, 44, .06);
 }
 
@@ -345,7 +345,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   padding: 6px 10px;
   color: #247a45;
   background: #edf8f1;
-  border-radius: 999px;
+  border-radius: 4px;
   font-size: 10px;
   font-weight: 850;
   letter-spacing: .35px;
@@ -366,7 +366,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   width: 100%;
   overflow-x: auto;
   border: 1px solid #e5eee8;
-  border-radius: 10px;
+  border-radius: 4px;
   background: #fff;
 }
 .status-table-wrap { overflow: hidden; }
@@ -488,7 +488,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   align-items: center;
   background: var(--surface);
   border: 1px solid #e1ebe5;
-  border-radius: 10px;
+  border-radius: 4px;
   box-shadow: 0 5px 16px rgba(25, 69, 44, .04);
 }
 .metric-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
@@ -532,7 +532,7 @@ body.modal-open { overflow: hidden; }
   flex-direction: column;
   color: var(--text);
   background: #fff;
-  border-radius: 14px;
+  border-radius: 4px;
   box-shadow: 0 24px 80px rgba(12, 43, 26, .26);
 }
 .modal-header {
@@ -551,7 +551,7 @@ body.modal-open { overflow: hidden; }
   height: 34px;
   padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #f1f5f2;
   color: #52645a;
   font-size: 23px;
@@ -589,7 +589,7 @@ body.modal-open { overflow: hidden; }
   padding: 16px;
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 4px;
 }
 .form-section-wide { grid-column: 1 / -1; }
 .section-heading { margin-bottom: 13px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
@@ -617,7 +617,7 @@ body.modal-open { overflow: hidden; }
 input, select, textarea {
   width: 100%;
   border: 1px solid #cfdcd4;
-  border-radius: 7px;
+  border-radius: 4px;
   background: #fff;
   color: #1e382b;
   transition: border-color .15s ease, box-shadow .15s ease;
@@ -639,7 +639,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   height: 30px;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   background: #fff0f1;
   color: #b93542;
   font-size: 18px;
@@ -666,7 +666,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .modal-button {
   min-height: 38px;
   padding: 0 16px;
-  border-radius: 7px;
+  border-radius: 4px;
   font-size: 11px;
   font-weight: 800;
 }
@@ -682,7 +682,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   padding: 11px 16px;
   color: #fff;
   background: #163e28;
-  border-radius: 8px;
+  border-radius: 4px;
   box-shadow: 0 12px 30px rgba(0,0,0,.18);
   font-size: 12px;
   font-weight: 700;
@@ -766,7 +766,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   .unit-card { gap: 12px; }
   .unit-layout-grid { grid-template-columns: 1fr; }
   .unit-side-stack { grid-template-columns: 1fr; }
-  .unit-main-block { padding: 14px; border-radius: 11px; }
+  .unit-main-block { padding: 14px; border-radius: 4px; }
   .unit-header { align-items: flex-start; }
   .unit-title { flex-basis: 100%; flex-direction: column; align-items: flex-start; gap: 3px; }
   .unit-title strong { font-size: 27px; }
@@ -789,7 +789,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   .footer { flex-direction: column; align-items: flex-start; padding: 16px 18px; }
 
   .modal-backdrop { padding: 10px; align-items: stretch; }
-  .editor-modal { width: 100%; max-height: calc(100dvh - 20px); border-radius: 10px; }
+  .editor-modal { width: 100%; max-height: calc(100dvh - 20px); border-radius: 4px; }
   .modal-header { padding: 18px; }
   .editor-unit-summary strong { white-space: normal; }
   .form-content { padding: 14px 18px 18px; grid-template-columns: 1fr; }
@@ -823,7 +823,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   .dashboard-fill-button { width: 100%; }
   .units-grid { padding: 10px; }
   .unit-card { gap: 10px; }
-  .unit-main-block, .rain-turn-block, .notes-changes-block { border-radius: 9px; }
+  .unit-main-block, .rain-turn-block, .notes-changes-block { border-radius: 4px; }
   .unit-state { font-size: 9px; }
 
   .data-table th { font-size: 9px; }
@@ -851,7 +851,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
     gap: 8px;
     padding: 10px;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: 4px;
     background: #fbfdfb;
   }
   .editable-table .front-edit-row td {
@@ -953,7 +953,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   align-items: center;
   gap: 9px;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: 4px;
   color: #839087;
   background: transparent;
   transition: background .15s ease, border-color .15s ease, color .15s ease;
@@ -1036,7 +1036,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .operation-editor-modal {
   width: min(920px, calc(100vw - 40px));
   max-height: min(760px, calc(100dvh - 32px));
-  border-radius: 16px;
+  border-radius: 4px;
 }
 .operation-editor-modal .modal-header {
   padding: 16px 22px 14px;
@@ -1103,7 +1103,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .operation-editor-modal .form-section {
   padding: 16px 18px;
   border-color: #dce8e0;
-  border-radius: 12px;
+  border-radius: 4px;
   box-shadow: 0 5px 18px rgba(25,69,44,.04);
 }
 .operation-editor-modal .section-heading {
@@ -1126,7 +1126,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   min-height: 32px;
   padding: 0 11px;
   border: 1px solid #bcd7c5;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #f4faf6;
   font-size: 10px;
 }
@@ -1136,7 +1136,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 }
 .operation-editor-modal .editable-table-wrap {
   border: 1px solid #e3ebe6;
-  border-radius: 9px;
+  border-radius: 4px;
 }
 .operation-editor-modal .editable-table th { padding: 8px 9px; }
 .operation-editor-modal .editable-table td { padding: 6px 9px; }
@@ -1144,14 +1144,14 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .operation-editor-modal .metric-field {
   padding: 10px;
   border: 1px solid #e4ece7;
-  border-radius: 9px;
+  border-radius: 4px;
   background: #fbfdfc;
 }
 .operation-editor-modal .notes-form-grid { gap: 12px; }
 .operation-editor-modal .notes-form-grid .field {
   padding: 11px;
   border: 1px solid #e4ece7;
-  border-radius: 9px;
+  border-radius: 4px;
   background: #fbfdfc;
 }
 .operation-editor-modal .notes-form-grid textarea {
@@ -1162,7 +1162,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .operation-editor-modal .rain-edit-row {
   padding: 9px;
   border: 1px solid #e4ece7;
-  border-radius: 9px;
+  border-radius: 4px;
   background: #fbfdfc;
 }
 .operation-editor-modal .modal-footer {
@@ -1174,7 +1174,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .operation-editor-modal .modal-footer p { font-size: 9px; }
 .operation-editor-modal .modal-button {
   min-height: 36px;
-  border-radius: 8px;
+  border-radius: 4px;
 }
 .operation-editor-modal .modal-button.save:hover { background: var(--green-strong); }
 
@@ -1285,7 +1285,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid #cad7cf;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #fff;
   color: #496457;
   font-size: 10px;
@@ -1313,7 +1313,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   gap: 18px;
   padding: 12px 14px;
   border: 1px solid #e2eae5;
-  border-radius: 10px;
+  border-radius: 4px;
   background: #fbfdfc;
   flex-wrap: wrap;
 }
@@ -1371,7 +1371,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   padding: 14px;
   margin-bottom: 16px;
   border: 1px solid #e1ebe5;
-  border-radius: 12px;
+  border-radius: 4px;
   background: #f8fbf9;
 }
 .quick-user-form .modal-button { min-height: 42px; white-space: nowrap; }
@@ -1425,7 +1425,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   gap: 16px;
   padding: 12px 14px;
   border: 1px solid #e2eae5;
-  border-radius: 10px;
+  border-radius: 4px;
   background: #fbfdfc;
 }
 .user-list-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -1434,7 +1434,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .user-delete {
   padding: 7px 10px;
   border: 1px solid #d9e4de;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #fff;
   color: #a12d35;
   font-size: 10px;
@@ -1469,7 +1469,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   align-items: center;
   min-height: 20px;
   padding: 3px 7px;
-  border-radius: 999px;
+  border-radius: 4px;
   font-size: 9px;
   font-style: normal;
   font-weight: 800;
@@ -1485,7 +1485,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   min-height: 32px;
   padding: 7px 10px;
   border: 1px solid #d9e4de;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #fff;
   font-size: 10px;
   font-weight: 800;
@@ -1508,7 +1508,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   min-height: 34px;
   padding: 7px 10px;
   border: 1px solid #cad7cf;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #fff;
   color: #20372b;
   outline: none;
@@ -1538,7 +1538,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .excel-filter-panel,
 .excel-browser-section {
   border: 1px solid #dbe7df;
-  border-radius: 14px;
+  border-radius: 4px;
   background: #fff;
   box-shadow: 0 8px 24px rgba(23, 67, 43, .05);
 }
@@ -1583,7 +1583,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   min-height: 34px;
   padding: 7px 12px;
   border: 1px solid #cddbd2;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #fff;
   color: #365344;
   font: inherit;
@@ -1606,7 +1606,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .excel-shift-rules span {
   padding: 5px 8px;
   border: 1px solid #dbe7df;
-  border-radius: 999px;
+  border-radius: 4px;
   background: #f8fbf9;
   color: #63746a;
   font-size: 8px;
@@ -1616,7 +1616,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   margin-top: 10px !important;
   padding: 8px 10px;
   border-left: 3px solid #d7b52b;
-  border-radius: 7px;
+  border-radius: 4px;
   background: #fffaf0;
 }
 .excel-team-rule strong { color: #5f511e; }
@@ -1634,7 +1634,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   min-height: 36px;
   padding: 7px 9px;
   border: 1px solid #cad8cf;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #fff;
   color: #29483a;
   font: inherit;
@@ -1654,7 +1654,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   min-width: 0;
   padding: 10px 11px;
   border: 1px solid #e1e9e4;
-  border-radius: 10px;
+  border-radius: 4px;
   background: #fbfdfc;
 }
 .excel-report-meta span { display: block; color: #849189; font-size: 7px; text-transform: uppercase; letter-spacing: .08em; }
@@ -1672,7 +1672,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   padding: 10px 11px;
   border: 1px solid #e0e9e3;
   border-left: 4px solid #7a8b82;
-  border-radius: 10px;
+  border-radius: 4px;
   background: #fff;
 }
 .excel-kpi small { display: block; color: #7f8d85; font-size: 7px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; }
@@ -1687,10 +1687,10 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .excel-detail-header h3 { margin: 0; color: #244234; font-size: 13px; }
 .excel-section-heading-actions { align-items: center; }
 .excel-browser-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.excel-browser-column { min-width: 0; border: 1px solid #e2ebe5; border-radius: 11px; overflow: hidden; background: #fbfdfc; }
+.excel-browser-column { min-width: 0; border: 1px solid #e2ebe5; border-radius: 4px; overflow: hidden; background: #fbfdfc; }
 .excel-browser-title { display: flex; align-items: center; justify-content: space-between; padding: 9px 10px; border-bottom: 1px solid #e6ece8; background: #f4f8f5; }
 .excel-browser-title strong { color: #2d4b3c; font-size: 10px; }
-.excel-browser-title span { min-width: 22px; padding: 2px 6px; border-radius: 999px; background: #e4eee8; color: #496357; font-size: 8px; font-weight: 900; text-align: center; }
+.excel-browser-title span { min-width: 22px; padding: 2px 6px; border-radius: 4px; background: #e4eee8; color: #496357; font-size: 8px; font-weight: 900; text-align: center; }
 .excel-entity-list { max-height: 430px; overflow-y: auto; }
 .excel-entity-row {
   width: 100%;
@@ -1725,7 +1725,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   min-width: 0;
   padding: 11px;
   border: 1px solid #dfe8e2;
-  border-radius: 11px;
+  border-radius: 4px;
   background: #fbfdfc;
 }
 .excel-comparison-card.is-best { border-color: #8ccba2; background: #f1faf4; }
@@ -1738,7 +1738,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .excel-comparison-card h4 { margin: 8px 0 0; color: #254536; font-size: 11px; }
 .excel-comparison-card p { margin: 3px 0 0; color: #7b8a82; font-size: 8px; }
 .excel-comparison-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
-.excel-comparison-metrics span { padding: 7px; border-radius: 8px; background: #fff; border: 1px solid #e8eeea; }
+.excel-comparison-metrics span { padding: 7px; border-radius: 4px; background: #fff; border: 1px solid #e8eeea; }
 .excel-comparison-metrics small { display: block; color: #849188; font-size: 7px; }
 .excel-comparison-metrics strong { display: block; margin-top: 2px; color: #345443; font-size: 9px; }
 .excel-occurrence-list { display: grid; gap: 7px; }
@@ -1749,7 +1749,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   padding: 9px 10px;
   border: 1px solid #e2e9e5;
   border-left: 4px solid #85958c;
-  border-radius: 9px;
+  border-radius: 4px;
   background: #fff;
 }
 .excel-occurrence-item.is-positive { border-left-color: #2f9b58; background: #f8fcf9; }
@@ -1758,7 +1758,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .excel-occurrence-item p { margin: 0; color: #304e3f; font-size: 9px; line-height: 1.45; }
 .excel-occurrence-item small { display: block; margin-top: 3px; color: #7f8d85; font-size: 7px; line-height: 1.35; }
 .excel-empty-state { padding: 16px; color: #819087; font-size: 8px; text-align: center; }
-.excel-unclassified { padding: 10px 11px; border: 1px solid #eedda8; border-radius: 9px; background: #fffaf0; color: #7e6428; font-size: 8px; line-height: 1.45; }
+.excel-unclassified { padding: 10px 11px; border: 1px solid #eedda8; border-radius: 4px; background: #fffaf0; color: #7e6428; font-size: 8px; line-height: 1.45; }
 .excel-unclassified[hidden] { display: none !important; }
 
 @media (max-width: 1180px) {
@@ -1815,7 +1815,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   margin-top: 14px;
   padding: 14px;
   border: 1px solid #e1e9e4;
-  border-radius: 12px;
+  border-radius: 4px;
   background: #fff;
 }
 .excel-productivity-modal-footer { flex: 0 0 auto; }
@@ -1859,7 +1859,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .sector-base-manual-card {
   padding: 15px;
   border: 1px solid #e1ebe5;
-  border-radius: 12px;
+  border-radius: 4px;
   background: #f8fbf9;
 }
 .sector-base-config-grid {
@@ -1990,7 +1990,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .sector-base-table-wrap {
   overflow: auto;
   border: 1px solid #e1e9e4;
-  border-radius: 10px;
+  border-radius: 4px;
 }
 .sector-base-table {
   width: 100%;
@@ -2032,7 +2032,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   align-items: center;
   min-height: 22px;
   padding: 3px 7px;
-  border-radius: 999px;
+  border-radius: 4px;
   background: #edf7f0;
   color: #28613b;
   font-size: 9px;
@@ -2044,7 +2044,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .sector-base-action {
   padding: 6px 8px;
   border: 1px solid #d8e4dc;
-  border-radius: 7px;
+  border-radius: 4px;
   background: #fff;
   color: #2f6d45;
   font-size: 9px;
@@ -2069,7 +2069,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   min-height: 32px;
   padding: 6px 11px;
   border: 1px solid #d8e4dc;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #fff;
   color: #2f6d45;
   font-size: 9px;
@@ -2146,7 +2146,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   gap: 10px;
   padding: 12px 14px;
   border: 1px solid #cfe5d6;
-  border-radius: 11px;
+  border-radius: 4px;
   background: #eef8f1;
   color: #315642;
 }
@@ -2154,7 +2154,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   margin-top: 14px;
   padding: 14px;
   border: 1px solid #e1ebe5;
-  border-radius: 12px;
+  border-radius: 4px;
   background: #fff;
 }
 .sacarose-unit-heading {
@@ -2170,14 +2170,14 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   min-height: 34px;
   padding: 0 11px;
   border: 1px solid #bdd9c6;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #f5fbf7;
   color: #23703f;
   font-size: 9px;
   font-weight: 850;
 }
 .sacarose-unit-heading .section-action:hover { background: #eaf6ee; }
-.sacarose-table-wrap { overflow-x: auto; border: 1px solid #e1e9e4; border-radius: 10px; }
+.sacarose-table-wrap { overflow-x: auto; border: 1px solid #e1e9e4; border-radius: 4px; }
 .sacarose-table { width: 100%; min-width: 860px; border-collapse: collapse; background: #fff; table-layout: fixed; }
 .sacarose-table th {
   padding: 8px 9px;
@@ -2205,7 +2205,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   width: 30px;
   height: 30px;
   border: 1px solid #ead8da;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #fff;
   color: #a5313a;
   font-size: 18px;
@@ -2221,7 +2221,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   min-height: 34px;
   padding: 0 7px;
   border: 1px solid #dce6df;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #fbfdfc;
   color: #53665b;
   font-size: 9px;
@@ -2257,7 +2257,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
     gap: 8px 10px;
     padding: 10px;
     border: 1px solid #e1e9e4;
-    border-radius: 10px;
+    border-radius: 4px;
     background: #fbfdfc;
   }
   .sacarose-table .sacarose-row td { display: block; padding: 0; border: 0; min-width: 0; }
@@ -2290,7 +2290,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .sacarose-unit-tab {
   min-height: 40px;
   border: 1px solid #dce6df;
-  border-radius: 10px;
+  border-radius: 4px;
   background: #ffffff;
   color: #345243;
   font-weight: 850;
@@ -2316,7 +2316,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   min-height: 132px;
   padding: 18px;
   border: 1px solid #dce6df;
-  border-radius: 14px;
+  border-radius: 4px;
   background: #ffffff;
   color: #244235;
   text-align: left;
@@ -2354,7 +2354,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .sector-base-import-card,
 .sector-base-manual-card {
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 4px;
 }
 .sector-base-import-card { gap: 7px; }
 .sector-base-compact-heading,

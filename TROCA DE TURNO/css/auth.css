@@ -74,7 +74,7 @@ a:hover { text-decoration: underline; }
   color: var(--text);
   background: #fbfdfb;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 4px;
 }
 .auth-form input:focus {
   outline: 3px solid rgba(11, 122, 54, .14);
@@ -85,7 +85,7 @@ a:hover { text-decoration: underline; }
   margin-top: 4px;
   padding: 0 18px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 4px;
   color: #fff;
   background: var(--green);
   font-weight: 800;
@@ -100,7 +100,7 @@ a:hover { text-decoration: underline; }
   color: var(--danger);
   background: #fff2f3;
   border: 1px solid #ffd5da;
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 12px;
   font-weight: 700;
 }
