@@ -2,7 +2,7 @@ const STORAGE_KEY = 'posicao-campo-v1-state';
 
 const REPORT_BASE_WIDTH = 1024;
 const REPORT_BASE_HEIGHT = 1536;
-const REPORT_EXPORT_SCALE = 3;
+const REPORT_EXPORT_SCALE = 4;
 const REPORT_EXPORT_MIME_TYPE = 'image/png';
 const REPORT_EXPORT_EXTENSION = REPORT_EXPORT_MIME_TYPE === 'image/png' ? 'png' : 'jpg';
 
@@ -1094,6 +1094,10 @@ function loadSacaroseHeaderIconImage() {
   return loadImageAsset('/assets/sacarose-icon.png', 'Não foi possível carregar o ícone da posição de colheita.');
 }
 
+function loadReportUnitIconImage() {
+  return loadImageAsset('/assets/report-unit-icon.png', 'Não foi possível carregar o ícone das unidades do relatório.');
+}
+
 function roundedRectPath(ctx, x, y, width, height, radius) {
   const r = Math.min(radius, width / 2, height / 2);
   ctx.beginPath();
@@ -1122,7 +1126,7 @@ function strokeRoundedRect(ctx, x, y, width, height, radius, color, lineWidth = 
   ctx.restore();
 }
 
-function prepareCardBody(ctx, layout, unit, borderColor) {
+function prepareCardBody(ctx, layout, unit, borderColor, unitIconImage = null) {
   // Primeiro cobre totalmente a borda antiga da arte-base para evitar mistura de cores.
   fillRoundedRect(ctx, layout.x - 4, layout.y - 4, layout.w + 8, layout.h + 8, 20, '#012d36');
 
@@ -1144,7 +1148,16 @@ function prepareCardBody(ctx, layout, unit, borderColor) {
 
   strokeRoundedRect(ctx, layout.x + 1.5, layout.y + 1.5, layout.w - 3, layout.h - 3, 15, borderColor, 6);
 
-  drawLeafMark(ctx, layout.x + 18, layout.y + 9, 1);
+  if (unitIconImage) {
+    const iconH = 44;
+    const iconW = Math.round(iconH * (unitIconImage.width / Math.max(1, unitIconImage.height)));
+    const iconX = layout.x + 18;
+    const iconY = layout.y + 10;
+    ctx.drawImage(unitIconImage, iconX, iconY, iconW, iconH);
+  } else {
+    drawReportUnitIcon(ctx, layout.x + 18, layout.y + 9, 42, 46);
+  }
+
   drawFittedText(ctx, unit.code || '', layout.x + 83, layout.y + 28, 118, 'bold 29px Arial, sans-serif', '#ffffff', 'middle');
   drawFittedText(ctx, unit.name || '', layout.x + 83, layout.y + 54, layout.w - 110, '22px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
 }
@@ -1179,25 +1192,60 @@ function statusTextColor(color) {
   return color === 'green' ? '#73ff48' : '#ffffff';
 }
 
-function drawLeafMark(ctx, x, y, scale = 1) {
+function drawReportUnitIcon(ctx, x, y, width = 40, height = 46) {
   ctx.save();
-  ctx.lineWidth = 2.2 * scale;
-  ctx.strokeStyle = '#6ff334';
+  ctx.fillStyle = '#74f23a';
+  ctx.strokeStyle = '#74f23a';
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
 
-  const leaves = [
-    [x + 10 * scale, y + 42 * scale, x + 8 * scale, y + 24 * scale, x + 16 * scale, y + 6 * scale, x + 18 * scale, y + 42 * scale],
-    [x + 20 * scale, y + 46 * scale, x + 18 * scale, y + 22 * scale, x + 30 * scale, y + 4 * scale, x + 30 * scale, y + 46 * scale],
-    [x + 32 * scale, y + 44 * scale, x + 36 * scale, y + 26 * scale, x + 42 * scale, y + 11 * scale, x + 40 * scale, y + 44 * scale]
-  ];
-
-  leaves.forEach(([sx, sy, cx1, cy1, cx2, cy2, ex, ey]) => {
+  const drawBlade = (points) => {
     ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.quadraticCurveTo(cx1, cy1, cx2, cy2);
-    ctx.quadraticCurveTo(ex - 4 * scale, cy2 + 6 * scale, ex, ey);
-    ctx.stroke();
-  });
+    ctx.moveTo(x + points[0][0] * width, y + points[0][1] * height);
+    for (let i = 1; i < points.length; i += 1) {
+      const p = points[i];
+      if (p.length === 2) {
+        ctx.lineTo(x + p[0] * width, y + p[1] * height);
+      } else if (p.length === 4) {
+        ctx.quadraticCurveTo(x + p[0] * width, y + p[1] * height, x + p[2] * width, y + p[3] * height);
+      }
+    }
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  // lâmina esquerda
+  drawBlade([
+    [0.10, 0.98],
+    [0.10, 0.52, 0.08, 0.22],
+    [0.14, 0.04, 0.29, 0.04],
+    [0.22, 0.22, 0.20, 0.58],
+    [0.22, 0.98]
+  ]);
+
+  // lâmina central
+  drawBlade([
+    [0.40, 0.98],
+    [0.38, 0.56, 0.36, 0.20],
+    [0.48, 0.02, 0.66, 0.02],
+    [0.58, 0.24, 0.56, 0.52],
+    [0.56, 0.98]
+  ]);
+
+  // lâmina direita
+  drawBlade([
+    [0.74, 0.98],
+    [0.74, 0.62, 0.72, 0.36],
+    [0.79, 0.16, 0.94, 0.08],
+    [0.85, 0.30, 0.84, 0.54],
+    [0.84, 0.98]
+  ]);
+
   ctx.restore();
+}
+
+function drawLeafMark(ctx, x, y, scale = 1) {
+  drawReportUnitIcon(ctx, x, y, 40 * scale, 46 * scale);
 }
 
 function wrapTextLines(ctx, text, maxWidth) {
@@ -1476,8 +1524,8 @@ function drawRows(ctx, unit, layout, geometry) {
   const rowHeight = rowCount > 1
     ? Math.min(layout.lower ? 18 : 18, Math.max(preferredMinRowHeight, (lastCenterLimit - geometry.tableTop) / (rowCount - 1)))
     : 18;
-  const fontSize = Math.max(11.8, Math.min(14.8, rowHeight - 1.8));
-  const statusFontSize = Math.max(11.2, fontSize - 0.3);
+  const fontSize = Math.max(12.4, Math.min(15.4, rowHeight - 1.2));
+  const statusFontSize = Math.max(11.8, fontSize - 0.2);
   const dotRadius = Math.max(5.5, Math.min(7.25, rowHeight * 0.36));
   const lineOffset = Math.min(8, rowHeight * 0.44);
 
@@ -1490,9 +1538,9 @@ function drawRows(ctx, unit, layout, geometry) {
   ctx.lineTo(right, layout.y + 73);
   ctx.stroke();
 
-  drawFittedText(ctx, 'FRENTE', layout.x + 20, layout.y + 93, 86, 'bold 13.6px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
-  drawFittedText(ctx, 'SETOR', layout.x + 153, layout.y + 93, 90, 'bold 13.6px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
-  drawFittedText(ctx, 'STATUS', layout.x + 323, layout.y + 93, 135, 'bold 13.6px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+  drawFittedText(ctx, 'FRENTE', layout.x + 20, layout.y + 93, 86, 'bold 14.2px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+  drawFittedText(ctx, 'SETOR', layout.x + 153, layout.y + 93, 90, 'bold 14.2px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+  drawFittedText(ctx, 'STATUS', layout.x + 323, layout.y + 93, 135, 'bold 14.2px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
 
   ctx.beginPath();
   ctx.moveTo(left, layout.y + 104);
@@ -1538,7 +1586,7 @@ function drawRainBox(ctx, unit, layout, geometry) {
   ctx.fillStyle = '#ffffff';
   ctx.strokeStyle = 'rgba(150, 201, 210, 0.34)';
   drawFittedText(ctx, '☁', rainX + 12, rainY + 17, 20, 'bold 16px Arial, sans-serif', '#ffffff', 'middle');
-  drawFittedText(ctx, 'CHUVA TURNO / ACUM. (mm)', rainX + 37, rainY + 17, rainW - 48, 'bold 11.6px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+  drawFittedText(ctx, 'CHUVA TURNO / ACUM. (mm)', rainX + 37, rainY + 17, rainW - 48, 'bold 12.2px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
   ctx.beginPath();
   ctx.moveTo(rainX + 9, rainY + headerHeight);
   ctx.lineTo(rainX + rainW - 9, rainY + headerHeight);
@@ -1546,7 +1594,7 @@ function drawRainBox(ctx, unit, layout, geometry) {
 
   rows.forEach(([eq = '', turn = '-', accum = '-'], index) => {
     const cy = rainY + headerHeight + 8 + index * rowHeight;
-    const fontSize = Math.max(9.8, Math.min(11.8, rowHeight - 1.4));
+    const fontSize = Math.max(10.4, Math.min(12.4, rowHeight - 1.0));
     drawFittedText(ctx, eq, rainX + 39, cy, 78, `bold ${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
     drawFittedText(ctx, turn, rainX + rainW - 88, cy, 28, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
     drawFittedText(ctx, '/', rainX + rainW - 59, cy, 10, `${fontSize}px Arial, sans-serif`, '#ffffff', 'middle');
@@ -1568,12 +1616,12 @@ function getReportLayoutBase(lower = false) {
 }
 
 function getSequentialNotesMetrics(ctx, unit, notesWidth, lower = false) {
-  const titleFontSize = lower ? 17 : 19;
+  const titleFontSize = lower ? 18 : 20;
   const titleHeight = Math.ceil(titleFontSize * 1.12);
   const titleToBodyGap = lower ? 20 : 22;
   const sectionGap = lower ? 7 : 9;
-  const observationFontSize = lower ? 12.2 : 13.8;
-  const changesFontSize = Math.max(11.2, observationFontSize - 0.3);
+  const observationFontSize = lower ? 12.8 : 14.6;
+  const changesFontSize = Math.max(11.8, observationFontSize - 0.2);
   const lineRatio = 1.18;
 
   ctx.save();
@@ -1741,9 +1789,9 @@ function buildDynamicReportLayouts(ctx, normalizedUnits) {
   };
 }
 
-function drawUnitOnCanvas(ctx, unit, layout) {
+function drawUnitOnCanvas(ctx, unit, layout, unitIconImage = null) {
   const geometry = getReportGeometry(ctx, layout, unit);
-  prepareCardBody(ctx, layout, unit, borderColorForState(unit.border));
+  prepareCardBody(ctx, layout, unit, borderColorForState(unit.border), unitIconImage);
   drawRows(ctx, unit, layout, geometry);
 
   const metricWidth = 148;
@@ -1864,6 +1912,7 @@ async function generateReportImageBlob() {
   ctx.scale(REPORT_EXPORT_SCALE, REPORT_EXPORT_SCALE);
 
   const template = await loadReportTemplateImage();
+  const reportUnitIcon = await loadReportUnitIconImage();
   ctx.drawImage(template, 0, 0, REPORT_BASE_WIDTH, REPORT_BASE_HEIGHT);
 
   // Quando os cards precisam crescer, cobrimos as áreas antigas do template
@@ -1885,7 +1934,8 @@ async function generateReportImageBlob() {
   drawFittedText(ctx, greeting, 28, 38, 165, 'bold 31px Arial, sans-serif', '#ffffff', 'middle');
   drawFittedText(ctx, `${date} - TC`, 260, 38, 195, 'bold 28px Arial, sans-serif', '#ffffff', 'middle');
 
-  dynamicReport.layouts.forEach((layout, index) => drawUnitOnCanvas(ctx, normalizedUnits[index], layout));
+  dynamicReport.layouts.forEach((layout, index) => drawUnitOnCanvas(ctx, normalizedUnits[index], layout, reportUnitIcon));
+  if (typeof reportUnitIcon?.close === 'function') reportUnitIcon.close();
 
   return new Promise((resolve, reject) => {
     if (REPORT_EXPORT_MIME_TYPE === 'image/png') {
