@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from .config import BASE_DIR, MAX_BODY_BYTES, SESSION_COOKIE, SESSION_TTL_SECONDS
 from .excel_reports import MAX_EXCEL_UPLOAD_BYTES, analyze_excel_report
+from .sector_base_import import MAX_SECTOR_BASE_UPLOAD_BYTES, parse_sector_base_excel
 from .database import (
     UnitConflictError,
     authenticate_user,
@@ -25,6 +26,12 @@ from .database import (
     list_history,
     list_users,
     list_units_payload,
+    list_sector_base,
+    list_sacarose_positions,
+    save_sector_base_item,
+    import_sector_base_items,
+    delete_sector_base_item,
+    save_sacarose_positions,
     save_unit,
 )
 
@@ -128,7 +135,7 @@ def _is_admin(user):
     return bool(user and user.get("role") == "admin" and user.get("is_active", True))
 
 
-def _multipart_file(environ, field_name="file"):
+def _multipart_file(environ, field_name="file", max_file_bytes=MAX_EXCEL_UPLOAD_BYTES):
     content_type = environ.get("CONTENT_TYPE", "")
     if "multipart/form-data" not in content_type:
         raise ValueError("Envie a planilha usando multipart/form-data.")
@@ -149,7 +156,7 @@ def _multipart_file(environ, field_name="file"):
         raise ValueError("Tamanho de requisição inválido.") from exc
     if length <= 0:
         raise ValueError("Selecione uma planilha XLSX.")
-    if length > MAX_EXCEL_UPLOAD_BYTES + 256 * 1024:
+    if length > max_file_bytes + 256 * 1024:
         raise ValueError("A planilha excede o limite de 10 MB.")
 
     body = environ["wsgi.input"].read(length)
@@ -383,6 +390,72 @@ def application(environ, start_response):
                 {"error": str(exc), "conflict": True, "current": exc.current},
             )
         except (ValueError, TypeError) as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+
+    if path == "/api/sacarose" and method == "GET":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        return _json(start_response, HTTPStatus.OK, {"units": list_sacarose_positions()})
+
+    if path == "/api/sacarose" and method == "POST":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            payload = _json_body(environ)
+            units_payload = payload.get("units")
+            create_backup()
+            result = save_sacarose_positions(units_payload, user["id"])
+            return _json(start_response, HTTPStatus.OK, {"ok": True, **result})
+        except (ValueError, TypeError) as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path == "/api/sector-base" and method == "GET":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        search = (query.get("search") or [None])[0]
+        items = list_sector_base(search)
+        return _json(start_response, HTTPStatus.OK, {"items": items, "count": len(items)})
+
+    if path == "/api/sector-base" and method == "POST":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            payload = _json_body(environ)
+            item = save_sector_base_item(
+                payload.get("sector"),
+                payload.get("section"),
+                payload.get("description"),
+                user["id"],
+                source="manual",
+            )
+            return _json(start_response, HTTPStatus.OK, {"item": item})
+        except ValueError as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path == "/api/sector-base/import" and method == "POST":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            filename, file_bytes = _multipart_file(environ, max_file_bytes=MAX_SECTOR_BASE_UPLOAD_BYTES)
+            items = parse_sector_base_excel(file_bytes, filename)
+            result = import_sector_base_items(items, user["id"])
+            return _json(start_response, HTTPStatus.OK, {"ok": True, **result})
+        except ValueError as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+        except Exception as exc:
+            print(f"Erro ao importar base de setores: {exc}")
+            return _json(start_response, HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "Não foi possível importar a base de setores."})
+
+    if path.startswith("/api/sector-base/") and method == "DELETE":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        sector = path.rsplit("/", 1)[-1]
+        try:
+            from urllib.parse import unquote
+            delete_sector_base_item(unquote(sector))
+            return _json(start_response, HTTPStatus.OK, {"ok": True})
+        except ValueError as exc:
             return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
 
     if path == "/api/reports/excel/analyze" and method == "POST":

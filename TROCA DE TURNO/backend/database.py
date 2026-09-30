@@ -254,9 +254,33 @@ def init_db() -> None:
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
             );
 
+            CREATE TABLE IF NOT EXISTS sector_base (
+                sector TEXT PRIMARY KEY COLLATE NOCASE,
+                section TEXT NOT NULL DEFAULT '',
+                description TEXT NOT NULL DEFAULT '',
+                source TEXT NOT NULL DEFAULT 'manual',
+                updated_by INTEGER,
+                updated_at INTEGER NOT NULL,
+                FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS sacarose_positions (
+                unit_code TEXT NOT NULL,
+                front TEXT NOT NULL,
+                sector TEXT NOT NULL,
+                exclude_image INTEGER NOT NULL DEFAULT 0,
+                updated_by INTEGER,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY (unit_code, front),
+                FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash);
             CREATE INDEX IF NOT EXISTS idx_units_position ON units(position);
             CREATE INDEX IF NOT EXISTS idx_unit_history_code_created ON unit_history(unit_code, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_sector_base_section ON sector_base(section);
+            CREATE INDEX IF NOT EXISTS idx_sector_base_description ON sector_base(description);
+            CREATE INDEX IF NOT EXISTS idx_sacarose_positions_sector ON sacarose_positions(sector);
             """
         )
         if not _column_exists(conn, "users", "role"):
@@ -265,6 +289,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
         if not _column_exists(conn, "units", "version"):
             conn.execute("ALTER TABLE units ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+        if not _column_exists(conn, "sacarose_positions", "exclude_image"):
+            conn.execute("ALTER TABLE sacarose_positions ADD COLUMN exclude_image INTEGER NOT NULL DEFAULT 0")
         conn.execute("UPDATE users SET role = 'user' WHERE role IS NULL OR role NOT IN ('admin', 'user')")
         conn.execute("UPDATE users SET is_active = 1 WHERE is_active IS NULL")
         _repair_unit_identities(conn)
@@ -631,6 +657,49 @@ def initialize_units(units: list[dict[str, Any]], user_id: int) -> dict[str, Any
     return list_units_payload()
 
 
+def _sync_sacarose_from_position_unit(conn: sqlite3.Connection, unit: dict[str, Any], user_id: int, now: int) -> None:
+    """Mantém a posição da Sacarose espelhada quando uma unidade é salva na Posição de Campo."""
+    code = str(unit.get("code") or "").strip().upper()
+    if code not in ("NRD", "PPT", "RBR", "PST"):
+        return
+
+    rows = unit.get("rows") if isinstance(unit.get("rows"), list) else []
+    normalized_rows: list[tuple[str, str]] = []
+    seen_fronts: set[str] = set()
+
+    for row in rows:
+        if not isinstance(row, (list, tuple)) or len(row) < 2:
+            continue
+        front = str(row[0] or "").strip()
+        sector = str(row[1] or "").strip()
+        if not front or not sector:
+            continue
+        front_key = str(int(front)) if front.isdigit() else front.casefold()
+        if front_key in seen_fronts:
+            continue
+        seen_fronts.add(front_key)
+        normalized_rows.append((front, sector))
+
+    normalized_rows.sort(key=lambda item: (0, int(item[0])) if item[0].isdigit() else (1, item[0].casefold()))
+    existing_visibility = {
+        _sacarose_match_key(row["front"]): bool(row["exclude_image"])
+        for row in conn.execute(
+            "SELECT front, exclude_image FROM sacarose_positions WHERE unit_code = ?",
+            (code,),
+        ).fetchall()
+    }
+    conn.execute("DELETE FROM sacarose_positions WHERE unit_code = ?", (code,))
+    for front, sector in normalized_rows:
+        exclude_image = 1 if existing_visibility.get(_sacarose_match_key(front), False) else 0
+        conn.execute(
+            """
+            INSERT INTO sacarose_positions (unit_code, front, sector, exclude_image, updated_by, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (code, front, sector, exclude_image, user_id, now),
+        )
+
+
 def save_unit(
     unit: dict[str, Any],
     position: int,
@@ -694,6 +763,8 @@ def save_unit(
             )
             action = "criação"
 
+        _sync_sacarose_from_position_unit(conn, normalized_unit, user_id, now)
+
         _history_insert(
             conn,
             unit_code=code,
@@ -750,3 +821,345 @@ def list_history(limit: int = 100, unit_code: str | None = None) -> list[dict[st
         }
         for row in rows
     ]
+
+
+
+def _normalize_sector_code(value: Any, field: str = "Setor") -> str:
+    text = str(value or "").strip()
+    if not text:
+        raise ValueError(f"Informe o {field.lower()}.")
+    if len(text) > 24:
+        raise ValueError(f"{field} deve ter no máximo 24 caracteres.")
+    # Evita códigos vindos do Excel como 71.0 quando o valor é inteiro.
+    if re.fullmatch(r"-?\d+\.0+", text):
+        text = text.split(".", 1)[0]
+    return text
+
+
+def _normalize_sector_text(value: Any, field: str, max_length: int) -> str:
+    text = str(value or "").strip()
+    if len(text) > max_length:
+        raise ValueError(f"{field} deve ter no máximo {max_length} caracteres.")
+    return text
+
+
+def _sector_sort_key(value: str) -> tuple:
+    pieces = re.split(r"(\d+)", str(value or "").casefold())
+    return tuple(int(piece) if piece.isdigit() else piece for piece in pieces)
+
+
+def list_sector_base(search: str | None = None) -> list[dict[str, Any]]:
+    params: list[Any] = []
+    where = ""
+    if search:
+        term = f"%{str(search).strip()}%"
+        where = "WHERE s.sector LIKE ? OR s.section LIKE ? OR s.description LIKE ?"
+        params.extend([term, term, term])
+
+    with connection() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT s.sector, s.section, s.description, s.source, s.updated_at,
+                   users.name AS updated_by_name
+            FROM sector_base s
+            LEFT JOIN users ON users.id = s.updated_by
+            {where}
+            """,
+            params,
+        ).fetchall()
+
+    items = [
+        {
+            "sector": row["sector"],
+            "section": row["section"],
+            "description": row["description"],
+            "source": row["source"],
+            "updated_at": int(row["updated_at"] or 0),
+            "updated_by": row["updated_by_name"] or "-",
+        }
+        for row in rows
+    ]
+    items.sort(key=lambda item: _sector_sort_key(item["sector"]))
+    return items
+
+
+def save_sector_base_item(
+    sector: Any,
+    section: Any,
+    description: Any,
+    user_id: int,
+    *,
+    source: str = "manual",
+) -> dict[str, Any]:
+    normalized_sector = _normalize_sector_code(sector)
+    normalized_section = _normalize_sector_text(section, "Seção", 24)
+    normalized_description = _normalize_sector_text(description, "Descrição do setor", 160)
+    normalized_source = "excel" if source == "excel" else "manual"
+    now = int(time.time())
+
+    with connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO sector_base (sector, section, description, source, updated_by, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(sector) DO UPDATE SET
+                section = excluded.section,
+                description = excluded.description,
+                source = excluded.source,
+                updated_by = excluded.updated_by,
+                updated_at = excluded.updated_at
+            """,
+            (normalized_sector, normalized_section, normalized_description, normalized_source, user_id, now),
+        )
+        row = conn.execute(
+            """
+            SELECT s.sector, s.section, s.description, s.source, s.updated_at,
+                   users.name AS updated_by_name
+            FROM sector_base s
+            LEFT JOIN users ON users.id = s.updated_by
+            WHERE s.sector = ?
+            """,
+            (normalized_sector,),
+        ).fetchone()
+
+    return {
+        "sector": row["sector"],
+        "section": row["section"],
+        "description": row["description"],
+        "source": row["source"],
+        "updated_at": int(row["updated_at"] or 0),
+        "updated_by": row["updated_by_name"] or "-",
+    }
+
+
+def import_sector_base_items(items: list[dict[str, Any]], user_id: int) -> dict[str, int]:
+    if not isinstance(items, list) or not items:
+        raise ValueError("Nenhum setor válido foi encontrado na planilha.")
+    if len(items) > 10_000:
+        raise ValueError("A planilha possui setores demais para uma única importação.")
+
+    normalized: dict[str, tuple[str, str, str]] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        sector = _normalize_sector_code(item.get("sector"))
+        section = _normalize_sector_text(item.get("section"), "Seção", 24)
+        description = _normalize_sector_text(item.get("description"), "Descrição do setor", 160)
+        normalized[sector.casefold()] = (sector, section, description)
+
+    if not normalized:
+        raise ValueError("Nenhum setor válido foi encontrado na planilha.")
+
+    now = int(time.time())
+    created = 0
+    updated = 0
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        for sector, section, description in normalized.values():
+            exists = conn.execute("SELECT 1 FROM sector_base WHERE sector = ?", (sector,)).fetchone()
+            if exists:
+                updated += 1
+            else:
+                created += 1
+            conn.execute(
+                """
+                INSERT INTO sector_base (sector, section, description, source, updated_by, updated_at)
+                VALUES (?, ?, ?, 'excel', ?, ?)
+                ON CONFLICT(sector) DO UPDATE SET
+                    section = excluded.section,
+                    description = excluded.description,
+                    source = 'excel',
+                    updated_by = excluded.updated_by,
+                    updated_at = excluded.updated_at
+                """,
+                (sector, section, description, user_id, now),
+            )
+
+    return {"total": len(normalized), "created": created, "updated": updated}
+
+
+def delete_sector_base_item(sector: Any) -> None:
+    normalized_sector = _normalize_sector_code(sector)
+    with connection() as conn:
+        cursor = conn.execute("DELETE FROM sector_base WHERE sector = ?", (normalized_sector,))
+        if cursor.rowcount <= 0:
+            raise ValueError("Setor não encontrado na base.")
+
+
+SACAROSE_UNIT_CODES = ("NRD", "PPT", "RBR", "PST")
+
+def _sacarose_front_key(value: Any) -> tuple[int, Any]:
+    text = str(value or "").strip()
+    if text.isdigit():
+        return (0, int(text))
+    return (1, _sector_sort_key(text))
+
+def _sacarose_match_key(value: Any) -> str:
+    text = str(value or "").strip()
+    if text.isdigit():
+        return str(int(text))
+    return text.casefold()
+
+def list_sacarose_positions() -> dict[str, list[dict[str, Any]]]:
+    result = {code: [] for code in SACAROSE_UNIT_CODES}
+    with connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT p.unit_code, p.front, p.sector, p.exclude_image, p.updated_at,
+                   COALESCE(b.section, '') AS section,
+                   COALESCE(b.description, '') AS description,
+                   users.name AS updated_by_name
+            FROM sacarose_positions p
+            LEFT JOIN sector_base b ON b.sector = p.sector COLLATE NOCASE
+            LEFT JOIN users ON users.id = p.updated_by
+            WHERE p.unit_code IN ('NRD', 'PPT', 'RBR', 'PST')
+            """
+        ).fetchall()
+
+    for row in rows:
+        code = str(row["unit_code"] or "").upper()
+        if code not in result:
+            continue
+        result[code].append({
+            "front": row["front"],
+            "sector": row["sector"],
+            "section": row["section"],
+            "description": row["description"],
+            "exclude_image": bool(row["exclude_image"]),
+            "updated_at": int(row["updated_at"] or 0),
+            "updated_by": row["updated_by_name"] or "-",
+        })
+
+    for code in result:
+        result[code].sort(key=lambda item: _sacarose_front_key(item["front"]))
+    return result
+
+def save_sacarose_positions(payload: Any, user_id: int) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("Dados da Sacarose inválidos.")
+
+    normalized: dict[str, list[dict[str, str]]] = {code: [] for code in SACAROSE_UNIT_CODES}
+    with connection() as conn:
+        known_sectors = {
+            str(row["sector"]).casefold(): str(row["sector"])
+            for row in conn.execute("SELECT sector FROM sector_base").fetchall()
+        }
+
+        for code in SACAROSE_UNIT_CODES:
+            raw_rows = payload.get(code, [])
+            if not isinstance(raw_rows, list) or len(raw_rows) > 100:
+                raise ValueError(f"Lista da Sacarose {code} inválida.")
+            seen_fronts: set[str] = set()
+            for raw in raw_rows:
+                if not isinstance(raw, dict):
+                    raise ValueError(f"Linha da Sacarose {code} inválida.")
+                front = str(raw.get("front") or "").strip()
+                sector = _normalize_sector_code(raw.get("sector"))
+                if not front:
+                    raise ValueError(f"Informe a frente em {code}.")
+                if len(front) > 12:
+                    raise ValueError(f"Frente {front} excede o tamanho permitido.")
+                front_key = _sacarose_match_key(front)
+                if front_key in seen_fronts:
+                    raise ValueError(f"A frente {front} está repetida em {code}.")
+                seen_fronts.add(front_key)
+                canonical_sector = known_sectors.get(sector.casefold())
+                if not canonical_sector:
+                    raise ValueError(f"Setor {sector} de {code} não foi encontrado na Base de Setores.")
+                exclude_image = bool(raw.get("exclude_image", False))
+                normalized[code].append({
+                    "front": front,
+                    "sector": canonical_sector,
+                    "exclude_image": exclude_image,
+                })
+            normalized[code].sort(key=lambda item: _sacarose_front_key(item["front"]))
+
+        now = int(time.time())
+        conn.execute("BEGIN IMMEDIATE")
+        for code in SACAROSE_UNIT_CODES:
+            conn.execute("DELETE FROM sacarose_positions WHERE unit_code = ?", (code,))
+            for item in normalized[code]:
+                conn.execute(
+                    """
+                    INSERT INTO sacarose_positions (unit_code, front, sector, exclude_image, updated_by, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        code,
+                        item["front"],
+                        item["sector"],
+                        1 if item.get("exclude_image") else 0,
+                        user_id,
+                        now,
+                    ),
+                )
+
+            unit_row = conn.execute(
+                """
+                SELECT u.id, u.code, u.name, u.position, u.data_json, u.version
+                FROM units u WHERE u.code = ?
+                """,
+                (code,),
+            ).fetchone()
+            if not unit_row:
+                raise ValueError(f"Unidade {code} ainda não foi inicializada.")
+
+            current_unit = _decode_unit(unit_row) or {}
+            current_rows = current_unit.get("rows") if isinstance(current_unit.get("rows"), list) else []
+            row_by_front: dict[str, list[Any]] = {}
+            for row in current_rows:
+                if isinstance(row, (list, tuple)) and len(row) >= 4:
+                    row_by_front[_sacarose_match_key(row[0])] = list(row)
+
+            synced_rows: list[list[Any]] = []
+            for item in normalized[code]:
+                match = row_by_front.get(_sacarose_match_key(item["front"]))
+                if match:
+                    display_front = str(match[0] or item["front"]).strip() or item["front"]
+                    status = _normalize_status(match[3])
+                else:
+                    display_front = item["front"]
+                    status = "EM ATIVIDADE"
+                color = "green" if status == "EM ATIVIDADE" else "yellow"
+                synced_rows.append([display_front, item["sector"], color, status])
+
+            synced_rows.sort(key=lambda row: _sacarose_front_key(row[0]))
+            current_unit["code"] = code
+            current_unit["name"] = UNIT_DEFINITIONS[code]["name"]
+            current_unit["rows"] = synced_rows
+            normalized_unit = _normalize_unit_payload(current_unit, UNIT_DEFINITIONS[code]["position"])
+            after_json = json.dumps(normalized_unit, ensure_ascii=False)
+            before_json = unit_row["data_json"]
+            new_version = int(unit_row["version"] or 1) + 1
+            conn.execute(
+                """
+                UPDATE units
+                SET name = ?, position = ?, data_json = ?, updated_by = ?, updated_at = ?, version = ?
+                WHERE code = ?
+                """,
+                (
+                    normalized_unit["name"],
+                    UNIT_DEFINITIONS[code]["position"],
+                    after_json,
+                    user_id,
+                    now,
+                    new_version,
+                    code,
+                ),
+            )
+            _history_insert(
+                conn,
+                unit_code=code,
+                unit_name=normalized_unit["name"],
+                user_id=user_id,
+                action="sincronização Sacarose",
+                before_json=before_json,
+                after_json=after_json,
+                version=new_version,
+                created_at=now,
+            )
+
+    return {
+        "sacarose": list_sacarose_positions(),
+        **list_units_payload(),
+    }
