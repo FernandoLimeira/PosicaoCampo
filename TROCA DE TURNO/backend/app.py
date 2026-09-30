@@ -43,6 +43,7 @@ PUBLIC_STATIC_FILES = {
 }
 LOGIN_WINDOW_SECONDS = 5 * 60
 LOGIN_MAX_FAILURES = 10
+LOGIN_MAX_FAILURES_PER_IP = 30
 LOGIN_TRACKED_KEYS_MAX = 5000
 _login_failures = {}
 _login_lock = threading.Lock()
@@ -52,12 +53,17 @@ def _client_key(environ, username=""):
     return (environ.get("REMOTE_ADDR", "unknown"), username.strip().casefold())
 
 
+def _ip_key(environ):
+    return (environ.get("REMOTE_ADDR", "unknown"), "*")
+
+
 def _prune_login_failures(now):
     stale_keys = []
     for key, stamps in _login_failures.items():
         fresh = [stamp for stamp in stamps if now - stamp < LOGIN_WINDOW_SECONDS]
         if fresh:
-            _login_failures[key] = fresh[-LOGIN_MAX_FAILURES:]
+            limit = LOGIN_MAX_FAILURES_PER_IP if key[1] == "*" else LOGIN_MAX_FAILURES
+            _login_failures[key] = fresh[-limit:]
         else:
             stale_keys.append(key)
     for key in stale_keys:
@@ -70,25 +76,30 @@ def _prune_login_failures(now):
 
 
 def _login_blocked(environ, username):
-    key = _client_key(environ, username)
+    user_key = _client_key(environ, username)
+    ip_key = _ip_key(environ)
     now = time.time()
     with _login_lock:
         _prune_login_failures(now)
-        attempts = _login_failures.get(key, [])
-        return len(attempts) >= LOGIN_MAX_FAILURES
+        return (
+            len(_login_failures.get(user_key, [])) >= LOGIN_MAX_FAILURES
+            or len(_login_failures.get(ip_key, [])) >= LOGIN_MAX_FAILURES_PER_IP
+        )
 
 
 def _record_login_failure(environ, username):
-    key = _client_key(environ, username)
     now = time.time()
     with _login_lock:
         _prune_login_failures(now)
-        attempts = list(_login_failures.get(key, []))
-        attempts.append(now)
-        _login_failures[key] = attempts[-LOGIN_MAX_FAILURES:]
+        for key, limit in ((_client_key(environ, username), LOGIN_MAX_FAILURES), (_ip_key(environ), LOGIN_MAX_FAILURES_PER_IP)):
+            attempts = list(_login_failures.get(key, []))
+            attempts.append(now)
+            _login_failures[key] = attempts[-limit:]
 
 
 def _clear_login_failures(environ, username):
+    # Limpa o bloqueio específico do usuário autenticado; o histórico agregado
+    # do IP permanece para evitar pulverização de tentativas entre vários nomes.
     with _login_lock:
         _login_failures.pop(_client_key(environ, username), None)
 
@@ -207,6 +218,8 @@ def _respond(start_response, status, body=b"", headers=None):
     headers.append(("X-Content-Type-Options", "nosniff"))
     headers.append(("X-Frame-Options", "DENY"))
     headers.append(("Referrer-Policy", "no-referrer"))
+    headers.append(("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()"))
+    headers.append(("X-Permitted-Cross-Domain-Policies", "none"))
     headers.append(("Permissions-Policy", "camera=(), microphone=(), geolocation=()"))
     headers.append(("Cross-Origin-Opener-Policy", "same-origin"))
     headers.append(("Cross-Origin-Resource-Policy", "same-origin"))
@@ -241,17 +254,26 @@ def _file(start_response, path: Path):
     )
 
 
-def _auth_cookie(token):
+def _request_is_https(environ):
+    if str(environ.get("wsgi.url_scheme", "")).lower() == "https":
+        return True
+    forwarded_proto = str(environ.get("HTTP_X_FORWARDED_PROTO", "")).split(",", 1)[0].strip().lower()
+    return forwarded_proto == "https"
+
+
+def _auth_cookie(token, environ):
+    secure = "; Secure" if _request_is_https(environ) else ""
     return (
         "Set-Cookie",
-        f"{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_TTL_SECONDS}",
+        f"{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_TTL_SECONDS}{secure}",
     )
 
 
-def _clear_auth_cookie():
+def _clear_auth_cookie(environ):
+    secure = "; Secure" if _request_is_https(environ) else ""
     return (
         "Set-Cookie",
-        f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0",
+        f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0{secure}",
     )
 
 
@@ -290,12 +312,12 @@ def application(environ, start_response):
             return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Nome ou senha inválidos."})
         _clear_login_failures(environ, username)
         token = create_session(logged["id"])
-        return _json(start_response, HTTPStatus.OK, {"user": logged}, [_auth_cookie(token)])
+        return _json(start_response, HTTPStatus.OK, {"user": logged}, [_auth_cookie(token, environ)])
 
     if path == "/api/auth/logout" and method == "POST":
         token = _cookies(environ).get(SESSION_COOKIE)
         delete_session(token)
-        return _json(start_response, HTTPStatus.OK, {"ok": True}, [_clear_auth_cookie()])
+        return _json(start_response, HTTPStatus.OK, {"ok": True}, [_clear_auth_cookie(environ)])
 
     if path == "/api/auth/me" and method == "GET":
         if not user:
@@ -404,9 +426,16 @@ def application(environ, start_response):
         try:
             payload = _json_body(environ)
             units_payload = payload.get("units")
+            expected_versions = payload.get("expected_versions")
             create_backup()
-            result = save_sacarose_positions(units_payload, user["id"])
+            result = save_sacarose_positions(units_payload, user["id"], expected_versions)
             return _json(start_response, HTTPStatus.OK, {"ok": True, **result})
+        except UnitConflictError as exc:
+            return _json(
+                start_response,
+                HTTPStatus.CONFLICT,
+                {"error": str(exc), "conflict": True, "current": exc.current},
+            )
         except (ValueError, TypeError) as exc:
             return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
 

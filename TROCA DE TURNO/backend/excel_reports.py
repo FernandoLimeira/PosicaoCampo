@@ -17,6 +17,23 @@ import xml.etree.ElementTree as ET
 
 
 MAX_EXCEL_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_XLSX_UNCOMPRESSED_BYTES = 96 * 1024 * 1024
+MAX_XLSX_ENTRY_BYTES = 48 * 1024 * 1024
+MAX_REPORT_ROWS = 100000
+MAX_XLSX_COLUMNS = 256
+MAX_SHARED_STRINGS = 300000
+
+
+def _validate_xlsx_archive(archive: zipfile.ZipFile):
+    total = 0
+    for info in archive.infolist():
+        if info.flag_bits & 0x1:
+            raise ValueError("Planilhas Excel protegidas por senha não são suportadas.")
+        if info.file_size > MAX_XLSX_ENTRY_BYTES:
+            raise ValueError("A planilha possui um conteúdo interno grande demais para processar com segurança.")
+        total += info.file_size
+        if total > MAX_XLSX_UNCOMPRESSED_BYTES:
+            raise ValueError("A planilha expandida excede o limite seguro de processamento.")
 
 SHIFT_RANGES = (
     ("A", 0, 7 * 3600 + 20 * 60),
@@ -69,18 +86,6 @@ def _norm(value) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def _number(value, default=0.0):
-    if value in (None, ""):
-        return default
-    text = str(value).strip().replace(".", "").replace(",", ".")
-    try:
-        return float(text)
-    except ValueError:
-        try:
-            return float(str(value).strip().replace(",", "."))
-        except ValueError:
-            return default
-
 
 def _excel_serial_to_datetime(value: float) -> datetime:
     return datetime(1899, 12, 30) + timedelta(days=value)
@@ -125,6 +130,8 @@ def _shared_strings(archive: zipfile.ZipFile):
     root = ET.fromstring(archive.read("xl/sharedStrings.xml"))
     values = []
     for si in root.findall("m:si", NS):
+        if len(values) >= MAX_SHARED_STRINGS:
+            raise ValueError("A planilha possui textos compartilhados demais para processar com segurança.")
         pieces = [node.text or "" for node in si.findall(".//m:t", NS)]
         values.append("".join(pieces))
     return values
@@ -178,6 +185,7 @@ def _read_xlsx_rows(file_bytes: bytes):
         raise ValueError("O arquivo enviado não é uma planilha XLSX válida.") from exc
 
     with archive:
+        _validate_xlsx_archive(archive)
         required = {"xl/workbook.xml"}
         if not required.issubset(archive.namelist()):
             raise ValueError("Estrutura XLSX inválida ou incompleta.")
@@ -189,11 +197,15 @@ def _read_xlsx_rows(file_bytes: bytes):
         root = ET.fromstring(archive.read(sheet_path))
         rows = []
         for row_node in root.findall(".//m:sheetData/m:row", NS):
+            if len(rows) >= MAX_REPORT_ROWS:
+                raise ValueError(f"A planilha excede o limite de {MAX_REPORT_ROWS} linhas.")
             cells = {}
             max_col = -1
             for cell in row_node.findall("m:c", NS):
                 ref = cell.attrib.get("r", "A1")
                 col = _column_index(ref)
+                if col >= MAX_XLSX_COLUMNS:
+                    raise ValueError(f"A planilha excede o limite de {MAX_XLSX_COLUMNS} colunas.")
                 max_col = max(max_col, col)
                 cell_type = cell.attrib.get("t", "n")
                 style_index = int(cell.attrib.get("s", "0") or 0)
@@ -259,7 +271,14 @@ def _read_csv_rows(file_bytes: bytes):
         delimiter = ";" if sample.count(";") >= sample.count(",") else ","
 
     reader = csv.reader(StringIO(decoded), delimiter=delimiter)
-    return [[str(value or "").strip() for value in row] for row in reader]
+    rows = []
+    for row in reader:
+        if len(rows) >= MAX_REPORT_ROWS:
+            raise ValueError(f"O arquivo excede o limite de {MAX_REPORT_ROWS} linhas.")
+        if len(row) > MAX_XLSX_COLUMNS:
+            raise ValueError(f"O arquivo excede o limite de {MAX_XLSX_COLUMNS} colunas.")
+        rows.append([str(value or "").strip() for value in row])
+    return rows
 
 def _header_map(headers):
     normalized = {_norm(header): index for index, header in enumerate(headers) if str(header or "").strip()}

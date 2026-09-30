@@ -11,10 +11,12 @@ from typing import Any
 
 from .config import (
     BACKUP_DIR,
+    BACKUP_INTERVAL_SECONDS,
     BACKUP_RETENTION_DAYS,
     DATA_DIR,
     DB_BUSY_TIMEOUT_MS,
     DB_PATH,
+    MIN_PASSWORD_LENGTH,
     SESSION_TTL_SECONDS,
 )
 from .security import hash_password, new_session_token, token_digest, verify_password
@@ -304,21 +306,20 @@ def create_backup(force: bool = False) -> Path | None:
 
         BACKUP_DIR.mkdir(parents=True, exist_ok=True)
         now = datetime.now()
-        day_prefix = f"posicao_campo-{now:%Y-%m-%d}"
-        existing = sorted(BACKUP_DIR.glob(f"{day_prefix}*.db"))
+        existing = list(BACKUP_DIR.glob("posicao_campo-*.db"))
         if existing and not force:
-            _cleanup_old_backups(now)
-            return existing[-1]
+            latest = max(existing, key=lambda path: path.stat().st_mtime)
+            age_seconds = max(0.0, now.timestamp() - latest.stat().st_mtime)
+            if age_seconds < BACKUP_INTERVAL_SECONDS:
+                _cleanup_old_backups(now)
+                return latest
 
-        if force:
-            base_name = f"{day_prefix}-{now:%H%M%S}"
-            destination = BACKUP_DIR / f"{base_name}.db"
-            counter = 1
-            while destination.exists():
-                destination = BACKUP_DIR / f"{base_name}-{counter}.db"
-                counter += 1
-        else:
-            destination = BACKUP_DIR / f"{day_prefix}.db"
+        base_name = f"posicao_campo-{now:%Y-%m-%d-%H%M%S}"
+        destination = BACKUP_DIR / f"{base_name}.db"
+        counter = 1
+        while destination.exists():
+            destination = BACKUP_DIR / f"{base_name}-{counter}.db"
+            counter += 1
 
         source = sqlite3.connect(DB_PATH, timeout=max(DB_BUSY_TIMEOUT_MS / 1000, 1))
         target = sqlite3.connect(destination)
@@ -351,6 +352,8 @@ def _validate_credentials(name: str, password: str) -> tuple[str, str]:
         raise ValueError("Informe o nome do usuário.")
     if password == "":
         raise ValueError("Informe a senha.")
+    if len(password) < MIN_PASSWORD_LENGTH:
+        raise ValueError(f"A senha deve ter pelo menos {MIN_PASSWORD_LENGTH} caracteres.")
     if len(cleaned_name) > 80:
         raise ValueError("O nome do usuário deve ter no máximo 80 caracteres.")
     if len(password) > 256:
@@ -479,6 +482,8 @@ def set_user_active(user_id: int, is_active: bool, current_user_id: int) -> dict
 def reset_user_password(user_id: int, password: str, current_user_id: int) -> None:
     if password == "":
         raise ValueError("Informe a nova senha.")
+    if len(password) < MIN_PASSWORD_LENGTH:
+        raise ValueError(f"A senha deve ter pelo menos {MIN_PASSWORD_LENGTH} caracteres.")
     if len(password) > 256:
         raise ValueError("A senha deve ter no máximo 256 caracteres.")
     with connection() as conn:
@@ -1034,22 +1039,37 @@ def list_sacarose_positions() -> dict[str, list[dict[str, Any]]]:
         result[code].sort(key=lambda item: _sacarose_front_key(item["front"]))
     return result
 
-def save_sacarose_positions(payload: Any, user_id: int) -> dict[str, Any]:
+def save_sacarose_positions(
+    payload: Any,
+    user_id: int,
+    expected_versions: Any = None,
+) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("Dados da Sacarose inválidos.")
 
-    normalized: dict[str, list[dict[str, str]]] = {code: [] for code in SACAROSE_UNIT_CODES}
+    provided_codes = [code for code in SACAROSE_UNIT_CODES if code in payload]
+    if not provided_codes:
+        raise ValueError("Nenhuma unidade foi informada para a Sacarose.")
+
+    if expected_versions is None:
+        expected_versions = {}
+    if not isinstance(expected_versions, dict):
+        raise ValueError("Versões esperadas inválidas.")
+
+    normalized: dict[str, list[dict[str, Any]]] = {}
     with connection() as conn:
         known_sectors = {
             str(row["sector"]).casefold(): str(row["sector"])
             for row in conn.execute("SELECT sector FROM sector_base").fetchall()
         }
 
-        for code in SACAROSE_UNIT_CODES:
-            raw_rows = payload.get(code, [])
+        for code in provided_codes:
+            raw_rows = payload.get(code)
             if not isinstance(raw_rows, list) or len(raw_rows) > 100:
                 raise ValueError(f"Lista da Sacarose {code} inválida.")
+
             seen_fronts: set[str] = set()
+            normalized_rows: list[dict[str, Any]] = []
             for raw in raw_rows:
                 if not isinstance(raw, dict):
                     raise ValueError(f"Linha da Sacarose {code} inválida.")
@@ -1059,24 +1079,56 @@ def save_sacarose_positions(payload: Any, user_id: int) -> dict[str, Any]:
                     raise ValueError(f"Informe a frente em {code}.")
                 if len(front) > 12:
                     raise ValueError(f"Frente {front} excede o tamanho permitido.")
+
                 front_key = _sacarose_match_key(front)
                 if front_key in seen_fronts:
                     raise ValueError(f"A frente {front} está repetida em {code}.")
                 seen_fronts.add(front_key)
+
                 canonical_sector = known_sectors.get(sector.casefold())
                 if not canonical_sector:
                     raise ValueError(f"Setor {sector} de {code} não foi encontrado na Base de Setores.")
-                exclude_image = bool(raw.get("exclude_image", False))
-                normalized[code].append({
+
+                normalized_rows.append({
                     "front": front,
                     "sector": canonical_sector,
-                    "exclude_image": exclude_image,
+                    "exclude_image": bool(raw.get("exclude_image", False)),
                 })
-            normalized[code].sort(key=lambda item: _sacarose_front_key(item["front"]))
+
+            normalized_rows.sort(key=lambda item: _sacarose_front_key(item["front"]))
+            normalized[code] = normalized_rows
 
         now = int(time.time())
         conn.execute("BEGIN IMMEDIATE")
-        for code in SACAROSE_UNIT_CODES:
+
+        for code in provided_codes:
+            unit_row = conn.execute(
+                """
+                SELECT u.id, u.code, u.name, u.position, u.data_json, u.version,
+                       u.updated_at, users.name AS updated_by_name
+                FROM units u
+                LEFT JOIN users ON users.id = u.updated_by
+                WHERE u.code = ?
+                """,
+                (code,),
+            ).fetchone()
+            if not unit_row:
+                raise ValueError(f"Unidade {code} ainda não foi inicializada.")
+
+            expected_raw = expected_versions.get(code)
+            expected_version = int(expected_raw) if expected_raw is not None else None
+            current_version = int(unit_row["version"] or 1)
+            if expected_version is not None and expected_version != current_version:
+                current_unit = _decode_unit(unit_row) or {}
+                raise UnitConflictError({
+                    "unit": current_unit,
+                    "meta": {
+                        "version": current_version,
+                        "updated_at": int(unit_row["updated_at"] or 0),
+                        "updated_by": unit_row["updated_by_name"] or "-",
+                    },
+                })
+
             conn.execute("DELETE FROM sacarose_positions WHERE unit_code = ?", (code,))
             for item in normalized[code]:
                 conn.execute(
@@ -1088,21 +1140,11 @@ def save_sacarose_positions(payload: Any, user_id: int) -> dict[str, Any]:
                         code,
                         item["front"],
                         item["sector"],
-                        1 if item.get("exclude_image") else 0,
+                        1 if item["exclude_image"] else 0,
                         user_id,
                         now,
                     ),
                 )
-
-            unit_row = conn.execute(
-                """
-                SELECT u.id, u.code, u.name, u.position, u.data_json, u.version
-                FROM units u WHERE u.code = ?
-                """,
-                (code,),
-            ).fetchone()
-            if not unit_row:
-                raise ValueError(f"Unidade {code} ainda não foi inicializada.")
 
             current_unit = _decode_unit(unit_row) or {}
             current_rows = current_unit.get("rows") if isinstance(current_unit.get("rows"), list) else []
@@ -1130,34 +1172,37 @@ def save_sacarose_positions(payload: Any, user_id: int) -> dict[str, Any]:
             normalized_unit = _normalize_unit_payload(current_unit, UNIT_DEFINITIONS[code]["position"])
             after_json = json.dumps(normalized_unit, ensure_ascii=False)
             before_json = unit_row["data_json"]
-            new_version = int(unit_row["version"] or 1) + 1
-            conn.execute(
-                """
-                UPDATE units
-                SET name = ?, position = ?, data_json = ?, updated_by = ?, updated_at = ?, version = ?
-                WHERE code = ?
-                """,
-                (
-                    normalized_unit["name"],
-                    UNIT_DEFINITIONS[code]["position"],
-                    after_json,
-                    user_id,
-                    now,
-                    new_version,
-                    code,
-                ),
-            )
-            _history_insert(
-                conn,
-                unit_code=code,
-                unit_name=normalized_unit["name"],
-                user_id=user_id,
-                action="sincronização Sacarose",
-                before_json=before_json,
-                after_json=after_json,
-                version=new_version,
-                created_at=now,
-            )
+
+            # Só cria nova versão/histórico quando Frente/Setor realmente mudarem.
+            if after_json != before_json:
+                new_version = current_version + 1
+                conn.execute(
+                    """
+                    UPDATE units
+                    SET name = ?, position = ?, data_json = ?, updated_by = ?, updated_at = ?, version = ?
+                    WHERE code = ?
+                    """,
+                    (
+                        normalized_unit["name"],
+                        UNIT_DEFINITIONS[code]["position"],
+                        after_json,
+                        user_id,
+                        now,
+                        new_version,
+                        code,
+                    ),
+                )
+                _history_insert(
+                    conn,
+                    unit_code=code,
+                    unit_name=normalized_unit["name"],
+                    user_id=user_id,
+                    action="sincronização Sacarose",
+                    before_json=before_json,
+                    after_json=after_json,
+                    version=new_version,
+                    created_at=now,
+                )
 
     return {
         "sacarose": list_sacarose_positions(),

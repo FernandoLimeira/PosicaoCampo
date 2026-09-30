@@ -14,11 +14,28 @@ import zipfile
 import xml.etree.ElementTree as ET
 
 MAX_SECTOR_BASE_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_XLSX_UNCOMPRESSED_BYTES = 64 * 1024 * 1024
+MAX_XLSX_ENTRY_BYTES = 32 * 1024 * 1024
+MAX_XLSX_ROWS = 25000
+MAX_XLSX_COLUMNS = 256
+MAX_SHARED_STRINGS = 200000
 XML_MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 XML_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PKG_REL = "http://schemas.openxmlformats.org/package/2006/relationships"
 NS = {"m": XML_MAIN, "r": XML_REL}
 
+
+
+def _validate_xlsx_archive(archive: zipfile.ZipFile):
+    total = 0
+    for info in archive.infolist():
+        if info.flag_bits & 0x1:
+            raise ValueError("Planilhas Excel protegidas por senha não são suportadas.")
+        if info.file_size > MAX_XLSX_ENTRY_BYTES:
+            raise ValueError("A planilha possui um conteúdo interno grande demais para processar com segurança.")
+        total += info.file_size
+        if total > MAX_XLSX_UNCOMPRESSED_BYTES:
+            raise ValueError("A planilha expandida excede o limite seguro de processamento.")
 
 def _norm(value) -> str:
     text = unicodedata.normalize("NFKD", str(value or ""))
@@ -42,6 +59,8 @@ def _shared_strings(archive: zipfile.ZipFile):
     root = ET.fromstring(archive.read("xl/sharedStrings.xml"))
     values = []
     for si in root.findall("m:si", NS):
+        if len(values) >= MAX_SHARED_STRINGS:
+            raise ValueError("A planilha possui textos compartilhados demais para processar com segurança.")
         pieces = [node.text or "" for node in si.findall(".//m:t", NS)]
         values.append("".join(pieces))
     return values
@@ -114,11 +133,15 @@ def _sheet_rows(archive: zipfile.ZipFile, sheet_path: str, shared):
     root = ET.fromstring(archive.read(sheet_path))
     rows = []
     for row_node in root.findall(".//m:sheetData/m:row", NS):
+        if len(rows) >= MAX_XLSX_ROWS:
+            raise ValueError(f"A planilha excede o limite de {MAX_XLSX_ROWS} linhas.")
         cells = {}
         max_col = -1
         for cell in row_node.findall("m:c", NS):
             ref = cell.attrib.get("r", "A1")
             col = _column_index(ref)
+            if col >= MAX_XLSX_COLUMNS:
+                raise ValueError(f"A planilha excede o limite de {MAX_XLSX_COLUMNS} colunas.")
             max_col = max(max_col, col)
             cells[col] = _cell_value(cell, shared)
         if max_col >= 0:
@@ -190,6 +213,7 @@ def parse_sector_base_excel(file_bytes: bytes, filename: str = "base.xlsx") -> l
         raise ValueError("O arquivo enviado não é uma planilha Excel válida.") from exc
 
     with archive:
+        _validate_xlsx_archive(archive)
         required = {"xl/workbook.xml", "xl/_rels/workbook.xml.rels"}
         if not required.issubset(archive.namelist()):
             raise ValueError("Estrutura da planilha Excel inválida ou incompleta.")
