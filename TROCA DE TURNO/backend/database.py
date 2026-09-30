@@ -983,12 +983,20 @@ def import_sector_base_items(items: list[dict[str, Any]], user_id: int) -> dict[
     return {"total": len(normalized), "created": created, "updated": updated}
 
 
-def delete_sector_base_item(sector: Any) -> None:
+def delete_sector_base_item(sector: Any, section: Any) -> None:
     normalized_sector = _normalize_sector_code(sector)
+    normalized_section = _normalize_sector_text(section, "Seção", 24)
     with connection() as conn:
-        cursor = conn.execute("DELETE FROM sector_base WHERE sector = ?", (normalized_sector,))
+        cursor = conn.execute(
+            """
+            DELETE FROM sector_base
+            WHERE sector = ? COLLATE NOCASE
+              AND section = ? COLLATE NOCASE
+            """,
+            (normalized_sector, normalized_section),
+        )
         if cursor.rowcount <= 0:
-            raise ValueError("Setor não encontrado na base.")
+            raise ValueError("Setor não encontrado com essa mesma seção.")
 
 
 SACAROSE_UNIT_CODES = ("NRD", "PPT", "RBR", "PST")

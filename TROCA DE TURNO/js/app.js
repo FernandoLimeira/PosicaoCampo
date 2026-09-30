@@ -323,26 +323,16 @@ function getUnitStateLabel(border) {
   return 'Operação normal';
 }
 
-function unitSelectorButton(unit, index) {
-  const isSelected = index === selectedUnitIndex;
-  return `
-    <button
-      class="unit-selector-button ${isSelected ? 'selected' : ''} ${escapeHtml(unit.border)}"
-      type="button"
-      role="tab"
-      aria-selected="${isSelected ? 'true' : 'false'}"
-      data-unit-index="${index}"
-    >
-      <strong>${escapeHtml(unit.code)}</strong>
-      <span>${escapeHtml(unit.name)}</span>
-    </button>`;
-}
-
 function renderUnitSelection() {
   if (!units[selectedUnitIndex]) selectedUnitIndex = 0;
 
   const selector = document.querySelector('#unit-selector');
-  if (selector) selector.innerHTML = units.map((unit, index) => unitSelectorButton(unit, index)).join('');
+  if (selector) {
+    selector.innerHTML = units.map((unit, index) => {
+      const selected = index === selectedUnitIndex;
+      return `<button class="unit-selector-button${selected ? ' selected' : ''}" type="button" role="tab" aria-selected="${selected}" data-unit-index="${index}" title="${escapeHtml(unit.name)}">${escapeHtml(unit.code)}</button>`;
+    }).join('');
+  }
 
   const unit = units[selectedUnitIndex];
   const previewLabel = document.querySelector('#preview-unit-label');
@@ -2897,7 +2887,7 @@ function renderSectorBaseList() {
 
   if (count) count.textContent = String(sectorBaseItems.length);
   tbody.innerHTML = pageItems.map(item => `
-    <tr data-sector="${escapeHtml(item.sector)}">
+    <tr data-sector="${escapeHtml(item.sector)}" data-section="${escapeHtml(item.section || '')}">
       <td><strong>${escapeHtml(item.sector)}</strong></td>
       <td>${escapeHtml(item.section || '-')}</td>
       <td>
@@ -2907,7 +2897,7 @@ function renderSectorBaseList() {
       <td><span class="sector-base-source ${item.source === 'excel' ? 'is-excel' : 'is-manual'}">${escapeHtml(sectorBaseSourceLabel(item.source))}</span></td>
       <td class="sector-base-actions-cell">
         <button class="sector-base-action" type="button" data-sector-base-action="edit" data-sector="${escapeHtml(item.sector)}">Editar</button>
-        <button class="sector-base-action danger" type="button" data-sector-base-action="delete" data-sector="${escapeHtml(item.sector)}">Excluir</button>
+        <button class="sector-base-action danger" type="button" data-sector-base-action="delete" data-sector="${escapeHtml(item.sector)}" data-section="${escapeHtml(item.section || '')}">Excluir</button>
       </td>
     </tr>
   `).join('');
@@ -3046,16 +3036,24 @@ async function importSectorBaseExcel(event) {
   }
 }
 
-async function deleteSectorBaseItemFromList(sector) {
+async function deleteSectorBaseItemFromList(sector, section = '') {
   if (!sector) return;
-  const accepted = window.confirm(`Excluir o setor ${sector} da base?`);
+  const sectionLabel = section || '(sem seção)';
+  const accepted = window.confirm(`Excluir o setor ${sector} da seção ${sectionLabel}?`);
   if (!accepted) return;
   try {
-    await apiRequest(`/api/sector-base/${encodeURIComponent(sector)}`, { method: 'DELETE' });
-    sectorBaseItems = sectorBaseItems.filter(item => normalizeSectorLookupKey(item.sector) !== normalizeSectorLookupKey(sector));
+    const url = `/api/sector-base/${encodeURIComponent(sector)}?section=${encodeURIComponent(section)}`;
+    await apiRequest(url, { method: 'DELETE' });
+    const sectorKey = normalizeSectorLookupKey(sector);
+    const sectionKey = String(section || '').trim().toLocaleLowerCase('pt-BR');
+    sectorBaseItems = sectorBaseItems.filter(item => {
+      const sameSector = normalizeSectorLookupKey(item.sector) === sectorKey;
+      const sameSection = String(item.section || '').trim().toLocaleLowerCase('pt-BR') === sectionKey;
+      return !(sameSector && sameSection);
+    });
     rebuildSectorBaseMap();
-      renderSectorBaseList();
-    showToast(`Setor ${sector} removido da base.`);
+    renderSectorBaseList();
+    showToast(`Setor ${sector} da seção ${sectionLabel} removido da base.`);
   } catch (error) {
     console.error(error);
     showToast(error.message || 'Não foi possível excluir o setor.');
@@ -3321,8 +3319,9 @@ function setupEvents() {
     const button = event.target.closest('[data-sector-base-action]');
     if (!button) return;
     const sector = button.dataset.sector || '';
+    const section = button.dataset.section || '';
     if (button.dataset.sectorBaseAction === 'edit') editSectorBaseItem(sector);
-    if (button.dataset.sectorBaseAction === 'delete') deleteSectorBaseItemFromList(sector);
+    if (button.dataset.sectorBaseAction === 'delete') deleteSectorBaseItemFromList(sector, section);
   });
   document.querySelector('#sacarose-form')?.addEventListener('submit', saveSacarose);
   document.querySelectorAll('.sacarose-add-row').forEach(button => {
@@ -3386,11 +3385,11 @@ function setupEvents() {
     setEditorStep(currentEditorStep + 1);
   });
 
-  document.querySelector('#unit-selector').addEventListener('click', event => {
+  document.querySelector('#unit-selector')?.addEventListener('click', event => {
     const button = event.target.closest('.unit-selector-button');
     if (!button) return;
     const index = Number(button.dataset.unitIndex);
-    if (!Number.isInteger(index) || !units[index]) return;
+    if (!Number.isInteger(index) || !units[index] || index === selectedUnitIndex) return;
     selectedUnitIndex = index;
     showAppView('dashboard');
     renderDashboard();

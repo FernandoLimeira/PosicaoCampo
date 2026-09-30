@@ -480,9 +480,12 @@ def application(environ, start_response):
         if not user:
             return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
         sector = path.rsplit("/", 1)[-1]
+        section = (query.get("section") or [None])[0]
         try:
             from urllib.parse import unquote
-            delete_sector_base_item(unquote(sector))
+            if section is None:
+                raise ValueError("Informe a seção para confirmar a exclusão do setor.")
+            delete_sector_base_item(unquote(sector), section)
             return _json(start_response, HTTPStatus.OK, {"ok": True})
         except ValueError as exc:
             return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
