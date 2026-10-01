@@ -1084,8 +1084,13 @@ function loadSacaroseHeaderIconImage() {
   return loadImageAsset('/assets/sacarose-icon.png', 'Não foi possível carregar o ícone da posição de colheita.');
 }
 
-function loadReportUnitIconImage() {
-  return loadImageAsset('/assets/report-unit-icon.png', 'Não foi possível carregar o ícone das unidades do relatório.');
+async function loadReportUnitIconImage() {
+  try {
+    return await loadImageAsset('/assets/report-unit-icon.png?v=20260930-icon-v35', 'Não foi possível carregar o ícone das unidades do relatório.');
+  } catch (error) {
+    console.warn('Ícone das unidades indisponível; usando desenho de segurança no relatório.', error);
+    return null;
+  }
 }
 
 function roundedRectPath(ctx, x, y, width, height, radius) {
