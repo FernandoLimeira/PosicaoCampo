@@ -1009,6 +1009,10 @@ def import_sector_base_items(items: list[dict[str, Any]], user_id: int) -> dict[
     created = 0
     updated = 0
     with connection() as conn:
+        # Garante também no momento da importação que bases antigas, onde SETOR
+        # era a única chave, sejam migradas para a chave composta SETOR + SEÇÃO.
+        # Assim o mesmo SETOR pode existir em várias SEÇÕES sem sobrescrever dados.
+        _ensure_sector_base_composite_key(conn)
         conn.execute("BEGIN IMMEDIATE")
         for sector, section, description in normalized.values():
             exists = conn.execute(
@@ -1032,7 +1036,12 @@ def import_sector_base_items(items: list[dict[str, Any]], user_id: int) -> dict[
                 (sector, section, description, user_id, now),
             )
 
-    return {"total": len(normalized), "created": created, "updated": updated}
+    return {
+        "total": len(normalized),
+        "processed_rows": len(items),
+        "created": created,
+        "updated": updated,
+    }
 
 def delete_sector_base_item(sector: Any, section: Any) -> None:
     normalized_sector = _normalize_sector_code(sector)

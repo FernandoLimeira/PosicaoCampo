@@ -477,6 +477,7 @@ def application(environ, start_response):
                     "ok": True,
                     **result,
                     "rows_read": parsed["rows_read"],
+                    "unique_records": parsed.get("unique_records", result.get("total", 0)),
                     "duplicate_rows": parsed["duplicate_rows"],
                     "conflicts": parsed["conflicts"],
                     "conflict_keys": parsed["conflict_keys"],

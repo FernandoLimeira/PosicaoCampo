@@ -225,7 +225,8 @@ def parse_sector_base_excel_details(file_bytes: bytes, filename: str = "base.xls
         preferred_names = {"base dados", "base de dados", "base setores", "base de setores"}
         named_base_sheets = [item for item in sheets if _norm(item[0]) in preferred_names]
         preferred = named_base_sheets or sheets
-        deduped: dict[tuple[str, str], dict[str, str]] = {}
+        all_items: list[dict[str, str]] = []
+        seen: dict[tuple[str, str], dict[str, str]] = {}
         rows_read = 0
         duplicate_rows = 0
         conflicts = 0
@@ -233,14 +234,18 @@ def parse_sector_base_excel_details(file_bytes: bytes, filename: str = "base.xls
         matched_sheets: list[str] = []
 
         for sheet_name, sheet_path in preferred:
+            # Lê a aba inteira. Não interrompe por repetição de SETOR e não usa
+            # o número do SETOR como critério para encerrar/deduplicar a leitura.
             items = _parse_rows(_sheet_rows(archive, sheet_path, shared))
             if not items:
                 continue
             matched_sheets.append(sheet_name)
             rows_read += len(items)
+            all_items.extend(items)
+
             for item in items:
                 key = (_norm(item["sector"]), _norm(item.get("section", "")))
-                previous = deduped.get(key)
+                previous = seen.get(key)
                 if previous is not None:
                     duplicate_rows += 1
                     if _norm(previous.get("description", "")) != _norm(item.get("description", "")):
@@ -248,13 +253,15 @@ def parse_sector_base_excel_details(file_bytes: bytes, filename: str = "base.xls
                         label = f'{item["sector"]} / {item.get("section", "") or "sem seção"}'
                         if label not in conflict_keys and len(conflict_keys) < 20:
                             conflict_keys.append(label)
-                # Para a mesma combinação SETOR + SEÇÃO, mantém a última linha da planilha.
-                deduped[key] = item
+                seen[key] = item
 
-        if deduped:
+        if all_items:
             return {
-                "items": list(deduped.values()),
+                # Entrega TODAS as linhas válidas ao importador. A consolidação
+                # acontece depois pela chave correta SETOR + SEÇÃO.
+                "items": all_items,
                 "rows_read": rows_read,
+                "unique_records": len(seen),
                 "duplicate_rows": duplicate_rows,
                 "conflicts": conflicts,
                 "conflict_keys": conflict_keys,
