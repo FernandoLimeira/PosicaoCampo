@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from .config import BASE_DIR, MAX_BODY_BYTES, SESSION_COOKIE, SESSION_TTL_SECONDS
 from .excel_reports import MAX_EXCEL_UPLOAD_BYTES, analyze_excel_report
-from .sector_base_import import MAX_SECTOR_BASE_UPLOAD_BYTES, parse_sector_base_excel
+from .sector_base_import import MAX_SECTOR_BASE_UPLOAD_BYTES, parse_sector_base_excel_details
 from .database import (
     UnitConflictError,
     authenticate_user,
@@ -457,6 +457,7 @@ def application(environ, start_response):
                 payload.get("description"),
                 user["id"],
                 source="manual",
+                original_section=payload.get("original_section"),
             )
             return _json(start_response, HTTPStatus.OK, {"item": item})
         except ValueError as exc:
@@ -467,9 +468,21 @@ def application(environ, start_response):
             return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
         try:
             filename, file_bytes = _multipart_file(environ, max_file_bytes=MAX_SECTOR_BASE_UPLOAD_BYTES)
-            items = parse_sector_base_excel(file_bytes, filename)
-            result = import_sector_base_items(items, user["id"])
-            return _json(start_response, HTTPStatus.OK, {"ok": True, **result})
+            parsed = parse_sector_base_excel_details(file_bytes, filename)
+            result = import_sector_base_items(parsed["items"], user["id"])
+            return _json(
+                start_response,
+                HTTPStatus.OK,
+                {
+                    "ok": True,
+                    **result,
+                    "rows_read": parsed["rows_read"],
+                    "duplicate_rows": parsed["duplicate_rows"],
+                    "conflicts": parsed["conflicts"],
+                    "conflict_keys": parsed["conflict_keys"],
+                    "matched_sheets": parsed["matched_sheets"],
+                },
+            )
         except ValueError as exc:
             return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
         except Exception as exc:

@@ -208,6 +208,44 @@ def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
     return any(row["name"] == column for row in rows)
 
 
+def _ensure_sector_base_composite_key(conn: sqlite3.Connection) -> None:
+    info = conn.execute("PRAGMA table_info(sector_base)").fetchall()
+    if not info:
+        return
+    pk_columns = [
+        row["name"]
+        for row in sorted((row for row in info if int(row["pk"] or 0) > 0), key=lambda row: int(row["pk"]))
+    ]
+    if pk_columns == ["sector", "section"]:
+        return
+
+    conn.execute("ALTER TABLE sector_base RENAME TO sector_base_legacy")
+    conn.execute(
+        """
+        CREATE TABLE sector_base (
+            sector TEXT NOT NULL COLLATE NOCASE,
+            section TEXT NOT NULL DEFAULT '' COLLATE NOCASE,
+            description TEXT NOT NULL DEFAULT '',
+            source TEXT NOT NULL DEFAULT 'manual',
+            updated_by INTEGER,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (sector, section),
+            FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO sector_base (sector, section, description, source, updated_by, updated_at)
+        SELECT sector, COALESCE(section, ''), COALESCE(description, ''), COALESCE(source, 'manual'), updated_by, updated_at
+        FROM sector_base_legacy
+        """
+    )
+    conn.execute("DROP TABLE sector_base_legacy")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sector_base_section ON sector_base(section)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sector_base_description ON sector_base(description)")
+
+
 def init_db() -> None:
     with connection() as conn:
         conn.execute("PRAGMA journal_mode = WAL")
@@ -257,12 +295,13 @@ def init_db() -> None:
             );
 
             CREATE TABLE IF NOT EXISTS sector_base (
-                sector TEXT PRIMARY KEY COLLATE NOCASE,
-                section TEXT NOT NULL DEFAULT '',
+                sector TEXT NOT NULL COLLATE NOCASE,
+                section TEXT NOT NULL DEFAULT '' COLLATE NOCASE,
                 description TEXT NOT NULL DEFAULT '',
                 source TEXT NOT NULL DEFAULT 'manual',
                 updated_by INTEGER,
                 updated_at INTEGER NOT NULL,
+                PRIMARY KEY (sector, section),
                 FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
             );
 
@@ -285,6 +324,7 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_sacarose_positions_sector ON sacarose_positions(sector);
             """
         )
+        _ensure_sector_base_composite_key(conn)
         if not _column_exists(conn, "users", "role"):
             conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
         if not _column_exists(conn, "users", "is_active"):
@@ -884,7 +924,7 @@ def list_sector_base(search: str | None = None) -> list[dict[str, Any]]:
         }
         for row in rows
     ]
-    items.sort(key=lambda item: _sector_sort_key(item["sector"]))
+    items.sort(key=lambda item: (_sector_sort_key(item["sector"]), _sector_sort_key(item["section"])))
     return items
 
 
@@ -895,20 +935,31 @@ def save_sector_base_item(
     user_id: int,
     *,
     source: str = "manual",
+    original_section: Any | None = None,
 ) -> dict[str, Any]:
     normalized_sector = _normalize_sector_code(sector)
     normalized_section = _normalize_sector_text(section, "Seção", 24)
     normalized_description = _normalize_sector_text(description, "Descrição do setor", 160)
     normalized_source = "excel" if source == "excel" else "manual"
+    normalized_original_section = (
+        _normalize_sector_text(original_section, "Seção original", 24)
+        if original_section is not None
+        else None
+    )
     now = int(time.time())
 
     with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if normalized_original_section is not None and normalized_original_section.casefold() != normalized_section.casefold():
+            conn.execute(
+                "DELETE FROM sector_base WHERE sector = ? COLLATE NOCASE AND section = ? COLLATE NOCASE",
+                (normalized_sector, normalized_original_section),
+            )
         conn.execute(
             """
             INSERT INTO sector_base (sector, section, description, source, updated_by, updated_at)
             VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(sector) DO UPDATE SET
-                section = excluded.section,
+            ON CONFLICT(sector, section) DO UPDATE SET
                 description = excluded.description,
                 source = excluded.source,
                 updated_by = excluded.updated_by,
@@ -922,9 +973,9 @@ def save_sector_base_item(
                    users.name AS updated_by_name
             FROM sector_base s
             LEFT JOIN users ON users.id = s.updated_by
-            WHERE s.sector = ?
+            WHERE s.sector = ? COLLATE NOCASE AND s.section = ? COLLATE NOCASE
             """,
-            (normalized_sector,),
+            (normalized_sector, normalized_section),
         ).fetchone()
 
     return {
@@ -936,21 +987,20 @@ def save_sector_base_item(
         "updated_by": row["updated_by_name"] or "-",
     }
 
-
 def import_sector_base_items(items: list[dict[str, Any]], user_id: int) -> dict[str, int]:
     if not isinstance(items, list) or not items:
         raise ValueError("Nenhum setor válido foi encontrado na planilha.")
-    if len(items) > 10_000:
+    if len(items) > 25_000:
         raise ValueError("A planilha possui setores demais para uma única importação.")
 
-    normalized: dict[str, tuple[str, str, str]] = {}
+    normalized: dict[tuple[str, str], tuple[str, str, str]] = {}
     for item in items:
         if not isinstance(item, dict):
             continue
         sector = _normalize_sector_code(item.get("sector"))
         section = _normalize_sector_text(item.get("section"), "Seção", 24)
         description = _normalize_sector_text(item.get("description"), "Descrição do setor", 160)
-        normalized[sector.casefold()] = (sector, section, description)
+        normalized[(sector.casefold(), section.casefold())] = (sector, section, description)
 
     if not normalized:
         raise ValueError("Nenhum setor válido foi encontrado na planilha.")
@@ -961,7 +1011,10 @@ def import_sector_base_items(items: list[dict[str, Any]], user_id: int) -> dict[
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         for sector, section, description in normalized.values():
-            exists = conn.execute("SELECT 1 FROM sector_base WHERE sector = ?", (sector,)).fetchone()
+            exists = conn.execute(
+                "SELECT 1 FROM sector_base WHERE sector = ? COLLATE NOCASE AND section = ? COLLATE NOCASE",
+                (sector, section),
+            ).fetchone()
             if exists:
                 updated += 1
             else:
@@ -970,8 +1023,7 @@ def import_sector_base_items(items: list[dict[str, Any]], user_id: int) -> dict[
                 """
                 INSERT INTO sector_base (sector, section, description, source, updated_by, updated_at)
                 VALUES (?, ?, ?, 'excel', ?, ?)
-                ON CONFLICT(sector) DO UPDATE SET
-                    section = excluded.section,
+                ON CONFLICT(sector, section) DO UPDATE SET
                     description = excluded.description,
                     source = 'excel',
                     updated_by = excluded.updated_by,
@@ -981,7 +1033,6 @@ def import_sector_base_items(items: list[dict[str, Any]], user_id: int) -> dict[
             )
 
     return {"total": len(normalized), "created": created, "updated": updated}
-
 
 def delete_sector_base_item(sector: Any, section: Any) -> None:
     normalized_sector = _normalize_sector_code(sector)
@@ -1023,7 +1074,13 @@ def list_sacarose_positions() -> dict[str, list[dict[str, Any]]]:
                    COALESCE(b.description, '') AS description,
                    users.name AS updated_by_name
             FROM sacarose_positions p
-            LEFT JOIN sector_base b ON b.sector = p.sector COLLATE NOCASE
+            LEFT JOIN sector_base b ON b.rowid = (
+                SELECT b2.rowid
+                FROM sector_base b2
+                WHERE b2.sector = p.sector COLLATE NOCASE
+                ORDER BY b2.updated_at DESC, b2.section COLLATE NOCASE ASC
+                LIMIT 1
+            )
             LEFT JOIN users ON users.id = p.updated_by
             WHERE p.unit_code IN ('NRD', 'PPT', 'RBR', 'PST')
             """

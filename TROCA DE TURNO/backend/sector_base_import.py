@@ -198,7 +198,7 @@ def _parse_rows(rows):
     return items
 
 
-def parse_sector_base_excel(file_bytes: bytes, filename: str = "base.xlsx") -> list[dict[str, str]]:
+def parse_sector_base_excel_details(file_bytes: bytes, filename: str = "base.xlsx") -> dict:
     if not file_bytes:
         raise ValueError("Selecione uma planilha para importar.")
     if len(file_bytes) > MAX_SECTOR_BASE_UPLOAD_BYTES:
@@ -222,14 +222,47 @@ def parse_sector_base_excel(file_bytes: bytes, filename: str = "base.xlsx") -> l
         if not sheets:
             raise ValueError("A planilha não possui abas para importar.")
 
-        preferred = sorted(sheets, key=lambda item: 0 if _norm(item[0]) in {"base dados", "base de dados", "base setores", "base de setores"} else 1)
-        for _, sheet_path in preferred:
+        preferred_names = {"base dados", "base de dados", "base setores", "base de setores"}
+        named_base_sheets = [item for item in sheets if _norm(item[0]) in preferred_names]
+        preferred = named_base_sheets or sheets
+        deduped: dict[tuple[str, str], dict[str, str]] = {}
+        rows_read = 0
+        duplicate_rows = 0
+        conflicts = 0
+        conflict_keys: list[str] = []
+        matched_sheets: list[str] = []
+
+        for sheet_name, sheet_path in preferred:
             items = _parse_rows(_sheet_rows(archive, sheet_path, shared))
-            if items:
-                # Setor é a chave da base; em caso de repetição, preserva a última linha da planilha.
-                deduped = {}
-                for item in items:
-                    deduped[_norm(item["sector"])] = item
-                return list(deduped.values())
+            if not items:
+                continue
+            matched_sheets.append(sheet_name)
+            rows_read += len(items)
+            for item in items:
+                key = (_norm(item["sector"]), _norm(item.get("section", "")))
+                previous = deduped.get(key)
+                if previous is not None:
+                    duplicate_rows += 1
+                    if _norm(previous.get("description", "")) != _norm(item.get("description", "")):
+                        conflicts += 1
+                        label = f'{item["sector"]} / {item.get("section", "") or "sem seção"}'
+                        if label not in conflict_keys and len(conflict_keys) < 20:
+                            conflict_keys.append(label)
+                # Para a mesma combinação SETOR + SEÇÃO, mantém a última linha da planilha.
+                deduped[key] = item
+
+        if deduped:
+            return {
+                "items": list(deduped.values()),
+                "rows_read": rows_read,
+                "duplicate_rows": duplicate_rows,
+                "conflicts": conflicts,
+                "conflict_keys": conflict_keys,
+                "matched_sheets": matched_sheets,
+            }
 
     raise ValueError("Não encontrei uma aba com as colunas SETOR, SEÇÃO e DESCRIÇÃO SETOR.")
+
+
+def parse_sector_base_excel(file_bytes: bytes, filename: str = "base.xlsx") -> list[dict[str, str]]:
+    return parse_sector_base_excel_details(file_bytes, filename)["items"]

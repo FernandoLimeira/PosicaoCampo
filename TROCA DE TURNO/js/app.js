@@ -515,12 +515,21 @@ function rebuildSectorBaseMap() {
   sectorBaseMap = new Map();
   sectorBaseItems.forEach(item => {
     const key = normalizeSectorLookupKey(item?.sector);
-    if (key) sectorBaseMap.set(key, item);
+    if (key && !sectorBaseMap.has(key)) sectorBaseMap.set(key, item);
   });
 }
 
 function getSectorBaseItem(value) {
   return sectorBaseMap.get(normalizeSectorLookupKey(value)) || null;
+}
+
+function getSectorBaseItemExact(sector, section = '') {
+  const sectorKey = normalizeSectorLookupKey(sector);
+  const sectionKey = String(section || '').trim().toLocaleLowerCase('pt-BR');
+  return sectorBaseItems.find(item => (
+    normalizeSectorLookupKey(item?.sector) === sectorKey
+    && String(item?.section || '').trim().toLocaleLowerCase('pt-BR') === sectionKey
+  )) || null;
 }
 
 function frontRowHtml(front = '', sector = '', status = 'EM ATIVIDADE') {
@@ -2901,7 +2910,7 @@ function renderSectorBaseList() {
       </td>
       <td><span class="sector-base-source ${item.source === 'excel' ? 'is-excel' : 'is-manual'}">${escapeHtml(sectorBaseSourceLabel(item.source))}</span></td>
       <td class="sector-base-actions-cell">
-        <button class="sector-base-action" type="button" data-sector-base-action="edit" data-sector="${escapeHtml(item.sector)}">Editar</button>
+        <button class="sector-base-action" type="button" data-sector-base-action="edit" data-sector="${escapeHtml(item.sector)}" data-section="${escapeHtml(item.section || '')}">Editar</button>
         <button class="sector-base-action danger" type="button" data-sector-base-action="delete" data-sector="${escapeHtml(item.sector)}" data-section="${escapeHtml(item.section || '')}">Excluir</button>
       </td>
     </tr>
@@ -2940,11 +2949,12 @@ function clearSectorBaseManualForm() {
   if (title) title.textContent = 'Adicionar ou atualizar setor';
   const sectorInput = document.querySelector('#sector-base-sector');
   sectorInput?.removeAttribute('data-editing-sector');
+  sectorInput?.removeAttribute('data-editing-section');
   if (sectorInput) sectorInput.readOnly = false;
 }
 
-function editSectorBaseItem(sector) {
-  const item = getSectorBaseItem(sector);
+function editSectorBaseItem(sector, section = '') {
+  const item = getSectorBaseItemExact(sector, section);
   if (!item) return;
   const sectorInput = document.querySelector('#sector-base-sector');
   const sectionInput = document.querySelector('#sector-base-section');
@@ -2952,6 +2962,7 @@ function editSectorBaseItem(sector) {
   if (sectorInput) {
     sectorInput.value = item.sector || '';
     sectorInput.dataset.editingSector = item.sector || '';
+    sectorInput.dataset.editingSection = item.section || '';
     sectorInput.readOnly = true;
   }
   if (sectionInput) sectionInput.value = item.section || '';
@@ -2968,6 +2979,8 @@ async function saveSectorBaseManual(event) {
   const sector = document.querySelector('#sector-base-sector')?.value.trim() || '';
   const section = document.querySelector('#sector-base-section')?.value.trim() || '';
   const description = document.querySelector('#sector-base-description')?.value.trim() || '';
+  const sectorInput = document.querySelector('#sector-base-sector');
+  const originalSection = sectorInput?.dataset.editingSection;
   if (!sector) {
     showToast('Informe o setor.');
     return;
@@ -2977,20 +2990,14 @@ async function saveSectorBaseManual(event) {
   try {
     const payload = await apiRequest('/api/sector-base', {
       method: 'POST',
-      body: JSON.stringify({ sector, section, description })
+      body: JSON.stringify({
+        sector,
+        section,
+        description,
+        original_section: originalSection === undefined ? null : originalSection
+      })
     });
-    const saved = payload?.item;
-    if (saved) {
-      const key = normalizeSectorLookupKey(saved.sector);
-      const index = sectorBaseItems.findIndex(item => normalizeSectorLookupKey(item.sector) === key);
-      if (index >= 0) sectorBaseItems[index] = saved;
-      else sectorBaseItems.push(saved);
-      sectorBaseItems.sort((a, b) => compareFrontLabels(a.sector, b.sector));
-      rebuildSectorBaseMap();
-          renderSectorBaseList();
-    } else {
-      await loadSectorBase({ render: true });
-    }
+    await loadSectorBase({ render: true });
     clearSectorBaseManualForm();
     showToast(`Setor ${sector} salvo na base.`);
   } catch (error) {
@@ -3032,7 +3039,17 @@ async function importSectorBaseExcel(event) {
     if (fileInput) fileInput.value = '';
     const fileName = document.querySelector('#sector-base-file-name');
     if (fileName) fileName.textContent = 'Nenhum arquivo selecionado';
-    showToast(`${payload.total || 0} setores processados · ${payload.created || 0} novos · ${payload.updated || 0} atualizados.`);
+    const rowsRead = Number(payload.rows_read || payload.total || 0);
+    const uniqueRecords = Number(payload.total || 0);
+    const duplicateRows = Number(payload.duplicate_rows || 0);
+    const conflicts = Number(payload.conflicts || 0);
+    let message = `${rowsRead} linhas lidas · ${uniqueRecords} registros únicos · ${payload.created || 0} novos · ${payload.updated || 0} atualizados`;
+    if (duplicateRows) message += ` · ${duplicateRows} repetidos`;
+    if (conflicts) message += ` · ${conflicts} conflito${conflicts === 1 ? '' : 's'} de descrição`;
+    showToast(message);
+    if (conflicts && Array.isArray(payload.conflict_keys) && payload.conflict_keys.length) {
+      console.warn('Conflitos na base de setores (SETOR / SEÇÃO):', payload.conflict_keys);
+    }
   } catch (error) {
     console.error(error);
     showToast(error.message || 'Não foi possível importar a base de setores.');
@@ -3325,7 +3342,7 @@ function setupEvents() {
     if (!button) return;
     const sector = button.dataset.sector || '';
     const section = button.dataset.section || '';
-    if (button.dataset.sectorBaseAction === 'edit') editSectorBaseItem(sector);
+    if (button.dataset.sectorBaseAction === 'edit') editSectorBaseItem(sector, section);
     if (button.dataset.sectorBaseAction === 'delete') deleteSectorBaseItemFromList(sector, section);
   });
   document.querySelector('#sacarose-form')?.addEventListener('submit', saveSacarose);
