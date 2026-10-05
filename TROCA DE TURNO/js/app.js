@@ -511,16 +511,36 @@ function normalizeSectorLookupKey(value) {
   return /^-?\d+\.0+$/.test(text) ? text.split('.', 1)[0].toLocaleLowerCase('pt-BR') : text.toLocaleLowerCase('pt-BR');
 }
 
+function normalizeSectionLookupKey(value) {
+  return String(value ?? '').trim().toLocaleLowerCase('pt-BR');
+}
+
 function rebuildSectorBaseMap() {
   sectorBaseMap = new Map();
   sectorBaseItems.forEach(item => {
     const key = normalizeSectorLookupKey(item?.sector);
-    if (key) sectorBaseMap.set(key, item);
+    if (!key) return;
+    if (!sectorBaseMap.has(key)) sectorBaseMap.set(key, []);
+    sectorBaseMap.get(key).push(item);
+  });
+
+  sectorBaseMap.forEach(items => {
+    items.sort((a, b) => compareFrontLabels(a?.section || '', b?.section || ''));
   });
 }
 
-function getSectorBaseItem(value) {
-  return sectorBaseMap.get(normalizeSectorLookupKey(value)) || null;
+function getSectorBaseItems(value) {
+  return sectorBaseMap.get(normalizeSectorLookupKey(value)) || [];
+}
+
+function getSectorBaseItem(value, section = '') {
+  const items = getSectorBaseItems(value);
+  if (!items.length) return null;
+  const sectionKey = normalizeSectionLookupKey(section);
+  if (sectionKey) {
+    return items.find(item => normalizeSectionLookupKey(item?.section) === sectionKey) || null;
+  }
+  return items[0] || null;
 }
 
 function frontRowHtml(front = '', sector = '', status = 'EM ATIVIDADE') {
@@ -2032,11 +2052,12 @@ function getSacaroseExportRows(unitCode) {
   return [...source]
     .map(item => {
       const sector = String(item?.sector || '').trim();
-      const baseItem = getSectorBaseItem(sector);
+      const requestedSection = String(item?.section || '').trim();
+      const baseItem = getSectorBaseItem(sector, requestedSection) || (!requestedSection ? getSectorBaseItem(sector) : null);
       return {
         front: String(item?.front || '').trim(),
         sector,
-        section: String(baseItem?.section || item?.section || '').trim(),
+        section: String(requestedSection || baseItem?.section || '').trim(),
         description: String(baseItem?.description || item?.description || '').trim(),
         exclude_image: Boolean(item?.exclude_image)
       };
@@ -3105,21 +3126,96 @@ async function deleteSectorBaseItemFromList(sector, section = '') {
 
 
 
+function getSacaroseRowSection(row) {
+  if (!row) return '';
+  const select = row.querySelector('.sacarose-section-select');
+  if (select) return select.value.trim();
+  const target = row.querySelector('.sacarose-section');
+  return String(target?.dataset.section || '').trim();
+}
+
+function getSacaroseResolvedBaseItem(unitCode, sector, section = '') {
+  const options = getSectorBaseItems(sector);
+  if (!options.length) return null;
+
+  const exact = getSectorBaseItem(sector, section);
+  if (exact) return exact;
+
+  if (options.length === 1) return options[0];
+
+  // No Polo MS um mesmo setor pode possuir várias seções. Nessa situação
+  // a seção precisa ser escolhida explicitamente para não associar a fazenda errada.
+  if (['RBR', 'PST'].includes(unitCode)) return null;
+  return options[0];
+}
+
+function sacaroseSectionControlHtml(unitCode, sector, selectedSection = '') {
+  const options = getSectorBaseItems(sector);
+  const selectedKey = normalizeSectionLookupKey(selectedSection);
+
+  if (['RBR', 'PST'].includes(unitCode) && options.length > 1) {
+    const optionHtml = options.map(item => {
+      const section = String(item?.section || '').trim();
+      const selected = normalizeSectionLookupKey(section) === selectedKey ? 'selected' : '';
+      return `<option value="${escapeHtml(section)}" ${selected}>${escapeHtml(section || '(sem seção)')}</option>`;
+    }).join('');
+    return `
+      <select class="sacarose-section-select" aria-label="Selecionar seção do setor">
+        <option value="" ${selectedKey ? '' : 'selected'}>Selecione</option>
+        ${optionHtml}
+      </select>
+    `;
+  }
+
+  const resolved = getSacaroseResolvedBaseItem(unitCode, sector, selectedSection);
+  const section = String(resolved?.section || selectedSection || '').trim();
+  return `<span class="sacarose-section sacarose-lookup-value${section ? '' : ' is-muted'}" data-section="${escapeHtml(section)}">${escapeHtml(section || '-')}</span>`;
+}
+
+function updateSacaroseDescription(row) {
+  if (!row) return;
+  const unitCode = String(row.dataset.unitCode || '').toUpperCase();
+  const sector = row.querySelector('.sacarose-sector')?.value.trim() || '';
+  const section = getSacaroseRowSection(row);
+  const options = getSectorBaseItems(sector);
+  const descriptionTarget = row.querySelector('.sacarose-description');
+  const missingSector = Boolean(sector) && !options.length;
+  const needsSection = ['RBR', 'PST'].includes(unitCode) && options.length > 1 && !section;
+  const item = getSacaroseResolvedBaseItem(unitCode, sector, section);
+
+  row.classList.toggle('has-missing-sector', missingSector);
+  row.classList.toggle('has-missing-section', needsSection);
+
+  if (descriptionTarget) {
+    const text = missingSector
+      ? 'Setor não encontrado na base'
+      : needsSection
+        ? 'Selecione a seção'
+        : item?.description || '-';
+    descriptionTarget.textContent = text;
+    descriptionTarget.classList.toggle('is-missing', missingSector || needsSection);
+    descriptionTarget.classList.toggle('is-muted', !missingSector && !needsSection && !item?.description);
+  }
+}
+
 function sacaroseRowHtml(unitCode, item = {}) {
   const front = String(item.front ?? '').trim();
   const sector = String(item.sector ?? '').trim();
-  const baseItem = getSectorBaseItem(sector);
-  const section = baseItem?.section || item.section || '';
+  const requestedSection = String(item.section ?? '').trim();
+  const baseItem = getSacaroseResolvedBaseItem(unitCode, sector, requestedSection);
+  const options = getSectorBaseItems(sector);
+  const section = requestedSection || (options.length === 1 ? String(options[0]?.section || '').trim() : (['RBR', 'PST'].includes(unitCode) ? '' : String(baseItem?.section || '').trim()));
   const description = baseItem?.description || item.description || '';
   const hasSector = Boolean(sector);
-  const missing = hasSector && !baseItem;
+  const missing = hasSector && !options.length;
+  const needsSection = ['RBR', 'PST'].includes(unitCode) && options.length > 1 && !section;
   const excludeImage = Boolean(item.exclude_image);
   return `
-    <tr class="sacarose-row${missing ? ' has-missing-sector' : ''}" data-unit-code="${escapeHtml(unitCode)}">
+    <tr class="sacarose-row${missing ? ' has-missing-sector' : ''}${needsSection ? ' has-missing-section' : ''}" data-unit-code="${escapeHtml(unitCode)}" data-sector-key="${escapeHtml(normalizeSectorLookupKey(sector))}">
       <td><input class="sacarose-front" type="text" maxlength="12" value="${escapeHtml(front)}" placeholder="Ex.: 08" /></td>
       <td><input class="sacarose-sector" type="text" maxlength="16" value="${escapeHtml(sector)}" placeholder="Ex.: 3803" /></td>
-      <td><span class="sacarose-section sacarose-lookup-value${section ? '' : ' is-muted'}">${escapeHtml(section || '-')}</span></td>
-      <td><span class="sacarose-description sacarose-lookup-value${missing ? ' is-missing' : description ? '' : ' is-muted'}">${escapeHtml(missing ? 'Setor não encontrado na base' : description || '-')}</span></td>
+      <td class="sacarose-section-cell">${sacaroseSectionControlHtml(unitCode, sector, section)}</td>
+      <td><span class="sacarose-description sacarose-lookup-value${missing || needsSection ? ' is-missing' : description ? '' : ' is-muted'}">${escapeHtml(missing ? 'Setor não encontrado na base' : needsSection ? 'Selecione a seção' : description || '-')}</span></td>
       <td class="sacarose-image-toggle-cell">
         <label class="sacarose-image-toggle" title="Marque para não mostrar esta frente na imagem da Sacarose">
           <input class="sacarose-exclude-image" type="checkbox" ${excludeImage ? 'checked' : ''} />
@@ -3151,21 +3247,18 @@ function renderSacaroseRows(unitCode, rows) {
 function updateSacaroseLookup(row) {
   if (!row) return;
   const sectorInput = row.querySelector('.sacarose-sector');
-  const sectionTarget = row.querySelector('.sacarose-section');
-  const descriptionTarget = row.querySelector('.sacarose-description');
+  const sectionCell = row.querySelector('.sacarose-section-cell');
   const sector = sectorInput?.value.trim() || '';
-  const item = getSectorBaseItem(sector);
-  const missing = Boolean(sector) && !item;
-  row.classList.toggle('has-missing-sector', missing);
-  if (sectionTarget) {
-    sectionTarget.textContent = item?.section || '-';
-    sectionTarget.classList.toggle('is-muted', !item?.section);
+  const sectorKey = normalizeSectorLookupKey(sector);
+  const previousSectorKey = String(row.dataset.sectorKey || '');
+  const currentSection = previousSectorKey === sectorKey ? getSacaroseRowSection(row) : '';
+  const unitCode = String(row.dataset.unitCode || '').toUpperCase();
+  row.dataset.sectorKey = sectorKey;
+
+  if (sectionCell) {
+    sectionCell.innerHTML = sacaroseSectionControlHtml(unitCode, sector, currentSection);
   }
-  if (descriptionTarget) {
-    descriptionTarget.textContent = missing ? 'Setor não encontrado na base' : item?.description || '-';
-    descriptionTarget.classList.toggle('is-missing', missing);
-    descriptionTarget.classList.toggle('is-muted', !missing && !item?.description);
-  }
+  updateSacaroseDescription(row);
 }
 
 function collectSacaroseRows(unitCode) {
@@ -3174,6 +3267,7 @@ function collectSacaroseRows(unitCode) {
   const rows = [...tbody.querySelectorAll('.sacarose-row')].map(row => ({
     front: row.querySelector('.sacarose-front')?.value.trim() || '',
     sector: row.querySelector('.sacarose-sector')?.value.trim() || '',
+    section: getSacaroseRowSection(row),
     exclude_image: Boolean(row.querySelector('.sacarose-exclude-image')?.checked)
   })).filter(item => item.front || item.sector);
   return rows.sort((a, b) => compareFrontLabels(a.front, b.front));
@@ -3253,8 +3347,18 @@ async function saveSacarose(event) {
       return;
     }
     seen.add(frontKey);
-    if (!getSectorBaseItem(item.sector)) {
+    const sectionOptions = getSectorBaseItems(item.sector);
+    if (!sectionOptions.length) {
       showToast(`Setor ${item.sector} de ${code} não encontrado na Base de Setores.`);
+      return;
+    }
+    if (['RBR', 'PST'].includes(code) && sectionOptions.length > 1 && !item.section) {
+      showToast(`Selecione a seção do setor ${item.sector} em ${code}.`);
+      document.querySelector(`#sacarose-rows-${code} .sacarose-row.has-missing-section .sacarose-section-select`)?.focus();
+      return;
+    }
+    if (item.section && !getSectorBaseItem(item.sector, item.section)) {
+      showToast(`A seção ${item.section} não pertence ao setor ${item.sector} em ${code}.`);
       return;
     }
   }
@@ -3391,6 +3495,12 @@ function setupEvents() {
       sacaroseUnits[code] = collectSacaroseRows(code);
     });
     tbody?.addEventListener('change', event => {
+      const sectionSelect = event.target.closest('.sacarose-section-select');
+      if (sectionSelect) {
+        updateSacaroseDescription(sectionSelect.closest('.sacarose-row'));
+        sacaroseUnits[code] = collectSacaroseRows(code);
+        return;
+      }
       if (event.target.closest('.sacarose-exclude-image')) {
         // O checkbox afeta apenas a imagem, mas passa a valer imediatamente.
         sacaroseUnits[code] = collectSacaroseRows(code);

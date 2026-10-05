@@ -2197,10 +2197,31 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .sacarose-table th:nth-child(4) { width: 43%; }
 .sacarose-table th:nth-child(5) { width: 10%; text-align: center; }
 .sacarose-table th:nth-child(6) { width: 7%; }
-.sacarose-table input { width: 100%; min-width: 0; height: 36px; }
+.sacarose-table input, .sacarose-table select { width: 100%; min-width: 0; height: 36px; }
 .sacarose-lookup-value { display: block; color: #274837; font-size: 10.5px; font-weight: 750; line-height: 1.3; }
 .sacarose-lookup-value.is-muted { color: #8a9690; font-weight: 650; }
 .sacarose-lookup-value.is-missing { color: #b13c45; }
+.sacarose-section-select {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 28px 0 9px;
+  border: 1px solid #cfdcd4;
+  border-radius: 4px;
+  background: #fff;
+  color: #274837;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.sacarose-section-select:focus {
+  border-color: #1d7f4b;
+  box-shadow: 0 0 0 2px rgba(29,127,75,.12);
+}
+.sacarose-row.has-missing-section .sacarose-section-select {
+  border-color: #d3a52b;
+  background: #fffdf4;
+}
 .sacarose-remove-row {
   width: 30px;
   height: 30px;

@@ -309,6 +309,7 @@ def init_db() -> None:
                 unit_code TEXT NOT NULL,
                 front TEXT NOT NULL,
                 sector TEXT NOT NULL,
+                section TEXT NOT NULL DEFAULT '',
                 exclude_image INTEGER NOT NULL DEFAULT 0,
                 updated_by INTEGER,
                 updated_at INTEGER NOT NULL,
@@ -331,8 +332,32 @@ def init_db() -> None:
             conn.execute("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
         if not _column_exists(conn, "units", "version"):
             conn.execute("ALTER TABLE units ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+        if not _column_exists(conn, "sacarose_positions", "section"):
+            conn.execute("ALTER TABLE sacarose_positions ADD COLUMN section TEXT NOT NULL DEFAULT ''")
         if not _column_exists(conn, "sacarose_positions", "exclude_image"):
             conn.execute("ALTER TABLE sacarose_positions ADD COLUMN exclude_image INTEGER NOT NULL DEFAULT 0")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sacarose_positions_sector_section ON sacarose_positions(sector, section)"
+        )
+        # Bases antigas da Sacarose não guardavam seção. Quando o setor possui
+        # apenas uma seção possível, completamos automaticamente sem exigir ação do usuário.
+        conn.execute(
+            """
+            UPDATE sacarose_positions
+            SET section = (
+                SELECT b.section
+                FROM sector_base b
+                WHERE b.sector = sacarose_positions.sector COLLATE NOCASE
+                LIMIT 1
+            )
+            WHERE COALESCE(section, '') = ''
+              AND 1 = (
+                  SELECT COUNT(*)
+                  FROM sector_base b2
+                  WHERE b2.sector = sacarose_positions.sector COLLATE NOCASE
+              )
+            """
+        )
         conn.execute("UPDATE users SET role = 'user' WHERE role IS NULL OR role NOT IN ('admin', 'user')")
         conn.execute("UPDATE users SET is_active = 1 WHERE is_active IS NULL")
         _repair_unit_identities(conn)
@@ -726,22 +751,50 @@ def _sync_sacarose_from_position_unit(conn: sqlite3.Connection, unit: dict[str, 
         normalized_rows.append((front, sector))
 
     normalized_rows.sort(key=lambda item: (0, int(item[0])) if item[0].isdigit() else (1, item[0].casefold()))
-    existing_visibility = {
-        _sacarose_match_key(row["front"]): bool(row["exclude_image"])
+    existing_rows = {
+        _sacarose_match_key(row["front"]): {
+            "sector": str(row["sector"] or "").strip(),
+            "section": str(row["section"] or "").strip(),
+            "exclude_image": bool(row["exclude_image"]),
+        }
         for row in conn.execute(
-            "SELECT front, exclude_image FROM sacarose_positions WHERE unit_code = ?",
+            "SELECT front, sector, section, exclude_image FROM sacarose_positions WHERE unit_code = ?",
             (code,),
         ).fetchall()
     }
+
     conn.execute("DELETE FROM sacarose_positions WHERE unit_code = ?", (code,))
     for front, sector in normalized_rows:
-        exclude_image = 1 if existing_visibility.get(_sacarose_match_key(front), False) else 0
+        existing = existing_rows.get(_sacarose_match_key(front)) or {}
+        exclude_image = 1 if existing.get("exclude_image", False) else 0
+        section = ""
+
+        # Preserva a seção escolhida anteriormente quando a frente continua no mesmo setor.
+        if str(existing.get("sector") or "").casefold() == sector.casefold():
+            previous_section = str(existing.get("section") or "").strip()
+            if previous_section:
+                valid = conn.execute(
+                    "SELECT 1 FROM sector_base WHERE sector = ? COLLATE NOCASE AND section = ? COLLATE NOCASE LIMIT 1",
+                    (sector, previous_section),
+                ).fetchone()
+                if valid:
+                    section = previous_section
+
+        # Para setor com apenas uma seção, a associação é automática.
+        if not section:
+            section_rows = conn.execute(
+                "SELECT section FROM sector_base WHERE sector = ? COLLATE NOCASE ORDER BY section COLLATE NOCASE",
+                (sector,),
+            ).fetchall()
+            if len(section_rows) == 1:
+                section = str(section_rows[0]["section"] or "").strip()
+
         conn.execute(
             """
-            INSERT INTO sacarose_positions (unit_code, front, sector, exclude_image, updated_by, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO sacarose_positions (unit_code, front, sector, section, exclude_image, updated_by, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (code, front, sector, exclude_image, user_id, now),
+            (code, front, sector, section, exclude_image, user_id, now),
         )
 
 
@@ -1078,18 +1131,13 @@ def list_sacarose_positions() -> dict[str, list[dict[str, Any]]]:
     with connection() as conn:
         rows = conn.execute(
             """
-            SELECT p.unit_code, p.front, p.sector, p.exclude_image, p.updated_at,
-                   COALESCE(b.section, '') AS section,
+            SELECT p.unit_code, p.front, p.sector, p.section, p.exclude_image, p.updated_at,
                    COALESCE(b.description, '') AS description,
                    users.name AS updated_by_name
             FROM sacarose_positions p
-            LEFT JOIN sector_base b ON b.rowid = (
-                SELECT b2.rowid
-                FROM sector_base b2
-                WHERE b2.sector = p.sector COLLATE NOCASE
-                ORDER BY b2.updated_at DESC, b2.section COLLATE NOCASE ASC
-                LIMIT 1
-            )
+            LEFT JOIN sector_base b
+              ON b.sector = p.sector COLLATE NOCASE
+             AND b.section = p.section COLLATE NOCASE
             LEFT JOIN users ON users.id = p.updated_by
             WHERE p.unit_code IN ('NRD', 'PPT', 'RBR', 'PST')
             """
@@ -1132,10 +1180,13 @@ def save_sacarose_positions(
 
     normalized: dict[str, list[dict[str, Any]]] = {}
     with connection() as conn:
-        known_sectors = {
-            str(row["sector"]).casefold(): str(row["sector"])
-            for row in conn.execute("SELECT sector FROM sector_base").fetchall()
-        }
+        known_sectors: dict[str, list[tuple[str, str]]] = {}
+        for row in conn.execute(
+            "SELECT sector, section FROM sector_base ORDER BY sector COLLATE NOCASE, section COLLATE NOCASE"
+        ).fetchall():
+            canonical_sector = str(row["sector"] or "").strip()
+            canonical_section = str(row["section"] or "").strip()
+            known_sectors.setdefault(canonical_sector.casefold(), []).append((canonical_sector, canonical_section))
 
         for code in provided_codes:
             raw_rows = payload.get(code)
@@ -1159,13 +1210,35 @@ def save_sacarose_positions(
                     raise ValueError(f"A frente {front} está repetida em {code}.")
                 seen_fronts.add(front_key)
 
-                canonical_sector = known_sectors.get(sector.casefold())
-                if not canonical_sector:
+                sector_options = known_sectors.get(sector.casefold()) or []
+                if not sector_options:
                     raise ValueError(f"Setor {sector} de {code} não foi encontrado na Base de Setores.")
 
+                requested_section = str(raw.get("section") or "").strip()
+                selected_pair: tuple[str, str] | None = None
+                if requested_section:
+                    requested_key = requested_section.casefold()
+                    selected_pair = next(
+                        (pair for pair in sector_options if pair[1].casefold() == requested_key),
+                        None,
+                    )
+                    if not selected_pair:
+                        raise ValueError(
+                            f"A seção {requested_section} não pertence ao setor {sector} em {code}."
+                        )
+                elif len(sector_options) == 1:
+                    selected_pair = sector_options[0]
+                elif code in ("RBR", "PST"):
+                    raise ValueError(f"Selecione a seção do setor {sector} em {code}.")
+                else:
+                    # Mantém compatibilidade das unidades antigas, que não exigiam escolha de seção.
+                    selected_pair = sector_options[0]
+
+                canonical_sector, canonical_section = selected_pair
                 normalized_rows.append({
                     "front": front,
                     "sector": canonical_sector,
+                    "section": canonical_section,
                     "exclude_image": bool(raw.get("exclude_image", False)),
                 })
 
@@ -1207,13 +1280,14 @@ def save_sacarose_positions(
             for item in normalized[code]:
                 conn.execute(
                     """
-                    INSERT INTO sacarose_positions (unit_code, front, sector, exclude_image, updated_by, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO sacarose_positions (unit_code, front, sector, section, exclude_image, updated_by, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         code,
                         item["front"],
                         item["sector"],
+                        item["section"],
                         1 if item["exclude_image"] else 0,
                         user_id,
                         now,
