@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Cadastrar usuário · Posição de Campo{% endblock %}
+{% block styles %}
+  <link rel="stylesheet" href="/css/usuarios.css?v={{ asset_version }}" />
+{% endblock %}
+{% block content %}
+<section class="editor-modal module-page-card users-modal" aria-labelledby="user-create-title">
+  <header class="modal-header">
+    <div><span class="modal-kicker">Acessos</span><h2 id="user-create-title">Cadastrar usuário</h2></div>
+  </header>
+  <div class="users-content">
+    <form id="quick-user-form" class="quick-user-form user-create-form">
+      <label class="field" for="quick-user-name">
+        <span>Usuário</span>
+        <input id="quick-user-name" type="text" autocomplete="off" maxlength="80" required placeholder="Usuário de acesso" />
+      </label>
+      <label class="field" for="quick-user-password">
+        <span>Senha</span>
+        <input id="quick-user-password" type="password" autocomplete="new-password" minlength="8" required placeholder="Mínimo de 8 caracteres" />
+      </label>
+      <label class="field" for="quick-user-email">
+        <span>E-mail <small>(opcional)</small></span>
+        <input id="quick-user-email" type="email" autocomplete="off" maxlength="254" placeholder="usuario@exemplo.com" />
+      </label>
+      <label class="field" for="quick-user-role">
+        <span>Nível de acesso</span>
+        <select id="quick-user-role" required>
+          <option value="coordinator">Coordenador</option>
+          <option value="analyst" selected>Analista</option>
+        </select>
+      </label>
+      <label class="field" for="quick-user-base-unit">
+        <span>Unidade base</span>
+        <select id="quick-user-base-unit" required>
+          <option value="PPT">PPT — Paraguaçu Paulista</option>
+          <option value="NRD">NRD — Narandiba</option>
+          <option value="RBR">RBR — Rio Brilhante</option>
+          <option value="PST">PST — Passa Tempo</option>
+        </select>
+      </label>
+      <label class="field" for="quick-user-active">
+        <span>Situação</span>
+        <select id="quick-user-active" required>
+          <option value="active">Ativo</option>
+          <option value="inactive">Desativado</option>
+        </select>
+      </label>
+      <button id="create-user-button" class="modal-button save" type="submit">Cadastrar usuário</button>
+    </form>
+    <p id="user-create-status" class="user-create-status" role="status" aria-live="polite"></p>
+  </div>
+  <footer class="modal-footer">
+    <div class="wizard-footer-info"><strong>Controle do Administrador</strong><p>A unidade base define o acesso inicial. Todas as unidades continuam disponíveis.</p></div>
+    <div class="modal-footer-actions"><a class="modal-button secondary" href="/usuarios">Ver usuários cadastrados</a></div>
+  </footer>
+</section>
+{% endblock %}
+{% block scripts %}
+  <script src="/js/usuarios.js?v={{ asset_version }}"></script>
+{% endblock %}

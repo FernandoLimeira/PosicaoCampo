@@ -1,0 +1,6 @@
+# Dependência usada somente para leitura de planilhas Excel antigas (.xls).
+# XLSX/XLSM continuam sendo lidos pelo parser interno do projeto.
+xlrd>=2.0.1,<3
+
+# Herança de templates: layout base, páginas e componentes compartilhados.
+Jinja2>=3.1.6,<4

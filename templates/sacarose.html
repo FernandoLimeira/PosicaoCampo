@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Sacarose · Posição de Campo{% endblock %}
+{% block styles %}
+  <link rel="stylesheet" href="/css/sacarose.css?v={{ asset_version }}" />
+{% endblock %}
+
+{% block content %}
+<div class="page-shell">
+    <section class="page-intro">
+      <div>
+        <span class="eyebrow">Posição de colheita</span>
+        <h1>Sacarose</h1>
+        <p>Informe frente e setor. A seção e a fazenda são consultadas no Cadastro de setores.</p>
+      </div>
+      <div id="save-status" class="save-status" role="status" aria-live="polite"></div>
+    </section>
+
+
+    <form id="sacarose-form" class="sacarose-card">
+      <header class="card-header">
+        <div><span id="unit-pole">Polo</span><h2 id="unit-title">Unidade</h2></div>
+        <button id="add-row" class="secondary-button" type="button">Adicionar frente</button>
+      </header>
+
+      <div class="table-wrap">
+        <table class="sacarose-table">
+          <thead><tr><th>Frente</th><th>Setor</th><th>Seção</th><th>Fazenda</th><th>Não exibir</th><th></th></tr></thead>
+          <tbody id="sacarose-rows"></tbody>
+        </table>
+      </div>
+
+      <footer class="card-footer">
+        <p>Ao salvar, Frente e Setor também são sincronizados com a Posição de Campo.</p>
+        <div class="sacarose-actions">
+          <button id="export-sacarose-unit" class="secondary-button" type="button">Emitir imagem HD da unidade</button>
+          <button id="save-button" class="primary-button" type="submit">Salvar Sacarose</button>
+        </div>
+      </footer>
+    </form>
+  </div>
+{% endblock %}
+{% block scripts %}
+  <script src="/js/export.js?v={{ asset_version }}"></script>
+  <script src="/js/sacarose.js?v={{ asset_version }}"></script>
+{% endblock %}

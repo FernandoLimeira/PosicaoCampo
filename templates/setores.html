@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Cadastro de setores · Posição de Campo{% endblock %}
+{% block styles %}
+  <link rel="stylesheet" href="/css/setores.css?v={{ asset_version }}" />
+{% endblock %}
+
+{% block content %}
+<section class="editor-modal module-page-card sector-base-modal" aria-labelledby="sector-base-modal-title">
+      <header class="modal-header sector-base-modal-header">
+        <h2 id="sector-base-modal-title">Cadastro de setores</h2>
+      </header>
+
+      <div class="sector-base-content">
+        <div class="sector-base-config-grid">
+          <section class="sector-base-import-card">
+            <div class="sector-base-compact-heading">
+              <strong>Importação</strong>
+            </div>
+            <form id="sector-base-import-form" class="sector-base-import-form">
+              <label class="sector-base-file-field" for="sector-base-file">
+                <span>Arquivo Excel</span>
+                <input id="sector-base-file" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" required />
+                <small id="sector-base-file-name">Nenhum arquivo selecionado</small>
+              </label>
+              <button id="sector-base-import-button" class="modal-button save" type="submit">Importar Excel</button>
+            </form>
+          </section>
+
+          <section class="sector-base-manual-card">
+            <div class="sector-base-card-heading">
+              <strong id="sector-base-manual-title">Cadastro manual</strong>
+              <button id="sector-base-manual-clear" class="sector-base-text-button" type="button">Limpar</button>
+            </div>
+            <form id="sector-base-manual-form" class="sector-base-manual-form">
+              <label class="field">
+                <span>Setor</span>
+                <input id="sector-base-sector" type="text" maxlength="24" required placeholder="Ex.: 3803" />
+              </label>
+              <label class="field">
+                <span>Seção</span>
+                <input id="sector-base-section" type="text" maxlength="24" placeholder="Ex.: 3190" />
+              </label>
+              <label class="field sector-base-description-field">
+                <span>Fazenda / descrição</span>
+                <input id="sector-base-description" type="text" maxlength="160" placeholder="Ex.: FAZENDA SANTA LUCIA" />
+              </label>
+              <button class="modal-button save" type="submit">Salvar setor</button>
+            </form>
+          </section>
+        </div>
+
+        <div class="sector-base-list-toolbar">
+          <label class="sector-base-search-field" for="sector-base-search">
+            <span>Buscar na base</span>
+            <input id="sector-base-search" type="search" autocomplete="off" placeholder="Setor, seção ou fazenda" />
+          </label>
+          <div class="sector-base-count-wrap">
+            <strong id="sector-base-count">0</strong>
+            <span>setores cadastrados</span>
+          </div>
+        </div>
+
+        <div class="sector-base-table-wrap">
+          <table class="sector-base-table">
+            <thead>
+              <tr>
+                <th>Setor</th>
+                <th>Seção</th>
+                <th>Fazenda / descrição</th>
+                <th>Origem</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="sector-base-list"></tbody>
+          </table>
+          <div id="sector-base-empty" class="sector-base-empty" hidden>Nenhum setor encontrado.</div>
+        </div>
+        <div id="sector-base-pagination" class="sector-base-pagination">
+          <span id="sector-base-page-info">Página 1 de 1</span>
+          <div class="sector-base-pagination-actions">
+            <button id="sector-base-page-prev" class="sector-base-page-button" type="button">Anterior</button>
+            <button id="sector-base-page-next" class="sector-base-page-button" type="button">Próxima</button>
+          </div>
+        </div>
+      </div>
+
+      <footer class="modal-footer">
+        <div class="wizard-footer-info">
+          <strong>Base de consulta</strong>
+          <p>Ao digitar um setor nas frentes, o sistema mostra automaticamente a Seção e a Fazenda encontradas nesta base.</p>
+        </div>
+        <div class="modal-footer-actions">
+          <a class="modal-button secondary" href="/">Voltar ao painel</a>
+        </div>
+      </footer>
+    </section>
+{% endblock %}
+{% block scripts %}
+  <script src="/js/setores.js?v={{ asset_version }}"></script>
+{% endblock %}

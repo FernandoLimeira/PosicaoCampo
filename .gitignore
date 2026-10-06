@@ -1,0 +1,35 @@
+# Ambiente local e arquivos gerados pelo Python.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Configurações locais e segredos (versionar apenas exemplos sem credenciais).
+.env
+.env.*
+!.env.example
+
+# Bancos contêm contas, hashes, sessões e dados operacionais.
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
+*.sqlite3-shm
+*.sqlite3-wal
+*.sqlite3-journal
+/data/backups/
+/data/transplantes/
+
+# Dependências JavaScript locais, logs e arquivos do sistema operacional.
+node_modules/
+*.log
+.DS_Store
+Thumbs.db

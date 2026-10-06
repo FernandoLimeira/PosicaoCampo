@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Posição de Campo{% endblock %}
+{% block styles %}
+  <link rel="stylesheet" href="/css/dashboard.css?v={{ asset_version }}" />
+{% endblock %}
+{% block content %}
+<div id="dashboard-view" class="app-view is-active" aria-hidden="false">
+        <section class="dashboard-preview-heading">
+          <div class="dashboard-heading-copy">
+            <p>VISUALIZAÇÃO</p>
+            <h2>Posição de Campo</h2>
+          </div>
+          <div class="dashboard-heading-actions">
+            <span id="preview-unit-label">Exibindo a unidade selecionada</span>
+            <button id="export-unit-image" class="dashboard-fill-button" type="button">Emitir imagem HD da unidade</button>
+            <button id="open-data-modal" class="dashboard-fill-button" type="button">Preencher</button>
+          </div>
+        </section>
+
+        <section id="units-grid" class="units-grid" aria-live="polite"></section>
+      </div>
+{% endblock %}
+{% block modals %}
+<div id="data-modal" class="modal-backdrop" hidden>
+    <section class="editor-modal operation-editor-modal" role="dialog" aria-modal="true" aria-labelledby="data-modal-title">
+      <header class="modal-header operation-modal-header">
+        <div class="operation-modal-heading">
+          <span class="modal-kicker">Atualização operacional</span>
+          <div class="editor-unit-summary">
+            <span>Unidade em edição</span>
+            <strong id="form-unit-name">PPT — PARAGUAÇU PAULISTA</strong>
+          </div>
+        </div>
+        <button class="modal-close" type="button" data-close-modal="data-modal" aria-label="Fechar">×</button>
+      </header>
+
+      <form id="operation-form" class="operation-form">
+        <input id="unit-select" name="unit" type="hidden" value="0" />
+
+        <nav class="form-stepper" aria-label="Etapas do preenchimento">
+          <div class="form-step is-active" data-step-indicator="0" aria-current="step">
+            <span class="form-step-number">1</span>
+            <span class="form-step-copy"><strong>Campo</strong><small>Frentes e status</small></span>
+          </div>
+          <div class="form-step" data-step-indicator="1">
+            <span class="form-step-number">2</span>
+            <span class="form-step-copy"><strong>Produção</strong><small>Indicadores</small></span>
+          </div>
+          <div class="form-step" data-step-indicator="2">
+            <span class="form-step-number">3</span>
+            <span class="form-step-copy"><strong>Apontamentos</strong><small>Observação e mudanças</small></span>
+          </div>
+          <div class="form-step" data-step-indicator="3">
+            <span class="form-step-number">4</span>
+            <span class="form-step-copy"><strong>Precipitação</strong><small>Chuva e acumulado</small></span>
+          </div>
+        </nav>
+
+        <div class="form-content form-wizard-content">
+          <section class="form-section form-section-wide form-step-panel is-active" data-step-panel="0">
+            <div class="section-heading">
+              <div>
+                <span>Etapa 1 de 4 · Campo</span>
+                <h3>Frentes, setores e status</h3>
+              </div>
+              <button id="add-front-row" class="section-action" type="button">Adicionar frente</button>
+            </div>
+
+            <div class="editable-table-wrap">
+              <table class="editable-table">
+                <thead>
+                  <tr>
+                    <th>Frente</th>
+                    <th>Setor</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="front-rows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="form-section form-section-wide form-step-panel" data-step-panel="1" hidden>
+            <div class="section-heading">
+              <div>
+                <span>Etapa 2 de 4 · Produção</span>
+                <h3>Indicadores do turno</h3>
+              </div>
+            </div>
+            <div id="metrics-form" class="metrics-form metrics-form-wizard"></div>
+          </section>
+
+          <section class="form-section form-section-wide form-step-panel" data-step-panel="2" hidden>
+            <div class="section-heading">
+              <div>
+                <span>Etapa 3 de 4 · Apontamentos e Mudanças</span>
+                <h3>Observações e mudanças</h3>
+              </div>
+            </div>
+
+            <div class="notes-form-grid">
+              <label class="field">
+                <span>Observação</span>
+                <textarea id="observation-input" rows="3" placeholder="Digite a observação do turno"></textarea>
+              </label>
+
+              <label class="field">
+                <span>Mudanças</span>
+                <textarea id="changes-input" rows="3" placeholder="Digite mudanças previstas ou realizadas"></textarea>
+              </label>
+            </div>
+          </section>
+
+          <section class="form-section form-section-wide form-step-panel" data-step-panel="3" hidden>
+            <div class="section-heading">
+              <div>
+                <span>Etapa 4 de 4 · Precipitação</span>
+                <h3>Chuva do turno e acumulado</h3>
+              </div>
+              <button id="add-rain-row" class="section-action" type="button">Adicionar equipamento</button>
+            </div>
+            <div id="rain-form" class="rain-form"></div>
+          </section>
+        </div>
+
+        <footer class="modal-footer wizard-footer">
+          <div class="wizard-footer-info">
+            <strong id="wizard-step-label">Etapa 1 de 4 · Campo</strong>
+            <p>Revise a etapa atual antes de avançar.</p>
+          </div>
+          <div class="modal-footer-actions wizard-actions">
+            <button class="modal-button secondary" type="button" data-close-modal="data-modal">Cancelar</button>
+            <button id="wizard-prev" class="modal-button secondary" type="button" hidden>Voltar</button>
+            <button id="wizard-next" class="modal-button save" type="button">Próxima etapa</button>
+            <button id="wizard-save" class="modal-button save" type="submit" hidden>Salvar atualização</button>
+          </div>
+        </footer>
+      </form>
+    </section>
+  </div>
+{% endblock %}
+{% block scripts %}
+  <script src="/js/export.js?v={{ asset_version }}"></script>
+  <script src="/js/app.js?v={{ asset_version }}"></script>
+{% endblock %}

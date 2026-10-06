@@ -1,0 +1,9 @@
+/* Compatibilidade: as páginas novas carregam base.css e o CSS de seu módulo. */
+@import url("base.css");
+@import url("dashboard.css");
+@import url("historico.css");
+@import url("usuarios.css");
+@import url("reports-common.css");
+@import url("relatorios.css");
+@import url("setores.css");
+@import url("retornos.css");

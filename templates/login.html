@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Entrar · Posição de Campo{% endblock %}
+{% block styles %}<link rel="stylesheet" href="/css/auth.css?v={{ asset_version }}" />{% endblock %}
+{% block public_content %}
+<main class="auth-page">
+    <section class="auth-panel" aria-labelledby="auth-title">
+      <svg class="auth-panel-leaves" viewBox="0 0 520 310" aria-hidden="true" focusable="false">
+        <path d="M0 30C148 78 224 178 276 310H0Z" fill="#dbeada" />
+        <path d="M0 160C111 193 151 238 178 310H0Z" fill="#c8dfca" />
+        <path d="M155 226c120-18 205 18 295 84H207Z" fill="#e8f0e5" />
+      </svg>
+      <svg class="auth-leaf-mark" viewBox="0 0 64 54" aria-hidden="true" focusable="false">
+        <path d="M23 49C24 22 39 7 62 3c1 24-12 42-39 46Z" fill="#6fbb57" />
+        <path d="M23 49C26 28 40 12 62 3L23 49Z" fill="#459951" />
+        <path d="M20 47C6 42 1 30 3 16c15 4 20 15 17 31Z" fill="#338e73" />
+        <path d="M20 47C14 34 9 24 3 16c-2 14 3 26 17 31Z" fill="#176951" />
+      </svg>
+      <div class="auth-heading">
+        <p>ACESSO AO PAINEL</p>
+        <h1 id="auth-title">Entrar</h1>
+        <span>Use seu usuário e senha para acessar o preenchimento das unidades.</span>
+      </div>
+
+      <form id="login-form" class="auth-form" autocomplete="on">
+        <div class="auth-field">
+          <label for="name">Usuário</label>
+          <div class="auth-input-wrap">
+            <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="7" r="4" />
+              <path d="M4 21v-2a8 8 0 0 1 16 0v2" />
+            </svg>
+            <input id="name" name="name" type="text" autocomplete="username" maxlength="80" required autofocus />
+          </div>
+        </div>
+        <div class="auth-field">
+          <label for="password">Senha</label>
+          <div class="auth-input-wrap auth-password">
+            <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <rect x="5" y="10" width="14" height="11" rx="2" />
+              <path d="M8 10V7a4 4 0 0 1 8 0v3M12 15v2" />
+            </svg>
+            <input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required />
+            <button id="toggle-password" class="auth-password-toggle" type="button" aria-label="Mostrar senha" aria-controls="password" aria-pressed="false" title="Mostrar senha">
+              <svg id="eye-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              <svg id="eye-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false" hidden>
+                <path d="m3 3 18 18M10.6 5.1 12 5c6.5 0 10 7 10 7a20 20 0 0 1-3.1 4M6.1 6.1A22 22 0 0 0 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.8-1.3M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="auth-remember-option">
+          <label class="auth-remember" for="remember-me">
+            <input id="remember-me" name="remember_me" type="checkbox" aria-describedby="remember-help" />
+            <span>Lembrar de mim</span>
+          </label>
+          <small id="remember-help">Manter acesso por até 30 dias neste dispositivo. Use apenas em dispositivos pessoais.</small>
+        </div>
+        <p id="auth-error" class="auth-error" role="alert" hidden></p>
+        <button id="submit-button" type="submit">Entrar</button>
+      </form>
+
+    </section>
+
+    <aside class="auth-visual" aria-hidden="true">
+      <img class="auth-landscape" src="/assets/login-field-sunrise-v1.png" alt="" fetchpriority="high" />
+      <svg class="auth-field-contours" viewBox="0 0 1000 260" preserveAspectRatio="none" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true" focusable="false">
+        <path d="M-80 248C176 230 383-50 701 33c165 43 279 142 386 115" />
+        <path d="M-60 289C217 242 410 1 721 69c164 36 271 129 375 113" />
+        <path d="M90 316C325 259 466 60 749 116c165 33 230 94 340 97" />
+        <path d="M325 322C483 241 592 170 785 178c138 6 217 61 296 70" />
+      </svg>
+      <div class="auth-visual-copy">
+        <h2 class="auth-visual-title">Posição<br />de Campo</h2>
+        <span class="auth-title-accent"></span>
+      </div>
+    </aside>
+  </main>
+{% endblock %}
+{% block scripts %}<script src="/js/login.js?v={{ asset_version }}"></script>{% endblock %}

@@ -1,3 +1,0 @@
-# Dependência usada somente para leitura de planilhas Excel antigas (.xls).
-# XLSX/XLSM continuam sendo lidos pelo parser interno do projeto.
-xlrd>=2.0.1,<3

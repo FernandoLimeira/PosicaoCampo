@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Emitir posição global · Posição de Campo{% endblock %}
+{% block styles %}
+  <link rel="stylesheet" href="/css/emissao.css?v={{ asset_version }}" />
+{% endblock %}
+{% block content %}
+<section class="emission-page" aria-labelledby="emission-title">
+  <span class="modal-kicker">Emissão consolidada</span>
+  <h1 id="emission-title">Emitir posição global</h1>
+  <p>Gere uma imagem HD com a posição atual das quatro unidades: PPT, NRD, RBR e PST. Esta emissão inclui todas as unidades, independentemente do filtro lateral.</p>
+  <button id="emit-global-position" class="modal-button save" type="button">Emitir posição global em HD</button>
+  <p id="emission-status" role="status" aria-live="polite"></p>
+</section>
+{% endblock %}
+{% block scripts %}
+  <script src="/js/export.js?v={{ asset_version }}"></script>
+  <script src="/js/emissao.js?v={{ asset_version }}"></script>
+{% endblock %}

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Usuários cadastrados · Posição de Campo{% endblock %}
+{% block styles %}
+  <link rel="stylesheet" href="/css/usuarios.css?v={{ asset_version }}" />
+{% endblock %}
+
+{% block content %}
+<section class="editor-modal module-page-card users-modal" aria-labelledby="users-modal-title">
+      <header class="modal-header">
+        <div>
+          <span class="modal-kicker">Acessos</span>
+          <h2 id="users-modal-title">Usuários cadastrados</h2>
+        </div>
+      </header>
+      <div class="users-content">
+        <div class="users-search-bar">
+          <label class="users-search-field" for="users-search">
+            <span>Buscar usuário</span>
+            <input id="users-search" type="search" autocomplete="off" placeholder="Digite o nome do usuário" />
+          </label>
+          <span id="users-search-count" class="users-search-count" aria-live="polite"></span>
+        </div>
+
+        <div id="users-list" class="users-list" aria-live="polite"></div>
+        <div id="users-search-empty" class="users-search-empty" hidden>Nenhum usuário encontrado.</div>
+      </div>
+      <footer class="modal-footer">
+        <div class="wizard-footer-info">
+          <strong>Controle do Administrador</strong>
+          <p>Somente administradores gerenciam contas. Coordenadores e analistas têm acesso padrão às quatro unidades.</p>
+        </div>
+        <div class="modal-footer-actions">
+          <a class="modal-button save" href="/usuarios/cadastro">Cadastrar usuário</a>
+        </div>
+      </footer>
+    </section>
+{% endblock %}
+{% block scripts %}
+  <script src="/js/usuarios.js?v={{ asset_version }}"></script>
+{% endblock %}

@@ -1,0 +1,87 @@
+{% from "partials/icons.html" import icon %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0b7a36" />
+  <meta name="app-build" content="{{ asset_version }}" />
+  <title>{% block title %}Posição de Campo{% endblock %}</title>
+  <link rel="stylesheet" href="/css/base.css?v={{ asset_version }}" />
+  {% block styles %}{% endblock %}
+</head>
+<body data-page="{{ page }}" data-app-build="{{ asset_version }}"
+      {% if user %}data-user-id="{{ user.id }}" data-user-role="{{ user.role }}" data-user-name="{{ user.name }}" data-user-base-unit="{{ user.base_unit|default('PPT', true) }}"{% endif %}>
+  {% if user %}
+  <div class="dashboard-shell">
+    <nav class="app-navbar" aria-label="Navegação principal">
+      <a class="nav-brand" href="/" data-unit-context aria-label="Posição de Campo"><span>Posição<br />de Campo</span></a>
+      <div class="nav-unit-selector" aria-label="Filtro de unidade">
+        <span class="nav-unit-selector-label" id="report-unit-label">Unidade</span>
+        <div id="report-unit" class="report-unit-buttons" role="group" aria-labelledby="report-unit-label">
+          {% for code, name in [('PPT', 'Paraguaçu Paulista'), ('NRD', 'Narandiba'), ('RBR', 'Rio Brilhante'), ('PST', 'Passa Tempo')] %}
+          <button class="report-unit-button" type="button" data-report-unit="{{ code }}" aria-pressed="false" title="{{ name }}"><span>{{ code }}</span></button>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="nav-actions">
+        <button id="reports-toggle" class="nav-link nav-reports-toggle{% if page in ['dashboard', 'sacarose', 'reports', 'returns'] %} is-active{% endif %}" type="button" aria-expanded="false" aria-controls="reports-flyout">{{ icon('reports') }}<span>Relatórios</span></button>
+        <a class="nav-link{% if page == 'emission' %} is-active{% endif %}" href="/emitir-posicao-global"{% if page == 'emission' %} aria-current="page"{% endif %}>{{ icon('emission') }}<span>Emitir posição global</span></a>
+        {% for key, href, label in [
+          ('sectors', '/setores', 'Cadastro de setores'),
+          ('history', '/historico', 'Histórico')
+        ] %}
+        <a class="nav-link{% if page == key %} is-active{% endif %}" href="{{ href }}"{% if page == key %} aria-current="page"{% endif %}>{{ icon(key) }}<span>{{ label }}</span></a>
+        {% endfor %}
+        {% if user.role == 'admin' %}
+        <button id="users-toggle" class="nav-link nav-reports-toggle{% if page in ['users', 'user-create'] %} is-active{% endif %}" type="button" aria-expanded="false" aria-controls="users-flyout">{{ icon('users') }}<span>Usuários</span></button>
+        {% endif %}
+        {% block nav_actions %}{% endblock %}
+      </div>
+      <div class="nav-user" aria-label="Usuário conectado">
+        <div class="nav-user-greeting">{{ icon('user') }}<strong id="greeting">Bem-vindo, {{ user.name }}!</strong></div>
+        <span id="current-user" hidden>{{ user.name }}{% if user.role == 'admin' %} · Admin{% endif %}</span>
+        <div class="nav-date">
+          <span>{{ icon('calendar') }}<time id="today"></time></span>
+          <span>{{ icon('clock') }}<time id="current-time" aria-label="Horário atual"></time></span>
+        </div>
+        <button id="logout-button" class="nav-logout" type="button">{{ icon('logout') }}<span>Sair</span></button>
+      </div>
+    </nav>
+    <nav id="reports-flyout" class="nav-report-flyout" aria-label="Relatórios" hidden>
+      <div class="nav-report-heading">
+        <strong>Relatórios</strong>
+      </div>
+      <div class="nav-report-items">
+        {% for key, href, label in [
+          ('dashboard', '/', 'Posição de Campo'),
+          ('sacarose', '/sacarose', 'Sacarose'),
+          ('reports', '/relatorios', 'Acontecimentos de produtividade por frota e operador'),
+          ('returns', '/retornos', 'Análise de mudanças de área')
+        ] %}
+        <a class="nav-link{% if page == key %} is-active{% endif %}" href="{{ href }}" data-unit-context{% if page == key %} aria-current="page"{% endif %}>{{ icon(key) }}<span>{{ label }}</span></a>
+        {% endfor %}
+      </div>
+    </nav>
+    {% if user.role == 'admin' %}
+    <nav id="users-flyout" class="nav-report-flyout" aria-label="Usuários" hidden>
+      <div class="nav-report-heading"><strong>Usuários</strong></div>
+      <div class="nav-report-items">
+        <a class="nav-link{% if page == 'user-create' %} is-active{% endif %}" href="/usuarios/cadastro"{% if page == 'user-create' %} aria-current="page"{% endif %}>{{ icon('user-add') }}<span>Cadastrar usuário</span></a>
+        <a class="nav-link{% if page == 'users' %} is-active{% endif %}" href="/usuarios"{% if page == 'users' %} aria-current="page"{% endif %}>{{ icon('users') }}<span>Usuários cadastrados</span></a>
+      </div>
+    </nav>
+    {% endif %}
+    <main class="app-content" id="main-content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% else %}
+    {% block public_content %}{% endblock %}
+  {% endif %}
+  {% block modals %}{% endblock %}
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  {% if user %}<script src="/js/common.js?v={{ asset_version }}"></script>{% endif %}
+  {% block scripts %}{% endblock %}
+</body>
+</html>

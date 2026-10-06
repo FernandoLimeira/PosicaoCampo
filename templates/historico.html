@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Histórico · Posição de Campo{% endblock %}
+{% block styles %}
+  <link rel="stylesheet" href="/css/historico.css?v={{ asset_version }}" />
+{% endblock %}
+
+{% block content %}
+<section class="editor-modal module-page-card history-modal" aria-labelledby="history-modal-title">
+      <header class="modal-header">
+        <div>
+          <span class="modal-kicker">Rastreabilidade</span>
+          <h2 id="history-modal-title">Histórico de alterações</h2>
+        </div>
+      </header>
+      <div class="history-toolbar" hidden>
+        <label class="field history-filter">
+          <span>Unidade</span>
+          <select id="history-unit-filter">
+            <option value="">Todas as unidades</option>
+            <option value="PPT">PPT</option>
+            <option value="NRD">NRD</option>
+            <option value="RBR">RBR</option>
+            <option value="PST">PST</option>
+          </select>
+        </label>
+      </div>
+      <div class="history-content">
+        <div id="history-list" class="history-list" aria-live="polite"></div>
+        <nav id="history-pagination" class="history-pagination" aria-label="Paginação do histórico" hidden>
+          <button id="history-page-prev" class="history-page-button" type="button">Anterior</button>
+          <span id="history-page-info" class="history-page-info">Página 1 de 1</span>
+          <button id="history-page-next" class="history-page-button" type="button">Próxima</button>
+        </nav>
+      </div>
+      <footer class="modal-footer">
+        <div class="wizard-footer-info">
+          <strong>Registro automático</strong>
+          <p>Cada salvamento registra usuário, unidade e horário.</p>
+        </div>
+        <div class="modal-footer-actions">
+          <a class="modal-button secondary" href="/">Voltar ao painel</a>
+        </div>
+      </footer>
+    </section>
+{% endblock %}
+{% block scripts %}
+  <script src="/js/historico.js?v={{ asset_version }}"></script>
+{% endblock %}
