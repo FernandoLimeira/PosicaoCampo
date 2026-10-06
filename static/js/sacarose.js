@@ -14,6 +14,22 @@ function sectorItem(sector, section = '') {
   return (sectionKey ? options.find(item => normalizeKey(item.section) === sectionKey) : options[0]) || null;
 }
 
+
+function getSacarosePoleConfig(unitCode = activeUnit) {
+  if (['RBR', 'PST'].includes(unitCode)) {
+    return { code: 'MS', label: 'Polo MS', units: ['RBR', 'PST'] };
+  }
+  return { code: 'SP', label: 'Polo SP', units: ['NRD', 'PPT'] };
+}
+
+function updateExportButtonLabel() {
+  const button = document.querySelector('#export-sacarose-unit');
+  if (!button) return;
+  const pole = getSacarosePoleConfig(activeUnit);
+  button.textContent = `Emitir imagem HD do ${pole.label}`;
+}
+
+
 function setStatus(message = '', error = false) {
   const status = document.querySelector('#save-status');
   status.textContent = message;
@@ -60,10 +76,12 @@ function collectRows() {
 }
 
 function renderUnit() {
-  document.querySelector('#unit-pole').textContent = `${['RBR', 'PST'].includes(activeUnit) ? 'Polo MS' : 'Polo SP'} · ${activeUnit}`;
+  const pole = getSacarosePoleConfig(activeUnit);
+  document.querySelector('#unit-pole').textContent = `${pole.label} · ${activeUnit}`;
   document.querySelector('#unit-title').textContent = UNIT_NAMES[activeUnit];
   const rows = Array.isArray(units[activeUnit]) ? units[activeUnit] : [];
   document.querySelector('#sacarose-rows').innerHTML = rows.length ? rows.map(rowHtml).join('') : rowHtml();
+  updateExportButtonLabel();
   history.replaceState(null, '', `/sacarose?unit=${activeUnit}`);
   setStatus('');
 }
@@ -141,17 +159,29 @@ document.addEventListener('report-unit-change', event => {
 });
 document.querySelector('#export-sacarose-unit').addEventListener('click', async event => {
   const button = event.currentTarget;
-  const code = activeUnit;
-  const rows = collectRows();
-  const problem = validate(rows);
-  if (problem) { showToast(problem, true); return; }
+  const pole = getSacarosePoleConfig(activeUnit);
+  const exportPositions = { ...units, [activeUnit]: collectRows() };
+
+  for (const unitCode of pole.units) {
+    const rows = Array.isArray(exportPositions[unitCode]) ? exportPositions[unitCode] : [];
+    const problem = validate(rows);
+    if (problem) {
+      showToast(`${unitCode}: ${problem}`, true);
+      return;
+    }
+  }
+
   button.disabled = true;
   try {
-    const blob = await generateSacaroseReportImageBlob([code], { [code]: rows }, sectorBase);
-    downloadBlobFile(blob, `Sacarose-${code}-${new Date().toLocaleDateString('pt-BR').replaceAll('/', '-')}.png`);
-    showToast(`Imagem HD da Sacarose ${code} emitida.`);
-  } catch (error) { showToast(error.message || 'Não foi possível emitir a imagem.', true); }
-  finally { button.disabled = false; }
+    const blob = await generateSacaroseReportImageBlob(pole.units, exportPositions, sectorBase);
+    const dateText = new Date().toLocaleDateString('pt-BR').replaceAll('/', '-');
+    downloadBlobFile(blob, `Sacarose-${pole.code}-${dateText}.png`);
+    showToast(`Imagem HD da Sacarose do ${pole.label} emitida.`);
+  } catch (error) {
+    showToast(error.message || 'Não foi possível emitir a imagem.', true);
+  } finally {
+    button.disabled = false;
+  }
 });
 document.querySelector('#add-row').addEventListener('click', () => {
   document.querySelector('#sacarose-rows').insertAdjacentHTML('beforeend', rowHtml());
