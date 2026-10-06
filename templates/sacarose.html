@@ -31,8 +31,26 @@
 
       <footer class="card-footer">
         <p>Ao salvar, Frente e Setor também são sincronizados com a Posição de Campo.</p>
-        <div class="sacarose-actions">
-          <button id="save-button" class="primary-button" type="submit">Salvar Sacarose</button>
+        <div class="sacarose-actions-wrap">
+          <div class="sacarose-export-options" aria-label="Opções da imagem da Sacarose">
+            <label class="sacarose-option-field">
+              <span>Tamanho da imagem</span>
+              <select id="sacarose-export-size">
+                <option value="0.85">Pequena</option>
+                <option value="1" selected>Padrão</option>
+                <option value="1.3">Média</option>
+                <option value="1.6">Grande</option>
+              </select>
+            </label>
+            <label class="sacarose-option-toggle">
+              <input id="sacarose-export-transparent" type="checkbox" />
+              <span>Fundo transparente (somente tabelas)</span>
+            </label>
+          </div>
+          <div class="sacarose-actions">
+            <button id="export-sacarose-unit" class="secondary-button" type="button">Emitir imagem da unidade</button>
+            <button id="save-button" class="primary-button" type="submit">Salvar Sacarose</button>
+          </div>
         </div>
       </footer>
     </form>

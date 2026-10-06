@@ -14,7 +14,6 @@ function sectorItem(sector, section = '') {
   return (sectionKey ? options.find(item => normalizeKey(item.section) === sectionKey) : options[0]) || null;
 }
 
-
 function setStatus(message = '', error = false) {
   const status = document.querySelector('#save-status');
   status.textContent = message;
@@ -139,6 +138,29 @@ document.addEventListener('report-unit-change', event => {
   units[activeUnit] = collectRows();
   activeUnit = event.detail.unit;
   renderUnit();
+});
+document.querySelector('#export-sacarose-unit').addEventListener('click', async event => {
+  const button = event.currentTarget;
+  const code = activeUnit;
+  const rows = collectRows();
+  const problem = validate(rows);
+  if (problem) { showToast(problem, true); return; }
+
+  const scale = Number(document.querySelector('#sacarose-export-size')?.value || 1);
+  const transparentBackground = Boolean(document.querySelector('#sacarose-export-transparent')?.checked);
+
+  button.disabled = true;
+  try {
+    const blob = await generateSacaroseReportImageBlob([code], { [code]: rows }, sectorBase, {
+      scale,
+      transparentBackground
+    });
+    const dateText = new Date().toLocaleDateString('pt-BR').replaceAll('/', '-');
+    const suffix = transparentBackground ? 'transparente' : 'padrao';
+    downloadBlobFile(blob, `Sacarose-${code}-${suffix}-${dateText}.png`);
+    showToast(`Imagem da Sacarose ${code} emitida.`);
+  } catch (error) { showToast(error.message || 'Não foi possível emitir a imagem.', true); }
+  finally { button.disabled = false; }
 });
 document.querySelector('#add-row').addEventListener('click', () => {
   document.querySelector('#sacarose-rows').insertAdjacentHTML('beforeend', rowHtml());

@@ -2,6 +2,7 @@
 const REPORT_BASE_WIDTH = 1024;
 const REPORT_BASE_HEIGHT = 1536;
 const REPORT_EXPORT_SCALE = 4;
+const SACAROSE_REPORT_EXPORT_SCALE = 0.65;
 const REPORT_EXPORT_MIME_TYPE = 'image/png';
 const REPORT_EXPORT_EXTENSION = REPORT_EXPORT_MIME_TYPE === 'image/png' ? 'png' : 'jpg';
 const REPORT_METRICS = [
@@ -1062,7 +1063,7 @@ function drawSacaroseExportBackground(ctx, width, height) {
   ctx.restore();
 }
 
-function drawSacaroseExportUnit(ctx, code, rows, x, y, width, iconImage) {
+function drawSacaroseExportUnit(ctx, code, rows, x, y, width, iconImage, headerDate = '') {
   const headerH = 66;
   const columnsH = 36;
   const rowH = 60;
@@ -1107,6 +1108,16 @@ function drawSacaroseExportUnit(ctx, code, rows, x, y, width, iconImage) {
   ctx.font = 'bold 28px Arial, sans-serif';
   ctx.fillText(`POSIÇÃO DE COLHEITA ${code}`, x + width / 2, y + headerH / 2 + 2);
   ctx.restore();
+
+  if (headerDate) {
+    ctx.save();
+    ctx.fillStyle = '#214c32';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 17px Arial, sans-serif';
+    ctx.fillText(headerDate, x + width - 18, y + headerH / 2 + 2);
+    ctx.restore();
+  }
 
   const colY = y + headerH;
   ctx.save();
@@ -1180,7 +1191,7 @@ function drawSacaroseExportUnit(ctx, code, rows, x, y, width, iconImage) {
   return height;
 }
 
-async function generateSacaroseReportImageBlob(exportUnits, positions, sectors) {
+async function generateSacaroseReportImageBlob(exportUnits, positions, sectors, options = {}) {
   if (!Array.isArray(exportUnits) || !exportUnits.length || exportUnits.some(code => !REPORT_UNIT_NAMES[code])) throw new Error('Selecione uma unidade válida.');
 
   const sacaroseIcon = await loadSacaroseHeaderIconImage();
@@ -1190,41 +1201,58 @@ async function generateSacaroseReportImageBlob(exportUnits, positions, sectors) 
     rows: getSacaroseExportRows(code, positions, sectors)
   }));
 
+  const transparentBackground = options.transparentBackground !== false;
+  const selectedScale = Number(options.scale);
+  const scale = Number.isFinite(selectedScale) && selectedScale > 0 ? selectedScale : SACAROSE_REPORT_EXPORT_SCALE;
   const unitHeight = rows => 66 + 36 + (rows.length ? rows.length * 60 : 66);
   const baseWidth = 1145;
-  const topMargin = 74;
+  const topMargin = transparentBackground ? 18 : 74;
   const sideMargin = 32;
-  const gap = 42;
-  const bottomMargin = 34;
+  const gap = transparentBackground ? 24 : 42;
+  const bottomMargin = transparentBackground ? 18 : 34;
   const totalUnitsHeight = exportRows.reduce((sum, item, index) => (
     sum + unitHeight(item.rows) + (index < exportRows.length - 1 ? gap : 0)
   ), 0);
-  const baseHeight = Math.max(1374, topMargin + totalUnitsHeight + bottomMargin);
-  const scale = REPORT_EXPORT_SCALE;
+  const minimumHeight = transparentBackground ? topMargin + totalUnitsHeight + bottomMargin : 1374;
+  const baseHeight = Math.max(minimumHeight, topMargin + totalUnitsHeight + bottomMargin);
   const canvas = document.createElement('canvas');
   canvas.width = baseWidth * scale;
   canvas.height = baseHeight * scale;
-  const ctx = canvas.getContext('2d', { alpha: false });
+  const ctx = canvas.getContext('2d', { alpha: transparentBackground });
   if (!ctx) throw new Error('Canvas não suportado neste navegador.');
 
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.scale(scale, scale);
 
-  drawSacaroseExportBackground(ctx, baseWidth, baseHeight);
+  if (!transparentBackground) {
+    drawSacaroseExportBackground(ctx, baseWidth, baseHeight);
 
-  const { date } = getHeaderDataForExport(new Date());
-  ctx.save();
-  ctx.fillStyle = '#3b4d63';
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'middle';
-  ctx.font = 'bold 24px Arial, sans-serif';
-  ctx.fillText(date, baseWidth - 34, 40);
-  ctx.restore();
+    const { date } = getHeaderDataForExport(new Date());
+    ctx.save();
+    ctx.fillStyle = '#3b4d63';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 24px Arial, sans-serif';
+    ctx.fillText(date, baseWidth - 34, 40);
+    ctx.restore();
+  } else {
+    ctx.clearRect(0, 0, baseWidth, baseHeight);
+  }
 
-  let y = 102;
+  const { date: currentDate } = getHeaderDataForExport(new Date());
+  let y = transparentBackground ? topMargin : 102;
   exportRows.forEach((item, index) => {
-    y += drawSacaroseExportUnit(ctx, item.code, item.rows, sideMargin, y, baseWidth - sideMargin * 2, sacaroseIcon);
+    y += drawSacaroseExportUnit(
+      ctx,
+      item.code,
+      item.rows,
+      sideMargin,
+      y,
+      baseWidth - sideMargin * 2,
+      sacaroseIcon,
+      index === 0 ? currentDate : ''
+    );
     if (index < exportRows.length - 1) y += gap;
   });
   if (typeof sacaroseIcon?.close === 'function') sacaroseIcon.close();

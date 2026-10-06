@@ -1,10 +1,9 @@
-ARQUIVOS ALTERADOS — NRD PRIMEIRO NA IMAGEM
+ARQUIVOS ALTERADOS — SACAROSE COM TAMANHO PADRÃO
 
 Alterado apenas:
-- static/js/emissao.js
+- static/js/export.js
 
 Ajuste aplicado:
-- na emissão global da Posição de Campo, a ordem da imagem foi alterada para:
-  NRD, PPT, RBR, PST
-- com isso, a NRD sempre aparece primeiro na imagem.
-- a emissão da Sacarose por polo permanece inalterada.
+- a imagem da Sacarose passou a ser gerada em tamanho padrão menor para facilitar o envio por e-mail;
+- a escala de exportação da Sacarose foi reduzida de 4x para 2x;
+- a emissão da Posição de Campo permanece inalterada.

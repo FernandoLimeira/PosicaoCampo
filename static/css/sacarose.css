@@ -32,6 +32,28 @@
 
 .card-footer p { font-size: 12px; }
 
+.sacarose-actions-wrap { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 14px 18px; }
+
+.sacarose-export-options { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 10px 14px; }
+
+.sacarose-option-field { display: flex; align-items: center; gap: 10px; color: #55665d; font-size: 12px; font-weight: 800; }
+
+.sacarose-option-field span { white-space: nowrap; }
+
+.sacarose-option-field select {
+  min-width: 128px;
+  height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #ccd8d0;
+  border-radius: 6px;
+  color: #21372a;
+  background: #fff;
+}
+
+.sacarose-option-toggle { display: inline-flex; align-items: center; gap: 8px; color: #55665d; font-size: 12px; font-weight: 800; }
+
+.sacarose-option-toggle input { width: 18px; height: 18px; accent-color: var(--green); }
+
 .primary-button, .secondary-button { min-height: 40px; padding: 10px 17px; border-radius: 7px; cursor: pointer; font-weight: 800; }
 
 .primary-button { border: 1px solid var(--green); color: #fff; background: var(--green); }
@@ -92,6 +114,10 @@
 .page-shell { width: min(100% - 20px, 1380px); margin-top: 18px; }
 
 .page-intro, .card-header, .card-footer { flex-direction: column; align-items: stretch; }
+
+.sacarose-actions-wrap, .sacarose-export-options { justify-content: stretch; }
+
+.sacarose-option-field { flex-direction: column; align-items: stretch; }
 
 .unit-tabs { grid-template-columns: repeat(2, 1fr); }
 
