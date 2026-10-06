@@ -288,7 +288,7 @@ async function processReturnAnalysis(event) {
     renderReturnAnalysisResult(returnLastReport);
     returnSetStatus(
       '#return-analysis-status',
-      `${file.name} processado: ${returnLastReport?.records || 0} registros válidos · ${returnLastReport?.returns_count || 0} retornos reais.`,
+      `${file.name} processado: ${returnLastReport?.records || 0} registros válidos · ${returnLastReport?.returns_count || 0} retornos reais · ${returnLastReport?.possible_soil_wet_count || 0} possível(is) parada(s) por solo úmido.`,
       'success'
     );
   } catch (error) {
@@ -303,14 +303,15 @@ function renderReturnKpis(report) {
   const container = document.querySelector('#return-kpis');
   if (!container) return;
   const kpis = [
-    ['Retornos reais', report?.returns_count || 0, 'Setores revisitados pela frente'],
-    ['Setores com retorno', report?.return_sectors_count || 0, 'Setores distintos'],
+    ['Retornos reais', report?.returns_count || 0, 'Com trabalho em outro setor no intervalo'],
+    ['Possível solo úmido', report?.possible_soil_wet_count || 0, 'Sem atividade da frente no intervalo'],
+    ['Setores com retorno', report?.return_sectors_count || 0, 'Setores distintos com retorno real'],
     ['Outras frentes', report?.other_front_periods_count || 0, 'Períodos atribuídos a outra frente'],
     ['Empates', report?.ties_count || 0, 'Períodos sem frente única'],
     ['Sem cadastro', report?.unknown_equipment_count || 0, 'Equipamentos fora da base de layouts'],
   ];
   container.innerHTML = kpis.map(([label, value, hint], index) => `
-    <article class="excel-kpi ${index === 0 ? 'is-positive' : index > 2 && Number(value) ? 'is-warning' : ''}">
+    <article class="excel-kpi ${index === 0 ? 'is-positive' : index === 1 && Number(value) ? 'is-warning' : index > 3 && Number(value) ? 'is-warning' : ''}">
       <small>${escapeHtml(label)}</small>
       <strong>${escapeHtml(value)}</strong>
       <span>${escapeHtml(hint)}</span>
@@ -335,6 +336,26 @@ function renderReturnRows(report) {
       <td>${escapeHtml(item.days_out)}</td>
       <td>${escapeHtml((item.sectors_during_absence || []).length ? item.sectors_during_absence.join(', ') : 'Sem registro de outro setor')}</td>
       <td>${escapeHtml(returnCountText(item.return_counts))}</td>
+    </tr>
+  `).join('');
+}
+
+function renderPossibleSoilWetRows(report) {
+  const body = document.querySelector('#return-soil-wet-body');
+  if (!body) return;
+  const rows = Array.isArray(report?.possible_soil_wet) ? report.possible_soil_wet : [];
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="6" class="return-table-empty">Nenhum caso pendente de verificação por possível solo úmido.</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(item => `
+    <tr>
+      <td><strong>${escapeHtml(item.sector)}</strong></td>
+      <td>${escapeHtml(returnFormatDate(item.exit_date))}</td>
+      <td>${escapeHtml(returnFormatDate(item.return_date))}</td>
+      <td>${escapeHtml(item.days_out)}</td>
+      <td>Sem registro da frente em outro setor</td>
+      <td><strong>Possível parada por solo úmido — verificar</strong></td>
     </tr>
   `).join('');
 }
@@ -368,6 +389,7 @@ function renderReturnAnalysisResult(report) {
   document.querySelector('#return-report-text').textContent = report.report || '-';
   renderReturnKpis(report);
   renderReturnRows(report);
+  renderPossibleSoilWetRows(report);
   renderReturnOtherRows(report);
   results.hidden = false;
 }

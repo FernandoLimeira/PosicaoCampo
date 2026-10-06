@@ -27,6 +27,7 @@
               <span><b>Maior quantidade</b> define a frente do período</span>
               <span><b>Empate</b> fica como MISTO / EMPATE</span>
               <span><b>Sem cadastro</b> não entra na disputa</span>
+              <span><b>Sem atividade da frente no intervalo</b> indica possível parada por solo úmido para verificar</span>
             </div>
           </div>
           <form id="return-analysis-form" class="return-analysis-form">
@@ -70,6 +71,16 @@
               <table class="return-table">
                 <thead><tr><th>Setor</th><th>Entrada</th><th>Saída</th><th>Retorno</th><th>Dias fora</th><th>Setores durante a ausência</th><th>Contagem no retorno</th></tr></thead>
                 <tbody id="return-results-body"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="excel-browser-section return-table-section return-soil-wet-section">
+            <div class="excel-section-heading"><div><span>Verificar</span><h3>Possível parada por solo úmido</h3><p>Casos em que a frente reapareceu no mesmo setor sem registro de trabalho em outro setor durante o intervalo.</p></div></div>
+            <div class="return-table-wrap">
+              <table class="return-table">
+                <thead><tr><th>Setor</th><th>Último dia antes do intervalo</th><th>Reaparecimento</th><th>Dias sem atividade</th><th>Atividade no intervalo</th><th>Classificação</th></tr></thead>
+                <tbody id="return-soil-wet-body"></tbody>
               </table>
             </div>
           </section>

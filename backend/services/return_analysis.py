@@ -406,6 +406,7 @@ def analyze_return_rows(
         items.sort(key=lambda item: item["start"])
 
     returns: list[dict[str, Any]] = []
+    possible_soil_wet: list[dict[str, Any]] = []
     for sector, items in target_by_sector.items():
         for index in range(1, len(items)):
             previous = items[index - 1]
@@ -426,20 +427,27 @@ def analyze_return_rows(
                     and date.fromisoformat(period["start"]) <= gap_end
                 }
             )
-            returns.append(
-                {
-                    "front": target["name"],
-                    "sector": sector,
-                    "entry_date": previous["start"],
-                    "exit_date": previous["end"],
-                    "return_date": returned["start"],
-                    "days_out": days_out,
-                    "sectors_during_absence": sectors_between,
-                    "return_counts": returned["counts"],
-                    "return_equipment": returned["equipment"],
-                }
-            )
+            occurrence = {
+                "front": target["name"],
+                "sector": sector,
+                "entry_date": previous["start"],
+                "exit_date": previous["end"],
+                "return_date": returned["start"],
+                "days_out": days_out,
+                "sectors_during_absence": sectors_between,
+                "return_counts": returned["counts"],
+                "return_equipment": returned["equipment"],
+            }
+            # Só existe retorno real quando há evidência de que a frente trabalhou
+            # em outro setor durante o intervalo. Sem qualquer atividade da frente
+            # no intervalo, o caso fica pendente para verificação de possível parada
+            # por solo úmido, em vez de ser contado automaticamente como retorno.
+            if sectors_between:
+                returns.append(occurrence)
+            else:
+                possible_soil_wet.append(occurrence)
     returns.sort(key=lambda item: (item["return_date"], item["sector"]))
+    possible_soil_wet.sort(key=lambda item: (item["return_date"], item["sector"]))
 
     other_front_periods = [
         item for item in periods
@@ -458,12 +466,8 @@ def analyze_return_rows(
         report_lines.append("2. Não foram identificados setores com retorno real.")
     line_number = 3
 
-    no_other: list[dict[str, Any]] = []
     for item in returns:
         sectors_between = item["sectors_during_absence"]
-        if not sectors_between:
-            no_other.append(item)
-            continue
         location_text = (
             f"no setor {sectors_between[0]}"
             if len(sectors_between) == 1
@@ -475,18 +479,13 @@ def analyze_return_rows(
             f"trabalhou {location_text}."
         )
         line_number += 1
-    if no_other:
-        sector_text = _join_pt([item["sector"] for item in no_other])
-        if len(no_other) == 1:
-            item = no_other[0]
-            report_lines.append(
-                f"{line_number}. No setor {item['sector']}, houve retorno após {item['days_out']} "
-                f"{'dia' if item['days_out'] == 1 else 'dias'}, mas sem registro de outro setor da {target['name']} no período."
-            )
-        else:
-            report_lines.append(
-                f"{line_number}. Nos setores {sector_text}, houve intervalo antes do retorno, mas sem registro de outro setor da {target['name']} no período intermediário."
-            )
+
+    for item in possible_soil_wet:
+        report_lines.append(
+            f"{line_number}. No setor {item['sector']}, a {target['name']} ficou "
+            f"{item['days_out']} {'dia' if item['days_out'] == 1 else 'dias'} sem registro de trabalho em outro setor "
+            "antes de reaparecer no mesmo setor. Possível parada por solo úmido — verificar."
+        )
         line_number += 1
 
     for item in other_front_periods:
@@ -527,11 +526,14 @@ def analyze_return_rows(
         "min_gap_days": min_gap_days,
         "returns_count": len(returns),
         "return_sectors_count": len({item["sector"] for item in returns}),
+        "possible_soil_wet_count": len(possible_soil_wet),
+        "possible_soil_wet_sectors_count": len({item["sector"] for item in possible_soil_wet}),
         "other_front_periods_count": len(other_front_periods),
         "ties_count": len(tie_periods),
         "unknown_equipment_count": len(unknown_equipment),
         "unknown_equipment": unknown_equipment,
         "returns": returns,
+        "possible_soil_wet": possible_soil_wet,
         "other_front_periods": other_front_periods,
         "tie_periods": tie_periods,
         "periods": periods,

@@ -142,7 +142,7 @@
   gap: 8px;
 }
 
-.return-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.return-kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 
 .return-report-card { padding: 14px 16px; }
 
@@ -460,3 +460,7 @@
 .return-analysis-page .return-table td {
   font-size: 10px;
 }
+
+.return-soil-wet-section .excel-section-heading h3 { color: #8a5a18; }
+
+.return-soil-wet-section .return-table-wrap { border-color: #ead8b7; }
