@@ -6,7 +6,7 @@ import time
 from typing import Any
 
 from ..config import MIN_PASSWORD_LENGTH, REMEMBER_SESSION_TTL_SECONDS, SESSION_TTL_SECONDS
-from .storage import USER_REFERENCES, auth_connection, connection, initialize_databases, validate_actor
+from .storage import ALL_USER_REFERENCES, auth_connection, connection, initialize_databases, validate_actor
 from .security import hash_password, new_session_token, token_digest, verify_password
 
 
@@ -347,6 +347,152 @@ def save_return_analysis_layouts(unit_code: Any, fronts: Any, user_id: int) -> d
                 )
     return list_return_analysis_layouts(code)
 
+def get_return_soil_wet_summary(unit_code: Any) -> dict[str, Any]:
+    code = str(unit_code or "").strip().upper()
+    if code not in ALLOWED_UNIT_CODES:
+        raise ValueError("Unidade inválida.")
+    with connection() as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS records, COUNT(DISTINCT equipment) AS equipments,
+                   MIN(operation_date) AS start_date, MAX(operation_date) AS end_date,
+                   MAX(updated_at) AS updated_at
+            FROM return_analysis_soil_wet
+            WHERE unit_code = ?
+            """,
+            (code,),
+        ).fetchone()
+    return {
+        "unit": code,
+        "records": int(row["records"] or 0),
+        "equipments": int(row["equipments"] or 0),
+        "period": {"start": row["start_date"] or "", "end": row["end_date"] or ""},
+        "updated_at": int(row["updated_at"] or 0),
+    }
+
+
+def list_return_soil_wet_records(unit_code: Any) -> list[dict[str, Any]]:
+    code = str(unit_code or "").strip().upper()
+    if code not in ALLOWED_UNIT_CODES:
+        raise ValueError("Unidade inválida.")
+    with connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT equipment, operation_date, start_time, end_time, duration_seconds,
+                   operation_code, operation_description, operation_group, sector, field, farm
+            FROM return_analysis_soil_wet
+            WHERE unit_code = ?
+            ORDER BY operation_date, equipment, start_time, sector
+            """,
+            (code,),
+        ).fetchall()
+    return [
+        {
+            "equipment": int(row["equipment"]),
+            "date": row["operation_date"],
+            "start_time": row["start_time"],
+            "end_time": row["end_time"],
+            "duration_seconds": int(row["duration_seconds"] or 0),
+            "operation_code": row["operation_code"] or "",
+            "operation": row["operation_description"] or "",
+            "operation_group": row["operation_group"] or "",
+            "sector": int(row["sector"]),
+            "field": int(row["field"]) if row["field"] is not None else None,
+            "farm": row["farm"] or "",
+        }
+        for row in rows
+    ]
+
+
+def import_return_soil_wet_records(
+    unit_code: Any, records: Any, user_id: int, *, filename: str = ""
+) -> dict[str, Any]:
+    code = str(unit_code or "").strip().upper()
+    if code not in ALLOWED_UNIT_CODES:
+        raise ValueError("Unidade inválida.")
+    if not isinstance(records, list) or len(records) > 200_000:
+        raise ValueError("Lista de apontamentos inválida.")
+
+    now = int(time.time())
+    inserted = 0
+    updated = 0
+    unchanged = 0
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        validate_actor(conn, user_id)
+        for item in records:
+            if not isinstance(item, dict):
+                raise ValueError("Apontamento inválido.")
+            record_key = str(item.get("record_key") or "").strip()
+            if not record_key:
+                raise ValueError("Apontamento sem chave de identificação.")
+            values = (
+                str(item.get("source_front") or "").strip(),
+                int(item["equipment"]),
+                str(item["date"]),
+                str(item["start_time"]),
+                str(item["end_time"]),
+                max(0, int(item.get("duration_seconds") or 0)),
+                str(item.get("operation_code") or "").strip(),
+                str(item.get("operation") or "SOLO UMIDO").strip(),
+                str(item.get("operation_group") or "").strip(),
+                int(item["sector"]),
+                int(item["field"]) if item.get("field") is not None else None,
+                str(item.get("farm") or "").strip(),
+                str(filename or "").strip(),
+            )
+            existing = conn.execute(
+                """
+                SELECT source_front, equipment, operation_date, start_time, end_time, duration_seconds,
+                       operation_code, operation_description, operation_group, sector, field, farm, import_file
+                FROM return_analysis_soil_wet
+                WHERE unit_code = ? AND record_key = ?
+                """,
+                (code, record_key),
+            ).fetchone()
+            if existing is None:
+                conn.execute(
+                    """
+                    INSERT INTO return_analysis_soil_wet (
+                        unit_code, record_key, source_front, equipment, operation_date, start_time, end_time,
+                        duration_seconds, operation_code, operation_description, operation_group, sector, field, farm,
+                        import_file, updated_by, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (code, record_key, *values, user_id, now),
+                )
+                inserted += 1
+                continue
+            current = tuple(existing[column] for column in (
+                "source_front", "equipment", "operation_date", "start_time", "end_time", "duration_seconds",
+                "operation_code", "operation_description", "operation_group", "sector", "field", "farm", "import_file"
+            ))
+            if current == values:
+                unchanged += 1
+                continue
+            conn.execute(
+                """
+                UPDATE return_analysis_soil_wet
+                SET source_front=?, equipment=?, operation_date=?, start_time=?, end_time=?, duration_seconds=?,
+                    operation_code=?, operation_description=?, operation_group=?, sector=?, field=?, farm=?,
+                    import_file=?, updated_by=?, updated_at=?
+                WHERE unit_code=? AND record_key=?
+                """,
+                (*values, user_id, now, code, record_key),
+            )
+            updated += 1
+
+    return {
+        "imported": {
+            "received": len(records),
+            "inserted": inserted,
+            "updated": updated,
+            "unchanged": unchanged,
+        },
+        "summary": get_return_soil_wet_summary(code),
+    }
+
+
 def init_db() -> None:
     initialize_databases()
     with auth_connection() as conn:
@@ -499,7 +645,7 @@ def delete_user(user_id: int, current_user_id: int) -> None:
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         _editable_user(conn, user_id, current_user_id)
-        for table, column in USER_REFERENCES:
+        for table, column in ALL_USER_REFERENCES:
             conn.execute(f"UPDATE main.{table} SET {column}=NULL WHERE {column}=?", (user_id,))
         conn.execute("DELETE FROM auth.users WHERE id = ?", (user_id,))
 

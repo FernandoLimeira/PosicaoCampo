@@ -5,12 +5,16 @@ let returnLastInput = null;
 let returnAnalysisEpoch = 0;
 let returnAnalysisBusy = false;
 let returnPresentationBusy = false;
+let returnSoilWetImportBusy = false;
+let returnSoilWetSummaryEpoch = 0;
 
 function updateReturnPresentationButton() {
   const button = document.querySelector('#return-generate-presentation');
-  if (button) button.disabled = !returnLastInput || returnAnalysisBusy || returnPresentationBusy;
+  if (button) button.disabled = !returnLastInput || returnAnalysisBusy || returnPresentationBusy || returnSoilWetImportBusy;
   const processButton = document.querySelector('#return-analysis-process');
-  if (processButton) processButton.disabled = returnAnalysisBusy || returnPresentationBusy;
+  if (processButton) processButton.disabled = returnAnalysisBusy || returnPresentationBusy || returnSoilWetImportBusy;
+  const importButton = document.querySelector('#return-soil-wet-import');
+  if (importButton) importButton.disabled = returnSoilWetImportBusy || returnAnalysisBusy || returnPresentationBusy;
 }
 
 function invalidateReturnAnalysis() {
@@ -45,12 +49,134 @@ function returnCountText(counts) {
   return items.length ? items.map(item => `${item.front}: ${item.count}`).join(' · ') : '-';
 }
 
+function returnSectorCoverageText(items) {
+  const entries = Array.isArray(items) ? items : [];
+  if (!entries.length) return 'Nenhuma outra frente identificada';
+  return entries.map(item => {
+    const period = returnFormatPeriod(item.start, item.end);
+    const count = Number(item.min_count) === Number(item.max_count)
+      ? `${item.min_count} colhedora${Number(item.min_count) === 1 ? '' : 's'}`
+      : `${item.min_count} a ${item.max_count} colhedoras`;
+    return `${item.front} · ${period} · ${count}`;
+  }).join(' | ');
+}
+
+
+function returnFormatHours(value) {
+  const hours = Number(value || 0);
+  if (!Number.isFinite(hours) || hours <= 0) return '-';
+  return `${hours.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })} h`;
+}
+
+function returnConfirmedSoilWetHours(item) {
+  const daily = Array.isArray(item?.soil_wet_evidence?.daily) ? item.soil_wet_evidence.daily : [];
+  return daily.reduce((sum, day) => sum + Number(day?.total_hours || 0), 0);
+}
+
+function returnConfirmedSoilWetSectorText(item) {
+  const evidence = item?.soil_wet_evidence || {};
+  const sectors = Array.isArray(evidence.sector_evidence) ? evidence.sector_evidence : [];
+  if (!sectors.length) return '-';
+  const analyzedSector = String(item?.sector || '').trim();
+  return sectors.slice(0, 3).map(entry => {
+    const waitingSector = String(entry?.sector || '').trim();
+    const hours = Number(entry?.total_hours || 0);
+    const hourText = hours > 0 ? ` · ${hours.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} h` : '';
+    if (waitingSector && waitingSector === analyzedSector) {
+      return `Aguardando no próprio setor ${waitingSector}${hourText}`;
+    }
+    return waitingSector ? `Aguardando no setor ${waitingSector}${hourText}` : '-';
+  }).join(' | ');
+}
+
 function returnSetStatus(selector, message = '', type = '') {
   const element = document.querySelector(selector);
   if (!element) return;
   element.className = 'excel-report-status';
   if (type) element.classList.add(type === 'error' ? 'is-error' : 'is-success');
   element.textContent = message;
+}
+
+function setReturnSoilWetStatus(message = '', type = '') {
+  const element = document.querySelector('#return-soil-wet-status');
+  if (!element) return;
+  element.className = 'return-soil-wet-status';
+  if (type) element.classList.add(type === 'error' ? 'is-error' : 'is-success');
+  element.textContent = message;
+}
+
+function returnFormatTimestamp(value) {
+  const stamp = Number(value || 0);
+  if (!stamp) return '';
+  return new Date(stamp * 1000).toLocaleString('pt-BR');
+}
+
+function renderReturnSoilWetSummary(summary) {
+  if (!summary || !Number(summary.records || 0)) {
+    const unit = summary?.unit || document.querySelector('#return-analysis-unit')?.value || '';
+    setReturnSoilWetStatus(`Base de solo úmido ainda não importada${unit ? ` para ${unit}` : ''}.`);
+    return;
+  }
+  const period = returnFormatPeriod(summary.period?.start, summary.period?.end);
+  const updated = returnFormatTimestamp(summary.updated_at);
+  setReturnSoilWetStatus(
+    `Base de solo úmido ${summary.unit}: ${Number(summary.records).toLocaleString('pt-BR')} registros · ${Number(summary.equipments).toLocaleString('pt-BR')} equipamentos · ${period}${updated ? ` · atualizada em ${updated}` : ''}.`,
+    'success'
+  );
+}
+
+async function loadReturnSoilWetSummary() {
+  const unitCode = document.querySelector('#return-analysis-unit')?.value || getReportUnit();
+  if (!unitCode) return;
+  const epoch = ++returnSoilWetSummaryEpoch;
+  try {
+    const payload = await apiRequest(`/api/return-analysis/soil-wet?unit=${encodeURIComponent(unitCode)}`);
+    if (epoch !== returnSoilWetSummaryEpoch || (document.querySelector('#return-analysis-unit')?.value || getReportUnit()) !== unitCode) return;
+    renderReturnSoilWetSummary(payload.summary || { unit: unitCode, records: 0 });
+  } catch (error) {
+    console.error(error);
+    if (epoch !== returnSoilWetSummaryEpoch || (document.querySelector('#return-analysis-unit')?.value || getReportUnit()) !== unitCode) return;
+    setReturnSoilWetStatus(error.message || 'Não foi possível consultar a base de solo úmido.', 'error');
+  }
+}
+
+async function importReturnSoilWetFile(file) {
+  if (returnSoilWetImportBusy || returnAnalysisBusy || returnPresentationBusy) return;
+  const unitCode = document.querySelector('#return-analysis-unit')?.value || getReportUnit();
+  const validation = validateReturnFile(file);
+  if (!validation.valid) {
+    setReturnSoilWetStatus(validation.message, 'error');
+    return;
+  }
+  returnSoilWetImportBusy = true;
+  returnSoilWetSummaryEpoch += 1;
+  invalidateReturnAnalysis();
+  updateReturnPresentationButton();
+  setReturnSoilWetStatus(`Importando ${file.name} para ${unitCode}...`);
+  try {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    const response = await fetch(`/api/return-analysis/soil-wet/import?unit=${encodeURIComponent(unitCode)}`, { method: 'POST', body: formData });
+    let payload = {};
+    try { payload = await response.json(); } catch (_) { payload = {}; }
+    if (response.status === 401) { window.location.href = '/login'; return; }
+    if (!response.ok) throw new Error(payload.error || 'Não foi possível importar os apontamentos.');
+    if ((document.querySelector('#return-analysis-unit')?.value || getReportUnit()) !== unitCode) return;
+    invalidateReturnAnalysis();
+    const imported = payload.imported || {};
+    returnSoilWetSummaryEpoch += 1;
+    renderReturnSoilWetSummary(payload.summary || { unit: unitCode, records: 0 });
+    showToast(`Apontamentos atualizados: ${imported.inserted || 0} novos · ${imported.updated || 0} atualizados · ${imported.unchanged || 0} já existentes.`);
+  } catch (error) {
+    console.error(error);
+    if ((document.querySelector('#return-analysis-unit')?.value || getReportUnit()) !== unitCode) return;
+    setReturnSoilWetStatus(error.message || 'Não foi possível importar os apontamentos.', 'error');
+  } finally {
+    returnSoilWetImportBusy = false;
+    updateReturnPresentationButton();
+    const input = document.querySelector('#return-soil-wet-file');
+    if (input) input.value = '';
+  }
 }
 
 function returnFillSelect(element, options, preferred = '') {
@@ -223,6 +349,7 @@ async function loadReturnLayouts(force = false, preferredUnit = '') {
   if (returnLayoutsLoading && !force) return;
   if (returnLayoutsState.units?.length && !force) {
     renderReturnUnitSelects();
+    loadReturnSoilWetSummary();
     return;
   }
   returnLayoutsLoading = true;
@@ -238,6 +365,7 @@ async function loadReturnLayouts(force = false, preferredUnit = '') {
       renderReturnLayoutRows();
       renderReturnAnalysisFronts();
     }
+    loadReturnSoilWetSummary();
   } catch (error) {
     console.error(error);
     returnSetStatus('#return-layout-status', error.message || 'Não foi possível carregar os layouts.', 'error');
@@ -248,6 +376,7 @@ async function loadReturnLayouts(force = false, preferredUnit = '') {
 window.loadReturnLayouts = loadReturnLayouts;
 document.addEventListener('report-unit-change', () => {
   renderReturnUnitSelects();
+  loadReturnSoilWetSummary();
   invalidateReturnAnalysis();
   document.querySelector('#return-analysis-status').textContent = '';
   closeAllModals();
@@ -276,7 +405,7 @@ function updateReturnFileLabel() {
 
 async function processReturnAnalysis(event) {
   event.preventDefault();
-  if (returnAnalysisBusy || returnPresentationBusy) return;
+  if (returnAnalysisBusy || returnPresentationBusy || returnSoilWetImportBusy) return;
   const unitCode = document.querySelector('#return-analysis-unit')?.value || '';
   const frontCode = document.querySelector('#return-analysis-front')?.value || '';
   const minGap = Math.max(1, Number(document.querySelector('#return-min-gap')?.value || 1));
@@ -316,7 +445,7 @@ async function processReturnAnalysis(event) {
     renderReturnAnalysisResult(returnLastReport);
     returnSetStatus(
       '#return-analysis-status',
-      `${file.name} processado: ${returnLastReport?.records || 0} registros válidos · ${returnLastReport?.returns_count || 0} retornos reais · ${returnLastReport?.possible_soil_wet_count || 0} possível(is) parada(s) por solo úmido.`,
+      `${file.name} processado: ${returnLastReport?.records || 0} registros válidos · ${returnLastReport?.returns_count || 0} retornos reais · ${returnLastReport?.possible_soil_wet_count || 0} interrupção(ões) para verificar · ${returnLastReport?.confirmed_soil_wet_count || 0} parada(s) com apontamentos de solo úmido · ${returnLastReport?.sector_reference_issues_count || 0} setor(es) com cadastro para conferir.`,
       'success'
     );
   } catch (error) {
@@ -330,7 +459,7 @@ async function processReturnAnalysis(event) {
 }
 
 async function generateReturnPresentation() {
-  if (!returnLastInput || returnAnalysisBusy || returnPresentationBusy) return;
+  if (!returnLastInput || returnAnalysisBusy || returnPresentationBusy || returnSoilWetImportBusy) return;
   const snapshot = returnLastInput;
   const epoch = returnAnalysisEpoch;
   if (getReportUnit() !== snapshot.unitCode) {
@@ -394,10 +523,10 @@ function renderReturnKpis(report) {
   if (!container) return;
   const kpis = [
     ['Retornos reais', report?.returns_count || 0, 'Com trabalho em outro setor no intervalo'],
-    ['Possível solo úmido', report?.possible_soil_wet_count || 0, 'Sem atividade da frente no intervalo'],
+    ['Interrupções', report?.possible_soil_wet_count || 0, 'Sem deslocamento comprovado'],
+    ['Retorno com outra frente', report?.returns_with_other_front_in_sector_count || 0, 'Outra frente trabalhou no setor durante a ausência'],
     ['Setores com retorno', report?.return_sectors_count || 0, 'Setores distintos com retorno real'],
     ['Outras frentes', report?.other_front_periods_count || 0, 'Períodos atribuídos a outra frente'],
-    ['Empates', report?.ties_count || 0, 'Períodos sem frente única'],
     ['Sem cadastro', report?.unknown_equipment_count || 0, 'Equipamentos fora da base de layouts'],
   ];
   container.innerHTML = kpis.map(([label, value, hint], index) => `
@@ -409,22 +538,49 @@ function renderReturnKpis(report) {
   `).join('');
 }
 
+function returnSectorReference(item) {
+  return item?.sector_reference || {};
+}
+
+function returnSectorSectionText(item) {
+  const reference = returnSectorReference(item);
+  if (reference.status === 'matched') return reference.section || '-';
+  if (reference.status === 'multiple_sections') {
+    const sections = Array.isArray(reference.sections) ? reference.sections : [];
+    return sections.length ? `${sections.join(' / ')} · verificar` : 'Múltiplas · verificar';
+  }
+  if (reference.status === 'ambiguous') return 'Verificar cadastro';
+  if (reference.status === 'not_found') return 'Não cadastrado';
+  return '-';
+}
+
+function returnSectorFarmText(item) {
+  const reference = returnSectorReference(item);
+  if (reference.status === 'matched' || reference.status === 'multiple_sections') return reference.farm || '-';
+  if (reference.status === 'ambiguous') return 'Verificar cadastro';
+  if (reference.status === 'not_found') return 'Não cadastrado';
+  return '-';
+}
+
 function renderReturnRows(report) {
   const body = document.querySelector('#return-results-body');
   if (!body) return;
   const rows = Array.isArray(report?.returns) ? report.returns : [];
   if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="7" class="return-table-empty">Nenhum retorno real identificado.</td></tr>';
+    body.innerHTML = '<tr><td colspan="10" class="return-table-empty">Nenhum retorno real identificado.</td></tr>';
     return;
   }
   body.innerHTML = rows.map(item => `
     <tr>
       <td><strong>${escapeHtml(item.sector)}</strong></td>
+      <td>${escapeHtml(returnSectorSectionText(item))}</td>
+      <td>${escapeHtml(returnSectorFarmText(item))}</td>
       <td>${escapeHtml(returnFormatDate(item.entry_date))}</td>
       <td>${escapeHtml(returnFormatDate(item.exit_date))}</td>
       <td>${escapeHtml(returnFormatDate(item.return_date))}</td>
       <td>${escapeHtml(item.days_out)}</td>
       <td>${escapeHtml((item.sectors_during_absence || []).length ? item.sectors_during_absence.join(', ') : 'Sem registro de outro setor')}</td>
+      <td>${escapeHtml(returnSectorCoverageText(item.other_fronts_in_sector))}</td>
       <td>${escapeHtml(returnCountText(item.return_counts))}</td>
     </tr>
   `).join('');
@@ -435,19 +591,55 @@ function renderPossibleSoilWetRows(report) {
   if (!body) return;
   const rows = Array.isArray(report?.possible_soil_wet) ? report.possible_soil_wet : [];
   if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="6" class="return-table-empty">Nenhum caso pendente de verificação por possível solo úmido.</td></tr>';
+    body.innerHTML = '<tr><td colspan="9" class="return-table-empty">Nenhuma interrupção sem deslocamento comprovado identificada.</td></tr>';
     return;
   }
   body.innerHTML = rows.map(item => `
     <tr>
       <td><strong>${escapeHtml(item.sector)}</strong></td>
+      <td>${escapeHtml(returnSectorSectionText(item))}</td>
+      <td>${escapeHtml(returnSectorFarmText(item))}</td>
       <td>${escapeHtml(returnFormatDate(item.exit_date))}</td>
       <td>${escapeHtml(returnFormatDate(item.return_date))}</td>
       <td>${escapeHtml(item.days_out)}</td>
       <td>Sem registro da frente em outro setor</td>
-      <td><strong>Possível parada por solo úmido — verificar</strong></td>
+      <td>${escapeHtml(returnSectorCoverageText(item.other_fronts_in_sector))}</td>
+      <td><strong>Interrupção sem deslocamento comprovado</strong></td>
     </tr>
   `).join('');
+}
+
+
+function renderConfirmedSoilWetRows(report) {
+  const body = document.querySelector('#return-confirmed-soil-wet-body');
+  if (!body) return;
+  const rows = Array.isArray(report?.confirmed_soil_wet) ? report.confirmed_soil_wet : [];
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="10" class="return-table-empty">Nenhuma parada por solo úmido foi comprovada nesta análise.</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(item => {
+    const evidence = item.soil_wet_evidence || {};
+    const equipment = Array.isArray(evidence.equipment) ? evidence.equipment : [];
+    const fleetSize = Number(evidence.fleet_size || 0);
+    const majority = Number(evidence.majority_required || 0);
+    const daysWithMajority = Number(evidence.days_with_majority || 0);
+    const daysInGap = Number(evidence.days_in_gap || item.days_out || 0);
+    return `
+      <tr>
+        <td><strong>${escapeHtml(item.sector)}</strong></td>
+        <td>${escapeHtml(returnSectorSectionText(item))}</td>
+        <td>${escapeHtml(returnSectorFarmText(item))}</td>
+        <td>${escapeHtml(returnConfirmedSoilWetSectorText(item))}</td>
+        <td>${escapeHtml(returnFormatDate(item.exit_date))}</td>
+        <td>${escapeHtml(returnFormatDate(item.return_date))}</td>
+        <td><strong>${escapeHtml(item.days_out)} ${Number(item.days_out) === 1 ? 'dia' : 'dias'}</strong></td>
+        <td>${escapeHtml(equipment.length ? equipment.join(', ') : '-')}</td>
+        <td>${escapeHtml(`${majority} de ${fleetSize} · ${daysWithMajority}/${daysInGap} dias`)}</td>
+        <td>${escapeHtml(returnFormatHours(returnConfirmedSoilWetHours(item)))}</td>
+      </tr>
+    `;
+  }).join('');
 }
 
 function renderReturnOtherRows(report) {
@@ -455,13 +647,15 @@ function renderReturnOtherRows(report) {
   if (!body) return;
   const rows = Array.isArray(report?.other_front_periods) ? report.other_front_periods : [];
   if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="5" class="return-table-empty">Nenhum período atribuído a outra frente.</td></tr>';
+    body.innerHTML = '<tr><td colspan="7" class="return-table-empty">Nenhum período atribuído a outra frente.</td></tr>';
     return;
   }
   body.innerHTML = rows.map(item => `
     <tr>
       <td>${escapeHtml(returnFormatPeriod(item.start, item.end))}</td>
       <td><strong>${escapeHtml(item.sector)}</strong></td>
+      <td>${escapeHtml(returnSectorSectionText(item))}</td>
+      <td>${escapeHtml(returnSectorFarmText(item))}</td>
       <td>${escapeHtml(item.assigned_front)}</td>
       <td>${escapeHtml(returnCountText(item.counts))}</td>
       <td>${escapeHtml((item.equipment || []).join(', '))}</td>
@@ -480,6 +674,7 @@ function renderReturnAnalysisResult(report) {
   renderReturnKpis(report);
   renderReturnRows(report);
   renderPossibleSoilWetRows(report);
+  renderConfirmedSoilWetRows(report);
   renderReturnOtherRows(report);
   results.hidden = false;
 }
@@ -510,7 +705,7 @@ function setupReturnAnalysis() {
     updateReturnLayoutUnitHint();
     returnSetStatus('#return-layout-status', '');
   });
-  document.querySelector('#return-analysis-unit')?.addEventListener('change', () => { invalidateReturnAnalysis(); renderReturnAnalysisFronts(); });
+  document.querySelector('#return-analysis-unit')?.addEventListener('change', () => { invalidateReturnAnalysis(); renderReturnAnalysisFronts(); loadReturnSoilWetSummary(); });
   document.querySelector('#return-analysis-front')?.addEventListener('change', invalidateReturnAnalysis);
   document.querySelector('#return-min-gap')?.addEventListener('input', invalidateReturnAnalysis);
   document.querySelector('#return-add-front')?.addEventListener('click', () => appendReturnLayoutRow({}));
@@ -521,6 +716,11 @@ function setupReturnAnalysis() {
     button.closest('.return-layout-row')?.remove();
   });
   document.querySelector('#return-analysis-file')?.addEventListener('change', () => { invalidateReturnAnalysis(); updateReturnFileLabel(); });
+  document.querySelector('#return-soil-wet-import')?.addEventListener('click', () => document.querySelector('#return-soil-wet-file')?.click());
+  document.querySelector('#return-soil-wet-file')?.addEventListener('change', event => {
+    const file = event.currentTarget.files?.[0];
+    if (file) importReturnSoilWetFile(file);
+  });
   document.querySelector('#return-analysis-form')?.addEventListener('submit', processReturnAnalysis);
   document.querySelector('#return-copy-report')?.addEventListener('click', copyReturnReport);
   document.querySelector('#return-generate-presentation')?.addEventListener('click', generateReturnPresentation);

@@ -165,12 +165,53 @@ class PageTests(unittest.TestCase):
         presentation = upload("/api/return-analysis/presentation", query)
         self.assertEqual(presentation["status"], 200)
         self.assertIn("PST-frente-02", presentation["headers"]["Content-Disposition"])
+        from backend.services.soil_wet_import import parse_soil_wet_file
+        from tests.test_return_analysis_integration import SOIL_HEADERS, soil_row, xlsx
+        soil_records = parse_soil_wet_file(xlsx([SOIL_HEADERS, soil_row(unit="PST")]), "solo.xlsx")["records"]
+        self.db.import_return_soil_wet_records("PST", soil_records, self.admin["id"])
+        self.assertEqual(upload("/api/return-analysis/presentation", query)["status"], 409)
+        payload = json.loads(upload("/api/return-analysis/analyze", "unit=PST&front=02&min_gap=1")["body"])
+        query = "unit=PST&front=02&min_gap=1&digest=" + payload["report_digest"]
+        self.assertEqual(upload("/api/return-analysis/presentation", query)["status"], 200)
+        self.db.save_sector_base_item("202", "99", "Fazenda nova", self.admin["id"])
+        self.assertEqual(upload("/api/return-analysis/presentation", query)["status"], 409)
         self.db.save_return_analysis_layouts("PST", [
             {"code": "02", "name": "Frente 02", "equipment": [9999]},
             {"code": "03", "name": "Frente 03", "equipment": [1001]},
         ], self.admin["id"])
         changed = upload("/api/return-analysis/presentation", query)
         self.assertEqual(changed["status"], 409)
+
+    def test_soil_wet_routes_require_auth_and_import_respects_origin_and_unit(self):
+        from tests.test_return_analysis_integration import SOIL_HEADERS, soil_row, xlsx
+        route = "/api/return-analysis/soil-wet/import"
+        self.assertEqual(self.request("/api/return-analysis/soil-wet")["status"], 401)
+        self.assertEqual(self.request(route, method="POST")["status"], 401)
+        with patch("backend.controllers.application_controller.parse_soil_wet_file") as parse:
+            self.assertEqual(self.request(route, method="POST", role="member", overrides={"HTTP_ORIGIN": "https://untrusted.invalid"})["status"], 403)
+            parse.assert_not_called()
+        self.assertEqual(self.request("/api/return-analysis/soil-wet", role="member", overrides={"QUERY_STRING": "unit=BAD"})["status"], 400)
+
+        def upload(unit_in_file, selected="NRD"):
+            boundary = "soil-upload"
+            body = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="solo.xlsx"\r\nContent-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\r\n\r\n'.encode()
+                    + xlsx([SOIL_HEADERS, soil_row(unit=unit_in_file)]) + f'\r\n--{boundary}--\r\n'.encode())
+            return self.request(route, method="POST", role="member", overrides={
+                "QUERY_STRING": "unit=" + selected, "CONTENT_TYPE": "multipart/form-data; boundary=" + boundary,
+                "CONTENT_LENGTH": str(len(body)), "wsgi.input": io.BytesIO(body),
+            })
+
+        self.assertEqual(upload("PPT")["status"], 400)
+        self.assertEqual(self.db.get_return_soil_wet_summary("NRD")["records"], 0)
+        imported = upload("NRD")
+        self.assertEqual(imported["status"], 200, imported["body"])
+        self.assertEqual(json.loads(imported["body"])["imported"]["inserted"], 1)
+        self.assertEqual(json.loads(upload("NRD")["body"])["imported"]["unchanged"], 1)
+        summary = self.request("/api/return-analysis/soil-wet", role="member", overrides={"QUERY_STRING": "unit=NRD"})
+        self.assertEqual(json.loads(summary["body"])["summary"]["records"], 1)
+        page = self.request("/retornos", role="member")["body"]
+        for identifier in ("return-soil-wet-import", "return-soil-wet-file", "return-confirmed-soil-wet-body", "return-generate-presentation"):
+            self.assertIn(f'id="{identifier}"', page)
 
     def test_pages_share_layout_and_assets_exist(self):
         for path in ("/", "/sacarose", "/setores", "/relatorios", "/retornos", "/historico", "/usuarios", "/usuarios/cadastro", "/emitir-posicao-global"):

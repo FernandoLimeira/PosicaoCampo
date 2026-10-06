@@ -17,13 +17,14 @@ async function main() {
   let selectedUnit = 'PPT';
   let requests = [];
   let downloads = [];
+  const errors = [];
   let handler;
   class TestURL extends URL {
     static createObjectURL() { return 'blob:presentation'; }
     static revokeObjectURL(url) { assert.equal(url, 'blob:presentation'); }
   }
   const ctx = vm.createContext({
-    console, URL: TestURL, URLSearchParams,
+    console: {...console, error(...values) { errors.push(values); }}, URL: TestURL, URLSearchParams,
     FormData: class { constructor() { this.values = []; } append(...values) { this.values.push(values); } },
     setTimeout(fn) { fn(); },
     document: {
@@ -35,7 +36,7 @@ async function main() {
     window: { location: { href: '', search: '' } },
     getReportUnit() { return selectedUnit; },
     escapeHtml(value) { return String(value ?? ''); }, showToast() {}, closeAllModals() {},
-    apiRequest: async () => ({units: []}),
+    apiRequest: async () => ({units: ['PPT', 'NRD', 'RBR', 'PST'].map(code => ({code, name: code, fronts: []}))}),
     fetch: async (url, options) => { requests.push({url, options}); return handler(url, options); },
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/return-analysis.js'), 'utf8'), ctx);
@@ -102,6 +103,46 @@ async function main() {
   await analyze();
   element('#return-min-gap').listeners.input();
   assert.equal(button.disabled, true);
+  await analyze();
+  handler = async () => ({ok: true, status: 200, json: async () => ({
+    imported: {inserted: 2}, summary: {unit: 'PPT', records: 2, equipments: 2},
+  })});
+  await ctx.importReturnSoilWetFile({name: 'solo.xlsx', size: 100});
+  assert.equal(button.disabled, true, 'Atualizar apontamentos exige reprocessar antes de exportar');
+  assert.equal(element('#return-analysis-results').hidden, true);
+  assert(requests.at(-1).url.includes('/soil-wet/import?unit=PPT'));
+  assert(element('#return-soil-wet-status').textContent.includes('2 registros'));
+  assert.equal(element('#return-soil-wet-import').disabled, false);
+  await analyze();
+  handler = async () => ({ok: false, status: 400, json: async () => ({error: 'Unidade da planilha divergente'})});
+  await ctx.importReturnSoilWetFile({name: 'solo.xlsx', size: 100});
+  assert(element('#return-soil-wet-status').textContent.includes('divergente'));
+  assert(errors.some(values => String(values[0]).includes('divergente')));
+  assert.equal(button.disabled, true);
+  await analyze();
+  handler = () => new Promise(resolve => { complete = resolve; });
+  const importing = ctx.importReturnSoilWetFile({name: 'solo.xlsx', size: 100});
+  const duringImport = requests.length;
+  await ctx.importReturnSoilWetFile({name: 'duplicate.xlsx', size: 100});
+  await ctx.processReturnAnalysis({preventDefault() {}});
+  await ctx.generateReturnPresentation();
+  assert.equal(requests.length, duringImport, 'Importação bloqueia duplicação, processamento e exportação');
+  selectedUnit = 'NRD';
+  events['report-unit-change']();
+  await new Promise(resolve => setImmediate(resolve));
+  complete({ok: true, status: 200, json: async () => ({summary: {unit: 'PPT', records: 999}, imported: {inserted: 999}})});
+  await importing;
+  assert(!element('#return-soil-wet-status').textContent.includes('999'), 'Resposta anterior não sobrescreve a nova unidade');
+  assert.equal(element('#return-soil-wet-import').disabled, false);
+  assert.equal(button.disabled, true);
+  ctx.renderConfirmedSoilWetRows({confirmed_soil_wet: [{sector: 73, days_out: 2,
+    sector_reference: {status: 'matched', section: '10', farm: 'Fazenda A'},
+    soil_wet_evidence: {fleet_size: 3, majority_required: 2, days_in_gap: 2, days_with_majority: 2,
+      equipment: [1001, 1002], daily: [{total_hours: 4}, {total_hours: 4}], sector_evidence: [{sector: 71, total_hours: 8}]},
+  }]});
+  assert(element('#return-confirmed-soil-wet-body').innerHTML.includes('Fazenda A'));
+  assert(element('#return-confirmed-soil-wet-body').innerHTML.includes('Aguardando no setor 71'));
+  assert(!element('#return-confirmed-soil-wet-body').innerHTML.includes('setor próximo'), 'Não presume proximidade sem cadastro geográfico');
   console.log('OK: apresentação PPTX, arquivo/escopo processado, download, erros, sessão, bloqueio de duplicação e resultados obsoletos.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

@@ -90,6 +90,66 @@ class DatabaseTests(unittest.TestCase):
         db.init_db()
         self.assertEqual({p.name for p in self.root.iterdir()}, {"usuarios.db", "dados.db"})
 
+    def test_soil_wet_upgrade_preserves_old_pair_and_is_idempotent(self):
+        admin, member = self.seed()
+        token = db.create_session(member["id"])
+        with storage.connection() as conn:
+            snapshots = {table: [tuple(row) for row in conn.execute(f"SELECT * FROM {table}")]
+                         for table in storage.CORE_DATA_TABLES}
+            accounts = [tuple(row) for row in conn.execute("SELECT * FROM auth.users")]
+            sessions = [tuple(row) for row in conn.execute("SELECT * FROM auth.sessions")]
+            pair_id = storage._metadata(conn, "main")["pair_id"]
+            conn.execute("DROP TABLE return_analysis_soil_wet")
+            conn.execute("DELETE FROM schema_info WHERE key='return_soil_wet_schema_version'")
+        for _ in range(2):
+            db.init_db()
+            with storage.connection() as conn:
+                self.assertEqual(storage._metadata(conn, "main")["pair_id"], pair_id)
+                self.assertEqual(storage._metadata(conn, "main")["return_soil_wet_schema_version"], "1")
+                self.assertEqual([tuple(row) for row in conn.execute("SELECT * FROM auth.users")], accounts)
+                self.assertEqual([tuple(row) for row in conn.execute("SELECT * FROM auth.sessions")], sessions)
+                for table, original in snapshots.items():
+                    self.assertEqual([tuple(row) for row in conn.execute(f"SELECT * FROM {table}")], original)
+                storage.check_integrity(conn)
+        self.assertEqual(db.get_user_by_session(token)["id"], member["id"])
+
+    def test_soil_wet_import_is_unit_scoped_upsert_and_survives_restart(self):
+        from tests.test_return_analysis_integration import SOIL_HEADERS, soil_row, xlsx
+        from backend.services.soil_wet_import import parse_soil_wet_file
+        admin, member = self.seed()
+        records = parse_soil_wet_file(xlsx([SOIL_HEADERS, soil_row()]), "soil.xlsx")["records"]
+        result = db.import_return_soil_wet_records("PPT", records, member["id"], filename="soil.xlsx")
+        self.assertEqual(result["imported"]["inserted"], 1)
+        self.assertEqual(db.get_return_soil_wet_summary("PST")["records"], 0)
+        repeated = db.import_return_soil_wet_records("PPT", records, member["id"], filename="soil.xlsx")
+        self.assertEqual(repeated["imported"]["unchanged"], 1)
+        records[0]["end_time"] = "11:00:00"
+        records[0]["duration_seconds"] = 10800
+        updated = db.import_return_soil_wet_records("PPT", records, member["id"], filename="soil.xlsx")
+        self.assertEqual(updated["imported"]["updated"], 1)
+        db.init_db()
+        self.assertEqual(db.list_return_soil_wet_records("PPT")[0]["duration_seconds"], 10800)
+        db.delete_user(member["id"], admin["id"])
+        with storage.connection() as conn:
+            self.assertIsNone(conn.execute("SELECT updated_by FROM return_analysis_soil_wet").fetchone()[0])
+            storage.check_integrity(conn)
+        self.assertEqual(db.get_return_soil_wet_summary("PPT")["records"], 1)
+
+    def test_soil_wet_import_failure_rolls_back_whole_batch(self):
+        from tests.test_return_analysis_integration import SOIL_HEADERS, soil_row, xlsx
+        from backend.services.soil_wet_import import parse_soil_wet_file
+        admin, _ = self.seed()
+        records = parse_soil_wet_file(xlsx([SOIL_HEADERS, soil_row()]), "soil.xlsx")["records"]
+        with self.assertRaises(ValueError):
+            db.import_return_soil_wet_records("PPT", records + [{}], admin["id"])
+        self.assertEqual(db.get_return_soil_wet_summary("PPT")["records"], 0)
+        with self.assertRaises(ValueError):
+            db.import_return_soil_wet_records("PPT", records, 999999)
+        self.assertEqual(db.get_return_soil_wet_summary("PPT")["records"], 0)
+        for code in ("INVALID", "", "../PPT"):
+            with self.subTest(code=code), self.assertRaises(ValueError):
+                db.get_return_soil_wet_summary(code)
+
     def test_migration_preserves_ids_passwords_sessions_and_all_records(self):
         self.legacy()
         original = config.LEGACY_DB_PATH.read_bytes()

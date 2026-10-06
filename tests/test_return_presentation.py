@@ -41,7 +41,7 @@ class ReturnPresentationTests(unittest.TestCase):
             self.assertGreaterEqual(len(slide_names), 6)
             self.assertEqual(len(slide_names), len(presentation.find("p:sldIdLst", NS)))
             all_text = "\n".join("\n".join(t.text or "" for t in ET.fromstring(generated.read(name)).findall(".//a:t", NS)) for name in slide_names)
-            for text in ("PPT / Frente 02", "01/10/2026", "10/10/2026", "04/10/2026", "101", "Resumo automático", "Possível parada por solo úmido", "Frente 03", "3001"):
+            for text in ("PPT / Frente 02", "01/10/2026", "10/10/2026", "04/10/2026", "101", "Resumo automático", "Solo úmido não confirmado", "Frente 03", "3001"):
                 self.assertIn(text, all_text)
             self.assertNotIn("{{", all_text)
             self.assertNotIn("Título do slide", all_text)
@@ -72,6 +72,11 @@ class ReturnPresentationTests(unittest.TestCase):
             for name in z.namelist():
                 if name.startswith("ppt/slides/slide") and name.endswith(".xml"):
                     root = ET.fromstring(z.read(name))
+                    titles = ["".join(t.text or "" for t in shape.findall(".//a:t", NS))
+                              for shape in root.findall(".//p:sp", NS)
+                              if shape.find("p:nvSpPr/p:cNvPr", NS).get("name") == "ctt:summary_title"]
+                    if not any(title.startswith("Resumo automático") for title in titles):
+                        continue  # Continuação de ocorrência não é parte do resumo.
                     for shape in root.findall(".//p:sp", NS):
                         if shape.find("p:nvSpPr/p:cNvPr", NS).get("name") == "ctt:summary_body":
                             bodies.append("\n".join(t.text or "" for t in shape.findall(".//a:t", NS)))

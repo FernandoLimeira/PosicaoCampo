@@ -11,6 +11,7 @@ from ..config import MAX_BODY_BYTES, REMEMBER_SESSION_TTL_SECONDS, SESSION_COOKI
 from ..views.templates import render_template
 from ..services.excel_reports import MAX_EXCEL_UPLOAD_BYTES, analyze_excel_report
 from ..services.return_analysis import MAX_RETURN_UPLOAD_BYTES, analyze_return_file
+from ..services.soil_wet_import import MAX_SOIL_WET_UPLOAD_BYTES, parse_soil_wet_file
 from ..services.return_presentation import PPTX_MIME, generate_return_presentation, report_digest
 from ..services.sector_base_import import MAX_SECTOR_BASE_UPLOAD_BYTES, parse_sector_base_excel_details
 from ..models.database import (
@@ -32,6 +33,9 @@ from ..models.database import (
     list_sacarose_positions,
     list_return_analysis_layouts,
     save_return_analysis_layouts,
+    get_return_soil_wet_summary,
+    list_return_soil_wet_records,
+    import_return_soil_wet_records,
     save_sector_base_item,
     import_sector_base_items,
     delete_sector_base_item,
@@ -320,6 +324,8 @@ def _analyze_return_request(environ, query):
         file_bytes, filename, unit_payload.get("fronts") or [], front_code,
         min_gap_days=min_gap_days, unit_code=unit_payload.get("code") or unit_code,
         unit_name=unit_payload.get("name") or unit_code,
+        soil_wet_records=list_return_soil_wet_records(unit_code),
+        sector_base=list_sector_base(),
     )
 
 
@@ -585,6 +591,39 @@ def application(environ, start_response):
         except (ValueError, TypeError) as exc:
             return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
 
+    if path == "/api/return-analysis/soil-wet" and method == "GET":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        unit_code = str((query.get("unit") or [""])[0]).strip().upper()
+        try:
+            return _json(start_response, HTTPStatus.OK, {"summary": get_return_soil_wet_summary(unit_code)})
+        except ValueError as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path == "/api/return-analysis/soil-wet/import" and method == "POST":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        unit_code = str((query.get("unit") or [""])[0]).strip().upper()
+        try:
+            filename, file_bytes = _multipart_file(environ, max_file_bytes=MAX_SOIL_WET_UPLOAD_BYTES)
+            parsed = parse_soil_wet_file(file_bytes, filename)
+            detected_unit = parsed.get("detected_unit") or ""
+            if detected_unit and detected_unit != unit_code:
+                raise ValueError(
+                    f"A planilha foi identificada como {detected_unit}, mas a unidade selecionada é {unit_code}."
+                )
+            result = import_return_soil_wet_records(
+                unit_code, parsed.get("records") or [], user["id"], filename=parsed.get("filename") or filename
+            )
+            result["ignored_non_soil_wet"] = int(parsed.get("ignored_non_soil_wet") or 0)
+            result["invalid_rows"] = int(parsed.get("invalid_rows") or 0)
+            return _json(start_response, HTTPStatus.OK, {"ok": True, **result})
+        except ValueError as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+        except Exception as exc:
+            print(f"Erro ao importar apontamentos de solo úmido: {exc}")
+            return _json(start_response, HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "Não foi possível importar os apontamentos de solo úmido."})
+
     if path == "/api/return-analysis/analyze" and method == "POST":
         if not user:
             return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
@@ -609,7 +648,7 @@ def application(environ, start_response):
             report = _analyze_return_request(environ, query)
             if report_digest(report) != expected_digest:
                 return _json(start_response, HTTPStatus.CONFLICT, {
-                    "error": "O arquivo ou os layouts mudaram. Processe novamente a análise antes de gerar a apresentação.",
+                    "error": "O arquivo, os layouts ou as bases de setores/apontamentos mudaram. Processe novamente a análise antes de gerar a apresentação.",
                 })
             content, filename = generate_return_presentation(report)
             return _respond(start_response, HTTPStatus.OK, content, [

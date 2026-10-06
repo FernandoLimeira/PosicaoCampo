@@ -3,7 +3,8 @@
 O botão **Gerar apresentação**, no final de `/retornos`, baixa um PowerPoint
 editável usando a análise atual da unidade e frente selecionadas. Fica
 desabilitado até o processamento concluir. Trocar unidade, frente, arquivo
-ou dias mínimos invalida o resultado e exige novo processamento.
+ou dias mínimos invalida o resultado e exige novo processamento. Atualizar
+os apontamentos de solo úmido também invalida a análise anterior.
 
 ## Modelo padrão
 
@@ -20,10 +21,12 @@ Os outros layouts permanecem disponíveis no modelo, mas não são incluídos
 na apresentação baixada como slides vazios.
 
 O arquivo final contém capa com unidade, frente e período, indicadores,
-resumo automático completo, detalhes datados dos retornos e dos casos de
-possível solo úmido, e encerramento. O resumo conserva as conclusões do
-processamento. Solo úmido permanece uma hipótese a verificar, não uma causa
-confirmada. Outros períodos, empates e equipamentos sem cadastro aparecem
+resumo automático completo, detalhes datados dos retornos, interrupções
+pendentes e paradas confirmadas pela regra de apontamentos, e encerramento.
+O resumo conserva as conclusões do processamento. Sem apontamentos suficientes,
+a interrupção permanece pendente, sem confirmar sua causa. Paradas confirmadas
+não entram como mudanças de área, mas têm slides com datas, equipamentos,
+maioria diária e setores de espera. Outros períodos, empates e equipamentos sem cadastro aparecem
 nos indicadores e no resumo conforme o resultado existente.
 
 Resumos e listas longas ocupam slides adicionais, sem descartar texto nem
@@ -38,7 +41,7 @@ os parâmetros `unit`, `front`, `min_gap` e `digest` da análise concluída.
 
 A exportação exige sessão ativa e respeita a verificação de origem. Todos
 os perfis autorizados a analisar podem exportar. O servidor reprocessa o
-arquivo com os layouts cadastrados e compara o SHA-256 do resultado com o
+arquivo com os layouts, a base de setores e os apontamentos da unidade e compara o SHA-256 do resultado com o
 da análise exibida. Diferenças retornam HTTP 409, pedindo nova análise.
 O digest é um controle de consistência, não uma assinatura/autorização.
 O cliente não envia totais ou conclusões para montar slides.

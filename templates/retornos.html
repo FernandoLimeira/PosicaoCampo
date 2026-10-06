@@ -27,7 +27,9 @@
               <span><b>Maior quantidade</b> define a frente do período</span>
               <span><b>Empate</b> fica como MISTO / EMPATE</span>
               <span><b>Sem cadastro</b> não entra na disputa</span>
-              <span><b>Sem atividade da frente no intervalo</b> indica possível parada por solo úmido para verificar</span>
+              <span><b>Solo úmido confirmado</b> é filtrado automaticamente da análise de mudança de área</span>
+              <span><b>Sem deslocamento comprovado</b> permanece para verificação quando a maioria não confirma solo úmido</span>
+              <span><b>Base de setores/fazendas</b> valida Seção e Fazenda; divergências são sinalizadas sem adivinhação</span>
             </div>
           </div>
           <form id="return-analysis-form" class="return-analysis-form">
@@ -41,7 +43,12 @@
               <input id="return-analysis-file" type="file" accept=".xlsx,.xlsm,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.ms-excel" required />
               <small id="return-analysis-file-name">Nenhum arquivo selecionado</small>
             </label>
-            <button id="return-analysis-process" class="modal-button save" type="submit">Processar análise</button>
+            <div class="return-process-actions">
+              <input id="return-soil-wet-file" class="return-hidden-file" type="file" accept=".xlsx,.xlsm,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.ms-excel" />
+              <button id="return-soil-wet-import" class="modal-button secondary" type="button">Atualizar apontamentos</button>
+              <button id="return-analysis-process" class="modal-button save" type="submit">Processar análise</button>
+            </div>
+            <div id="return-soil-wet-status" class="return-soil-wet-status" aria-live="polite">Base de solo úmido: consultando...</div>
           </form>
         </section>
 
@@ -66,21 +73,31 @@
           </section>
 
           <section class="excel-browser-section return-table-section">
-            <div class="excel-section-heading"><div><span>Retornos reais</span><h3>Entrada, saída, retorno e setores no intervalo</h3></div></div>
+            <div class="excel-section-heading"><div><span>Retornos reais</span><h3>Saída, deslocamento, ocupação do setor e retorno</h3><p>Também mostra qual outra frente trabalhou no mesmo setor durante a ausência da frente analisada.</p></div></div>
             <div class="return-table-wrap">
               <table class="return-table">
-                <thead><tr><th>Setor</th><th>Entrada</th><th>Saída</th><th>Retorno</th><th>Dias fora</th><th>Setores durante a ausência</th><th>Contagem no retorno</th></tr></thead>
+                <thead><tr><th>Setor</th><th>Seção</th><th>Fazenda</th><th>Entrada</th><th>Saída</th><th>Retorno</th><th>Dias fora</th><th>Setores onde a frente trabalhou</th><th>Quem trabalhou no setor durante a ausência</th><th>Contagem no retorno</th></tr></thead>
                 <tbody id="return-results-body"></tbody>
               </table>
             </div>
           </section>
 
           <section class="excel-browser-section return-table-section return-soil-wet-section">
-            <div class="excel-section-heading"><div><span>Verificar</span><h3>Possível parada por solo úmido</h3><p>Casos em que a frente reapareceu no mesmo setor sem registro de trabalho em outro setor durante o intervalo.</p></div></div>
+            <div class="excel-section-heading"><div><span>Verificar</span><h3>Interrupção sem deslocamento comprovado</h3><p>A frente reapareceu no mesmo setor sem registro de trabalho em outra área. O sistema informa se outra frente trabalhou nesse setor durante a ausência.</p></div></div>
             <div class="return-table-wrap">
               <table class="return-table">
-                <thead><tr><th>Setor</th><th>Último dia antes do intervalo</th><th>Reaparecimento</th><th>Dias sem atividade</th><th>Atividade no intervalo</th><th>Classificação</th></tr></thead>
+                <thead><tr><th>Setor</th><th>Seção</th><th>Fazenda</th><th>Último dia antes do intervalo</th><th>Reaparecimento</th><th>Dias sem atividade</th><th>Atividade da frente no intervalo</th><th>Quem trabalhou no setor durante a ausência</th><th>Classificação</th></tr></thead>
                 <tbody id="return-soil-wet-body"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="excel-browser-section return-table-section return-confirmed-soil-wet-section">
+            <div class="excel-section-heading"><div><span>Solo úmido confirmado</span><h3>Paradas comprovadas</h3><p>Registro resumido das interrupções retiradas da análise de mudança de área porque a maioria dos equipamentos ficou apontada em solo úmido, indicando onde a frente permaneceu aguardando quando essa informação estiver disponível.</p></div></div>
+            <div class="return-table-wrap return-compact-table-wrap">
+              <table class="return-table return-compact-table">
+                <thead><tr><th>Setor analisado</th><th>Seção</th><th>Fazenda</th><th>Local de espera / apontamento</th><th>Última colheita</th><th>Retorno</th><th>Tempo parado</th><th>Equipamentos confirmados</th><th>Maioria exigida</th><th>Horas apontadas</th></tr></thead>
+                <tbody id="return-confirmed-soil-wet-body"></tbody>
               </table>
             </div>
           </section>
@@ -89,7 +106,7 @@
             <div class="excel-section-heading"><div><span>Outras frentes</span><h3>Períodos atribuídos a outra frente</h3><p>Mostra quando a maior quantidade de colhedoras pertenceu a outra equipe.</p></div></div>
             <div class="return-table-wrap">
               <table class="return-table">
-                <thead><tr><th>Período</th><th>Setor</th><th>Frente atribuída</th><th>Contagem por frente</th><th>Equipamentos</th></tr></thead>
+                <thead><tr><th>Período</th><th>Setor</th><th>Seção</th><th>Fazenda</th><th>Frente atribuída</th><th>Contagem por frente</th><th>Equipamentos</th></tr></thead>
                 <tbody id="return-other-body"></tbody>
               </table>
             </div>

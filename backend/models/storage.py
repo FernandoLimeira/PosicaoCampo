@@ -13,15 +13,18 @@ from contextlib import contextmanager
 from .. import config
 
 AUTH_TABLES = ("users", "sessions")
-DATA_TABLES = (
+CORE_DATA_TABLES = (
     "units", "unit_history", "sector_base", "sacarose_positions",
     "return_analysis_fronts", "return_analysis_equipment",
 )
+DATA_TABLES = CORE_DATA_TABLES + ("return_analysis_soil_wet",)
 USER_REFERENCES = (
     ("units", "updated_by"), ("unit_history", "user_id"),
     ("sector_base", "updated_by"), ("sacarose_positions", "updated_by"),
     ("return_analysis_fronts", "updated_by"), ("return_analysis_equipment", "updated_by"),
 )
+OPTIONAL_USER_REFERENCES = (("return_analysis_soil_wet", "updated_by"),)
+ALL_USER_REFERENCES = USER_REFERENCES + OPTIONAL_USER_REFERENCES
 _INIT_LOCK = threading.Lock()
 
 
@@ -91,7 +94,7 @@ def _validate_pair(conn):
         if main.get("schema_version") == auth.get("schema_version") == "1":
             if main.get("store") == "data" and auth.get("store") == "auth":
                 data_tables, auth_tables = _tables(conn), _tables(conn, "auth")
-                if (set(DATA_TABLES) <= data_tables and set(AUTH_TABLES) <= auth_tables
+                if (set(CORE_DATA_TABLES) <= data_tables and set(AUTH_TABLES) <= auth_tables
                         and not set(AUTH_TABLES) & data_tables and not set(DATA_TABLES) & auth_tables):
                     if any(conn.execute(f"PRAGMA {schema}.journal_mode").fetchone()[0] != "delete"
                            for schema in ("main", "auth")):
@@ -111,7 +114,7 @@ def check_integrity(conn):
         result = [row[0] for row in conn.execute(f"PRAGMA {schema}.integrity_check")]
         if result != ["ok"] or conn.execute(f"PRAGMA {schema}.foreign_key_check").fetchall():
             raise RuntimeError(f"Falha de integridade no banco {schema}.")
-    for table, column in USER_REFERENCES:
+    for table, column in ALL_USER_REFERENCES:
         if conn.execute(
             f"SELECT 1 FROM main.{table} d LEFT JOIN auth.users u ON u.id=d.{column} "
             f"WHERE d.{column} IS NOT NULL AND u.id IS NULL LIMIT 1"
@@ -194,6 +197,7 @@ def initialize_databases():
             conn.execute("BEGIN IMMEDIATE")
             if _validate_pair(conn):
                 _upgrade_user_profile(conn)
+                _upgrade_operational_schema(conn)
                 check_integrity(conn)
                 conn.commit()
                 return
@@ -204,6 +208,7 @@ def initialize_databases():
                     conn.execute(statement)
             legacy_layouts = _copy_legacy(conn) if config.LEGACY_DB_PATH.is_file() else False
             _upgrade_user_profile(conn)
+            _upgrade_operational_schema(conn)
             check_integrity(conn)
             pair_id = str(uuid.uuid4())
             for schema, store in (("main", "data"), ("auth", "auth")):
@@ -218,6 +223,46 @@ def initialize_databases():
             raise
         finally:
             conn.close()
+
+
+def _upgrade_operational_schema(conn):
+    """Migrações aditivas dos dados operacionais sem recriar os bancos existentes."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS main.return_analysis_soil_wet (
+            unit_code TEXT NOT NULL,
+            record_key TEXT NOT NULL,
+            source_front TEXT NOT NULL DEFAULT '',
+            equipment INTEGER NOT NULL,
+            operation_date TEXT NOT NULL,
+            start_time TEXT NOT NULL,
+            end_time TEXT NOT NULL,
+            duration_seconds INTEGER NOT NULL DEFAULT 0,
+            operation_code TEXT NOT NULL DEFAULT '',
+            operation_description TEXT NOT NULL DEFAULT 'SOLO UMIDO',
+            operation_group TEXT NOT NULL DEFAULT '',
+            sector INTEGER NOT NULL,
+            field INTEGER,
+            farm TEXT NOT NULL DEFAULT '',
+            import_file TEXT NOT NULL DEFAULT '',
+            updated_by INTEGER,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (unit_code, record_key)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS main.idx_return_soil_wet_unit_date ON return_analysis_soil_wet(unit_code, operation_date)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS main.idx_return_soil_wet_unit_sector_date ON return_analysis_soil_wet(unit_code, sector, operation_date)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS main.idx_return_soil_wet_unit_equipment_date ON return_analysis_soil_wet(unit_code, equipment, operation_date)"
+    )
+    conn.execute(
+        "INSERT OR REPLACE INTO main.schema_info(key,value) VALUES ('return_soil_wet_schema_version','1')"
+    )
 
 
 def _upgrade_user_profile(conn):
@@ -321,6 +366,27 @@ CREATE TABLE IF NOT EXISTS return_analysis_equipment (
     FOREIGN KEY (unit_code, front_code) REFERENCES return_analysis_fronts(unit_code, front_code) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS return_analysis_soil_wet (
+    unit_code TEXT NOT NULL,
+    record_key TEXT NOT NULL,
+    source_front TEXT NOT NULL DEFAULT '',
+    equipment INTEGER NOT NULL,
+    operation_date TEXT NOT NULL,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    duration_seconds INTEGER NOT NULL DEFAULT 0,
+    operation_code TEXT NOT NULL DEFAULT '',
+    operation_description TEXT NOT NULL DEFAULT 'SOLO UMIDO',
+    operation_group TEXT NOT NULL DEFAULT '',
+    sector INTEGER NOT NULL,
+    field INTEGER,
+    farm TEXT NOT NULL DEFAULT '',
+    import_file TEXT NOT NULL DEFAULT '',
+    updated_by INTEGER,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (unit_code, record_key)
+);
+
 CREATE INDEX IF NOT EXISTS auth.idx_sessions_token_hash ON sessions(token_hash);
 CREATE INDEX IF NOT EXISTS idx_units_position ON units(position);
 CREATE INDEX IF NOT EXISTS idx_unit_history_code_created ON unit_history(unit_code, created_at DESC);
@@ -330,4 +396,7 @@ CREATE INDEX IF NOT EXISTS idx_sacarose_positions_sector ON sacarose_positions(s
 CREATE INDEX IF NOT EXISTS idx_sacarose_positions_sector_section ON sacarose_positions(sector, section);
 CREATE INDEX IF NOT EXISTS idx_return_analysis_fronts_unit_position ON return_analysis_fronts(unit_code, position);
 CREATE INDEX IF NOT EXISTS idx_return_analysis_equipment_front ON return_analysis_equipment(unit_code, front_code);
+CREATE INDEX IF NOT EXISTS idx_return_soil_wet_unit_date ON return_analysis_soil_wet(unit_code, operation_date);
+CREATE INDEX IF NOT EXISTS idx_return_soil_wet_unit_sector_date ON return_analysis_soil_wet(unit_code, sector, operation_date);
+CREATE INDEX IF NOT EXISTS idx_return_soil_wet_unit_equipment_date ON return_analysis_soil_wet(unit_code, equipment, operation_date);
 """

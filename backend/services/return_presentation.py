@@ -82,7 +82,7 @@ def _plan(report):
         "cover_period": f"{report['unit']['name']}\n{period}",
     }), (9, {**common,
         "kpi1": f"{report['returns_count']} retornos reais\n\n{report['return_sectors_count']} setores distintos",
-        "kpi2": f"{report['possible_soil_wet_count']} casos para verificar\n\n{report['possible_soil_wet_sectors_count']} setores distintos",
+        "kpi2": f"{report['possible_soil_wet_count']} casos para verificar\n\n{report.get('confirmed_soil_wet_count', 0)} solo úmido confirmado\n\n{report['possible_soil_wet_sectors_count']} setores pendentes",
         "kpi3": f"{report['other_front_periods_count']} de outras frentes\n\n{report['ties_count']} empates\n\n{report['unknown_equipment_count']} sem cadastro",
         "kpi_context": f"{unit} / {report['target_front']['name']}    {report['records']} registros válidos",
     })]
@@ -92,23 +92,47 @@ def _plan(report):
     for index, body in enumerate(pages, 1):
         title = "Resumo automático" if len(pages) == 1 else f"Resumo automático ({index}/{len(pages)})"
         slides.append((5, {**common, "summary_title": title, "summary_body": body}))
-    for key, title, pending in (("returns", "Retornos reais", False), ("possible_soil_wet", "Possível solo úmido: verificar", True)):
+    for key, title, status in (("returns", "Retornos reais", "return"),
+                               ("possible_soil_wet", "Interrupção: verificar", "pending"),
+                               ("confirmed_soil_wet", "Solo úmido confirmado", "confirmed")):
         # A separate occurrence slide preserves dates and fleet attribution.
-        for item in report[key]:
+        for item in report.get(key, []):
             if len(slides) >= MAX_PRESENTATION_SLIDES - 1:
                 raise ValueError("A apresentação excede 150 slides. Processe uma planilha com período menor.")
             sectors = ", ".join(str(s) for s in item["sectors_during_absence"])
             counts = "; ".join(f"{entry['front']}: {entry['count']}" for entry in item["return_counts"])
             # Large lists continue in the summary layout rather than clipping.
             left = f"Entrada: {_date(item['entry_date'])}\nSaída: {_date(item['exit_date'])}\nReaparecimento: {_date(item['return_date'])}\n\n{item['days_out']} dia(s) fora"
-            right = ("Sem registro de trabalho da frente em outro setor durante o intervalo.\n\nPossível parada por solo úmido. Verificar antes de confirmar a causa."
-                     if pending else f"Trabalho nos setores:\n{sectors}\n\nEquipamentos por frente no retorno:\n{counts}")
+            if status == "pending":
+                right = "Sem registro de trabalho da frente em outro setor.\n\nSolo úmido não confirmado pela base de apontamentos. Verificar a causa."
+            elif status == "confirmed":
+                evidence = item.get("soil_wet_evidence") or {}
+                right = (f"Maioria exigida: {evidence.get('majority_required', 0)} de {evidence.get('fleet_size', 0)} equipamentos.\n"
+                         f"Dias com maioria: {evidence.get('days_with_majority', 0)}/{evidence.get('days_in_gap', 0)}.\n"
+                         "Excluído das mudanças de área pela regra de apontamentos de solo úmido.")
+                for day in evidence.get("daily", []):
+                    right += f"\n{_date(day['date'])}: {', '.join(map(str, day['equipment']))}; {day['total_hours']} h."
+                for sector in evidence.get("sector_evidence", []):
+                    right += f"\nSetor de espera {sector['sector']}: {sector['total_hours']} h."
+            else:
+                right = f"Trabalho nos setores:\n{sectors}\n\nEquipamentos por frente no retorno:\n{counts}"
+            for coverage in item.get("other_fronts_in_sector", []):
+                right += (f"\n\nNo setor durante a ausência: {coverage['front']}, "
+                          f"{_date(coverage['start'])} a {_date(coverage['end'])}, "
+                          f"{coverage['min_count']} a {coverage['max_count']} colhedoras.")
+            reference = item.get("sector_reference") or {}
+            if reference.get("farm"):
+                right += f"\n\nFazenda: {reference['farm']}."
+            if reference.get("section"):
+                right += f"\nSeção: {reference['section']}."
+            elif reference.get("status") in {"multiple_sections", "ambiguous", "not_found"}:
+                right += "\nSeção/cadastro de setores: verificar."
             wrapped = _pages(right, width=39, lines_per_page=10)
             slides.append((4, {**common, "detail_title": title,
                 "detail_left_label": f"Setor {item['sector']}", "detail_right_label": "Atividade no intervalo",
                 "detail_left": left, "detail_right": wrapped[0],
                 "detail_left_caption": report["target_front"]["name"],
-                "detail_right_caption": "Hipótese pendente de verificação" if pending else "Retorno com atividade em outro setor",
+                "detail_right_caption": {"pending": "Causa pendente de verificação", "confirmed": "Confirmado pela regra de apontamentos", "return": "Retorno com atividade em outro setor"}[status],
             }))
             for continuation in wrapped[1:]:
                 slides.append((5, {**common, "summary_title": f"Setor {item['sector']}: continuação", "summary_body": continuation}))
