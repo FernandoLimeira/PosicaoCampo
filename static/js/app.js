@@ -628,22 +628,6 @@ function setupEvents() {
     closeAllModals();
     renderDashboard();
   });
-  document.querySelector('#export-unit-image').addEventListener('click', async event => {
-    const button = event.currentTarget;
-    const code = getReportUnit();
-    button.disabled = true;
-    try {
-      const payload = await apiRequest('/api/units');
-      const unit = payload.units?.find(item => item.code === code);
-      if (!unit) throw new Error('Unidade não encontrada no servidor.');
-      const blob = await generateUnitReportImageBlob(unit);
-      downloadBlobFile(blob, `Posicao-de-Campo-${code}-${new Date().toLocaleDateString('pt-BR').replaceAll('/', '-')}.png`);
-      showToast(`Imagem HD de ${code} emitida.`);
-    } catch (error) {
-      showToast(error.message || 'Não foi possível emitir a imagem.', true);
-    } finally { button.disabled = false; }
-  });
-
   document.querySelector('#wizard-prev')?.addEventListener('click', () => {
     setEditorStep(currentEditorStep - 1);
   });

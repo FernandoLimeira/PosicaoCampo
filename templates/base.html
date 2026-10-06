@@ -26,7 +26,7 @@
       </div>
       <div class="nav-actions">
         <button id="reports-toggle" class="nav-link nav-reports-toggle{% if page in ['dashboard', 'sacarose', 'reports', 'returns'] %} is-active{% endif %}" type="button" aria-expanded="false" aria-controls="reports-flyout">{{ icon('reports') }}<span>Relatórios</span></button>
-        <a class="nav-link{% if page == 'emission' %} is-active{% endif %}" href="/emitir-posicao-global"{% if page == 'emission' %} aria-current="page"{% endif %}>{{ icon('emission') }}<span>Emitir posição global</span></a>
+        <a class="nav-link{% if page == 'emission' %} is-active{% endif %}" href="/emitir-posicao-global"{% if page == 'emission' %} aria-current="page"{% endif %}>{{ icon('emission') }}<span>Emissão global</span></a>
         {% for key, href, label in [
           ('sectors', '/setores', 'Cadastro de setores'),
           ('history', '/historico', 'Histórico')

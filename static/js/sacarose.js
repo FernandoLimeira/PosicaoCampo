@@ -15,21 +15,6 @@ function sectorItem(sector, section = '') {
 }
 
 
-function getSacarosePoleConfig(unitCode = activeUnit) {
-  if (['RBR', 'PST'].includes(unitCode)) {
-    return { code: 'MS', label: 'Polo MS', units: ['RBR', 'PST'] };
-  }
-  return { code: 'SP', label: 'Polo SP', units: ['NRD', 'PPT'] };
-}
-
-function updateExportButtonLabel() {
-  const button = document.querySelector('#export-sacarose-unit');
-  if (!button) return;
-  const pole = getSacarosePoleConfig(activeUnit);
-  button.textContent = `Emitir imagem HD do ${pole.label}`;
-}
-
-
 function setStatus(message = '', error = false) {
   const status = document.querySelector('#save-status');
   status.textContent = message;
@@ -76,12 +61,10 @@ function collectRows() {
 }
 
 function renderUnit() {
-  const pole = getSacarosePoleConfig(activeUnit);
-  document.querySelector('#unit-pole').textContent = `${pole.label} · ${activeUnit}`;
+  document.querySelector('#unit-pole').textContent = `${['RBR', 'PST'].includes(activeUnit) ? 'Polo MS' : 'Polo SP'} · ${activeUnit}`;
   document.querySelector('#unit-title').textContent = UNIT_NAMES[activeUnit];
   const rows = Array.isArray(units[activeUnit]) ? units[activeUnit] : [];
   document.querySelector('#sacarose-rows').innerHTML = rows.length ? rows.map(rowHtml).join('') : rowHtml();
-  updateExportButtonLabel();
   history.replaceState(null, '', `/sacarose?unit=${activeUnit}`);
   setStatus('');
 }
@@ -156,32 +139,6 @@ document.addEventListener('report-unit-change', event => {
   units[activeUnit] = collectRows();
   activeUnit = event.detail.unit;
   renderUnit();
-});
-document.querySelector('#export-sacarose-unit').addEventListener('click', async event => {
-  const button = event.currentTarget;
-  const pole = getSacarosePoleConfig(activeUnit);
-  const exportPositions = { ...units, [activeUnit]: collectRows() };
-
-  for (const unitCode of pole.units) {
-    const rows = Array.isArray(exportPositions[unitCode]) ? exportPositions[unitCode] : [];
-    const problem = validate(rows);
-    if (problem) {
-      showToast(`${unitCode}: ${problem}`, true);
-      return;
-    }
-  }
-
-  button.disabled = true;
-  try {
-    const blob = await generateSacaroseReportImageBlob(pole.units, exportPositions, sectorBase);
-    const dateText = new Date().toLocaleDateString('pt-BR').replaceAll('/', '-');
-    downloadBlobFile(blob, `Sacarose-${pole.code}-${dateText}.png`);
-    showToast(`Imagem HD da Sacarose do ${pole.label} emitida.`);
-  } catch (error) {
-    showToast(error.message || 'Não foi possível emitir a imagem.', true);
-  } finally {
-    button.disabled = false;
-  }
 });
 document.querySelector('#add-row').addEventListener('click', () => {
   document.querySelector('#sacarose-rows').insertAdjacentHTML('beforeend', rowHtml());

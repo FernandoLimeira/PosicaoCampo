@@ -338,7 +338,7 @@ class PageTests(unittest.TestCase):
             for element_id in ('greeting', 'today', 'current-time', 'logout-button'):
                 self.assertIn(f'id="{element_id}"', footer)
             self.assertIn('class="menu-icon"', footer)
-            self.assertIn('</svg><span>Emitir posição global</span>', html)
+            self.assertIn('</svg><span>Emissão global</span>', html)
             self.assertIn('</svg><span>Cadastro de setores</span>', html)
             self.assertIn('</svg><span>Sair</span>', footer)
             self.assertNotIn('<select id="report-unit"', html)
@@ -355,13 +355,14 @@ class PageTests(unittest.TestCase):
             self.assertNotIn('Fechar menu de relatórios', group)
             for label in ("Posição de Campo", "Sacarose", "Acontecimentos de produtividade por frota e operador", "Análise de mudanças de área"):
                 self.assertIn(label, group)
-            self.assertNotIn("Emitir posição global", group)
+            self.assertNotIn("Emissão global", group)
             self.assertNotIn('>Painel</a>', html)
         emission = self.request('/emitir-posicao-global', role='member')["body"]
         self.assertIn('id="emit-global-position"', emission)
+        self.assertIn('id="emit-global-sacarose"', emission)
         self.assertNotIn('id="operation-form"', emission)
-        self.assertIn('id="export-unit-image"', self.request('/', role='member')["body"])
-        self.assertIn('id="export-sacarose-unit"', self.request('/sacarose', role='member')["body"])
+        self.assertNotIn('id="export-unit-image"', self.request('/', role='member')["body"])
+        self.assertNotIn('id="export-sacarose-unit"', self.request('/sacarose', role='member')["body"])
 
     def test_auth_api_uses_users_store_and_creates_valid_session(self):
         response = self.request("/api/auth/login", method="POST", body={"name": "TestAdmin", "password": "Test-password-42"})
