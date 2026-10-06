@@ -7,6 +7,7 @@ let returnAnalysisBusy = false;
 let returnPresentationBusy = false;
 let returnSoilWetImportBusy = false;
 let returnSoilWetSummaryEpoch = 0;
+let returnTraceSelection = [];
 
 function updateReturnPresentationButton() {
   const button = document.querySelector('#return-generate-presentation');
@@ -15,12 +16,18 @@ function updateReturnPresentationButton() {
   if (processButton) processButton.disabled = returnAnalysisBusy || returnPresentationBusy || returnSoilWetImportBusy;
   const importButton = document.querySelector('#return-soil-wet-import');
   if (importButton) importButton.disabled = returnSoilWetImportBusy || returnAnalysisBusy || returnPresentationBusy;
+  document.querySelectorAll('#return-trace-list input').forEach(input => {
+    input.disabled = returnAnalysisBusy || returnPresentationBusy || returnSoilWetImportBusy;
+  });
 }
 
 function invalidateReturnAnalysis() {
   returnAnalysisEpoch += 1;
   returnLastReport = null;
   returnLastInput = null;
+  returnTraceSelection = [];
+  const traces = document.querySelector('#return-trace-options');
+  if (traces) traces.hidden = true;
   const results = document.querySelector('#return-analysis-results');
   if (results) results.hidden = true;
   returnSetStatus('#return-presentation-status', '');
@@ -475,6 +482,7 @@ async function generateReturnPresentation() {
     const formData = new FormData();
     formData.append('file', snapshot.file, snapshot.file.name);
     const query = new URLSearchParams({ unit: snapshot.unitCode, front: snapshot.frontCode, min_gap: String(snapshot.minGap), digest: snapshot.digest });
+    query.set('traces', returnTraceSelection.length ? returnTraceSelection.join(',') : 'none');
     const response = await fetch(`/api/return-analysis/presentation?${query}`, {
       method: 'POST', credentials: 'same-origin', body: formData,
     });
@@ -676,7 +684,48 @@ function renderReturnAnalysisResult(report) {
   renderPossibleSoilWetRows(report);
   renderConfirmedSoilWetRows(report);
   renderReturnOtherRows(report);
+  renderReturnTraceOptions(report);
   results.hidden = false;
+}
+
+function renderReturnTraceOptions(report) {
+  const rows = Array.isArray(report?.returns) ? report.returns : [];
+  const options = document.querySelector('#return-trace-options');
+  const list = document.querySelector('#return-trace-list');
+  if (!options || !list) return;
+  const ranked = rows.map((item, index) => ({item, index})).sort((a, b) => Number(b.item.days_out) - Number(a.item.days_out) || a.index - b.index);
+  const sectors = new Set();
+  returnTraceSelection = [];
+  for (const {item, index} of ranked) {
+    if (sectors.has(String(item.sector))) continue;
+    sectors.add(String(item.sector));
+    returnTraceSelection.push(index);
+    if (returnTraceSelection.length === 3) break;
+  }
+  list.innerHTML = rows.map((item, index) => `<label><input type="checkbox" data-trace-index="${index}" ${returnTraceSelection.includes(index) ? 'checked' : ''} /><span>Setor ${escapeHtml(item.sector)} · ${escapeHtml(returnSectorFarmText(item))} · retorno em ${escapeHtml(returnFormatDate(item.return_date))} · ${escapeHtml(item.days_out)} dias fora</span></label>`).join('');
+  options.hidden = !rows.length;
+}
+
+function changeReturnTraceSelection(event) {
+  const input = event.target;
+  const value = input?.getAttribute('data-trace-index');
+  if (value == null) return;
+  const index = Number(value);
+  if (returnPresentationBusy || returnAnalysisBusy || returnSoilWetImportBusy) {
+    input.checked = returnTraceSelection.includes(index);
+    return;
+  }
+  if (input.checked && !returnTraceSelection.includes(index)) {
+    if (returnTraceSelection.length >= 6) {
+      input.checked = false;
+      returnSetStatus('#return-presentation-status', 'Escolha no máximo 6 espaços de rastro.', 'error');
+      return;
+    }
+    returnTraceSelection.push(index);
+  } else if (!input.checked) {
+    returnTraceSelection = returnTraceSelection.filter(value => value !== index);
+  }
+  returnSetStatus('#return-presentation-status', '');
 }
 
 async function copyReturnReport() {
@@ -724,6 +773,7 @@ function setupReturnAnalysis() {
   document.querySelector('#return-analysis-form')?.addEventListener('submit', processReturnAnalysis);
   document.querySelector('#return-copy-report')?.addEventListener('click', copyReturnReport);
   document.querySelector('#return-generate-presentation')?.addEventListener('click', generateReturnPresentation);
+  document.querySelector('#return-trace-list')?.addEventListener('change', changeReturnTraceSelection);
   updateReturnPresentationButton();
 }
 

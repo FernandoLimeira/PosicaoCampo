@@ -182,6 +182,30 @@ class PageTests(unittest.TestCase):
         changed = upload("/api/return-analysis/presentation", query)
         self.assertEqual(changed["status"], 409)
 
+    def test_presentation_trace_selection_is_validated_against_current_analysis(self):
+        from backend.services.return_presentation import report_digest
+        from tests.test_return_presentation import sample_report
+        from zipfile import ZipFile
+        import xml.etree.ElementTree as ET
+        report = sample_report()
+        query = "unit=PPT&front=02&min_gap=1&digest=" + report_digest(report)
+        with patch("backend.controllers.application_controller._analyze_return_request", return_value=report):
+            for value, slides in (("none", 3), ("0", 4)):
+                response = self.request("/api/return-analysis/presentation", method="POST", role="member",
+                                        overrides={"QUERY_STRING": query + "&traces=" + value})
+                self.assertEqual(response["status"], 200, response["body"] if response["status"] != 200 else "")
+                with ZipFile(io.BytesIO(response["body"])) as archive:
+                    root = ET.fromstring(archive.read("ppt/presentation.xml"))
+                    self.assertEqual(len(root.find("{http://schemas.openxmlformats.org/presentationml/2006/main}sldIdLst")), slides)
+            for value in ("-1", "999", "0,0", "true", "0,1,2,3,4,5,6", "0&traces=none"):
+                with self.subTest(value=value):
+                    response = self.request("/api/return-analysis/presentation", method="POST", role="member",
+                                            overrides={"QUERY_STRING": query + "&traces=" + value})
+                    self.assertEqual(response["status"], 400)
+        page = self.request("/retornos", role="member")["body"]
+        self.assertIn('id="return-trace-options"', page)
+        self.assertIn("PowerPoint", page)
+
     def test_soil_wet_routes_require_auth_and_import_respects_origin_and_unit(self):
         from tests.test_return_analysis_integration import SOIL_HEADERS, soil_row, xlsx
         route = "/api/return-analysis/soil-wet/import"

@@ -535,6 +535,14 @@
 .return-presentation-footer .excel-report-status { flex-basis: 100%; margin: 0; }
 .return-presentation-footer .excel-report-status:empty { display: none; }
 .return-presentation-footer button:disabled { opacity: .55; cursor: not-allowed; }
+.return-trace-options { flex-basis: 100%; }
+.return-trace-options[hidden] { display: none; }
+.return-trace-options h4 { margin: 0 0 8px; color: #234f3d; }
+.return-trace-options p, .return-trace-options small { color: #5c7065; font-size: 12px; line-height: 1.5; }
+.return-trace-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; margin: 12px 0; }
+.return-trace-list label { display: flex; align-items: flex-start; gap: 8px; color: #30515f; font-size: 12px; line-height: 1.5; }
+.return-trace-list input { flex: 0 0 auto; accent-color: #234f3d; margin-top: 3px; }
+@media (max-width: 640px) { .return-trace-list { grid-template-columns: 1fr; } }
 @media (max-width: 640px) {
   .return-presentation-footer > div:first-child,
   .return-presentation-footer > button { width: 100%; }

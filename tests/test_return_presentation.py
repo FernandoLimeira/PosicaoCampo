@@ -9,6 +9,13 @@ from zipfile import ZipFile
 
 from backend.services.return_analysis import analyze_return_rows
 from backend.services.return_presentation import generate_return_presentation, report_digest, PRESENTATION_TEMPLATE, NS
+from backend.services.return_presentation import default_trace_indices
+
+
+def package_text(archive, directory="slides"):
+    return "\n".join(t.text or "" for name in archive.namelist()
+                     if name.startswith(f"ppt/{directory}/") and name.endswith(".xml")
+                     for t in ET.fromstring(archive.read(name)).findall(".//a:t", NS))
 
 
 def sample_report():
@@ -38,15 +45,16 @@ class ReturnPresentationTests(unittest.TestCase):
             self.assertIn(b'<Types xmlns="', generated.read("[Content_Types].xml"))
             self.assertIn(b'<Relationships xmlns="', generated.read("ppt/_rels/presentation.xml.rels"))
             slide_names = [name for name in generated.namelist() if name.startswith("ppt/slides/slide") and name.endswith(".xml")]
-            self.assertGreaterEqual(len(slide_names), 6)
+            self.assertEqual(len(slide_names), 4)
             self.assertEqual(len(slide_names), len(presentation.find("p:sldIdLst", NS)))
             all_text = "\n".join("\n".join(t.text or "" for t in ET.fromstring(generated.read(name)).findall(".//a:t", NS)) for name in slide_names)
-            for text in ("PPT / Frente 02", "01/10/2026", "10/10/2026", "04/10/2026", "101", "Resumo automático", "Solo úmido não confirmado", "Frente 03", "3001"):
+            for text in ("PPT / Frente 02", "01/10/2026", "10/10/2026", "04/10/2026", "101", "Retornos de setor", "Destaques e conferências", "interrupções pendentes", "3001", "Inserir rastro do setor 101"):
                 self.assertIn(text, all_text)
             self.assertNotIn("{{", all_text)
             self.assertNotIn("Título do slide", all_text)
             self.assertNotIn("Descrição do bloco", all_text)
             self.assertNotIn("NRD", all_text)
+            self.assertIn(report["report"], package_text(generated, "notesSlides"))
             for name in template.namelist():
                 if name.startswith(("ppt/media/", "ppt/theme/", "ppt/slideMasters/", "ppt/slideLayouts/")):
                     self.assertEqual(generated.read(name), template.read(name), name)
@@ -63,25 +71,52 @@ class ReturnPresentationTests(unittest.TestCase):
                     resolved = target.lstrip("/") if target.startswith("/") else posixpath.normpath(posixpath.join(base, target))
                     self.assertIn(resolved, generated.namelist(), f"{name}: {target}")
 
-    def test_summary_paginates_without_discarding_text(self):
+    def test_long_report_remains_complete_in_notes_without_extra_slides(self):
         report = sample_report()
         report["report"] = "\n".join(f"Linha {i}: ocorrência do setor {i}, com acentuação e dados da frente." for i in range(1, 80))
         content, _ = generate_return_presentation(report)
         with ZipFile(BytesIO(content)) as z:
-            bodies = []
-            for name in z.namelist():
-                if name.startswith("ppt/slides/slide") and name.endswith(".xml"):
-                    root = ET.fromstring(z.read(name))
-                    titles = ["".join(t.text or "" for t in shape.findall(".//a:t", NS))
-                              for shape in root.findall(".//p:sp", NS)
-                              if shape.find("p:nvSpPr/p:cNvPr", NS).get("name") == "ctt:summary_title"]
-                    if not any(title.startswith("Resumo automático") for title in titles):
-                        continue  # Continuação de ocorrência não é parte do resumo.
-                    for shape in root.findall(".//p:sp", NS):
-                        if shape.find("p:nvSpPr/p:cNvPr", NS).get("name") == "ctt:summary_body":
-                            bodies.append("\n".join(t.text or "" for t in shape.findall(".//a:t", NS)))
-            self.assertGreater(len(bodies), 1)
-            self.assertEqual(" ".join("\n".join(bodies).split()), " ".join(report["report"].split()))
+            self.assertEqual(len(ET.fromstring(z.read("ppt/presentation.xml")).find("p:sldIdLst", NS)), 4)
+            self.assertNotIn("Linha 79", package_text(z))
+            self.assertIn(report["report"], package_text(z, "notesSlides"))
+
+    def test_all_returns_in_native_tables_and_selected_picture_placeholders(self):
+        report = sample_report()
+        source = report["returns"][0]
+        report["returns"] = [{**source, "sector": index % 12 + 1, "days_out": index + 1,
+                              "sector_reference": {"status": "matched", "farm": "Fazenda extensa " * 8}}
+                             for index in range(14)]
+        report["returns_count"] = 14
+        report["return_sectors_count"] = 12
+        self.assertEqual(default_trace_indices(report), [13, 12, 11])
+        content, _ = generate_return_presentation(report)
+        with ZipFile(BytesIO(content)) as archive:
+            self.assertEqual(len(ET.fromstring(archive.read("ppt/presentation.xml")).find("p:sldIdLst", NS)), 7)
+            tables = [ET.fromstring(archive.read(f"ppt/slides/slide{i}.xml")).find(".//a:tbl", NS) for i in (2, 3)]
+            rows = [row for table in tables for row in table.findall("a:tr", NS)[1:]]
+            self.assertEqual(len(rows), 14)
+            self.assertEqual([row.find("a:tc/a:txBody/a:p/a:r/a:t", NS).text for row in rows],
+                             [str(item["sector"]) for item in report["returns"]])
+            self.assertIn("…", package_text(archive))
+            self.assertIn("Fazenda extensa " * 8, package_text(archive, "notesSlides"))
+            for slide in (5, 6, 7):
+                root = ET.fromstring(archive.read(f"ppt/slides/slide{slide}.xml"))
+                self.assertIsNotNone(root.find('.//p:ph[@type="pic"]', NS))
+                self.assertIn("04/10/2026", " ".join(t.text or "" for t in root.findall(".//a:t", NS)))
+        for selected, expected in (([], 4), ([0], 5), ([2, 0], 6)):
+            content, _ = generate_return_presentation(report, trace_indices=selected)
+            with ZipFile(BytesIO(content)) as archive:
+                self.assertEqual(len(ET.fromstring(archive.read("ppt/presentation.xml")).find("p:sldIdLst", NS)), expected)
+                if selected:
+                    first = ET.fromstring(archive.read("ppt/slides/slide5.xml"))
+                    self.assertIn(f"Inserir rastro do setor {report['returns'][selected[0]]['sector']}",
+                                  " ".join(t.text or "" for t in first.findall(".//a:t", NS)))
+
+    def test_invalid_trace_selection_rejected(self):
+        report = sample_report()
+        for selected in ([0, 0], [-1], [999], [True], ["0"], "0", list(range(7))):
+            with self.subTest(selected=selected), self.assertRaises(ValueError):
+                generate_return_presentation(report, trace_indices=selected)
 
     def test_zero_findings_missing_template_and_slide_limit(self):
         report = analyze_return_rows([
@@ -89,12 +124,12 @@ class ReturnPresentationTests(unittest.TestCase):
         ], [{"code": "02", "name": "Frente 02", "equipment": [1001]}], "02", unit_code="PPT", unit_name="Paraguaçu Paulista")
         content, _ = generate_return_presentation(report)
         with ZipFile(BytesIO(content)) as z:
-            self.assertEqual(len(ET.fromstring(z.read("ppt/presentation.xml")).find("p:sldIdLst", NS)), 4)
+            self.assertEqual(len(ET.fromstring(z.read("ppt/presentation.xml")).find("p:sldIdLst", NS)), 2)
         with self.assertRaises(FileNotFoundError):
             generate_return_presentation(report, template_path=PRESENTATION_TEMPLATE.with_name("missing.pptx"))
         with self.assertRaises(ValueError):
             generate_return_presentation(None)
-        report["report"] = "Longa ocorrência " * 20000
+        report["returns"] = [sample_report()["returns"][0]] * 1200
         with self.assertRaisesRegex(ValueError, "150 slides"):
             generate_return_presentation(report)
 
@@ -113,7 +148,7 @@ class ReturnPresentationTests(unittest.TestCase):
         content, _ = generate_return_presentation(report)
         with ZipFile(BytesIO(content)) as z:
             for name in z.namelist():
-                if name.startswith("ppt/slides/slide") and name.endswith(".xml"):
+                if name.startswith(("ppt/slides/slide", "ppt/notesSlides/notesSlide")) and name.endswith(".xml"):
                     ET.fromstring(z.read(name))
                     self.assertNotIn(b"\x00", z.read(name))
 

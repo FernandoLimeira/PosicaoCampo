@@ -157,7 +157,7 @@ class ReturnAnalysisIntegrationTests(unittest.TestCase):
         reference = self.analyze(activity, sector_base=base[:1])["possible_soil_wet"][0]["sector_reference"]
         self.assertEqual(reference["status"], "matched")
 
-    def test_presentation_includes_confirmed_soil_wet_evidence_without_pending_label(self):
+    def test_compact_presentation_preserves_confirmed_soil_wet_evidence_in_notes(self):
         report = self.analyze([(1, 101, 1001), (4, 101, 1001)], soil_wet_records=self.evidence(),
                               sector_base=[{"sector": "101", "section": "10", "description": "Fazenda A"}])
         content, _ = generate_return_presentation(report)
@@ -165,9 +165,14 @@ class ReturnAnalysisIntegrationTests(unittest.TestCase):
             text = "\n".join(t.text or "" for name in archive.namelist()
                              if name.startswith("ppt/slides/slide") and name.endswith(".xml")
                              for t in ET.fromstring(archive.read(name)).findall(".//a:t", NS))
-        for expected in ("Solo úmido confirmado", "Maioria exigida: 2 de 3", "Dias com maioria: 2/2",
-                         "Setor de espera 71", "1001, 1002", "Fazenda: Fazenda A", "Seção: 10"):
-            self.assertIn(expected, text)
+            notes = "\n".join(t.text or "" for name in archive.namelist()
+                              if name.startswith("ppt/notesSlides/notesSlide") and name.endswith(".xml")
+                              for t in ET.fromstring(archive.read(name)).findall(".//a:t", NS))
+        self.assertIn("1 solo úmido confirmado", text)
+        self.assertIn("0 interrupções pendentes", text)
+        for expected in ('"majority_required": 2', '"fleet_size": 3', '"days_with_majority": 2',
+                         '"dominant_sector": 71', '"farm": "Fazenda A"', '"section": "10"', '1001', '1002'):
+            self.assertIn(expected, notes)
         self.assertNotIn("Causa pendente", text)
 
 

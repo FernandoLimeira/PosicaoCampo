@@ -115,8 +115,14 @@
         <footer class="return-presentation-footer">
           <div>
             <strong>Apresentação da análise</strong>
-            <p>Baixe um PowerPoint editável no modelo CTT, com os resultados da unidade e frente processadas.</p>
+            <p>Resumo compacto no modelo CTT. Insira as imagens de rastro no PowerPoint, nos espaços identificados por setor e data.</p>
           </div>
+          <section id="return-trace-options" class="return-trace-options" hidden aria-labelledby="return-trace-title">
+            <h4 id="return-trace-title">Espaços para rastros de colheita</h4>
+            <p>Escolha até 6 retornos. Os 3 maiores intervalos de setores distintos ficam selecionados inicialmente. Desmarque todos para gerar somente o resumo.</p>
+            <div id="return-trace-list" class="return-trace-list"></div>
+            <small>As imagens não são carregadas nem armazenadas no sistema. Após baixar, insira a imagem original no espaço indicado no PowerPoint.</small>
+          </section>
           <button id="return-generate-presentation" class="modal-button save" type="button" disabled>Gerar apresentação</button>
           <div id="return-presentation-status" class="excel-report-status" role="status" aria-live="polite"></div>
         </footer>

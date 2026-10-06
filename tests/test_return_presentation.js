@@ -66,9 +66,33 @@ async function main() {
   const request = requests.at(-1);
   assert(request.url.includes('/api/return-analysis/presentation?'));
   assert(request.url.includes('unit=PPT&front=02&min_gap=1&digest='));
+  assert(request.url.includes('traces=none'), 'Sem retornos não inventa rastros');
   assert.equal(request.options.credentials, 'same-origin');
   assert.equal(request.options.body.values[0][1], file);
   assert.equal(button.disabled, false);
+  report.returns = Array.from({length: 8}, (_, index) => ({sector: index % 7 + 1, days_out: index + 1,
+    return_date: '2026-10-04', sector_reference: {status: 'matched', farm: 'Fazenda teste'}}));
+  await analyze();
+  assert.equal(element('#return-trace-options').hidden, false);
+  const selected = () => Array.from(vm.runInContext('returnTraceSelection', ctx));
+  assert.deepEqual(selected(), [7, 6, 5], 'Três maiores intervalos de setores distintos');
+  assert(element('#return-trace-list').innerHTML.includes('retorno em 04/10/2026'));
+  function choose(index, checked) {
+    const input = {checked, getAttribute() { return String(index); }};
+    element('#return-trace-list').listeners.change({target: input});
+    return input;
+  }
+  choose(0, true); choose(1, true); choose(2, true);
+  assert.equal(selected().length, 6);
+  assert.equal(choose(3, true).checked, false);
+  assert(element('#return-presentation-status').textContent.includes('máximo 6'));
+  for (const index of selected()) choose(index, false);
+  assert.deepEqual(selected(), []);
+  choose(2, true);
+  handler = async () => success();
+  await ctx.generateReturnPresentation();
+  assert.equal(new URL(requests.at(-1).url, 'https://test.invalid').searchParams.get('traces'), '2');
+  assert.equal(downloads.length, 2);
   let complete;
   handler = () => new Promise(resolve => { complete = resolve; });
   const generation = ctx.generateReturnPresentation();
@@ -76,12 +100,15 @@ async function main() {
   await ctx.generateReturnPresentation();
   assert.equal(requests.length, count);
   assert.equal(button.disabled, true);
+  assert.equal(choose(2, false).checked, true, 'Não altera a seleção durante a exportação');
   selectedUnit = 'NRD';
   events['report-unit-change']();
   complete(success());
   await generation;
-  assert.equal(downloads.length, 1, 'Não baixa uma unidade anterior após mudar o filtro');
+  assert.equal(downloads.length, 2, 'Não baixa uma unidade anterior após mudar o filtro');
   assert.equal(button.disabled, true);
+  assert.equal(element('#return-trace-options').hidden, true);
+  assert.deepEqual(selected(), []);
   selectedUnit = 'PPT';
   await analyze();
   handler = async () => ({ok: false, status: 409, json: async () => ({error: 'Layouts mudaram. Processe novamente.'})});
@@ -94,7 +121,7 @@ async function main() {
   handler = async () => ({ok: true, status: 200, headers: {get() { return 'text/html'; }}});
   await ctx.generateReturnPresentation();
   assert(element('#return-presentation-status').textContent.includes('não retornou um arquivo PowerPoint'));
-  assert.equal(downloads.length, 1);
+  assert.equal(downloads.length, 2);
   element('#return-analysis-front').listeners.change();
   assert.equal(button.disabled, true);
   await analyze();

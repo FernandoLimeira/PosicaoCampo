@@ -4,7 +4,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 
 from ..config import TEMPLATE_DIR
 
-ASSET_VERSION = "20261006-retornos-integrados-v23"
+ASSET_VERSION = "20261006-pptx-compacto-rastros-v24"
 
 environment = Environment(
     loader=FileSystemLoader(str(TEMPLATE_DIR)),

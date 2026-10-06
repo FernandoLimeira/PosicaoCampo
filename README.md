@@ -78,7 +78,10 @@ no rodapé do menu.
 
 A Análise de mudanças de área permite baixar a apresentação da unidade e
 frente processadas pelo botão “Gerar apresentação”, usando o modelo CTT
-fornecido. Consulte [docs/apresentacoes-mudancas-area.md](docs/apresentacoes-mudancas-area.md).
+fornecido, em formato compacto com tabelas e espaços de rastro por setor/data.
+É possível escolher até seis espaços para inserir as imagens no PowerPoint;
+o relatório completo permanece na página e nas notas da apresentação.
+Consulte [docs/apresentacoes-mudancas-area.md](docs/apresentacoes-mudancas-area.md).
 Também permite importar apontamentos de solo úmido e conferir seção/fazenda e
 ocupação dos setores por outras frentes. Consulte
 [docs/integracao-retornos-20261006.md](docs/integracao-retornos-20261006.md).

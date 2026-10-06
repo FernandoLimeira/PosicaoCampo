@@ -650,7 +650,13 @@ def application(environ, start_response):
                 return _json(start_response, HTTPStatus.CONFLICT, {
                     "error": "O arquivo, os layouts ou as bases de setores/apontamentos mudaram. Processe novamente a análise antes de gerar a apresentação.",
                 })
-            content, filename = generate_return_presentation(report)
+            traces = None
+            if "traces" in query:
+                requested = query["traces"]
+                if len(requested) != 1 or not re.fullmatch(r"none|\d+(?:,\d+){0,5}", requested[0]):
+                    raise ValueError("Seleção de rastros inválida. Escolha até 6 retornos.")
+                traces = [] if requested[0] == "none" else [int(index) for index in requested[0].split(",")]
+            content, filename = generate_return_presentation(report, trace_indices=traces)
             return _respond(start_response, HTTPStatus.OK, content, [
                 ("Content-Type", PPTX_MIME), ("Cache-Control", "no-store"),
                 ("Content-Disposition", f'attachment; filename="{filename}"'),
