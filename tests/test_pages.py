@@ -297,6 +297,30 @@ class PageTests(unittest.TestCase):
         html = self.request('/usuarios/cadastro', role='admin')["body"]
         self.assertIn('<a class="modal-button secondary" href="/usuarios">Ver usuários cadastrados</a>', html)
 
+    def test_trace_picker_resets_global_input_size_and_contains_long_content(self):
+        css = (config.STATIC_DIR / "css/retornos.css").read_text(encoding="utf-8")
+
+        def declarations(selector):
+            block = re.search(re.escape(selector) + r'\s*\{([^}]+)\}', css)
+            self.assertIsNotNone(block, selector)
+            return block.group(1)
+
+        checkbox = declarations('.return-trace-list input[type="checkbox"]')
+        for value in ('width: 16px;', 'height: 16px;', 'padding: 0;'):
+            self.assertIn(value, checkbox)
+        footer = declarations('.return-presentation-footer')
+        self.assertIn('grid-template-columns: minmax(0, 1fr);', footer)
+        self.assertIn('max-width: 100%;', footer)
+        self.assertIn('min-width: 0;', footer)
+        label = declarations('.return-trace-list label')
+        self.assertIn('grid-template-columns: 16px minmax(0, 1fr);', label)
+        self.assertIn('overflow-wrap: anywhere;', declarations('.return-trace-list label > span'))
+        self.assertIn('max-height: 200px;', declarations('.return-trace-list'))
+        self.assertIn('overflow-y: auto;', declarations('.return-trace-list'))
+        self.assertIn('.return-trace-list { grid-template-columns: 1fr; }', css)
+        page = self.request('/retornos', role='member')['body']
+        self.assertIn('/css/retornos.css?v=20261006-rastros-layout-v25', page)
+
     def test_script_dependencies_and_styles_are_scoped(self):
         expected = {
             "/": ["common.js", "export.js", "app.js"],
