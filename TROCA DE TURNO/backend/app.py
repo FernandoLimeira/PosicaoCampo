@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from .config import BASE_DIR, MAX_BODY_BYTES, SESSION_COOKIE, SESSION_TTL_SECONDS
 from .excel_reports import MAX_EXCEL_UPLOAD_BYTES, analyze_excel_report
+from .return_analysis import MAX_RETURN_UPLOAD_BYTES, analyze_return_file
 from .sector_base_import import MAX_SECTOR_BASE_UPLOAD_BYTES, parse_sector_base_excel_details
 from .database import (
     UnitConflictError,
@@ -28,6 +29,8 @@ from .database import (
     list_units_payload,
     list_sector_base,
     list_sacarose_positions,
+    list_return_analysis_layouts,
+    save_return_analysis_layouts,
     save_sector_base_item,
     import_sector_base_items,
     delete_sector_base_item,
@@ -503,6 +506,60 @@ def application(environ, start_response):
             return _json(start_response, HTTPStatus.OK, {"ok": True})
         except ValueError as exc:
             return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path == "/api/return-analysis/layouts" and method == "GET":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        unit_code = (query.get("unit") or [None])[0]
+        try:
+            return _json(start_response, HTTPStatus.OK, list_return_analysis_layouts(unit_code))
+        except ValueError as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path.startswith("/api/return-analysis/layouts/") and method == "PUT":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        unit_code = path.rsplit("/", 1)[-1].strip().upper()
+        try:
+            payload = _json_body(environ)
+            fronts = payload.get("fronts")
+            create_backup()
+            result = save_return_analysis_layouts(unit_code, fronts, user["id"])
+            return _json(start_response, HTTPStatus.OK, {"ok": True, **result})
+        except (ValueError, TypeError) as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path == "/api/return-analysis/analyze" and method == "POST":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        unit_code = str((query.get("unit") or [""])[0]).strip().upper()
+        front_code = str((query.get("front") or [""])[0]).strip()
+        try:
+            min_gap_days = int((query.get("min_gap") or [1])[0])
+        except (TypeError, ValueError):
+            min_gap_days = 1
+        try:
+            layouts_payload = list_return_analysis_layouts(unit_code)
+            units_payload = layouts_payload.get("units") or []
+            if not units_payload:
+                raise ValueError("Unidade sem cadastro de layouts para análise.")
+            unit_payload = units_payload[0]
+            filename, file_bytes = _multipart_file(environ, max_file_bytes=MAX_RETURN_UPLOAD_BYTES)
+            report = analyze_return_file(
+                file_bytes,
+                filename,
+                unit_payload.get("fronts") or [],
+                front_code,
+                min_gap_days=min_gap_days,
+                unit_code=unit_payload.get("code") or unit_code,
+                unit_name=unit_payload.get("name") or unit_code,
+            )
+            return _json(start_response, HTTPStatus.OK, {"report": report})
+        except ValueError as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+        except Exception as exc:
+            print(f"Erro ao processar análise de retornos: {exc}")
+            return _json(start_response, HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "Não foi possível processar a planilha de retornos."})
 
     if path == "/api/reports/excel/analyze" and method == "POST":
         if not user:

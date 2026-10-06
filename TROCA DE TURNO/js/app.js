@@ -2765,14 +2765,23 @@ function renderExcelReport(report) {
 function showAppView(viewName) {
   const dashboardView = document.querySelector('#dashboard-view');
   const excelView = document.querySelector('#excel-report-view');
+  const returnView = document.querySelector('#return-analysis-view');
   const reportsButton = document.querySelector('#open-excel-reports');
+  const returnsButton = document.querySelector('#open-return-analysis');
   const showExcel = viewName === 'excel';
-  dashboardView?.classList.toggle('is-active', !showExcel);
+  const showReturns = viewName === 'returns';
+  const showDashboard = !showExcel && !showReturns;
+
+  dashboardView?.classList.toggle('is-active', showDashboard);
   excelView?.classList.toggle('is-active', showExcel);
-  dashboardView?.setAttribute('aria-hidden', String(showExcel));
+  returnView?.classList.toggle('is-active', showReturns);
+  dashboardView?.setAttribute('aria-hidden', String(!showDashboard));
   excelView?.setAttribute('aria-hidden', String(!showExcel));
+  returnView?.setAttribute('aria-hidden', String(!showReturns));
   reportsButton?.classList.toggle('is-active', showExcel);
-  if (showExcel) closeAllModals();
+  returnsButton?.classList.toggle('is-active', showReturns);
+  if (showExcel || showReturns) closeAllModals();
+  if (showReturns && typeof window.loadReturnLayouts === 'function') window.loadReturnLayouts();
   window.scrollTo({ top: 0, behavior: 'auto' });
 }
 

@@ -1,3 +1,10 @@
+/* AJUSTE DE LEGIBILIDADE
+   Tipografia de tela aumentada em aproximadamente 2px.
+   Somente propriedades font-size foram alteradas.
+   Cores, padding, margens, espaçamentos e estrutura visual foram preservados.
+   A seção @media print do style.css foi mantida sem alteração.
+*/
+
 :root {
   --green: #0b7a36;
   --green-strong: #06642b;
@@ -44,16 +51,16 @@ a:hover { text-decoration: underline; }
   align-items: baseline;
   gap: 10px;
   color: var(--green);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 850;
   letter-spacing: 1.3px;
 }
-.auth-brand-mark { font-size: 21px; letter-spacing: 1px; }
+.auth-brand-mark { font-size: 23px; letter-spacing: 1px; }
 .auth-heading { margin-bottom: 28px; }
 .auth-heading p {
   margin: 0 0 8px;
   color: var(--green);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 850;
   letter-spacing: 1.5px;
 }
@@ -66,7 +73,7 @@ a:hover { text-decoration: underline; }
 .auth-heading > span { color: var(--muted); line-height: 1.55; }
 .auth-form { display: grid; gap: 17px; }
 .auth-form label { display: grid; gap: 7px; }
-.auth-form label > span { font-size: 12px; font-weight: 800; color: #355346; }
+.auth-form label > span { font-size: 14px; font-weight: 800; color: #355346; }
 .auth-form input {
   width: 100%;
   min-height: 48px;
@@ -93,7 +100,7 @@ a:hover { text-decoration: underline; }
 }
 .auth-form button:hover { background: var(--green-strong); }
 .auth-form button:disabled { opacity: .65; cursor: wait; }
-.auth-help { margin: -6px 0 0; color: var(--muted); font-size: 12px; }
+.auth-help { margin: -6px 0 0; color: var(--muted); font-size: 14px; }
 .auth-error {
   margin: 0;
   padding: 10px 12px;
@@ -101,10 +108,10 @@ a:hover { text-decoration: underline; }
   background: #fff2f3;
   border: 1px solid #ffd5da;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
 }
-.auth-switch { margin: 24px 0 0; color: var(--muted); font-size: 13px; }
+.auth-switch { margin: 24px 0 0; color: var(--muted); font-size: 15px; }
 .auth-visual {
   min-width: 0;
   min-height: 100vh;
@@ -118,10 +125,10 @@ a:hover { text-decoration: underline; }
     #0a6f34;
 }
 .auth-visual > div { max-width: 720px; }
-.auth-visual p { margin: 0 0 10px; font-size: 11px; font-weight: 900; letter-spacing: 1.8px; opacity: .85; }
+.auth-visual p { margin: 0 0 10px; font-size: 13px; font-weight: 900; letter-spacing: 1.8px; opacity: .85; }
 .auth-visual h2 { margin: 0 0 14px; font-size: clamp(44px, 6vw, 78px); line-height: .94; letter-spacing: -3px; text-transform: uppercase; }
 .auth-visual h2 span { color: #96f178; }
-.auth-visual small { display: block; max-width: 600px; font-size: 15px; line-height: 1.5; opacity: .9; }
+.auth-visual small { display: block; max-width: 600px; font-size: 17px; line-height: 1.5; opacity: .9; }
 
 @media (max-width: 820px) {
   .auth-page { grid-template-columns: 1fr; }

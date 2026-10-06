@@ -4,11 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#0b7a36" />
-  <meta name="app-build" content="20261001-sacarose-secao-v35" />
+  <meta name="app-build" content="20261005-retornos-v37-layout-modal" />
   <title>Posição de Campo</title>
-  <link rel="stylesheet" href="/css/style.css?v=20261001-sacarose-secao-v35" />
+  <link rel="stylesheet" href="/css/style.css?v=20261005-retornos-v37-layout-modal" />
 </head>
-<body data-app-build="20261001-sacarose-secao-v35">
+<body data-app-build="20261005-retornos-v37-layout-modal">
   <main id="dashboard" class="dashboard-shell">
     <nav class="app-navbar" aria-label="Navegação principal">
       <div class="nav-brand">
@@ -31,6 +31,7 @@
         <button id="open-sacarose" class="nav-link" type="button">Sacarose</button>
         <button id="open-sector-base" class="nav-link" type="button">Base de Setores</button>
         <button id="open-excel-reports" class="nav-link" type="button" data-app-view-target="excel">Relatórios</button>
+        <button id="open-return-analysis" class="nav-link" type="button" data-app-view-target="returns">Retornos</button>
         <button id="open-users" class="nav-link" type="button" hidden>Usuários</button>
         <div class="nav-user" aria-label="Usuário conectado">
           <span id="current-user">Usuário</span>
@@ -133,12 +134,131 @@
         </section>
       </section>
 
+      <section id="return-analysis-view" class="app-view excel-report-page return-analysis-page" aria-hidden="true" aria-labelledby="return-analysis-title">
+        <header class="excel-page-header">
+          <div>
+            <span class="excel-page-kicker">Análise agrícola</span>
+            <h1 id="return-analysis-title">Retornos de setor por layout de colhedoras</h1>
+            <p>Identifica quando uma frente sai de um setor e retorna depois, atribuindo cada período à frente com maior quantidade de equipamentos cadastrados.</p>
+          </div>
+          <div class="return-page-actions">
+            <button id="return-open-layouts" class="excel-filter-reset return-layout-config-button" type="button">Configurar layouts</button>
+            <button class="excel-page-back" type="button" data-app-view-target="dashboard">Voltar ao painel</button>
+          </div>
+        </header>
+
+        <section class="excel-upload-panel return-upload-panel">
+          <div class="excel-upload-copy">
+            <strong>Processar histórico de colheita</strong>
+            <p>Importe a base da frente em XLSX, XLSM ou XLS. São necessárias as colunas DIA, SETOR e COLHEDORA/FROTA.</p>
+            <div class="excel-shift-rules" aria-label="Regra de atribuição">
+              <span><b>Maior quantidade</b> define a frente do período</span>
+              <span><b>Empate</b> fica como MISTO / EMPATE</span>
+              <span><b>Sem cadastro</b> não entra na disputa</span>
+            </div>
+          </div>
+          <form id="return-analysis-form" class="return-analysis-form">
+            <div class="return-analysis-fields">
+              <label class="return-field"><span>Unidade</span><select id="return-analysis-unit"></select></label>
+              <label class="return-field"><span>Frente analisada</span><select id="return-analysis-front"></select></label>
+              <label class="return-field"><span>Dias mínimos fora</span><input id="return-min-gap" type="number" min="1" max="3650" value="1" /></label>
+            </div>
+            <label class="excel-file-field" for="return-analysis-file">
+              <span>Arquivo Excel</span>
+              <input id="return-analysis-file" type="file" accept=".xlsx,.xlsm,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.ms-excel" required />
+              <small id="return-analysis-file-name">Nenhum arquivo selecionado</small>
+            </label>
+            <button id="return-analysis-process" class="modal-button save" type="submit">Processar retornos</button>
+          </form>
+        </section>
+
+        <div id="return-analysis-status" class="excel-report-status" aria-live="polite"></div>
+
+        <section id="return-analysis-results" class="excel-report-results" hidden>
+          <div class="excel-report-meta return-meta">
+            <div><span>Arquivo</span><strong id="return-meta-file">-</strong></div>
+            <div><span>Período</span><strong id="return-meta-period">-</strong></div>
+            <div><span>Unidade / Frente</span><strong id="return-meta-scope">-</strong></div>
+            <div><span>Retornos reais</span><strong id="return-meta-count">-</strong></div>
+          </div>
+
+          <div id="return-kpis" class="excel-kpis return-kpis"></div>
+
+          <section class="return-report-card">
+            <div class="return-section-heading">
+              <div><span>Acontecimentos</span><h3>Resumo automático</h3><p>Texto pronto para leitura rápida da operação.</p></div>
+              <button id="return-copy-report" class="excel-filter-reset" type="button">Copiar resumo</button>
+            </div>
+            <pre id="return-report-text" class="return-report-text"></pre>
+          </section>
+
+          <section class="excel-browser-section return-table-section">
+            <div class="excel-section-heading"><div><span>Retornos reais</span><h3>Entrada, saída, retorno e setores no intervalo</h3></div></div>
+            <div class="return-table-wrap">
+              <table class="return-table">
+                <thead><tr><th>Setor</th><th>Entrada</th><th>Saída</th><th>Retorno</th><th>Dias fora</th><th>Setores durante a ausência</th><th>Contagem no retorno</th></tr></thead>
+                <tbody id="return-results-body"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="excel-browser-section return-table-section">
+            <div class="excel-section-heading"><div><span>Outras frentes</span><h3>Períodos atribuídos a outra frente</h3><p>Mostra quando a maior quantidade de colhedoras pertenceu a outra equipe.</p></div></div>
+            <div class="return-table-wrap">
+              <table class="return-table">
+                <thead><tr><th>Período</th><th>Setor</th><th>Frente atribuída</th><th>Contagem por frente</th><th>Equipamentos</th></tr></thead>
+                <tbody id="return-other-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </section>
+
       <footer class="footer">
         <span>COA · COCAL · SAFRA 2026</span>
         <strong>Segurança · Qualidade · Pessoas · Resultados</strong>
       </footer>
     </div>
   </main>
+
+  <div id="return-layout-modal" class="modal-backdrop" hidden>
+    <section class="editor-modal return-layout-modal" role="dialog" aria-modal="true" aria-labelledby="return-layout-modal-title">
+      <header class="modal-header return-layout-modal-header">
+        <div>
+          <span class="modal-kicker">Base de layouts</span>
+          <h2 id="return-layout-modal-title">Layouts das frentes</h2>
+          <p>Cadastre as colhedoras de cada frente. O layout é salvo separadamente para a unidade selecionada.</p>
+        </div>
+        <button class="modal-close" type="button" data-close-modal="return-layout-modal" aria-label="Fechar">×</button>
+      </header>
+
+      <div class="return-layout-modal-body">
+        <div class="return-layout-modal-toolbar">
+          <label class="return-field return-layout-unit-field">
+            <span>Unidade</span>
+            <select id="return-layout-unit"></select>
+          </label>
+          <div class="return-layout-modal-toolbar-actions">
+            <button id="return-add-front" class="section-action" type="button">Adicionar frente</button>
+          </div>
+        </div>
+
+        <div id="return-layout-status" class="excel-report-status" aria-live="polite"></div>
+        <div id="return-layout-list" class="return-layout-list return-layout-modal-list" aria-live="polite"></div>
+      </div>
+
+      <footer class="modal-footer return-layout-modal-footer">
+        <div class="wizard-footer-info">
+          <strong id="return-layout-unit-title">Layout por unidade</strong>
+          <p id="return-layout-unit-hint">As alterações são salvas somente na unidade selecionada.</p>
+        </div>
+        <div class="modal-footer-actions">
+          <button class="modal-button secondary" type="button" data-close-modal="return-layout-modal">Cancelar</button>
+          <button id="return-save-layouts" class="modal-button save" type="button">Salvar layouts</button>
+        </div>
+      </footer>
+    </section>
+  </div>
 
   <!-- Layout exclusivo para impressão/PDF. No navegador ele permanece oculto. -->
   <div id="excel-detail-modal" class="modal-backdrop" hidden>
@@ -599,6 +719,7 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="/js/app.js?v=20261001-sacarose-secao-v35"></script>
+  <script src="/js/app.js?v=20261005-retornos-v37-layout-modal"></script>
+  <script src="/js/return-analysis.js?v=20261005-retornos-v37-layout-modal"></script>
 </body>
 </html>

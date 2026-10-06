@@ -2461,3 +2461,399 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
   .sector-base-manual-form .modal-button { grid-column: auto; }
   .sector-base-count-wrap span { display: none; }
 }
+
+/* ANÁLISE DE RETORNOS — integrado à Posição de Campo */
+.return-analysis-page { display: none; }
+.return-analysis-page.is-active { display: block; }
+.return-layout-panel,
+.return-report-card {
+  border: 1px solid #dbe7df;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(23, 67, 43, .05);
+}
+.return-layout-panel { margin-bottom: 14px; padding: 14px 16px; }
+.return-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.return-section-heading > div:first-child { min-width: 0; }
+.return-section-heading span {
+  display: block;
+  margin-bottom: 4px;
+  color: #72847a;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.return-section-heading h3 {
+  margin: 0;
+  color: #244234;
+  font-size: 13px;
+}
+.return-section-heading p {
+  margin: 6px 0 0;
+  color: #718078;
+  font-size: 8px;
+  line-height: 1.45;
+}
+.return-layout-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.return-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.return-field > span {
+  color: #51675b;
+  font-size: 8px;
+  font-weight: 800;
+}
+.return-field input,
+.return-field select {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid #cad8cf;
+  border-radius: 4px;
+  background: #fff;
+  color: #29483a;
+  font: inherit;
+  font-size: 9px;
+  outline: none;
+}
+.return-field input:focus,
+.return-field select:focus {
+  border-color: #0b7a36;
+  box-shadow: 0 0 0 3px rgba(11, 122, 54, .08);
+}
+.return-field.compact { min-width: 190px; }
+.return-layout-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+.return-layout-row {
+  display: grid;
+  grid-template-columns: minmax(78px, .45fr) minmax(130px, .8fr) minmax(300px, 2.2fr) auto;
+  gap: 8px;
+  align-items: end;
+  padding: 9px 10px;
+  border: 1px solid #e2ebe5;
+  border-radius: 4px;
+  background: #fbfdfc;
+}
+.return-remove-front {
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid #e8c9cc;
+  border-radius: 4px;
+  background: #fff7f8;
+  color: #a64049;
+  font: inherit;
+  font-size: 8px;
+  font-weight: 800;
+}
+.return-remove-front:hover { border-color: #d89ba2; background: #fff0f2; }
+.return-layout-empty {
+  padding: 14px;
+  border: 1px dashed #cfded4;
+  border-radius: 4px;
+  color: #78877f;
+  font-size: 8px;
+  text-align: center;
+  background: #fbfdfc;
+}
+.return-upload-panel { margin-bottom: 0; }
+.return-analysis-form {
+  display: grid;
+  align-content: center;
+  gap: 9px;
+}
+.return-analysis-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr minmax(105px, .55fr);
+  gap: 8px;
+}
+.return-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.return-report-card { padding: 14px 16px; }
+.return-report-text {
+  margin: 12px 0 0;
+  padding: 13px 14px;
+  border: 1px solid #e0e9e3;
+  border-radius: 4px;
+  background: #f8fbf9;
+  color: #2b4739;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  font-size: 9px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.return-table-section { padding: 14px; }
+.return-table-wrap {
+  margin-top: 10px;
+  overflow: auto;
+  border: 1px solid #e2ebe5;
+  border-radius: 4px;
+}
+.return-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  background: #fff;
+}
+.return-table th {
+  padding: 8px 9px;
+  border-bottom: 1px solid #dfe9e2;
+  background: #f4f8f5;
+  color: #536b5e;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.return-table td {
+  padding: 9px;
+  border-bottom: 1px solid #edf2ef;
+  color: #40574b;
+  font-size: 8px;
+  line-height: 1.45;
+  vertical-align: top;
+}
+.return-table tbody tr:last-child td { border-bottom: 0; }
+.return-table tbody tr:hover td { background: #f8fbf9; }
+.return-table td strong { color: #234536; }
+.return-table-empty { color: #7d8b84 !important; text-align: center; }
+
+@media (max-width: 980px) {
+  .return-section-heading { flex-direction: column; }
+  .return-layout-actions { width: 100%; justify-content: flex-start; }
+  .return-layout-row { grid-template-columns: minmax(80px, .5fr) 1fr; }
+  .return-equipment-field { grid-column: 1 / -1; }
+  .return-analysis-fields { grid-template-columns: 1fr 1fr; }
+  .return-analysis-fields .return-field:last-child { grid-column: 1 / -1; }
+  .return-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 680px) {
+  .return-layout-row { grid-template-columns: 1fr; }
+  .return-equipment-field { grid-column: auto; }
+  .return-layout-actions { display: grid; grid-template-columns: 1fr; }
+  .return-field.compact { min-width: 0; }
+  .return-analysis-fields { grid-template-columns: 1fr; }
+  .return-analysis-fields .return-field:last-child { grid-column: auto; }
+  .return-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .return-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+
+/* CADASTRO DE LAYOUTS — POPUP DO MÓDULO RETORNOS */
+.return-page-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.return-layout-config-button {
+  border-color: #9fc2ac;
+  background: #f6fbf8;
+  color: #1f5b3a;
+}
+.return-layout-config-button:hover {
+  border-color: #6e9f80;
+  background: #edf7f1;
+}
+.return-layout-modal {
+  width: min(980px, calc(100vw - 28px));
+  max-height: calc(100dvh - 28px);
+}
+.return-layout-modal-header {
+  flex: 0 0 auto;
+}
+.return-layout-modal-header > div { min-width: 0; }
+.return-layout-modal-header p {
+  margin: 6px 0 0;
+  color: #718078;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.return-layout-modal-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px 18px;
+  background: #f8fbf9;
+}
+.return-layout-modal-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #dce8e0;
+  border-radius: 4px;
+  background: #fff;
+}
+.return-layout-unit-field { width: min(360px, 100%); }
+.return-layout-modal-toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.return-layout-modal-list {
+  margin-top: 12px;
+}
+.return-layout-modal .return-layout-row {
+  background: #fff;
+}
+.return-layout-modal-footer {
+  flex: 0 0 auto;
+}
+.return-layout-modal .modal-kicker { font-size: 10px; }
+.return-layout-modal .modal-header h2 { font-size: 24px; }
+.return-layout-modal .return-field > span { font-size: 10px; }
+.return-layout-modal .return-field input,
+.return-layout-modal .return-field select { font-size: 11px; }
+.return-layout-modal .return-remove-front,
+.return-layout-modal .return-layout-empty { font-size: 10px; }
+.return-layout-modal .section-action,
+.return-layout-modal .modal-button { font-size: 13px; }
+.return-layout-modal .excel-report-status { font-size: 10px; }
+.return-layout-modal .wizard-footer-info strong { font-size: 11px; }
+.return-layout-modal .wizard-footer-info p { font-size: 10px; }
+
+@media (max-width: 760px) {
+  .return-page-actions { width: 100%; justify-content: stretch; }
+  .return-page-actions .excel-page-back,
+  .return-page-actions .excel-filter-reset { flex: 1; }
+  .return-layout-modal { width: 100%; max-height: calc(100dvh - 20px); }
+  .return-layout-modal-toolbar { align-items: stretch; flex-direction: column; }
+  .return-layout-unit-field { width: 100%; }
+  .return-layout-modal-toolbar-actions,
+  .return-layout-modal-toolbar-actions .section-action { width: 100%; }
+}
+
+/* =========================================================
+   LEGIBILIDADE — SOMENTE MÓDULO RETORNOS
+   Regras escopadas em .return-analysis-page para não alterar
+   nenhuma outra tela do projeto.
+   ========================================================= */
+.return-analysis-page .excel-page-kicker,
+.return-analysis-page .excel-section-heading span {
+  font-size: 10px;
+}
+
+.return-analysis-page .excel-page-header h1 {
+  font-size: clamp(20px, 2vw, 30px);
+}
+
+.return-analysis-page .excel-page-header p,
+.return-analysis-page .excel-section-heading p {
+  font-size: 11px;
+}
+
+.return-analysis-page .excel-page-back,
+.return-analysis-page .excel-filter-reset {
+  font-size: 11px;
+}
+
+.return-analysis-page .excel-upload-copy > strong {
+  font-size: 13px;
+}
+
+.return-analysis-page .excel-upload-copy > p,
+.return-analysis-page .excel-shift-rules span {
+  font-size: 10px;
+}
+
+.return-analysis-page .excel-file-field > span {
+  font-size: 10px;
+}
+
+.return-analysis-page .excel-file-field input {
+  font-size: 11px;
+}
+
+.return-analysis-page .excel-file-field small,
+.return-analysis-page .excel-report-status {
+  font-size: 10px;
+}
+
+.return-analysis-page .excel-report-meta span {
+  font-size: 9px;
+}
+
+.return-analysis-page .excel-report-meta strong {
+  font-size: 11px;
+}
+
+.return-analysis-page .excel-kpi small {
+  font-size: 9px;
+}
+
+.return-analysis-page .excel-kpi strong {
+  font-size: 18px;
+}
+
+.return-analysis-page .excel-kpi span {
+  font-size: 9px;
+}
+
+.return-analysis-page .excel-section-heading h3 {
+  font-size: 15px;
+}
+
+.return-analysis-page .section-action,
+.return-analysis-page .modal-button {
+  font-size: 13px;
+}
+
+.return-analysis-page .return-section-heading span {
+  font-size: 10px;
+}
+
+.return-analysis-page .return-section-heading h3 {
+  font-size: 15px;
+}
+
+.return-analysis-page .return-section-heading p {
+  font-size: 10px;
+}
+
+.return-analysis-page .return-field > span {
+  font-size: 10px;
+}
+
+.return-analysis-page .return-field input,
+.return-analysis-page .return-field select {
+  font-size: 11px;
+}
+
+.return-analysis-page .return-remove-front,
+.return-analysis-page .return-layout-empty {
+  font-size: 10px;
+}
+
+.return-analysis-page .return-report-text {
+  font-size: 11px;
+}
+
+.return-analysis-page .return-table th {
+  font-size: 9px;
+}
+
+.return-analysis-page .return-table td {
+  font-size: 10px;
+}
