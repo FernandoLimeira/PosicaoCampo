@@ -4,7 +4,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 
 from ..config import TEMPLATE_DIR
 
-ASSET_VERSION = "20261006-admin-restrictions-v21"
+ASSET_VERSION = "20261006-ctt-presentation-v22"
 
 environment = Environment(
     loader=FileSystemLoader(str(TEMPLATE_DIR)),

@@ -89,7 +89,8 @@ class PageTests(unittest.TestCase):
         environ.update(overrides or {})
         raw_body = b"".join(self.application(environ, start_response))
         content_type = result["headers"].get("Content-Type", "")
-        result["body"] = raw_body if content_type.startswith("image/") else raw_body.decode("utf-8")
+        binary = content_type.startswith("image/") or content_type == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        result["body"] = raw_body if binary else raw_body.decode("utf-8")
         return result
 
     def test_pages_require_a_session(self):
@@ -98,6 +99,78 @@ class PageTests(unittest.TestCase):
                 response = self.request(path)
                 self.assertEqual(response["status"], 302)
                 self.assertEqual(response["headers"]["Location"], "/login")
+
+    def test_presentation_download_permissions_consistency_and_errors(self):
+        from backend.services.return_presentation import PPTX_MIME, report_digest
+        from tests.test_return_presentation import sample_report
+        report = sample_report()
+        overrides = {"QUERY_STRING": "unit=PPT&front=02&min_gap=1&digest=" + report_digest(report)}
+        self.assertEqual(self.request("/api/return-analysis/presentation", method="POST")["status"], 401)
+        with patch("backend.controllers.application_controller._analyze_return_request", return_value=report) as analyze:
+            rejected = self.request("/api/return-analysis/presentation", method="POST", role="member", overrides={**overrides, "HTTP_ORIGIN": "https://untrusted.invalid"})
+            self.assertEqual(rejected["status"], 403)
+            analyze.assert_not_called()
+            missing = self.request("/api/return-analysis/presentation", method="POST", role="member")
+            self.assertEqual(missing["status"], 400)
+            analyze.assert_not_called()
+            for role in ("member", "admin"):
+                response = self.request("/api/return-analysis/presentation", method="POST", role=role, overrides=overrides)
+                self.assertEqual(response["status"], 200)
+                self.assertEqual(response["headers"]["Content-Type"], PPTX_MIME)
+                self.assertEqual(response["headers"]["Cache-Control"], "no-store")
+                self.assertIn('attachment; filename="analise-mudancas-area-PPT', response["headers"]["Content-Disposition"])
+                self.assertTrue(response["body"].startswith(b"PK"))
+            conflict = self.request("/api/return-analysis/presentation", method="POST", role="member", overrides={"QUERY_STRING": "digest=" + "0" * 64})
+            self.assertEqual(conflict["status"], 409)
+            with patch("backend.controllers.application_controller.generate_return_presentation", side_effect=FileNotFoundError):
+                missing_model = self.request("/api/return-analysis/presentation", method="POST", role="member", overrides=overrides)
+                self.assertEqual(missing_model["status"], 500)
+                self.assertIn("templates/presentations", missing_model["body"])
+        self.assertEqual(self.request("/api/return-analysis/presentation", method="GET", role="member")["status"], 404)
+        page = self.request("/retornos", role="member")["body"]
+        self.assertIn('id="return-generate-presentation"', page)
+        self.assertIn('disabled>Gerar apresentação', page)
+        self.assertGreater(page.index('id="return-generate-presentation"'), page.index('id="return-other-body"'))
+        self.assertEqual(self.request("/templates/presentations/apresentacao_ctt.pptx", role="member")["status"], 404)
+
+    def test_real_upload_analysis_and_presentation_recompute_same_scope(self):
+        from xml.sax.saxutils import escape
+        from zipfile import ZipFile
+        self.db.save_return_analysis_layouts("PST", [{"code": "02", "name": "Frente 02", "equipment": [1001]}], self.admin["id"])
+        data = io.BytesIO()
+        rows = [("DIA", "SETOR", "COLHEDORA"), ("2026-10-01", "101", "1001"),
+                ("2026-10-02", "202", "1001"), ("2026-10-04", "101", "1001")]
+        xml_rows = "".join('<row r="%d">%s</row>' % (number, "".join(
+            f'<c r="{column}{number}" t="inlineStr"><is><t>{escape(value)}</t></is></c>'
+            for column, value in zip("ABC", values))) for number, values in enumerate(rows, 1))
+        with ZipFile(data, "w") as z:
+            z.writestr("xl/workbook.xml", '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Dados" sheetId="1" r:id="rId1"/></sheets></workbook>')
+            z.writestr("xl/_rels/workbook.xml.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>')
+            z.writestr("xl/worksheets/sheet1.xml", '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' + xml_rows + '</sheetData></worksheet>')
+        boundary = "test-presentation-upload"
+        body = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="colheita.xlsx"\r\nContent-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\r\n\r\n'.encode()
+                + data.getvalue() + f'\r\n--{boundary}--\r\n'.encode())
+
+        def upload(route, query):
+            return self.request(route, method="POST", role="member", overrides={
+                "QUERY_STRING": query, "CONTENT_TYPE": "multipart/form-data; boundary=" + boundary,
+                "CONTENT_LENGTH": str(len(body)), "wsgi.input": io.BytesIO(body),
+            })
+        analysis = upload("/api/return-analysis/analyze", "unit=PST&front=02&min_gap=1")
+        self.assertEqual(analysis["status"], 200, analysis["body"])
+        payload = json.loads(analysis["body"])
+        self.assertEqual(payload["report"]["unit"]["code"], "PST")
+        self.assertEqual(payload["report"]["returns_count"], 1)
+        query = "unit=PST&front=02&min_gap=1&digest=" + payload["report_digest"]
+        presentation = upload("/api/return-analysis/presentation", query)
+        self.assertEqual(presentation["status"], 200)
+        self.assertIn("PST-frente-02", presentation["headers"]["Content-Disposition"])
+        self.db.save_return_analysis_layouts("PST", [
+            {"code": "02", "name": "Frente 02", "equipment": [9999]},
+            {"code": "03", "name": "Frente 03", "equipment": [1001]},
+        ], self.admin["id"])
+        changed = upload("/api/return-analysis/presentation", query)
+        self.assertEqual(changed["status"], 409)
 
     def test_pages_share_layout_and_assets_exist(self):
         for path in ("/", "/sacarose", "/setores", "/relatorios", "/retornos", "/historico", "/usuarios", "/usuarios/cadastro", "/emitir-posicao-global"):
@@ -362,7 +435,8 @@ class PageTests(unittest.TestCase):
         self.assertIn('id="emit-global-sacarose"', emission)
         self.assertNotIn('id="operation-form"', emission)
         self.assertNotIn('id="export-unit-image"', self.request('/', role='member')["body"])
-        self.assertNotIn('id="export-sacarose-unit"', self.request('/sacarose', role='member')["body"])
+        # A emissão individual foi adicionada à Sacarose depois da navegação global.
+        self.assertIn('id="export-sacarose-unit"', self.request('/sacarose', role='member')["body"])
 
     def test_auth_api_uses_users_store_and_creates_valid_session(self):
         response = self.request("/api/auth/login", method="POST", body={"name": "TestAdmin", "password": "Test-password-42"})

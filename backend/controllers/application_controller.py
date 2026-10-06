@@ -11,6 +11,7 @@ from ..config import MAX_BODY_BYTES, REMEMBER_SESSION_TTL_SECONDS, SESSION_COOKI
 from ..views.templates import render_template
 from ..services.excel_reports import MAX_EXCEL_UPLOAD_BYTES, analyze_excel_report
 from ..services.return_analysis import MAX_RETURN_UPLOAD_BYTES, analyze_return_file
+from ..services.return_presentation import PPTX_MIME, generate_return_presentation, report_digest
 from ..services.sector_base_import import MAX_SECTOR_BASE_UPLOAD_BYTES, parse_sector_base_excel_details
 from ..models.database import (
     UnitConflictError,
@@ -302,6 +303,26 @@ def _clear_auth_cookie(environ):
     )
 
 
+def _analyze_return_request(environ, query):
+    unit_code = str((query.get("unit") or [""])[0]).strip().upper()
+    front_code = str((query.get("front") or [""])[0]).strip()
+    try:
+        min_gap_days = int((query.get("min_gap") or [1])[0])
+    except (TypeError, ValueError):
+        min_gap_days = 1
+    layouts_payload = list_return_analysis_layouts(unit_code)
+    units_payload = layouts_payload.get("units") or []
+    if not units_payload:
+        raise ValueError("Unidade sem cadastro de layouts para análise.")
+    unit_payload = units_payload[0]
+    filename, file_bytes = _multipart_file(environ, max_file_bytes=MAX_RETURN_UPLOAD_BYTES)
+    return analyze_return_file(
+        file_bytes, filename, unit_payload.get("fronts") or [], front_code,
+        min_gap_days=min_gap_days, unit_code=unit_payload.get("code") or unit_code,
+        unit_name=unit_payload.get("name") or unit_code,
+    )
+
+
 def application(environ, start_response):
     method = environ.get("REQUEST_METHOD", "GET").upper()
     path = environ.get("PATH_INFO", "/")
@@ -567,34 +588,43 @@ def application(environ, start_response):
     if path == "/api/return-analysis/analyze" and method == "POST":
         if not user:
             return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
-        unit_code = str((query.get("unit") or [""])[0]).strip().upper()
-        front_code = str((query.get("front") or [""])[0]).strip()
         try:
-            min_gap_days = int((query.get("min_gap") or [1])[0])
-        except (TypeError, ValueError):
-            min_gap_days = 1
-        try:
-            layouts_payload = list_return_analysis_layouts(unit_code)
-            units_payload = layouts_payload.get("units") or []
-            if not units_payload:
-                raise ValueError("Unidade sem cadastro de layouts para análise.")
-            unit_payload = units_payload[0]
-            filename, file_bytes = _multipart_file(environ, max_file_bytes=MAX_RETURN_UPLOAD_BYTES)
-            report = analyze_return_file(
-                file_bytes,
-                filename,
-                unit_payload.get("fronts") or [],
-                front_code,
-                min_gap_days=min_gap_days,
-                unit_code=unit_payload.get("code") or unit_code,
-                unit_name=unit_payload.get("name") or unit_code,
-            )
-            return _json(start_response, HTTPStatus.OK, {"report": report})
+            report = _analyze_return_request(environ, query)
+            return _json(start_response, HTTPStatus.OK, {"report": report, "report_digest": report_digest(report)})
         except ValueError as exc:
             return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
         except Exception as exc:
             print(f"Erro ao processar análise de retornos: {exc}")
             return _json(start_response, HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "Não foi possível processar a planilha de retornos."})
+
+    if path == "/api/return-analysis/presentation" and method == "POST":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            expected_digest = (query.get("digest") or [""])[0]
+            if not re.fullmatch(r"[0-9a-f]{64}", expected_digest):
+                raise ValueError("Processe a análise antes de gerar a apresentação.")
+            # Reprocessa o mesmo arquivo com os layouts do banco: o cliente não
+            # fornece totais, conclusões ou caminhos de modelo arbitrários.
+            report = _analyze_return_request(environ, query)
+            if report_digest(report) != expected_digest:
+                return _json(start_response, HTTPStatus.CONFLICT, {
+                    "error": "O arquivo ou os layouts mudaram. Processe novamente a análise antes de gerar a apresentação.",
+                })
+            content, filename = generate_return_presentation(report)
+            return _respond(start_response, HTTPStatus.OK, content, [
+                ("Content-Type", PPTX_MIME), ("Cache-Control", "no-store"),
+                ("Content-Disposition", f'attachment; filename="{filename}"'),
+            ])
+        except ValueError as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+        except FileNotFoundError:
+            return _json(start_response, HTTPStatus.INTERNAL_SERVER_ERROR, {
+                "error": "Modelo CTT não encontrado. Publique também a pasta templates/presentations.",
+            })
+        except Exception as exc:
+            print(f"Erro ao gerar apresentação de mudanças de área: {exc}")
+            return _json(start_response, HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "Não foi possível gerar a apresentação."})
 
     if path == "/api/reports/excel/analyze" and method == "POST":
         if not user:

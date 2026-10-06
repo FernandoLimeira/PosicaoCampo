@@ -76,6 +76,10 @@ emissão individual. “Emitir posição global” é uma opção independente q
 uma imagem HD consolidando PPT, NRD, RBR e PST. A saudação, data e relógio ficam
 no rodapé do menu.
 
+A Análise de mudanças de área permite baixar a apresentação da unidade e
+frente processadas pelo botão “Gerar apresentação”, usando o modelo CTT
+fornecido. Consulte [docs/apresentacoes-mudancas-area.md](docs/apresentacoes-mudancas-area.md).
+
 ## Verificação e versionamento
 
 ```powershell
@@ -83,6 +87,7 @@ no rodapé do menu.
 node tests/test_login.js
 node tests/test_reports.js
 node tests/test_users.js
+node tests/test_return_presentation.js
 & '.\.venv\Scripts\python.exe' -m pip check
 ```
 

@@ -464,3 +464,25 @@
 .return-soil-wet-section .excel-section-heading h3 { color: #8a5a18; }
 
 .return-soil-wet-section .return-table-wrap { border-color: #ead8b7; }
+
+.return-presentation-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 24px;
+  padding: 20px;
+  background: #fff;
+  border: 1px solid #dce5df;
+  border-radius: 12px;
+}
+.return-presentation-footer strong { color: #234f3d; font-size: 14px; }
+.return-presentation-footer p { margin: 6px 0 0; color: #5c7065; font-size: 12px; }
+.return-presentation-footer .excel-report-status { flex-basis: 100%; margin: 0; }
+.return-presentation-footer .excel-report-status:empty { display: none; }
+.return-presentation-footer button:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 640px) {
+  .return-presentation-footer > div:first-child,
+  .return-presentation-footer > button { width: 100%; }
+}

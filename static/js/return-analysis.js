@@ -1,6 +1,27 @@
 let returnLayoutsState = { units: [] };
 let returnLastReport = null;
 let returnLayoutsLoading = false;
+let returnLastInput = null;
+let returnAnalysisEpoch = 0;
+let returnAnalysisBusy = false;
+let returnPresentationBusy = false;
+
+function updateReturnPresentationButton() {
+  const button = document.querySelector('#return-generate-presentation');
+  if (button) button.disabled = !returnLastInput || returnAnalysisBusy || returnPresentationBusy;
+  const processButton = document.querySelector('#return-analysis-process');
+  if (processButton) processButton.disabled = returnAnalysisBusy || returnPresentationBusy;
+}
+
+function invalidateReturnAnalysis() {
+  returnAnalysisEpoch += 1;
+  returnLastReport = null;
+  returnLastInput = null;
+  const results = document.querySelector('#return-analysis-results');
+  if (results) results.hidden = true;
+  returnSetStatus('#return-presentation-status', '');
+  updateReturnPresentationButton();
+}
 
 function returnUnitByCode(code) {
   return (returnLayoutsState.units || []).find(unit => unit.code === code) || null;
@@ -178,6 +199,7 @@ async function saveReturnLayouts() {
       method: 'PUT',
       body: JSON.stringify({ fronts }),
     });
+    if (unitCode === getReportUnit()) invalidateReturnAnalysis();
     await loadReturnLayouts(true, unitCode);
     returnSetStatus('#return-layout-status', `Layouts de ${unitCode} salvos no banco da Posição de Campo.`, 'success');
     showToast(`Layouts de ${unitCode} atualizados.`);
@@ -226,8 +248,7 @@ async function loadReturnLayouts(force = false, preferredUnit = '') {
 window.loadReturnLayouts = loadReturnLayouts;
 document.addEventListener('report-unit-change', () => {
   renderReturnUnitSelects();
-  returnLastReport = null;
-  document.querySelector('#return-analysis-results').hidden = true;
+  invalidateReturnAnalysis();
   document.querySelector('#return-analysis-status').textContent = '';
   closeAllModals();
 });
@@ -255,6 +276,7 @@ function updateReturnFileLabel() {
 
 async function processReturnAnalysis(event) {
   event.preventDefault();
+  if (returnAnalysisBusy || returnPresentationBusy) return;
   const unitCode = document.querySelector('#return-analysis-unit')?.value || '';
   const frontCode = document.querySelector('#return-analysis-front')?.value || '';
   const minGap = Math.max(1, Number(document.querySelector('#return-min-gap')?.value || 1));
@@ -269,6 +291,10 @@ async function processReturnAnalysis(event) {
     return;
   }
   const button = document.querySelector('#return-analysis-process');
+  invalidateReturnAnalysis();
+  const epoch = returnAnalysisEpoch;
+  returnAnalysisBusy = true;
+  updateReturnPresentationButton();
   if (button) button.disabled = true;
   returnSetStatus('#return-analysis-status', 'Processando períodos, layouts e retornos...');
   try {
@@ -283,8 +309,10 @@ async function processReturnAnalysis(event) {
       return;
     }
     if (!response.ok) throw new Error(payload.error || 'Não foi possível processar a planilha.');
-    if (getReportUnit() !== unitCode) return;
+    if (getReportUnit() !== unitCode || epoch !== returnAnalysisEpoch) return;
     returnLastReport = payload.report || null;
+    if (!returnLastReport || !payload.report_digest) throw new Error('A análise não retornou os dados para gerar a apresentação.');
+    returnLastInput = { file, unitCode, frontCode, minGap, digest: payload.report_digest };
     renderReturnAnalysisResult(returnLastReport);
     returnSetStatus(
       '#return-analysis-status',
@@ -293,9 +321,71 @@ async function processReturnAnalysis(event) {
     );
   } catch (error) {
     console.error(error);
-    returnSetStatus('#return-analysis-status', error.message || 'Não foi possível processar a planilha.', 'error');
+    if (epoch === returnAnalysisEpoch) returnSetStatus('#return-analysis-status', error.message || 'Não foi possível processar a planilha.', 'error');
   } finally {
+    returnAnalysisBusy = false;
     if (button) button.disabled = false;
+    updateReturnPresentationButton();
+  }
+}
+
+async function generateReturnPresentation() {
+  if (!returnLastInput || returnAnalysisBusy || returnPresentationBusy) return;
+  const snapshot = returnLastInput;
+  const epoch = returnAnalysisEpoch;
+  if (getReportUnit() !== snapshot.unitCode) {
+    invalidateReturnAnalysis();
+    return;
+  }
+  returnPresentationBusy = true;
+  const button = document.querySelector('#return-generate-presentation');
+  if (button) button.textContent = 'Gerando apresentação...';
+  updateReturnPresentationButton();
+  returnSetStatus('#return-presentation-status', 'Preparando o PowerPoint no modelo CTT...');
+  try {
+    const formData = new FormData();
+    formData.append('file', snapshot.file, snapshot.file.name);
+    const query = new URLSearchParams({ unit: snapshot.unitCode, front: snapshot.frontCode, min_gap: String(snapshot.minGap), digest: snapshot.digest });
+    const response = await fetch(`/api/return-analysis/presentation?${query}`, {
+      method: 'POST', credentials: 'same-origin', body: formData,
+    });
+    if (response.status === 401) {
+      window.location.href = '/login';
+      return;
+    }
+    if (!response.ok) {
+      let payload = {};
+      try { payload = await response.json(); } catch (_) { /* Non-JSON gateway errors. */ }
+      throw new Error(payload.error || 'Não foi possível gerar a apresentação.');
+    }
+    const mime = response.headers.get('Content-Type') || '';
+    if (!mime.startsWith('application/vnd.openxmlformats-officedocument.presentationml.presentation')) {
+      throw new Error('O servidor não retornou um arquivo PowerPoint. Tente novamente.');
+    }
+    const blob = await response.blob();
+    if (!blob.size) throw new Error('O servidor retornou uma apresentação vazia.');
+    // Não baixe o relatório anterior se a seleção mudou durante a geração.
+    if (epoch !== returnAnalysisEpoch || returnLastInput !== snapshot) return;
+    const match = (response.headers.get('Content-Disposition') || '').match(/filename="([A-Za-z0-9._-]+\.pptx)"/);
+    const url = URL.createObjectURL(blob);
+    try {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = match?.[1] || 'analise-mudancas-area.pptx';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    returnSetStatus('#return-presentation-status', `Apresentação de ${snapshot.unitCode} / frente ${snapshot.frontCode} gerada.`, 'success');
+    showToast('Apresentação gerada.');
+  } catch (error) {
+    if (epoch === returnAnalysisEpoch) returnSetStatus('#return-presentation-status', error.message || 'Não foi possível gerar a apresentação.', 'error');
+  } finally {
+    returnPresentationBusy = false;
+    if (button) button.textContent = 'Gerar apresentação';
+    updateReturnPresentationButton();
   }
 }
 
@@ -420,7 +510,9 @@ function setupReturnAnalysis() {
     updateReturnLayoutUnitHint();
     returnSetStatus('#return-layout-status', '');
   });
-  document.querySelector('#return-analysis-unit')?.addEventListener('change', renderReturnAnalysisFronts);
+  document.querySelector('#return-analysis-unit')?.addEventListener('change', () => { invalidateReturnAnalysis(); renderReturnAnalysisFronts(); });
+  document.querySelector('#return-analysis-front')?.addEventListener('change', invalidateReturnAnalysis);
+  document.querySelector('#return-min-gap')?.addEventListener('input', invalidateReturnAnalysis);
   document.querySelector('#return-add-front')?.addEventListener('click', () => appendReturnLayoutRow({}));
   document.querySelector('#return-save-layouts')?.addEventListener('click', saveReturnLayouts);
   document.querySelector('#return-layout-list')?.addEventListener('click', event => {
@@ -428,9 +520,11 @@ function setupReturnAnalysis() {
     if (!button) return;
     button.closest('.return-layout-row')?.remove();
   });
-  document.querySelector('#return-analysis-file')?.addEventListener('change', updateReturnFileLabel);
+  document.querySelector('#return-analysis-file')?.addEventListener('change', () => { invalidateReturnAnalysis(); updateReturnFileLabel(); });
   document.querySelector('#return-analysis-form')?.addEventListener('submit', processReturnAnalysis);
   document.querySelector('#return-copy-report')?.addEventListener('click', copyReturnReport);
+  document.querySelector('#return-generate-presentation')?.addEventListener('click', generateReturnPresentation);
+  updateReturnPresentationButton();
 }
 
 setupReturnAnalysis();
