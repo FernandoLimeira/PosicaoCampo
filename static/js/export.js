@@ -1037,6 +1037,21 @@ function drawSacaroseHeaderIcon(ctx, iconImage, x, y, size) {
   ctx.restore();
 }
 
+function drawSacaroseCenteredText(ctx, text, centerX, y, maxWidth, font, color = '#1a2435') {
+  const value = String(text ?? '');
+  ctx.save();
+  ctx.font = font;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const measured = Math.max(1, ctx.measureText(value).width);
+  const scaleX = Math.min(1, maxWidth / measured);
+  ctx.translate(centerX, y);
+  ctx.scale(scaleX, 1);
+  ctx.fillText(value, 0, 0);
+  ctx.restore();
+}
+
 function drawSacaroseExportBackground(ctx, width, height) {
   const bg = ctx.createLinearGradient(0, 0, width, height);
   bg.addColorStop(0, '#edf3ef');
@@ -1124,17 +1139,27 @@ function drawSacaroseExportUnit(ctx, code, rows, x, y, width, iconImage, headerD
   ctx.fillStyle = '#40556b';
   ctx.fillRect(x, colY, width, columnsH);
   ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = 'bold 12px Arial, sans-serif';
-  const colFront = x + 86;
-  const colSection = x + 342;
-  const colSector = x + 590;
-  const colFarm = x + 910;
+  const frontStart = x;
+  const frontEnd = x + 220;
+  const sectionStart = x + 220;
+  const sectionEnd = x + 465;
+  const sectorStart = x + 465;
+  const sectorEnd = x + 705;
+  const farmStart = x + 705;
+  const farmEnd = x + width;
+  const colFront = (frontStart + frontEnd) / 2;
+  const colSection = (sectionStart + sectionEnd) / 2;
+  const colSector = (sectorStart + sectorEnd) / 2;
+  const farmTextX = farmStart + 16;
+
+  ctx.textAlign = 'center';
   ctx.fillText('Frente', colFront, colY + columnsH / 2);
   ctx.fillText('Seção', colSection, colY + columnsH / 2);
   ctx.fillText('Setor', colSector, colY + columnsH / 2);
-  ctx.fillText('Fazenda', colFarm, colY + columnsH / 2);
+  ctx.textAlign = 'left';
+  ctx.fillText('Fazenda', farmTextX, colY + columnsH / 2);
   ctx.restore();
 
   // subtle vertical separators matching the reference layout
@@ -1176,10 +1201,10 @@ function drawSacaroseExportUnit(ctx, code, rows, x, y, width, iconImage, headerD
     ctx.stroke();
     ctx.restore();
 
-    drawFittedText(ctx, item.front || '-', colFront - 32, rowY + rowH / 2, 64, 'bold 18px Arial, sans-serif', '#0d3c28', 'middle');
-    drawFittedText(ctx, item.section || '-', colSection - 54, rowY + rowH / 2, 108, '17px Arial, sans-serif', '#1a2435', 'middle');
-    drawFittedText(ctx, item.sector || '-', colSector - 54, rowY + rowH / 2, 108, '17px Arial, sans-serif', '#1a2435', 'middle');
-    drawWrappedTextFit(ctx, item.description || '-', colFarm - 180, rowY + 8, 360, rowH - 16, {
+    drawSacaroseCenteredText(ctx, item.front || '-', colFront, rowY + rowH / 2, frontEnd - frontStart - 28, 'bold 18px Arial, sans-serif', '#0d3c28');
+    drawSacaroseCenteredText(ctx, item.section || '-', colSection, rowY + rowH / 2, sectionEnd - sectionStart - 28, '17px Arial, sans-serif', '#1a2435');
+    drawSacaroseCenteredText(ctx, item.sector || '-', colSector, rowY + rowH / 2, sectorEnd - sectorStart - 28, '17px Arial, sans-serif', '#1a2435');
+    drawWrappedTextFit(ctx, item.description || '-', farmTextX, rowY + 8, farmEnd - farmTextX - 16, rowH - 16, {
       maxFontSize: 15,
       minFontSize: 10,
       color: '#162234',
