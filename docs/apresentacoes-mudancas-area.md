@@ -17,13 +17,17 @@ os apontamentos de solo úmido também invalida a análise anterior.
   preparados e conferidos com Artifact Tool.
 
 O formato é 16:9, 12192000 × 6858000 EMU. O design, logos, fundos, tema e
-fontes Calibri/Calibri Light seguem o modelo fornecido. O gerador utiliza
-os layouts de três indicadores, tabela, dois blocos e rastros.
-Os outros layouts permanecem disponíveis no modelo, mas não são incluídos
-na apresentação baixada como slides vazios.
+fontes Calibri/Calibri Light seguem o modelo fornecido. A apresentação sempre
+mantém a capa, a abertura de seção, o sumário com os itens a serem discutidos
+e o encerramento do CTT, inclusive quando não há retornos ou rastros selecionados.
+Os layouts adicionais de conteúdo continuam no modelo, sem gerar páginas vazias.
 
-O arquivo é objetivo: um resumo com indicadores, tabelas de até oito retornos
-por slide, um slide de destaques/conferências e os espaços de rastro escolhidos.
+Após a capa, a abertura de seção e o sumário, vêm os indicadores, as tabelas
+de até oito retornos por slide, os destaques/conferências e os espaços de
+rastro escolhidos. O encerramento original do CTT é sempre a última página.
+O sumário acompanha a seleção: sem rastros, apresenta discussão dos resultados;
+sem retornos, informa a ausência de ocorrências, sem prometer uma tabela vazia.
+Somente o conteúdo da análise é compactado; os slides estruturais não são removidos.
 Cada retorno aparece uma vez na tabela, incluindo repetições do mesmo setor,
 com fazenda, data da última colheita, data do retorno e dias fora. Nomes muito
 longos são abreviados apenas no slide; as notas conservam o cadastro integral.

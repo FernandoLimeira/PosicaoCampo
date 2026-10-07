@@ -119,11 +119,27 @@ def _plan(report, trace_indices=None):
     period = f"{_date(report['period']['start'])} a {_date(report['period']['end'])}"
     common = {"footer": f"{scope}    {period}"}
     returns = report.get("returns", [])
+    selected_traces = _trace_indices(report, trace_indices)
     ranked = sorted(returns, key=lambda item: -int(item["days_out"]))
     largest = ranked[0] if ranked else None
     context = (f"Maior intervalo: setor {largest['sector']}, {largest['days_out']} dias fora."
                if largest else "Nenhum retorno real identificado no período.")
-    slides = [(9, {**common,
+    # Compact the analysis, not the structural slides of the supplied CTT deck.
+    # Source layouts 1/2/3/10 remain mandatory even without returns or traces.
+    slides = [
+        (1, {"cover_scope": scope, "cover_title": "Análise de mudanças de área",
+             "cover_period": period, "_notes": report["report"]}),
+        (2, {"section_label": "ANÁLISE OPERACIONAL", "section_title": "Mudanças de área",
+             "section_scope": scope, "section_caption": "Análise da frente",
+             "_notes": f"{scope}\n{period}"}),
+        (3, {"agenda_title": "SUMÁRIO", "agenda_scope": f"Itens a serem discutidos · {scope}",
+             "agenda_item1": "Indicadores da análise",
+             "agenda_item2": "Retornos de setor" if returns else "Retornos: sem ocorrências",
+             "agenda_item3": "Ocupação por outras frentes",
+             "agenda_item4": "Paradas e cadastros",
+             "agenda_item5": "Rastros selecionados" if selected_traces else "Discussão dos resultados",
+             "agenda_context": period, "_notes": report["report"]}),
+        (9, {**common,
         "kpi_title": f"{scope}: mudanças de área",
         "label1": "Retornos de setor", "label2": "Paradas e interrupções", "label3": "Outras frentes",
         "caption1": "Com trabalho em outra área", "caption2": "Solo úmido exige apontamentos", "caption3": "Atribuição por equipamentos",
@@ -181,7 +197,7 @@ def _plan(report, trace_indices=None):
             "sector_reference_issues": issues, "unknown_equipment": unknown,
         }, ensure_ascii=False, indent=2),
     }))
-    for index in _trace_indices(report, trace_indices):
+    for index in selected_traces:
         item = returns[index]
         day = _date(item["return_date"])
         slides.append((11, {**common, "summary_title": f"Rastro de colheita: setor {item['sector']}",
@@ -191,6 +207,8 @@ def _plan(report, trace_indices=None):
             "trace_caption": "Insira a imagem original no PowerPoint. Preserve a legenda, a escala e o período do mapa.",
             "_notes": json.dumps(item, ensure_ascii=False, indent=2),
         }))
+    slides.append((10, {"closing_title": "ENCERRAMENTO", "closing_scope": scope,
+                        "_notes": f"{scope}\n{period}\n\n{report['report']}"}))
     if len(slides) > MAX_PRESENTATION_SLIDES:
         raise ValueError("A apresentação excede 150 slides. Processe uma planilha com período menor.")
     for index, (_, values) in enumerate(slides, 1):

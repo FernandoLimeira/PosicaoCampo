@@ -32,6 +32,51 @@ def sample_report():
 
 
 class ReturnPresentationTests(unittest.TestCase):
+    def test_ctt_structural_slides_always_keep_order_and_original_artwork(self):
+        reference = PRESENTATION_TEMPLATE.with_name("apresentacao_ctt.pptx")
+
+        def picture_signatures(archive, slide):
+            filename = f"ppt/slides/slide{slide}.xml"
+            rels = ET.fromstring(archive.read(f"ppt/slides/_rels/slide{slide}.xml.rels"))
+            targets = {rel.get("Id"): rel.get("Target") for rel in rels}
+            signatures = []
+            for picture in ET.fromstring(archive.read(filename)).findall(".//p:pic", NS):
+                embed = picture.find(".//a:blip", NS).get(f"{{{NS['r']}}}embed")
+                target = targets[embed]
+                path = target.lstrip("/") if target.startswith("/") else posixpath.normpath(posixpath.join("ppt/slides", target))
+                transform = picture.find("p:spPr/a:xfrm", NS)
+                signatures.append((sha256(archive.read(path)).digest(), ET.tostring(transform)))
+            return signatures
+
+        for unit in ("PPT", "NRD", "RBR", "PST"):
+            for no_returns, selected in ((False, None), (False, []), (True, [])):
+                with self.subTest(unit=unit, no_returns=no_returns, selected=selected):
+                    report = sample_report()
+                    report["unit"]["code"] = unit
+                    if no_returns:
+                        report["returns"] = []
+                        report["returns_count"] = report["return_sectors_count"] = 0
+                    content, _ = generate_return_presentation(report, trace_indices=selected)
+                    with ZipFile(BytesIO(content)) as output, ZipFile(reference) as source:
+                        count = len(ET.fromstring(output.read("ppt/presentation.xml")).find("p:sldIdLst", NS))
+                        def slide_text(number):
+                            return "\n".join(t.text or "" for t in ET.fromstring(output.read(f"ppt/slides/slide{number}.xml")).findall(".//a:t", NS))
+                        self.assertIn("Análise de mudanças de área", slide_text(1))
+                        self.assertIn(f"{unit} / Frente 02", slide_text(1))
+                        self.assertIn("ANÁLISE OPERACIONAL", slide_text(2))
+                        self.assertIn("SUMÁRIO", slide_text(3))
+                        self.assertIn("Itens a serem discutidos", slide_text(3))
+                        self.assertIn(f"03 / {count:02d}", slide_text(3))
+                        self.assertIn("ENCERRAMENTO", slide_text(count))
+                        self.assertIn(f"{unit} / Frente 02", slide_text(count))
+                        self.assertIn("Discussão dos resultados" if selected == [] else "Rastros selecionados", slide_text(3))
+                        if no_returns:
+                            self.assertIn("Retornos: sem ocorrências", slide_text(3))
+                        for generated_slide, original_slide in ((1, 1), (2, 2), (3, 3), (count, 10)):
+                            self.assertEqual(picture_signatures(output, generated_slide), picture_signatures(source, original_slide))
+                        for placeholder in ("NOME DA SEÇÃO", "Título da seção", "Descrição breve", "{{", "00 / 00"):
+                            self.assertNotIn(placeholder, package_text(output))
+
     def test_package_matches_report_preserves_art_and_is_editable(self):
         report = sample_report()
         before = sha256(PRESENTATION_TEMPLATE.read_bytes()).digest()
@@ -45,7 +90,7 @@ class ReturnPresentationTests(unittest.TestCase):
             self.assertIn(b'<Types xmlns="', generated.read("[Content_Types].xml"))
             self.assertIn(b'<Relationships xmlns="', generated.read("ppt/_rels/presentation.xml.rels"))
             slide_names = [name for name in generated.namelist() if name.startswith("ppt/slides/slide") and name.endswith(".xml")]
-            self.assertEqual(len(slide_names), 4)
+            self.assertEqual(len(slide_names), 8)
             self.assertEqual(len(slide_names), len(presentation.find("p:sldIdLst", NS)))
             all_text = "\n".join("\n".join(t.text or "" for t in ET.fromstring(generated.read(name)).findall(".//a:t", NS)) for name in slide_names)
             for text in ("PPT / Frente 02", "01/10/2026", "10/10/2026", "04/10/2026", "101", "Retornos de setor", "Destaques e conferências", "interrupções pendentes", "3001", "Inserir rastro do setor 101"):
@@ -76,7 +121,7 @@ class ReturnPresentationTests(unittest.TestCase):
         report["report"] = "\n".join(f"Linha {i}: ocorrência do setor {i}, com acentuação e dados da frente." for i in range(1, 80))
         content, _ = generate_return_presentation(report)
         with ZipFile(BytesIO(content)) as z:
-            self.assertEqual(len(ET.fromstring(z.read("ppt/presentation.xml")).find("p:sldIdLst", NS)), 4)
+            self.assertEqual(len(ET.fromstring(z.read("ppt/presentation.xml")).find("p:sldIdLst", NS)), 8)
             self.assertNotIn("Linha 79", package_text(z))
             self.assertIn(report["report"], package_text(z, "notesSlides"))
 
@@ -91,24 +136,24 @@ class ReturnPresentationTests(unittest.TestCase):
         self.assertEqual(default_trace_indices(report), [13, 12, 11])
         content, _ = generate_return_presentation(report)
         with ZipFile(BytesIO(content)) as archive:
-            self.assertEqual(len(ET.fromstring(archive.read("ppt/presentation.xml")).find("p:sldIdLst", NS)), 7)
-            tables = [ET.fromstring(archive.read(f"ppt/slides/slide{i}.xml")).find(".//a:tbl", NS) for i in (2, 3)]
+            self.assertEqual(len(ET.fromstring(archive.read("ppt/presentation.xml")).find("p:sldIdLst", NS)), 11)
+            tables = [ET.fromstring(archive.read(f"ppt/slides/slide{i}.xml")).find(".//a:tbl", NS) for i in (5, 6)]
             rows = [row for table in tables for row in table.findall("a:tr", NS)[1:]]
             self.assertEqual(len(rows), 14)
             self.assertEqual([row.find("a:tc/a:txBody/a:p/a:r/a:t", NS).text for row in rows],
                              [str(item["sector"]) for item in report["returns"]])
             self.assertIn("…", package_text(archive))
             self.assertIn("Fazenda extensa " * 8, package_text(archive, "notesSlides"))
-            for slide in (5, 6, 7):
+            for slide in (8, 9, 10):
                 root = ET.fromstring(archive.read(f"ppt/slides/slide{slide}.xml"))
                 self.assertIsNotNone(root.find('.//p:ph[@type="pic"]', NS))
                 self.assertIn("04/10/2026", " ".join(t.text or "" for t in root.findall(".//a:t", NS)))
-        for selected, expected in (([], 4), ([0], 5), ([2, 0], 6)):
+        for selected, expected in (([], 8), ([0], 9), ([2, 0], 10)):
             content, _ = generate_return_presentation(report, trace_indices=selected)
             with ZipFile(BytesIO(content)) as archive:
                 self.assertEqual(len(ET.fromstring(archive.read("ppt/presentation.xml")).find("p:sldIdLst", NS)), expected)
                 if selected:
-                    first = ET.fromstring(archive.read("ppt/slides/slide5.xml"))
+                    first = ET.fromstring(archive.read("ppt/slides/slide8.xml"))
                     self.assertIn(f"Inserir rastro do setor {report['returns'][selected[0]]['sector']}",
                                   " ".join(t.text or "" for t in first.findall(".//a:t", NS)))
 
@@ -124,7 +169,7 @@ class ReturnPresentationTests(unittest.TestCase):
         ], [{"code": "02", "name": "Frente 02", "equipment": [1001]}], "02", unit_code="PPT", unit_name="Paraguaçu Paulista")
         content, _ = generate_return_presentation(report)
         with ZipFile(BytesIO(content)) as z:
-            self.assertEqual(len(ET.fromstring(z.read("ppt/presentation.xml")).find("p:sldIdLst", NS)), 2)
+            self.assertEqual(len(ET.fromstring(z.read("ppt/presentation.xml")).find("p:sldIdLst", NS)), 6)
         with self.assertRaises(FileNotFoundError):
             generate_return_presentation(report, template_path=PRESENTATION_TEMPLATE.with_name("missing.pptx"))
         with self.assertRaises(ValueError):

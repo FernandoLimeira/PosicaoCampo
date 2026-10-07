@@ -190,7 +190,7 @@ class PageTests(unittest.TestCase):
         report = sample_report()
         query = "unit=PPT&front=02&min_gap=1&digest=" + report_digest(report)
         with patch("backend.controllers.application_controller._analyze_return_request", return_value=report):
-            for value, slides in (("none", 3), ("0", 4)):
+            for value, slides in (("none", 7), ("0", 8)):
                 response = self.request("/api/return-analysis/presentation", method="POST", role="member",
                                         overrides={"QUERY_STRING": query + "&traces=" + value})
                 self.assertEqual(response["status"], 200, response["body"] if response["status"] != 200 else "")

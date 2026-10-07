@@ -78,7 +78,8 @@ no rodapé do menu.
 
 A Análise de mudanças de área permite baixar a apresentação da unidade e
 frente processadas pelo botão “Gerar apresentação”, usando o modelo CTT
-fornecido, em formato compacto com tabelas e espaços de rastro por setor/data.
+fornecido, preservando capa, abertura de seção, sumário e encerramento, com
+tabelas compactas e espaços de rastro por setor/data.
 É possível escolher até seis espaços para inserir as imagens no PowerPoint;
 o relatório completo permanece na página e nas notas da apresentação.
 Consulte [docs/apresentacoes-mudancas-area.md](docs/apresentacoes-mudancas-area.md).
