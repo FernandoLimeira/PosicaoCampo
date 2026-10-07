@@ -275,9 +275,24 @@ class ReturnPresentationTests(unittest.TestCase):
 
     def test_invalid_trace_selection_rejected(self):
         report = sample_report()
-        for selected in ([0, 0], [-1], [999], [True], ["0"], "0", list(range(7))):
+        for selected in ([0, 0], [-1], [999], [True], ["0"], "0"):
             with self.subTest(selected=selected), self.assertRaises(ValueError):
                 generate_return_presentation(report, trace_indices=selected)
+
+    def test_more_than_six_trace_selections_are_allowed(self):
+        report = sample_report()
+        source = report["returns"][0]
+        report["returns"] = [{**source, "sector": index + 1, "days_out": index + 1}
+                             for index in range(8)]
+        report["returns_count"] = 8
+        report["return_sectors_count"] = 8
+        content, _ = generate_return_presentation(report, trace_indices=list(range(8)))
+        with ZipFile(BytesIO(content)) as archive:
+            slide_count = len(ET.fromstring(archive.read("ppt/presentation.xml")).find("p:sldIdLst", NS))
+            self.assertEqual(slide_count, 15)
+            text = package_text(archive)
+            for sector in range(1, 9):
+                self.assertIn(f"Rastros de colheita: setor {sector}", text)
 
     def test_zero_findings_missing_template_and_slide_limit(self):
         report = analyze_return_rows([

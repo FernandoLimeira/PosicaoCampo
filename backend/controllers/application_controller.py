@@ -653,8 +653,8 @@ def application(environ, start_response):
             traces = None
             if "traces" in query:
                 requested = query["traces"]
-                if len(requested) != 1 or not re.fullmatch(r"none|\d+(?:,\d+){0,5}", requested[0]):
-                    raise ValueError("Seleção de rastros inválida. Escolha até 6 retornos.")
+                if len(requested) != 1 or not re.fullmatch(r"none|\d+(?:,\d+)*", requested[0]):
+                    raise ValueError("Seleção de rastros inválida.")
                 traces = [] if requested[0] == "none" else [int(index) for index in requested[0].split(",")]
             content, filename = generate_return_presentation(report, trace_indices=traces)
             return _respond(start_response, HTTPStatus.OK, content, [

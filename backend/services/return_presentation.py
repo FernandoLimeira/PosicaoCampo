@@ -124,7 +124,6 @@ def _text(value):
 
 
 TABLE_ROWS = 8
-MAX_TRACE_PLACEHOLDERS = 6
 
 
 def default_trace_indices(report):
@@ -144,8 +143,8 @@ def default_trace_indices(report):
 def _trace_indices(report, selected):
     if selected is None:
         return default_trace_indices(report)
-    if not isinstance(selected, list) or len(selected) > MAX_TRACE_PLACEHOLDERS:
-        raise ValueError("Selecione no máximo 6 espaços de rastro.")
+    if not isinstance(selected, list):
+        raise ValueError("Seleção de rastros inválida.")
     if any(isinstance(index, bool) or not isinstance(index, int)
            or index < 0 or index >= len(report.get("returns", [])) for index in selected):
         raise ValueError("Rastro sem retorno correspondente na análise atual.")

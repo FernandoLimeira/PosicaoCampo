@@ -716,11 +716,6 @@ function changeReturnTraceSelection(event) {
     return;
   }
   if (input.checked && !returnTraceSelection.includes(index)) {
-    if (returnTraceSelection.length >= 6) {
-      input.checked = false;
-      returnSetStatus('#return-presentation-status', 'Escolha no máximo 6 espaços de rastro.', 'error');
-      return;
-    }
     returnTraceSelection.push(index);
   } else if (!input.checked) {
     returnTraceSelection = returnTraceSelection.filter(value => value !== index);

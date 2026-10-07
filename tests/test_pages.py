@@ -197,11 +197,21 @@ class PageTests(unittest.TestCase):
                 with ZipFile(io.BytesIO(response["body"])) as archive:
                     root = ET.fromstring(archive.read("ppt/presentation.xml"))
                     self.assertEqual(len(root.find("{http://schemas.openxmlformats.org/presentationml/2006/main}sldIdLst")), slides)
-            for value in ("-1", "999", "0,0", "true", "0,1,2,3,4,5,6", "0&traces=none"):
+            for value in ("-1", "999", "0,0", "true", "0&traces=none"):
                 with self.subTest(value=value):
                     response = self.request("/api/return-analysis/presentation", method="POST", role="member",
                                             overrides={"QUERY_STRING": query + "&traces=" + value})
                     self.assertEqual(response["status"], 400)
+        many = sample_report()
+        source = many["returns"][0]
+        many["returns"] = [{**source, "sector": index + 1, "days_out": index + 1} for index in range(7)]
+        many["returns_count"] = 7
+        many["return_sectors_count"] = 7
+        many_query = "unit=PPT&front=02&min_gap=1&digest=" + report_digest(many)
+        with patch("backend.controllers.application_controller._analyze_return_request", return_value=many):
+            response = self.request("/api/return-analysis/presentation", method="POST", role="member",
+                                    overrides={"QUERY_STRING": many_query + "&traces=0,1,2,3,4,5,6"})
+            self.assertEqual(response["status"], 200, response["body"] if response["status"] != 200 else "")
         page = self.request("/retornos", role="member")["body"]
         self.assertIn('id="return-trace-options"', page)
         self.assertIn("PowerPoint", page)

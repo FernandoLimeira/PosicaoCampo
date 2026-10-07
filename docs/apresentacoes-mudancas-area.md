@@ -69,8 +69,9 @@ O limite é 150 slides; ao excedê-lo, processe um período menor.
 ## Rastros de colheita
 
 Após processar, escolha no final da página quais retornos receberão um espaço
-de rastro (até seis). Por padrão, são selecionados os três maiores intervalos
-de setores distintos. Desmarque todos para baixar somente o resumo compacto.
+de rastro. Não há limite fixo de retornos selecionados; o limite global de 150
+slides continua protegendo a geração de apresentações excessivamente grandes. Por
+padrão, são selecionados os três maiores intervalos de setores distintos. Desmarque todos para baixar somente o resumo compacto.
 Cada setor selecionado reúne suas passagens em ordem cronológica. O slide
 mostra a **Primeira passagem** e a **Segunda passagem** em dois espaços de
 imagem lado a lado. Quando existe uma terceira passagem, usa três espaços

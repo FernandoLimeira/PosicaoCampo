@@ -82,10 +82,10 @@ async function main() {
     element('#return-trace-list').listeners.change({target: input});
     return input;
   }
-  choose(0, true); choose(1, true); choose(2, true);
-  assert.equal(selected().length, 6);
-  assert.equal(choose(3, true).checked, false);
-  assert(element('#return-presentation-status').textContent.includes('máximo 6'));
+  choose(0, true); choose(1, true); choose(2, true); choose(3, true); choose(4, true);
+  assert.equal(selected().length, 8, 'Permite selecionar mais de 6 retornos');
+  assert.equal(choose(3, true).checked, true);
+  assert.equal(element('#return-presentation-status').textContent, '');
   for (const index of selected()) choose(index, false);
   assert.deepEqual(selected(), []);
   choose(2, true);
