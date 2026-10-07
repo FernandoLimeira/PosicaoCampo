@@ -28,9 +28,35 @@ rastro escolhidos. O encerramento original do CTT é sempre a última página.
 O sumário acompanha a seleção: sem rastros, apresenta discussão dos resultados;
 sem retornos, informa a ausência de ocorrências, sem prometer uma tabela vazia.
 Somente o conteúdo da análise é compactado; os slides estruturais não são removidos.
+O quarto slide reutiliza o layout CTT de dois blocos: retornos de setor e
+presença de outra frente em área já iniciada. Essa presença considera a atuação
+no mesmo setor durante a ausência da frente analisada, não o total genérico
+de períodos de outras frentes. Paradas/interrupções e empates não aparecem
+nesse slide; as evidências completas permanecem no relatório e nas notas.
+O slide **Destaques e conferências** contém somente o tópico **Retornos e
+ocupação**, com os três menores intervalos e evidências de outra frente no
+mesmo setor durante a ausência. O tópico de paradas/qualidade dos dados foi
+removido desse slide, sem remover as evidências das notas.
+Quando a frente informada na base corresponde à frente analisada, mas o
+equipamento pertence ao layout de outra frente, o destaque informa esse
+cruzamento. As notas e o relatório conservam datas, valores originais da
+coluna de frente e equipamentos correspondentes. A comprovação usa somente
+equipamentos da frente que recebeu a atribuição diária, sem incluir frotas
+desconhecidas ou de outra frente por engano. Sem frente informada ou com
+referência ambígua, não presume a frente da entrada de cana. Esses registros
+não comprovam autorização de colheita nem conclusão da área.
 Cada retorno aparece uma vez na tabela, incluindo repetições do mesmo setor,
 com fazenda, data da última colheita, data do retorno e dias fora. Nomes muito
 longos são abreviados apenas no slide; as notas conservam o cadastro integral.
+Como evidência extra, a coluna **Talhões no retorno** informa se a frente
+trabalhou somente talhões da sua última permanência, talhões diferentes ou
+talhões em comum e diferentes. A comparação considera os registros da frente
+selecionada nos dois períodos do mesmo setor, respeitando a atribuição diária.
+Não usa talhões de outra frente para comprovar a recorrência da frente analisada.
+Sem a coluna TALHÃO, mostra “Não informado”; com registros incompletos, mostra
+“Dados parciais”, sem concluir que os talhões eram diferentes. As listas
+completas, os talhões em comum e os períodos comparados ficam no relatório
+e nas notas. Essa informação não altera a regra nem a quantidade de retornos.
 O relatório completo continua na página e nas notas do apresentador. Os detalhes
 dos retornos, interrupções e evidências de solo úmido também ficam nas notas.
 Assim não se criam dezenas de slides de texto ou de continuação.
@@ -45,9 +71,19 @@ O limite é 150 slides; ao excedê-lo, processe um período menor.
 Após processar, escolha no final da página quais retornos receberão um espaço
 de rastro (até seis). Por padrão, são selecionados os três maiores intervalos
 de setores distintos. Desmarque todos para baixar somente o resumo compacto.
-Cada espaço mostra setor, fazenda, última colheita e data do retorno, com a
-instrução “Inserir rastro do setor … em … aqui”. A data sugerida é a do retorno
-selecionado, não uma data extraída ou presumida de uma imagem.
+Cada setor selecionado reúne suas passagens em ordem cronológica. O slide
+mostra a **Primeira passagem** e a **Segunda passagem** em dois espaços de
+imagem lado a lado. Quando existe uma terceira passagem, usa três espaços
+lado a lado. Cada imagem tem o período correspondente e a instrução para
+inserir o rastro daquele setor e passagem. Selecionar mais de um retorno do
+mesmo setor não duplica a comparação. Havendo mais de três passagens, gera
+continuações com até três imagens por slide; uma passagem isolada compara
+com a passagem anterior. Todas as passagens identificadas do setor escolhido
+aparecem, independentemente de qual retorno desse setor foi selecionado.
+A primeira passagem é a primeira encontrada no histórico importado, não
+uma afirmação sobre o início da safra. Retornos reais separam as passagens;
+interrupções sem trabalho em outro setor não criam novas passagens. Os
+períodos vêm dos registros da frente analisada, não de imagens presumidas.
 
 Insira a imagem original no PowerPoint, no espaço de imagem do slide, mantendo
 a proporção, legenda, escala e período do mapa. A instrução é editável caso o
@@ -81,6 +117,14 @@ ou backups. Modelos ficam fora dos diretórios estáticos públicos.
 Não há nova dependência em `requirements.txt`: o preenchimento e a montagem
 do pacote usam apenas a biblioteca padrão Python. Não exige Node, PowerPoint,
 LibreOffice ou um serviço externo no PythonAnywhere.
+
+O modelo e o preenchimento não usam `horzOverflow="wrap"`, que é inválido
+no OOXML e fazia o PowerPoint pedir reparo. O gerador também normaliza esse
+valor em modelos antigos, preservando a quebra de texto em `bodyPr.wrap`.
+Antes do download, verifica XML, referências internas, identificadores
+duplicados e valores de overflow. Uma inconsistência detectada bloqueia a
+exportação, em vez de entregar um arquivo estruturalmente inválido. Esse
+controle não substitui a validação completa de esquema pelo SDK Microsoft.
 
 Publique **também `templates/presentations/`**, junto do serviço, controller,
 template HTML, CSS e JavaScript atualizados, e recarregue a aplicação Web.

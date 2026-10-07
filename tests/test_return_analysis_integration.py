@@ -168,8 +168,9 @@ class ReturnAnalysisIntegrationTests(unittest.TestCase):
             notes = "\n".join(t.text or "" for name in archive.namelist()
                               if name.startswith("ppt/notesSlides/notesSlide") and name.endswith(".xml")
                               for t in ET.fromstring(archive.read(name)).findall(".//a:t", NS))
-        self.assertIn("1 solo úmido confirmado", text)
-        self.assertIn("0 interrupções pendentes", text)
+        self.assertNotIn("Paradas e qualidade dos dados", text)
+        self.assertIn('"confirmed_soil_wet": [', notes)
+        self.assertIn('"possible_soil_wet": []', notes)
         for expected in ('"majority_required": 2', '"fleet_size": 3', '"days_with_majority": 2',
                          '"dominant_sector": 71', '"farm": "Fazenda A"', '"section": "10"', '1001', '1002'):
             self.assertIn(expected, notes)

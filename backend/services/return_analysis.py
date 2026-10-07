@@ -54,6 +54,22 @@ def _norm(value: Any) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _source_front_code(value: Any, fronts: list[dict[str, Any]], unit_code: str = "") -> str | None:
+    """Resolve only an explicit source front, without guessing from arbitrary digits."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    matches = {front["code"] for front in fronts if _norm(text) in
+               {_norm(front["name"]), _norm(front["code"])}}
+    numeric_text = re.sub(r"^" + re.escape(unit_code) + r"\s+(?=frente\b)", "", text,
+                          flags=re.IGNORECASE) if unit_code else text
+    numeric = re.fullmatch(r"(?:frente\s*)?(\d+)(?:[.,]0+)?", numeric_text, re.IGNORECASE)
+    if numeric:
+        matches.update(front["code"] for front in fronts
+                       if front["code"].isdigit() and int(front["code"]) == int(numeric.group(1)))
+    return next(iter(matches)) if len(matches) == 1 else None
+
+
 def _normalize_number(value: Any, *, integer: bool = False) -> int | float | None:
     if value is None or value == "":
         return None
@@ -452,6 +468,10 @@ def _aggregate_sector_coverage(
         count_entry = next((item for item in assignment["counts"] if item["code"] == code), None)
         count = int(count_entry["count"]) if count_entry else 0
         fleets = set(count_entry["equipment"] if count_entry else [])
+        credited = [{"date": _iso(operation_date), "source_front": item["source_front"],
+                     "equipment": sorted(fleets.intersection(item["equipment"]))}
+                    for item in assignment.get("source_front_evidence", [])
+                    if item["code"] == target_front_code and fleets.intersection(item["equipment"])]
 
         if (
             current
@@ -464,6 +484,7 @@ def _aggregate_sector_coverage(
             current["min_count"] = min(current["min_count"], count)
             current["max_count"] = max(current["max_count"], count)
             current["equipment_set"].update(fleets)
+            current["credited_target_evidence"].extend(credited)
             continue
 
         if current:
@@ -480,6 +501,7 @@ def _aggregate_sector_coverage(
             "min_count": count,
             "max_count": count,
             "equipment_set": set(fleets),
+            "credited_target_evidence": credited,
             "_end_date": operation_date,
         }
 
@@ -502,7 +524,17 @@ def _coverage_report_text(entries: list[dict[str, Any]]) -> str:
             else f"{item['min_count']} colhedoras" if item["min_count"] == item["max_count"]
             else f"entre {item['min_count']} e {item['max_count']} colhedoras"
         )
-        parts.append(f"{item['front']} em {period} ({count_text})")
+        detail = f"{item['front']} em {period} ({count_text})"
+        credited = item.get("credited_target_evidence", [])
+        if credited:
+            records = _join_pt([
+                f"{date.fromisoformat(entry['date']).strftime('%d/%m/%Y')}: frente informada "
+                f"{entry['source_front']}, equipamentos {', '.join(str(fleet) for fleet in entry['equipment'])}"
+                for entry in credited
+            ])
+            detail += f" [entrada registrada para a frente analisada com equipamentos de {item['front']} "
+            detail += f"conforme layout: {records}. Não comprova autorização nem conclusão da área]"
+        parts.append(detail)
     return _join_pt(parts)
 
 
@@ -624,6 +656,39 @@ def _soil_wet_evidence(
     }
 
 
+def _return_field_evidence(previous: dict[str, Any], returned: dict[str, Any]) -> dict[str, Any]:
+    """Informação extra, sem interferir na identificação de retornos de setor."""
+    before = set(previous["fields"])
+    after = set(returned["fields"])
+    common = before & after
+    complete = previous["fields_complete"] and returned["fields_complete"]
+    if not complete:
+        status = "incomplete" if before or after else "unavailable"
+    elif after.issubset(before):
+        status = "same"
+    elif common:
+        status = "mixed"
+    else:
+        status = "different"
+    return {"status": status, "previous_fields": sorted(before), "return_fields": sorted(after),
+            "common_fields": sorted(common), "new_fields": sorted(after - before),
+            "previous_complete": previous["fields_complete"], "return_complete": returned["fields_complete"],
+            "previous_start": previous["start"], "previous_end": previous["end"],
+            "return_start": returned["start"], "return_end": returned["end"]}
+
+
+def _field_evidence_text(evidence: dict[str, Any]) -> str:
+    descriptions = {"same": "os mesmos talhões", "different": "talhões diferentes",
+                    "mixed": "talhões em comum e diferentes", "incomplete": "dados de talhões parciais",
+                    "unavailable": "talhões não informados"}
+    before = _join_pt(evidence["previous_fields"]) or "não informados"
+    after = _join_pt(evidence["return_fields"]) or "não informados"
+    return (f" Talhões na última permanência: {before}; no retorno: {after}. "
+            f"Comparação: {descriptions[evidence['status']]}."
+            + (f" Talhões em comum comprovados: {_join_pt(evidence['common_fields'])}."
+               if evidence["status"] == "incomplete" and evidence["common_fields"] else ""))
+
+
 def analyze_return_rows(
     rows: list[dict[str, Any]],
     layouts: list[dict[str, Any]],
@@ -668,16 +733,40 @@ def analyze_return_rows(
     day_sector: dict[tuple[int, date], dict[str, Any]] = {}
     for row in rows:
         key = (row["sector"], row["date"])
-        aggregate = day_sector.setdefault(key, {"equipment": set(), "tons": 0.0, "loads": 0.0})
+        aggregate = day_sector.setdefault(key, {"equipment": set(), "tons": 0.0, "loads": 0.0,
+                                               "source_fronts": defaultdict(set)})
         aggregate["equipment"].add(row["equipment"])
         aggregate["tons"] += float(row.get("tons") or 0)
         aggregate["loads"] += float(row.get("loads") or 0)
+        source = str(row.get("source_front") or "").strip()
+        if source:
+            aggregate["source_fronts"][source].add(row["equipment"])
 
     day_assignments: dict[tuple[int, date], dict[str, Any]] = {}
     for key, aggregate in day_sector.items():
         day_assignments[key] = _assign_equipment_to_front(
             aggregate["equipment"], equipment_owner, fronts_by_code
         )
+        day_assignments[key]["source_front_evidence"] = [
+            {"source_front": source, "code": _source_front_code(source, fronts, unit_code),
+             "equipment": sorted(fleets)}
+            for source, fleets in sorted(aggregate["source_fronts"].items())
+        ]
+
+    # Only equipment of the selected front, on days assigned to that front.
+    # An unknown field prevents inferring that the complete sets are disjoint.
+    target_equipment = set(target["equipment"])
+    target_fields_by_day: dict[tuple[int, date], dict[str, Any]] = {}
+    for row in rows:
+        key = (row["sector"], row["date"])
+        if row["equipment"] not in target_equipment or day_assignments[key]["assigned_front_code"] != normalized_target:
+            continue
+        evidence = target_fields_by_day.setdefault(key, {"fields": set(), "missing": False})
+        field = _normalize_number(row.get("field"), integer=True)
+        if field is None or field <= 0:
+            evidence["missing"] = True
+        else:
+            evidence["fields"].add(int(field))
 
     sector_dates: dict[int, list[date]] = defaultdict(list)
     for sector, operation_date in day_sector:
@@ -751,8 +840,14 @@ def analyze_return_rows(
         for block in blocks:
             first_assignment = day_assignments[(sector, block[0])]
             equipment: set[int] = set()
+            fields: set[int] = set()
+            fields_complete = True
             for operation_date in block:
                 equipment.update(day_assignments[(sector, operation_date)]["equipment"])
+                evidence = target_fields_by_day.get((sector, operation_date))
+                fields_complete = fields_complete and bool(evidence and evidence["fields"] and not evidence["missing"])
+                if evidence:
+                    fields.update(evidence["fields"])
             period = {
                 "sector": sector,
                 "sector_reference": _resolve_sector_reference(sector, sector_reference_index),
@@ -763,6 +858,8 @@ def analyze_return_rows(
                 "assigned_front": target["name"],
                 "counts": first_assignment["counts"],
                 "equipment": sorted(equipment),
+                "fields": sorted(fields),
+                "fields_complete": fields_complete,
             }
             target_by_sector[sector].append(period)
             target_activity_periods.append(period)
@@ -810,6 +907,7 @@ def analyze_return_rows(
                 "ties_in_sector": ties_in_sector,
                 "return_counts": returned["counts"],
                 "return_equipment": returned["equipment"],
+                "field_evidence": _return_field_evidence(previous, returned),
             }
             # Só existe retorno real quando há evidência de que a frente trabalhou
             # em outro setor durante o intervalo. Sem qualquer atividade da frente
@@ -868,7 +966,7 @@ def analyze_return_rows(
         report_lines.append(
             f"{line_number}. No retorno ao setor {item['sector']}{sector_suffix}, a {target['name']} ficou "
             f"{item['days_out']} {'dia' if item['days_out'] == 1 else 'dias'} fora e, nesse intervalo, "
-            f"trabalhou {location_text}.{sector_activity}"
+            f"trabalhou {location_text}.{sector_activity}{_field_evidence_text(item['field_evidence'])}"
         )
         line_number += 1
 
@@ -986,6 +1084,7 @@ def analyze_return_rows(
         "other_front_periods": other_front_periods,
         "tie_periods": tie_periods,
         "periods": periods,
+        "target_activity_periods": target_activity_periods,
         "report": "\n".join(report_lines),
     }
 

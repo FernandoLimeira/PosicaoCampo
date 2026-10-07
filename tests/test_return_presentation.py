@@ -10,6 +10,7 @@ from zipfile import ZipFile
 from backend.services.return_analysis import analyze_return_rows
 from backend.services.return_presentation import generate_return_presentation, report_digest, PRESENTATION_TEMPLATE, NS
 from backend.services.return_presentation import default_trace_indices
+from backend.services.return_presentation import _fill_slide, _validate_presentation_package
 
 
 def package_text(archive, directory="slides"):
@@ -32,6 +33,119 @@ def sample_report():
 
 
 class ReturnPresentationTests(unittest.TestCase):
+    def test_legacy_wrap_is_normalized_without_changing_valid_overflow(self):
+        source = f'<p:sld xmlns:p="{NS["p"]}" xmlns:a="{NS["a"]}"><p:cSld><a:tc>' \
+                 '<a:txBody><a:bodyPr/><a:p/></a:txBody><a:tcPr horzOverflow="wrap"/>' \
+                 '</a:tc><a:bodyPr horzOverflow="wrap"/><a:bodyPr horzOverflow="clip"/></p:cSld></p:sld>'
+        root = ET.fromstring(_fill_slide(source.encode(), {}))
+        self.assertIsNone(root.find('.//a:tcPr', NS).get('horzOverflow'))
+        self.assertEqual(root.find('.//a:tc/a:txBody/a:bodyPr', NS).get('wrap'), 'square')
+        self.assertEqual([body.get('horzOverflow') for body in root.findall('.//a:bodyPr', NS)], [None, None, 'clip'])
+        with self.assertRaisesRegex(RuntimeError, 'configuração de texto inválida'):
+            _fill_slide(source.replace('horzOverflow="wrap"', 'horzOverflow="invalid"').encode(), {})
+
+    def test_download_guard_rejects_invalid_overflow_missing_parts_and_duplicate_objects(self):
+        content, _ = generate_return_presentation(sample_report())
+        _validate_presentation_package(content)
+        for defect in ('overflow', 'missing', 'duplicate'):
+            with self.subTest(defect=defect):
+                output = BytesIO()
+                with ZipFile(BytesIO(content)) as source, ZipFile(output, 'w') as target:
+                    for name in source.namelist():
+                        if defect == 'missing' and name.startswith('ppt/media/'):
+                            continue
+                        data = source.read(name)
+                        if name == 'ppt/slides/slide5.xml':
+                            root = ET.fromstring(data)
+                            if defect == 'overflow':
+                                root.find('.//a:tcPr', NS).set('horzOverflow', 'wrap')
+                            elif defect == 'duplicate':
+                                shapes = root.findall('.//p:cNvPr', NS)
+                                shapes[1].set('id', shapes[0].get('id'))
+                            data = ET.tostring(root)
+                        target.writestr(name, data)
+                with self.assertRaises(RuntimeError):
+                    _validate_presentation_package(output.getvalue())
+
+    def test_shipped_template_and_generated_tables_have_only_supported_overflow(self):
+        content, _ = generate_return_presentation(sample_report())
+        for source in (PRESENTATION_TEMPLATE, BytesIO(content)):
+            with ZipFile(source) as archive:
+                for name in archive.namelist():
+                    if not name.endswith('.xml'):
+                        continue
+                    root = ET.fromstring(archive.read(name))
+                    for element in root.iter():
+                        if 'horzOverflow' in element.attrib:
+                            self.assertIn(element.get('horzOverflow'), {'clip', 'overflow'}, name)
+
+    def test_trace_passages_are_side_by_side_and_same_sector_is_not_duplicated(self):
+        rows = [{"date": date(2026, 10, day), "sector": sector, "equipment": 1001}
+                for day, sector in [(1, 101), (2, 202), (3, 101), (4, 202), (5, 101)]]
+        report = analyze_return_rows(rows, [{"code": "02", "name": "Frente 02", "equipment": [1001]}],
+                                    "02", unit_code="PPT", unit_name="Paraguaçu Paulista")
+        selected = [index for index, item in enumerate(report["returns"]) if item["sector"] == 101]
+        content, _ = generate_return_presentation(report, trace_indices=selected)
+        with ZipFile(BytesIO(content)) as archive:
+            root = ET.fromstring(archive.read("ppt/slides/slide7.xml"))
+            text = "\n".join(t.text or "" for t in root.findall(".//a:t", NS))
+            for label in ("Primeira passagem", "Segunda passagem", "Terceira passagem",
+                          "01/10/2026", "03/10/2026", "05/10/2026"):
+                self.assertIn(label, text)
+            pictures = [shape for shape in root.findall('.//p:sp', NS)
+                        if shape.find('p:nvSpPr/p:nvPr/p:ph', NS) is not None
+                        and shape.find('p:nvSpPr/p:nvPr/p:ph', NS).get('type') == 'pic']
+            self.assertEqual(len(pictures), 3)
+            positions = [shape.find('p:spPr/a:xfrm/a:off', NS).attrib for shape in pictures]
+            self.assertEqual(len({position['y'] for position in positions}), 1)
+            self.assertEqual(len({position['x'] for position in positions}), 3)
+            self.assertEqual(len(ET.fromstring(archive.read("ppt/presentation.xml")).find("p:sldIdLst", NS)), 8)
+
+    def test_highlights_crosses_source_front_and_layout_without_claiming_completion(self):
+        rows = [{"date": date(2026, 10, day), "sector": sector, "equipment": fleet,
+                 "source_front": source}
+                for day, sector, fleet, source in [(1, 101, 1001, "02"), (2, 202, 1001, "02"),
+                    (2, 101, 5001, "PPT FRENTE 02"), (3, 101, 5001, "05"), (4, 101, 1001, "02")]]
+        report = analyze_return_rows(rows, [
+            {"code": "02", "name": "Frente 02", "equipment": [1001]},
+            {"code": "05", "name": "Frente 05", "equipment": [5001]},
+        ], "02", unit_code="PPT", unit_name="Paraguaçu Paulista")
+        evidence = report["returns"][0]["other_fronts_in_sector"][0]["credited_target_evidence"]
+        self.assertEqual(evidence, [{"date": "2026-10-02", "source_front": "PPT FRENTE 02", "equipment": [5001]}])
+        content, _ = generate_return_presentation(report, trace_indices=[])
+        with ZipFile(BytesIO(content)) as archive:
+            root = ET.fromstring(archive.read("ppt/slides/slide6.xml"))
+            text = "\n".join(t.text or "" for t in root.findall(".//a:t", NS))
+            self.assertIn("Menores intervalos", text)
+            self.assertIn("Entrada registrada para Frente 02, com equipamentos de Frente 05.", text)
+            self.assertIn("5001", text)
+            self.assertNotIn("Paradas e qualidade dos dados", text)
+            self.assertNotIn("ctt:detail_right", archive.read("ppt/slides/slide6.xml").decode())
+
+    def test_overview_uses_two_topics_and_only_same_sector_coverage(self):
+        report = sample_report()
+        report["ties_count"] = 3
+        report["other_front_periods_count"] = 99
+        for with_coverage in (False, True):
+            report["returns"][0]["other_fronts_in_sector"] = ([{
+                "front": "Frente 05", "start": "2026-10-02", "end": "2026-10-03",
+            }] if with_coverage else [])
+            content, _ = generate_return_presentation(report)
+            with ZipFile(BytesIO(content)) as archive:
+                root = ET.fromstring(archive.read("ppt/slides/slide4.xml"))
+                text = "\n".join(t.text or "" for t in root.findall(".//a:t", NS))
+                self.assertIn("Retornos de setor", text)
+                self.assertIn("Outra frente em área já iniciada", text)
+                for removed in ("Paradas e interrupções", "empates", "99 períodos"):
+                    self.assertNotIn(removed, text)
+                if with_coverage:
+                    self.assertIn("1 setor já iniciado recebeu", text)
+                    self.assertIn("Setor 101: Frente 05", text)
+                    self.assertIn("02/10/2026", text)
+                    self.assertIn("03/10/2026", text)
+                else:
+                    self.assertIn("Nenhuma outra frente identificada", text)
+
     def test_ctt_structural_slides_always_keep_order_and_original_artwork(self):
         reference = PRESENTATION_TEMPLATE.with_name("apresentacao_ctt.pptx")
 
@@ -61,8 +175,9 @@ class ReturnPresentationTests(unittest.TestCase):
                         count = len(ET.fromstring(output.read("ppt/presentation.xml")).find("p:sldIdLst", NS))
                         def slide_text(number):
                             return "\n".join(t.text or "" for t in ET.fromstring(output.read(f"ppt/slides/slide{number}.xml")).findall(".//a:t", NS))
-                        self.assertIn("Análise de mudanças de área", slide_text(1))
-                        self.assertIn(f"{unit} / Frente 02", slide_text(1))
+                        self.assertIn("Análise de Recorrência de Setores", slide_text(1))
+                        self.assertIn("Retornos da frente aos setores após atuação em outras áreas.", slide_text(1))
+                        self.assertIn(f"Unidade {report['unit']['name'].title()}", slide_text(1))
                         self.assertIn("ANÁLISE OPERACIONAL", slide_text(2))
                         self.assertIn("SUMÁRIO", slide_text(3))
                         self.assertIn("Itens a serem discutidos", slide_text(3))
@@ -93,13 +208,14 @@ class ReturnPresentationTests(unittest.TestCase):
             self.assertEqual(len(slide_names), 8)
             self.assertEqual(len(slide_names), len(presentation.find("p:sldIdLst", NS)))
             all_text = "\n".join("\n".join(t.text or "" for t in ET.fromstring(generated.read(name)).findall(".//a:t", NS)) for name in slide_names)
-            for text in ("PPT / Frente 02", "01/10/2026", "10/10/2026", "04/10/2026", "101", "Retornos de setor", "Destaques e conferências", "interrupções pendentes", "3001", "Inserir rastro do setor 101"):
+            for text in ("PPT / Frente 02", "01/10/2026", "10/10/2026", "04/10/2026", "101", "Retornos de setor", "Destaques e conferências", "Menores intervalos", "Inserir rastro do setor 101"):
                 self.assertIn(text, all_text)
             self.assertNotIn("{{", all_text)
             self.assertNotIn("Título do slide", all_text)
             self.assertNotIn("Descrição do bloco", all_text)
             self.assertNotIn("NRD", all_text)
             self.assertIn(report["report"], package_text(generated, "notesSlides"))
+            self.assertIn("3001", package_text(generated, "notesSlides"))
             for name in template.namelist():
                 if name.startswith(("ppt/media/", "ppt/theme/", "ppt/slideMasters/", "ppt/slideLayouts/")):
                     self.assertEqual(generated.read(name), template.read(name), name)
