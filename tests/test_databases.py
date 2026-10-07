@@ -105,13 +105,42 @@ class DatabaseTests(unittest.TestCase):
             db.init_db()
             with storage.connection() as conn:
                 self.assertEqual(storage._metadata(conn, "main")["pair_id"], pair_id)
-                self.assertEqual(storage._metadata(conn, "main")["return_soil_wet_schema_version"], "1")
+                self.assertEqual(storage._metadata(conn, "main")["return_soil_wet_schema_version"], "2")
                 self.assertEqual([tuple(row) for row in conn.execute("SELECT * FROM auth.users")], accounts)
                 self.assertEqual([tuple(row) for row in conn.execute("SELECT * FROM auth.sessions")], sessions)
                 for table, original in snapshots.items():
                     self.assertEqual([tuple(row) for row in conn.execute(f"SELECT * FROM {table}")], original)
                 storage.check_integrity(conn)
         self.assertEqual(db.get_user_by_session(token)["id"], member["id"])
+
+    def test_soil_wet_v1_table_migrates_to_nullable_sector_without_data_loss(self):
+        _, member = self.seed()
+        now = int(time.time())
+        with storage.connection() as conn:
+            conn.execute("DROP TABLE return_analysis_soil_wet")
+            conn.execute("""
+                CREATE TABLE return_analysis_soil_wet (
+                    unit_code TEXT NOT NULL, record_key TEXT NOT NULL, source_front TEXT NOT NULL DEFAULT '',
+                    equipment INTEGER NOT NULL, operation_date TEXT NOT NULL, start_time TEXT NOT NULL,
+                    end_time TEXT NOT NULL, duration_seconds INTEGER NOT NULL DEFAULT 0,
+                    operation_code TEXT NOT NULL DEFAULT '', operation_description TEXT NOT NULL DEFAULT 'SOLO UMIDO',
+                    operation_group TEXT NOT NULL DEFAULT '', sector INTEGER NOT NULL, field INTEGER,
+                    farm TEXT NOT NULL DEFAULT '', import_file TEXT NOT NULL DEFAULT '', updated_by INTEGER,
+                    updated_at INTEGER NOT NULL, PRIMARY KEY (unit_code, record_key)
+                )
+            """)
+            conn.execute("""
+                INSERT INTO return_analysis_soil_wet VALUES
+                ('PPT','legacy','PPT FRENTE 02',1001,'2026-10-02','08:00:00','10:00:00',7200,'','SOLO UMIDO','',71,18,'FAZENDA A','legacy.xlsx',?,?)
+            """, (member["id"], now))
+            conn.execute("INSERT OR REPLACE INTO schema_info(key,value) VALUES ('return_soil_wet_schema_version','1')")
+        db.init_db()
+        with storage.connection() as conn:
+            sector = next(row for row in conn.execute("PRAGMA main.table_info(return_analysis_soil_wet)") if row[1] == "sector")
+            self.assertEqual(sector[3], 0)
+            row = conn.execute("SELECT record_key, sector, farm FROM return_analysis_soil_wet WHERE record_key='legacy'").fetchone()
+            self.assertEqual(tuple(row), ("legacy", 71, "FAZENDA A"))
+            self.assertEqual(storage._metadata(conn, "main")["return_soil_wet_schema_version"], "2")
 
     def test_soil_wet_import_is_unit_scoped_upsert_and_survives_restart(self):
         from tests.test_return_analysis_integration import SOIL_HEADERS, soil_row, xlsx
@@ -120,6 +149,10 @@ class DatabaseTests(unittest.TestCase):
         records = parse_soil_wet_file(xlsx([SOIL_HEADERS, soil_row()]), "soil.xlsx")["records"]
         result = db.import_return_soil_wet_records("PPT", records, member["id"], filename="soil.xlsx")
         self.assertEqual(result["imported"]["inserted"], 1)
+        without_sector = [{**records[0], "record_key": "missing-sector", "sector": None, "farm": "Fazenda A", "field": 18}]
+        missing_result = db.import_return_soil_wet_records("PPT", without_sector, member["id"], filename="soil-sem-setor.xlsx")
+        self.assertEqual(missing_result["imported"]["inserted"], 1)
+        self.assertTrue(any(item["sector"] is None for item in db.list_return_soil_wet_records("PPT")))
         self.assertEqual(db.get_return_soil_wet_summary("PST")["records"], 0)
         repeated = db.import_return_soil_wet_records("PPT", records, member["id"], filename="soil.xlsx")
         self.assertEqual(repeated["imported"]["unchanged"], 1)
@@ -128,12 +161,14 @@ class DatabaseTests(unittest.TestCase):
         updated = db.import_return_soil_wet_records("PPT", records, member["id"], filename="soil.xlsx")
         self.assertEqual(updated["imported"]["updated"], 1)
         db.init_db()
-        self.assertEqual(db.list_return_soil_wet_records("PPT")[0]["duration_seconds"], 10800)
+        stored = db.list_return_soil_wet_records("PPT")
+        sector_record = next(item for item in stored if item["sector"] == 71)
+        self.assertEqual(sector_record["duration_seconds"], 10800)
         db.delete_user(member["id"], admin["id"])
         with storage.connection() as conn:
             self.assertIsNone(conn.execute("SELECT updated_by FROM return_analysis_soil_wet").fetchone()[0])
             storage.check_integrity(conn)
-        self.assertEqual(db.get_return_soil_wet_summary("PPT")["records"], 1)
+        self.assertEqual(db.get_return_soil_wet_summary("PPT")["records"], 2)
 
     def test_soil_wet_import_failure_rolls_back_whole_batch(self):
         from tests.test_return_analysis_integration import SOIL_HEADERS, soil_row, xlsx

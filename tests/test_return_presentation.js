@@ -170,6 +170,17 @@ async function main() {
   assert(element('#return-confirmed-soil-wet-body').innerHTML.includes('Fazenda A'));
   assert(element('#return-confirmed-soil-wet-body').innerHTML.includes('Aguardando no setor 71'));
   assert(!element('#return-confirmed-soil-wet-body').innerHTML.includes('setor próximo'), 'Não presume proximidade sem cadastro geográfico');
+  ctx.renderConfirmedSoilWetRows({confirmed_soil_wet: [{sector: 73, days_out: 2,
+    sector_reference: {status: 'matched', section: '10', farm: 'Fazenda A'},
+    soil_wet_evidence: {fleet_size: 3, majority_required: 2, days_in_gap: 2, days_with_majority: 2,
+      equipment: [1001, 1002], daily: [{total_hours: 4}, {total_hours: 4}], sector_evidence: [],
+      location_evidence: [{sector: null, farm: 'FAZENDA LORENA', field: 18, total_hours: 8}]},
+  }]});
+  assert(element('#return-confirmed-soil-wet-body').innerHTML.includes('Aguardando em FAZENDA LORENA · Talhão 18'));
+  ctx.renderPossibleSoilWetRows({possible_soil_wet: [{sector: 101, days_out: 5, exit_date: '2026-10-01', return_date: '2026-10-07',
+    sector_reference: {status: 'matched', section: '10', farm: 'Fazenda A'}, other_fronts_in_sector: [],
+    soil_wet_evidence: {probable: true}}]});
+  assert(element('#return-soil-wet-body').innerHTML.includes('Solo úmido provável'));
   console.log('OK: apresentação PPTX, arquivo/escopo processado, download, erros, sessão, bloqueio de duplicação e resultados obsoletos.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

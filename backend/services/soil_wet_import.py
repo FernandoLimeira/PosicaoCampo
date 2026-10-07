@@ -36,7 +36,7 @@ def _header_mapping(headers: list[Any]) -> dict[str, int]:
             if normalized_alias in normalized:
                 mapping[key] = normalized[normalized_alias]
                 break
-    required = ("equipment", "date", "start_time", "end_time", "operation", "sector")
+    required = ("equipment", "date", "start_time", "end_time", "operation")
     missing = [key for key in required if key not in mapping]
     if missing:
         labels = {
@@ -45,7 +45,6 @@ def _header_mapping(headers: list[Any]) -> dict[str, int]:
             "start_time": "Hora Inicial",
             "end_time": "Hora Final",
             "operation": "Descrição da Operação",
-            "sector": "Código da Zona/Setor",
         }
         raise ValueError("Colunas obrigatórias não encontradas: " + ", ".join(labels[key] for key in missing) + ".")
     return mapping
@@ -144,12 +143,15 @@ def parse_soil_wet_file(file_bytes: bytes, filename: str) -> dict[str, Any]:
         start_time = _parse_time(value("start_time"))
         end_time = _parse_time(value("end_time"))
         equipment = _normalize_number(value("equipment"))
-        sector = _normalize_number(value("sector"))
+        sector = _normalize_number(value("sector")) if "sector" in mapping else None
         field = _normalize_number(value("field"))
-        if operation_date is None or start_time is None or end_time is None or equipment is None or sector is None:
+        if operation_date is None or start_time is None or end_time is None or equipment is None:
             invalid_rows += 1
             continue
-        if equipment <= 0 or sector <= 0 or not float(equipment).is_integer() or not float(sector).is_integer():
+        if equipment <= 0 or not float(equipment).is_integer():
+            invalid_rows += 1
+            continue
+        if sector is not None and (sector <= 0 or not float(sector).is_integer()):
             invalid_rows += 1
             continue
         if field is not None and (field < 0 or not float(field).is_integer()):
@@ -169,13 +171,15 @@ def parse_soil_wet_file(file_bytes: bytes, filename: str) -> dict[str, Any]:
         operation_group = str(value("operation_group") or "").strip()
         farm = str(value("farm") or "").strip()
         field_value = int(field) if field is not None else None
+        sector_value = int(sector) if sector is not None else None
         key_source = "|".join([
             str(int(equipment)),
             operation_date.isoformat(),
             start_time.strftime("%H:%M:%S"),
             _norm(operation_code or operation),
-            str(int(sector)),
+            "" if sector_value is None else str(sector_value),
             "" if field_value is None else str(field_value),
+            _norm(farm) if sector_value is None else "",
         ])
         record_key = sha256(key_source.encode("utf-8")).hexdigest()
         if record_key in seen_keys:
@@ -192,7 +196,7 @@ def parse_soil_wet_file(file_bytes: bytes, filename: str) -> dict[str, Any]:
             "operation_code": operation_code,
             "operation": operation,
             "operation_group": operation_group,
-            "sector": int(sector),
+            "sector": sector_value,
             "field": field_value,
             "farm": farm,
         })
@@ -204,7 +208,7 @@ def parse_soil_wet_file(file_bytes: bytes, filename: str) -> dict[str, Any]:
     if len(detected_units) > 1:
         raise ValueError("A planilha contém apontamentos de mais de uma unidade: " + ", ".join(sorted(detected_units)) + ".")
 
-    parsed.sort(key=lambda item: (item["date"], item["equipment"], item["start_time"], item["sector"]))
+    parsed.sort(key=lambda item: (item["date"], item["equipment"], item["start_time"], item["sector"] or -1))
     return {
         "records": parsed,
         "detected_unit": next(iter(detected_units), ""),

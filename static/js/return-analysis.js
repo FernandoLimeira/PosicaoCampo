@@ -56,14 +56,28 @@ function returnCountText(counts) {
   return items.length ? items.map(item => `${item.front}: ${item.count}`).join(' · ') : '-';
 }
 
+function returnDailyFrontCountText(daily, frontCode = '') {
+  const rows = Array.isArray(daily) ? daily : [];
+  if (!rows.length) return '';
+  return rows.map(day => {
+    const counts = Array.isArray(day?.counts) ? day.counts : [];
+    const selected = frontCode ? counts.find(entry => String(entry.code) === String(frontCode)) : null;
+    const text = selected
+      ? `${selected.count} colhedora${Number(selected.count) === 1 ? '' : 's'}`
+      : returnCountText(counts);
+    return `${returnFormatDate(day.date)}: ${text}`;
+  }).join(' · ');
+}
+
 function returnSectorCoverageText(items) {
   const entries = Array.isArray(items) ? items : [];
   if (!entries.length) return 'Nenhuma outra frente identificada';
   return entries.map(item => {
     const period = returnFormatPeriod(item.start, item.end);
-    const count = Number(item.min_count) === Number(item.max_count)
+    const daily = returnDailyFrontCountText(item.daily, item.code);
+    const count = daily || (Number(item.min_count) === Number(item.max_count)
       ? `${item.min_count} colhedora${Number(item.min_count) === 1 ? '' : 's'}`
-      : `${item.min_count} a ${item.max_count} colhedoras`;
+      : `${item.min_count} a ${item.max_count} colhedoras`);
     return `${item.front} · ${period} · ${count}`;
   }).join(' | ');
 }
@@ -82,17 +96,24 @@ function returnConfirmedSoilWetHours(item) {
 
 function returnConfirmedSoilWetSectorText(item) {
   const evidence = item?.soil_wet_evidence || {};
-  const sectors = Array.isArray(evidence.sector_evidence) ? evidence.sector_evidence : [];
-  if (!sectors.length) return '-';
+  const locations = Array.isArray(evidence.location_evidence) && evidence.location_evidence.length
+    ? evidence.location_evidence
+    : Array.isArray(evidence.sector_evidence) ? evidence.sector_evidence : [];
+  if (!locations.length) return '-';
   const analyzedSector = String(item?.sector || '').trim();
-  return sectors.slice(0, 3).map(entry => {
-    const waitingSector = String(entry?.sector || '').trim();
+  return locations.slice(0, 3).map(entry => {
+    const waitingSector = entry?.sector == null ? '' : String(entry.sector).trim();
+    const farm = String(entry?.farm || '').trim();
+    const field = entry?.field == null ? '' : String(entry.field).trim();
     const hours = Number(entry?.total_hours || 0);
     const hourText = hours > 0 ? ` · ${hours.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} h` : '';
     if (waitingSector && waitingSector === analyzedSector) {
       return `Aguardando no próprio setor ${waitingSector}${hourText}`;
     }
-    return waitingSector ? `Aguardando no setor ${waitingSector}${hourText}` : '-';
+    if (waitingSector) return `Aguardando no setor ${waitingSector}${hourText}`;
+    const farmLabel = farm ? (/^fazenda\b/i.test(farm) ? farm : `Fazenda ${farm}`) : '';
+    const place = [farmLabel, field ? `Talhão ${field}` : ''].filter(Boolean).join(' · ');
+    return `${place ? `Aguardando em ${place}` : 'Local do apontamento não informado'}${hourText}`;
   }).join(' | ');
 }
 
@@ -612,7 +633,7 @@ function renderPossibleSoilWetRows(report) {
       <td>${escapeHtml(item.days_out)}</td>
       <td>Sem registro da frente em outro setor</td>
       <td>${escapeHtml(returnSectorCoverageText(item.other_fronts_in_sector))}</td>
-      <td><strong>Interrupção sem deslocamento comprovado</strong></td>
+      <td><strong>${escapeHtml(item?.soil_wet_evidence?.probable ? 'Solo úmido provável · verificar' : 'Interrupção sem deslocamento comprovado')}</strong></td>
     </tr>
   `).join('');
 }
@@ -665,7 +686,7 @@ function renderReturnOtherRows(report) {
       <td>${escapeHtml(returnSectorSectionText(item))}</td>
       <td>${escapeHtml(returnSectorFarmText(item))}</td>
       <td>${escapeHtml(item.assigned_front)}</td>
-      <td>${escapeHtml(returnCountText(item.counts))}</td>
+      <td>${escapeHtml(returnDailyFrontCountText(item.daily) || returnCountText(item.counts))}</td>
       <td>${escapeHtml((item.equipment || []).join(', '))}</td>
     </tr>
   `).join('');

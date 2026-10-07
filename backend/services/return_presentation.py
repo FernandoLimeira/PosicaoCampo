@@ -207,6 +207,56 @@ def _compact_lines(text, width=39, max_lines=10):
     return "\n".join(lines)
 
 
+def _coverage_count_text(entry):
+    daily = entry.get("daily") or []
+    if not daily:
+        minimum = int(entry.get("min_count") or 0)
+        maximum = int(entry.get("max_count") or minimum)
+        return (f"{minimum} colhedora" if minimum == maximum == 1
+                else f"{minimum} colhedoras" if minimum == maximum
+                else f"{minimum} a {maximum} colhedoras")
+    parts = []
+    for item in daily:
+        count = int(item.get("count") or 0)
+        parts.append(f"{date.fromisoformat(item['date']):%d/%m}: {count}")
+    return "; ".join(parts)
+
+
+def _period_count_text(item):
+    daily = item.get("daily") or []
+    if not daily:
+        return " / ".join(f"{entry['front']} {entry['count']}" for entry in item.get("counts", [])) or "-"
+    parts = []
+    for day in daily:
+        counts = " / ".join(f"{entry['front']} {entry['count']}" for entry in day.get("counts", [])) or "sem frente"
+        parts.append(f"{date.fromisoformat(day['date']):%d/%m}: {counts}")
+    return "; ".join(parts)
+
+
+def _quality_lines(report):
+    lines = []
+    for item in report.get("sector_reference_issues", []):
+        status = item.get("status")
+        if status == "multiple_sections":
+            sections = ", ".join(item.get("sections") or []) or "seções não informadas"
+            lines.append(f"Setor {item['sector']}: múltiplas seções ({sections}) · Fazenda {item.get('farm') or '-'}")
+        elif status == "ambiguous":
+            lines.append(f"Setor {item['sector']}: cadastro ambíguo · verificar")
+        else:
+            lines.append(f"Setor {item['sector']}: não cadastrado na base de setores/fazendas")
+    for item in report.get("tie_periods", []):
+        lines.append(f"Empate no setor {item['sector']} · {_date(item['start'])} a {_date(item['end'])}")
+    unknown = report.get("unknown_equipment", [])
+    if unknown:
+        lines.append("Equipamentos sem frente cadastrada: " + ", ".join(str(value) for value in unknown))
+    return lines
+
+
+def _chunks(items, size):
+    return [items[index:index + size] for index in range(0, len(items), size)]
+
+
+
 def _plan(report, trace_indices=None):
     unit = report["unit"]["code"]
     front = report["target_front"]["code"]
@@ -214,6 +264,8 @@ def _plan(report, trace_indices=None):
     period = f"{_date(report['period']['start'])} a {_date(report['period']['end'])}"
     common = {"footer": f"{scope}    {period}"}
     returns = report.get("returns", [])
+    interruptions = report.get("possible_soil_wet", [])
+    other_periods = report.get("other_front_periods", [])
     selected_traces = _trace_indices(report, trace_indices)
     ranked = sorted(returns, key=lambda item: int(item["days_out"]))
     smallest = min(returns, key=lambda item: int(item["days_out"])) if returns else None
@@ -222,15 +274,15 @@ def _plan(report, trace_indices=None):
     coverage = [(item, entry) for item in returns for entry in item.get("other_fronts_in_sector", [])]
     covered_sectors = {item["sector"] for item, _ in coverage}
     if coverage:
-        count = len(covered_sectors)
-        presence = [f"{count} " + ("setor já iniciado recebeu" if count == 1 else "setores já iniciados receberam") +
-                    " outra frente durante a ausência."]
-        presence.extend(f"Setor {item['sector']}: {entry['front']}, {_date(entry['start'])} a {_date(entry['end'])}"
-                        for item, entry in coverage[:2])
+        presence = [
+            (f"{len(coverage)} ocorrência de outra frente em {len(covered_sectors)} setor com retorno."
+             if len(coverage) == len(covered_sectors) == 1
+             else f"{len(coverage)} ocorrências de outra frente em {len(covered_sectors)} setores com retorno."),
+            "Todas as ocorrências são detalhadas nas páginas seguintes; nenhuma é cortada por limite fixo.",
+        ]
     else:
-        presence = ["Nenhuma outra frente identificada nos setores já iniciados durante a ausência da frente analisada."]
-    # Compact the analysis, not the structural slides of the supplied CTT deck.
-    # Source layouts 1/2/3/10 remain mandatory even without returns or traces.
+        presence = ["Nenhuma outra frente identificada nos setores com retorno durante a ausência da frente analisada."]
+
     slides = [
         (1, {"cover_scope": f"Unidade {(report['unit'].get('name') or unit).title()}",
              "cover_title": "Análise de Recorrência de Setores",
@@ -240,77 +292,126 @@ def _plan(report, trace_indices=None):
              "section_scope": "Identificar os retornos das frentes a setores já trabalhados, "
                               "evidenciando a importância de concluir a colheita da área "
                               "antes do deslocamento para um novo setor.",
-             "section_caption": scope,
-             "_notes": f"{scope}\n{period}"}),
+             "section_caption": scope, "_notes": f"{scope}\n{period}"}),
         (3, {"agenda_title": "SUMÁRIO", "agenda_scope": f"Itens a serem discutidos · {scope}",
              "agenda_item1": "Indicadores da análise",
              "agenda_item2": "Retornos de setor" if returns else "Retornos: sem ocorrências",
-             "agenda_item3": "Ocupação por outras frentes",
-             "agenda_item4": "Paradas e cadastros",
+             "agenda_item3": "Outras frentes e ocupação do setor",
+             "agenda_item4": "Interrupções e conferências",
              "agenda_item5": "Rastros selecionados" if selected_traces else "Discussão dos resultados",
              "agenda_context": period, "_notes": report["report"]}),
-        # Reuse the original two-block CTT layout, without an empty middle topic.
         (4, {**common,
-        "detail_title": f"{scope}: mudanças de área",
-        "detail_left_label": "Retornos de setor",
-        "detail_right_label": "Outra frente em área já iniciada",
-        "detail_left": _compact_lines(f"{report['returns_count']} retornos reais\n\n"
-                                      f"{report['return_sectors_count']} setores distintos\n\n{context}"),
-        "detail_right": _compact_lines("\n".join(presence)),
-        "detail_left_caption": "Com trabalho em outra área",
-        "detail_right_caption": "Atuação no mesmo setor durante a ausência da frente analisada",
-        "_notes": report["report"],
-    })]
-    for offset in range(0, len(returns), TABLE_ROWS):
-        items = returns[offset:offset + TABLE_ROWS]
+             "detail_title": f"{scope}: mudanças de área",
+             "detail_left_label": "Retornos de setor",
+             "detail_right_label": "Outra frente em área já iniciada",
+             "detail_left": _compact_lines(
+                 f"{report['returns_count']} {'retorno real' if report['returns_count'] == 1 else 'retornos reais'}\n\n"
+                 f"{report['return_sectors_count']} {'setor distinto' if report['return_sectors_count'] == 1 else 'setores distintos'}\n\n{context}"
+             ),
+             "detail_right": _compact_lines("\n".join(presence)),
+             "detail_left_caption": "Com trabalho em outra área",
+             "detail_right_caption": "Atuação no mesmo setor durante a ausência da frente analisada",
+             "_notes": report["report"]}),
+    ]
+
+    for page, items in enumerate(_chunks(returns, TABLE_ROWS), 1):
         matrix = [["Setor", "Fazenda", "Última colheita", "Retorno", "Dias fora", "Talhões no retorno"]]
         for item in items:
-            # A single table line keeps the authored row height readable.
-            # The unabridged registered name remains in the speaker notes.
             farm = " ".join(_farm(item).split())
             if len(farm) > 19:
                 farm = farm[:18].rstrip() + "…"
-            field_label = {"same": "Mesmos talhões", "different": "Talhões diferentes",
-                           "mixed": "Comuns e diferentes", "incomplete": "Dados parciais",
-                           "unavailable": "Não informado"}.get((item.get("field_evidence") or {}).get("status"), "Não informado")
+            field_label = {
+                "same": "Mesmos talhões",
+                "previous_only": "Já trabalhados",
+                "different": "Talhões diferentes",
+                "mixed": "Comuns e diferentes",
+                "incomplete": "Dados parciais",
+                "unavailable": "Não informado",
+            }.get((item.get("field_evidence") or {}).get("status"), "Não informado")
             matrix.append([str(item["sector"]), farm, _date(item["exit_date"]),
                            _date(item["return_date"]), str(item["days_out"]), field_label])
-        page = offset // TABLE_ROWS + 1
-        total = (len(returns) + TABLE_ROWS - 1) // TABLE_ROWS
+        total = max(1, (len(returns) + TABLE_ROWS - 1) // TABLE_ROWS)
         slides.append((5, {**common, "summary_title": f"Retornos de setor ({page}/{total})",
-            "table_caption": "Talhões: última permanência × retorno da frente. Dados parciais não permitem conclusão completa.",
+            "table_caption": "Talhões: última permanência × retorno. 'Já trabalhados' indica subconjunto, não igualdade.",
             "_table": matrix, "_notes": json.dumps(items, ensure_ascii=False, indent=2)}))
+
+    coverage_rows = [dict(sector=item["sector"], farm=_farm(item), **entry) for item, entry in coverage]
+    for page, items in enumerate(_chunks(coverage_rows, TABLE_ROWS), 1):
+        matrix = [["Setor", "Fazenda", "Outra frente", "Período", "Colhedoras por dia", "Equipamentos"]]
+        for item in items:
+            matrix.append([
+                str(item["sector"]), textwrap.shorten(item["farm"], width=19, placeholder="…"), item["front"],
+                f"{_date(item['start'])} a {_date(item['end'])}",
+                _coverage_count_text(item),
+                (_short_list(item.get("equipment", []), 5) or "-")
+                + (f" · base: {report['target_front']['name']}" if item.get("credited_target_evidence") else ""),
+            ])
+        total = (len(coverage_rows) + TABLE_ROWS - 1) // TABLE_ROWS
+        slides.append((5, {**common, "summary_title": f"Outra frente no setor durante a ausência ({page}/{total})",
+            "table_caption": "Contagem diária preservada. Entrada informada para a frente analisada não comprova autorização nem conclusão.",
+            "_table": matrix, "_notes": json.dumps(items, ensure_ascii=False, indent=2)}))
+
+    for page, items in enumerate(_chunks(other_periods, TABLE_ROWS), 1):
+        matrix = [["Período", "Setor", "Fazenda", "Frente atribuída", "Contagem diária", "Equipamentos"]]
+        for item in items:
+            matrix.append([
+                f"{_date(item['start'])} a {_date(item['end'])}", str(item["sector"]),
+                textwrap.shorten(_farm(item), width=19, placeholder="…"), item["assigned_front"],
+                _period_count_text(item), _short_list(item.get("equipment", []), 5) or "-",
+            ])
+        total = (len(other_periods) + TABLE_ROWS - 1) // TABLE_ROWS
+        slides.append((5, {**common, "summary_title": f"Períodos atribuídos a outras frentes ({page}/{total})",
+            "table_caption": "A frente responsável é definida por maioria diária; mudanças de frente geram períodos separados.",
+            "_table": matrix, "_notes": json.dumps(items, ensure_ascii=False, indent=2)}))
+
+    for page, items in enumerate(_chunks(interruptions, TABLE_ROWS), 1):
+        matrix = [["Setor", "Fazenda", "Última colheita", "Retorno", "Dias fora", "Situação"]]
+        for item in items:
+            evidence = item.get("soil_wet_evidence") or {}
+            status = ("Solo úmido provável · verificar" if evidence.get("probable")
+                      else "Interrupção sem deslocamento comprovado")
+            if item.get("other_fronts_in_sector"):
+                fronts = sorted({entry["front"] for entry in item["other_fronts_in_sector"]})
+                status += " · outra frente: " + ", ".join(fronts)
+            matrix.append([str(item["sector"]), textwrap.shorten(_farm(item), width=19, placeholder="…"),
+                           _date(item["exit_date"]), _date(item["return_date"]), str(item["days_out"]), status])
+        total = (len(interruptions) + TABLE_ROWS - 1) // TABLE_ROWS
+        slides.append((5, {**common, "summary_title": f"Interrupções para verificar ({page}/{total})",
+            "table_caption": "Paradas confirmadas por Solo Úmido não entram na contabilização de retornos.",
+            "_table": matrix, "_notes": json.dumps(items, ensure_ascii=False, indent=2)}))
+
+    quality = _quality_lines(report)
+    if not quality:
+        quality = ["Nenhuma pendência de cadastro, empate ou equipamento sem frente foi identificada."]
+    for page, lines in enumerate(_chunks(quality, 8), 1):
+        total = (len(quality) + 7) // 8
+        slides.append((12, {**common,
+            "detail_title": f"Interrupções e conferências ({page}/{total})",
+            "detail_left_label": "Qualidade dos dados",
+            "detail_left": "\n".join(lines),
+            "detail_left_caption": "Pendências são sinalizadas; o sistema não escolhe referência ou frente por suposição.",
+            "_notes": json.dumps({"quality": quality, "confirmed_soil_wet": report.get("confirmed_soil_wet", [])},
+                                 ensure_ascii=False, indent=2)}))
+
     left = ["Menores intervalos"]
-    left.extend(f"Setor {item['sector']}: {item['days_out']} dias fora" for item in ranked[:3])
-    if coverage:
-        left.append("Outra frente colheu na área já iniciada")
-        # Prioritize explicit source-front/layout crossovers, not a presumed authorization.
-        highlighted = sorted(coverage, key=lambda pair: not bool(pair[1].get("credited_target_evidence")))
-        for item, entry in highlighted[:2]:
-            left.append(f"Setor {item['sector']}: {entry['front']}, {_date(entry['start'])} a {_date(entry['end'])}.")
-            left.append(f"Equipamentos do layout: {_short_list(entry.get('equipment', []), 4) or 'ver notas'}.")
-            credited = entry.get("credited_target_evidence", [])
-            if credited:
-                left.append(f"Entrada registrada para {report['target_front']['name']}, "
-                            f"com equipamentos de {entry['front']}.")
-            else:
-                left.append("Sem comprovação de entrada registrada para a frente analisada.")
-    else:
-        left.append("Sem outra frente identificada nos setores dos retornos durante a ausência.")
-    issues = report.get("sector_reference_issues", [])
-    unknown = report.get("unknown_equipment", [])
-    slides.append((12, {**common, "detail_title": "Destaques e conferências",
+    left.extend(f"Setor {item['sector']}: {item['days_out']} {'dia' if int(item['days_out']) == 1 else 'dias'} fora" for item in ranked[:3])
+    left.append(f"Outra frente no setor durante a ausência: {len(coverage)} {'ocorrência' if len(coverage) == 1 else 'ocorrências'}.")
+    left.append(f"Períodos gerais atribuídos a outras frentes: {len(other_periods)}.")
+    left.append(f"Interrupções para verificar: {len(interruptions)}.")
+    slides.append((12, {**common,
+        "detail_title": "Destaques da análise",
         "detail_left_label": "Retornos e ocupação",
-        "detail_left": _compact_lines("\n".join(left), width=100, max_lines=11),
-        "detail_left_caption": "Frente informada na base × equipamentos dos layouts. "
-                               "O cruzamento não comprova autorização nem conclusão da área.",
+        "detail_left": "\n".join(left),
+        "detail_left_caption": "Os detalhes completos estão nas tabelas da apresentação; Solo Úmido confirmado não compõe o total de retornos.",
         "_notes": report["report"] + "\n\n" + json.dumps({
-            "other_front_occupation": [dict(sector=item["sector"], **entry) for item, entry in coverage],
-            "possible_soil_wet": report.get("possible_soil_wet", []),
+            "other_front_occupation": coverage_rows,
+            "possible_soil_wet": interruptions,
             "confirmed_soil_wet": report.get("confirmed_soil_wet", []),
-            "sector_reference_issues": issues, "unknown_equipment": unknown,
+            "sector_reference_issues": report.get("sector_reference_issues", []),
+            "unknown_equipment": report.get("unknown_equipment", []),
         }, ensure_ascii=False, indent=2),
     }))
+
     trace_sectors = set()
     for index in selected_traces:
         item = returns[index]
@@ -321,7 +422,6 @@ def _plan(report, trace_indices=None):
         passages = _trace_passages(report, sector)
         for offset in range(0, len(passages), 3):
             compared = passages[offset:offset + 3]
-            # A fourth/seventh passage retains the preceding image for comparison.
             if len(compared) == 1:
                 compared = [passages[offset - 1], *compared]
             values = {**common, "summary_title": f"Rastros de colheita: setor {sector}",
@@ -334,6 +434,7 @@ def _plan(report, trace_indices=None):
                 values[f"trace_passage_{slot}"] = _passage_label(passage)
                 values[f"trace_picture_{slot}"] = f"Inserir rastro do setor {sector}\n{passage['number']}ª passagem aqui"
             slides.append((13 if len(compared) == 3 else 11, values))
+
     slides.append((10, {"closing_title": "ENCERRAMENTO", "closing_scope": scope,
                         "_notes": f"{scope}\n{period}\n\n{report['report']}"}))
     if len(slides) > MAX_PRESENTATION_SLIDES:

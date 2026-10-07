@@ -396,7 +396,7 @@ def list_return_soil_wet_records(unit_code: Any) -> list[dict[str, Any]]:
             "operation_code": row["operation_code"] or "",
             "operation": row["operation_description"] or "",
             "operation_group": row["operation_group"] or "",
-            "sector": int(row["sector"]),
+            "sector": int(row["sector"]) if row["sector"] is not None else None,
             "field": int(row["field"]) if row["field"] is not None else None,
             "farm": row["farm"] or "",
         }
@@ -436,7 +436,7 @@ def import_return_soil_wet_records(
                 str(item.get("operation_code") or "").strip(),
                 str(item.get("operation") or "SOLO UMIDO").strip(),
                 str(item.get("operation_group") or "").strip(),
-                int(item["sector"]),
+                int(item["sector"]) if item.get("sector") is not None else None,
                 int(item["field"]) if item.get("field") is not None else None,
                 str(item.get("farm") or "").strip(),
                 str(filename or "").strip(),

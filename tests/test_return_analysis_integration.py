@@ -72,6 +72,20 @@ class SoilWetImportTests(unittest.TestCase):
         self.assertEqual([r["duration_seconds"] for r in parsed["records"]], [7200, 7200])
         self.assertEqual(len(parsed["records"][0]["record_key"]), 64)
 
+    def test_soil_wet_accepts_blank_or_missing_sector(self):
+        headers_without_sector = SOIL_HEADERS[:-1] + ("Descrição da Fazenda", "Código do Talhão")
+        row_without_sector = ("NRD FRENTE 18", 1001, "2026-10-02", "08:00", "10:00", "SOLO ÚMIDO", "FAZENDA A", 18)
+        parsed = parse_soil_wet_file(xlsx([headers_without_sector, row_without_sector]), "sem-setor.xlsx")
+        self.assertEqual(len(parsed["records"]), 1)
+        self.assertIsNone(parsed["records"][0]["sector"])
+        self.assertEqual(parsed["records"][0]["farm"], "FAZENDA A")
+        self.assertEqual(parsed["records"][0]["field"], 18)
+
+        blank_sector = list(soil_row())
+        blank_sector[-1] = ""
+        parsed = parse_soil_wet_file(xlsx([SOIL_HEADERS, tuple(blank_sector)]), "setor-vazio.xlsx")
+        self.assertIsNone(parsed["records"][0]["sector"])
+
     def test_excel_serial_date_and_numeric_times_without_styles(self):
         serial = (date(2026, 10, 2) - date(1899, 12, 30)).days
         parsed = parse_soil_wet_file(xlsx([SOIL_HEADERS, ("PPT", 1001, serial, 0, 0.5, "SOLO UMIDO", 71)]), "numeric.xlsx")
@@ -156,6 +170,55 @@ class ReturnAnalysisIntegrationTests(unittest.TestCase):
         self.assertEqual(reference["section"], "")
         reference = self.analyze(activity, sector_base=base[:1])["possible_soil_wet"][0]["sector_reference"]
         self.assertEqual(reference["status"], "matched")
+
+    def test_other_front_periods_follow_daily_majority_without_false_tie(self):
+        layouts = self.layouts + [{"code": "04", "name": "Frente 04", "equipment": [3001]}]
+        rows = [
+            {"date": date(2026, 10, 1), "sector": 101, "equipment": 2001},
+            {"date": date(2026, 10, 2), "sector": 101, "equipment": 3001},
+        ]
+        report = analyze_return_rows(rows, layouts, "02", unit_code="PPT", unit_name="Paraguaçu Paulista")
+        self.assertEqual(report["ties_count"], 0)
+        self.assertEqual([item["assigned_front_code"] for item in report["other_front_periods"]], ["03", "04"])
+        self.assertEqual([item["days"] for item in report["other_front_periods"]], [1, 1])
+
+    def test_field_subset_is_not_reported_as_same_fields(self):
+        rows = [
+            {"date": date(2026, 10, 1), "sector": 101, "equipment": 1001, "field": 6},
+            {"date": date(2026, 10, 1), "sector": 101, "equipment": 1002, "field": 7},
+            {"date": date(2026, 10, 2), "sector": 202, "equipment": 1001, "field": 1},
+            {"date": date(2026, 10, 3), "sector": 101, "equipment": 1001, "field": 7},
+        ]
+        report = analyze_return_rows(rows, self.layouts, "02", unit_code="PPT", unit_name="Paraguaçu Paulista")
+        evidence = report["returns"][0]["field_evidence"]
+        self.assertEqual(evidence["status"], "previous_only")
+        self.assertIn("somente talhões já trabalhados anteriormente", report["report"])
+
+    def test_soil_wet_probable_stays_for_verification(self):
+        activity = [(1, 101, 1001), (7, 101, 1001)]
+        records = parse_soil_wet_file(xlsx([SOIL_HEADERS] + [soil_row(day=day, equipment=fleet)
+                                  for day in (2, 3, 4, 5) for fleet in (1001, 1002)]), "solo-provavel.xlsx")["records"]
+        report = self.analyze(activity, soil_wet_records=records)
+        self.assertEqual(report["confirmed_soil_wet_count"], 0)
+        self.assertEqual(report["possible_soil_wet_count"], 1)
+        evidence = report["possible_soil_wet"][0]["soil_wet_evidence"]
+        self.assertEqual(evidence["status"], "probable")
+        self.assertTrue(evidence["probable"])
+        self.assertIn("Solo úmido provável", report["report"])
+
+    def test_soil_wet_without_sector_can_confirm_by_equipment_and_preserve_location(self):
+        activity = [(1, 101, 1001), (4, 101, 1001)]
+        records = self.evidence()
+        for record in records:
+            record["sector"] = None
+            record["farm"] = "FAZENDA A"
+            record["field"] = 18
+        report = self.analyze(activity, soil_wet_records=records)
+        self.assertEqual(report["confirmed_soil_wet_count"], 1)
+        evidence = report["confirmed_soil_wet"][0]["soil_wet_evidence"]
+        self.assertIsNone(evidence["dominant_sector"])
+        self.assertEqual(evidence["dominant_location"]["farm"], "FAZENDA A")
+        self.assertEqual(evidence["dominant_location"]["field"], 18)
 
     def test_compact_presentation_preserves_confirmed_soil_wet_evidence_in_notes(self):
         report = self.analyze([(1, 101, 1001), (4, 101, 1001)], soil_wet_records=self.evidence(),

@@ -432,6 +432,128 @@ def _assign_equipment_to_front(
     }
 
 
+def _assignment_period_key(assignment: dict[str, Any]) -> tuple[Any, ...]:
+    if assignment.get("tie"):
+        if not assignment.get("counts"):
+            return ("tie",)
+        maximum = max(int(item.get("count") or 0) for item in assignment["counts"])
+        winners = tuple(sorted(item["code"] for item in assignment["counts"] if int(item.get("count") or 0) == maximum))
+        return ("tie", *winners)
+    if assignment.get("assigned_front_code"):
+        return ("front", assignment["assigned_front_code"])
+    return ("unassigned",)
+
+
+def _group_daily_periods(
+    day_assignments: dict[tuple[int, date], dict[str, Any]],
+    day_sector: dict[tuple[int, date], dict[str, Any]],
+    sector_reference_index: dict[str, list[dict[str, str]]],
+) -> list[dict[str, Any]]:
+    """Agrupa somente dias consecutivos com a mesma classificação diária.
+
+    A maioria é decidida antes do agrupamento. Assim, uma troca de frente em um
+    setor que operou sem interrupção nunca vira um falso empate por união de frotas.
+    """
+    dates_by_sector: dict[int, list[date]] = defaultdict(list)
+    for sector, operation_date in day_assignments:
+        dates_by_sector[sector].append(operation_date)
+
+    periods: list[dict[str, Any]] = []
+    for sector, dates in dates_by_sector.items():
+        current: dict[str, Any] | None = None
+        for operation_date in sorted(set(dates)):
+            assignment = day_assignments[(sector, operation_date)]
+            aggregate = day_sector[(sector, operation_date)]
+            group_key = _assignment_period_key(assignment)
+            daily = {
+                "date": _iso(operation_date),
+                "assigned_front_code": assignment["assigned_front_code"],
+                "assigned_front": assignment["assigned_front"],
+                "tie": assignment["tie"],
+                "counts": assignment["counts"],
+                "equipment": assignment["equipment"],
+                "unknown_equipment": assignment["unknown_equipment"],
+                "source_front_evidence": assignment.get("source_front_evidence", []),
+                "tons": round(float(aggregate.get("tons") or 0), 2),
+                "loads": aggregate.get("loads") or 0,
+            }
+            if (
+                current
+                and current["_group_key"] == group_key
+                and operation_date == current["_end_date"] + timedelta(days=1)
+            ):
+                current["_end_date"] = operation_date
+                current["end"] = _iso(operation_date)
+                current["days"] += 1
+                current["daily"].append(daily)
+                current["equipment_set"].update(assignment["equipment"])
+                current["unknown_set"].update(assignment["unknown_equipment"])
+                current["tons"] += float(aggregate.get("tons") or 0)
+                current["loads"] += float(aggregate.get("loads") or 0)
+                continue
+
+            if current:
+                current["equipment"] = sorted(current.pop("equipment_set"))
+                current["unknown_equipment"] = sorted(current.pop("unknown_set"))
+                current["tons"] = round(current["tons"], 2)
+                current["loads"] = int(current["loads"]) if float(current["loads"]).is_integer() else round(current["loads"], 2)
+                current.pop("_group_key", None)
+                current.pop("_end_date", None)
+                periods.append(current)
+
+            current = {
+                "sector": sector,
+                "sector_reference": _resolve_sector_reference(sector, sector_reference_index),
+                "start": _iso(operation_date),
+                "end": _iso(operation_date),
+                "days": 1,
+                "assigned_front_code": assignment["assigned_front_code"],
+                "assigned_front": assignment["assigned_front"],
+                "tie": assignment["tie"],
+                "counts": assignment["counts"],
+                "equipment_set": set(assignment["equipment"]),
+                "unknown_set": set(assignment["unknown_equipment"]),
+                "tons": float(aggregate.get("tons") or 0),
+                "loads": float(aggregate.get("loads") or 0),
+                "daily": [daily],
+                "_group_key": group_key,
+                "_end_date": operation_date,
+            }
+
+        if current:
+            current["equipment"] = sorted(current.pop("equipment_set"))
+            current["unknown_equipment"] = sorted(current.pop("unknown_set"))
+            current["tons"] = round(current["tons"], 2)
+            current["loads"] = int(current["loads"]) if float(current["loads"]).is_integer() else round(current["loads"], 2)
+            current.pop("_group_key", None)
+            current.pop("_end_date", None)
+            periods.append(current)
+
+    periods.sort(key=lambda item: (item["start"], item["sector"]))
+    return periods
+
+
+def _daily_count_series(daily: list[dict[str, Any]], *, front_code: str | None = None) -> str:
+    """Resume contagens diárias sem perder mudança de quantidade."""
+    grouped: list[dict[str, Any]] = []
+    for item in daily:
+        operation_date = date.fromisoformat(item["date"])
+        if front_code is None:
+            signature = tuple((entry["front"], int(entry["count"])) for entry in item.get("counts", []))
+            label = ", ".join(f"{front}: {count}" for front, count in signature) or "sem frente cadastrada"
+        else:
+            entry = next((entry for entry in item.get("counts", []) if entry["code"] == front_code), None)
+            count = int(entry["count"]) if entry else int(item.get("count") or 0)
+            signature = (count,)
+            label = f"{count} {'colhedora' if count == 1 else 'colhedoras'}"
+        if grouped and grouped[-1]["signature"] == signature and operation_date == grouped[-1]["end"] + timedelta(days=1):
+            grouped[-1]["end"] = operation_date
+        else:
+            grouped.append({"start": operation_date, "end": operation_date, "signature": signature, "label": label})
+    return "; ".join(f"{_short_range(item['start'], item['end'])}: {item['label']}" for item in grouped)
+
+
+
 def _aggregate_sector_coverage(
     day_assignments: dict[tuple[int, date], dict[str, Any]],
     sector: int,
@@ -441,9 +563,8 @@ def _aggregate_sector_coverage(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Agrupa quem operou o mesmo setor durante a ausência da frente analisada.
 
-    A leitura é diária para não esconder trocas de frente dentro de um período
-    contínuo do setor. Só uma maioria diária exclusiva é atribuída a uma frente;
-    empate permanece separado como MISTO/EMPATE.
+    A decisão é sempre diária. Dias consecutivos só são unidos quando continuam
+    atribuídos à mesma frente; as contagens diárias ficam preservadas para auditoria.
     """
     relevant = []
     ties = []
@@ -472,12 +593,10 @@ def _aggregate_sector_coverage(
                      "equipment": sorted(fleets.intersection(item["equipment"]))}
                     for item in assignment.get("source_front_evidence", [])
                     if item["code"] == target_front_code and fleets.intersection(item["equipment"])]
+        daily = {"date": _iso(operation_date), "count": count, "equipment": sorted(fleets),
+                 "counts": assignment["counts"]}
 
-        if (
-            current
-            and current["code"] == code
-            and operation_date == current["_end_date"] + timedelta(days=1)
-        ):
+        if current and current["code"] == code and operation_date == current["_end_date"] + timedelta(days=1):
             current["_end_date"] = operation_date
             current["end"] = _iso(operation_date)
             current["days"] += 1
@@ -485,6 +604,7 @@ def _aggregate_sector_coverage(
             current["max_count"] = max(current["max_count"], count)
             current["equipment_set"].update(fleets)
             current["credited_target_evidence"].extend(credited)
+            current["daily"].append(daily)
             continue
 
         if current:
@@ -502,6 +622,7 @@ def _aggregate_sector_coverage(
             "max_count": count,
             "equipment_set": set(fleets),
             "credited_target_evidence": credited,
+            "daily": [daily],
             "_end_date": operation_date,
         }
 
@@ -519,12 +640,14 @@ def _coverage_report_text(entries: list[dict[str, Any]]) -> str:
         start = date.fromisoformat(item["start"])
         end = date.fromisoformat(item["end"])
         period = _short_range(start, end)
-        count_text = (
-            f"{item['min_count']} colhedora" if item["min_count"] == item["max_count"] == 1
-            else f"{item['min_count']} colhedoras" if item["min_count"] == item["max_count"]
-            else f"entre {item['min_count']} e {item['max_count']} colhedoras"
-        )
-        detail = f"{item['front']} em {period} ({count_text})"
+        daily = item.get("daily") or []
+        if len(daily) > 1:
+            count_text = _daily_count_series(daily, front_code=item["code"])
+            detail = f"{item['front']} em {period} ({count_text})"
+        else:
+            count = int(item.get("max_count") or item.get("min_count") or 0)
+            count_text = f"{count} {'colhedora' if count == 1 else 'colhedoras'}"
+            detail = f"{item['front']} em {period} ({count_text})"
         credited = item.get("credited_target_evidence", [])
         if credited:
             records = _join_pt([
@@ -545,14 +668,11 @@ def _soil_wet_evidence(
     gap_end: date,
     target_equipment: list[int],
 ) -> dict[str, Any]:
-    """Confirma solo úmido pela maioria das colhedoras da frente em cada dia do intervalo.
+    """Cruza a interrupção com SOLO ÚMIDO usando equipamento + dia como evidência principal.
 
-    A confirmação é feita no nível da frente: se a maioria dos equipamentos cadastrados
-    da frente possui apontamento de SOLO ÚMIDO em cada dia completo da interrupção, a
-    parada é considerada comprovada, mesmo quando o apontamento foi lançado em um setor
-    vizinho/diferente do setor onde a frente reaparece. O setor do apontamento é mantido
-    como evidência para auditoria e o setor dominante é calculado pelo maior número de
-    equipamentos distintos por dia, usando horas apontadas como desempate.
+    O setor do apontamento é contexto, não requisito: algumas bases registram a
+    espera em setor vizinho e outras deixam Código da Zona vazio. Fazenda/talhão
+    são preservados quando o setor não existe no arquivo.
     """
     fleet = sorted({int(value) for value in target_equipment})
     fleet_set = set(fleet)
@@ -560,13 +680,11 @@ def _soil_wet_evidence(
 
     daily_equipment: dict[date, set[int]] = defaultdict(set)
     daily_seconds: dict[date, int] = defaultdict(int)
-    daily_sector_equipment: dict[date, dict[int, set[int]]] = defaultdict(lambda: defaultdict(set))
-    daily_sector_seconds: dict[date, dict[int, int]] = defaultdict(lambda: defaultdict(int))
+    daily_locations: dict[date, dict[tuple[int | None, str, int | None], dict[str, Any]]] = defaultdict(dict)
 
     for record in soil_wet_records or []:
         try:
             equipment = int(record.get("equipment"))
-            record_sector = int(record.get("sector"))
         except (TypeError, ValueError):
             continue
         if equipment not in fleet_set:
@@ -578,18 +696,34 @@ def _soil_wet_evidence(
         if duration <= 0:
             continue
 
+        raw_sector = record.get("sector")
+        try:
+            record_sector = int(raw_sector) if raw_sector not in (None, "") else None
+        except (TypeError, ValueError):
+            record_sector = None
+        raw_field = record.get("field")
+        try:
+            record_field = int(raw_field) if raw_field not in (None, "") else None
+        except (TypeError, ValueError):
+            record_field = None
+        farm = str(record.get("farm") or "").strip()
+
         daily_equipment[operation_date].add(equipment)
         daily_seconds[operation_date] += duration
-        daily_sector_equipment[operation_date][record_sector].add(equipment)
-        daily_sector_seconds[operation_date][record_sector] += duration
+        key = (record_sector, farm, record_field)
+        location = daily_locations[operation_date].setdefault(
+            key, {"sector": record_sector, "farm": farm, "field": record_field,
+                  "equipment": set(), "seconds": 0}
+        )
+        location["equipment"].add(equipment)
+        location["seconds"] += duration
 
     days_in_gap = max(0, (gap_end - gap_start).days + 1)
     daily: list[dict[str, Any]] = []
     days_with_majority = 0
     peak_count = 0
     union_equipment: set[int] = set()
-    sector_equipment_days: dict[int, int] = defaultdict(int)
-    sector_seconds: dict[int, int] = defaultdict(int)
+    location_totals: dict[tuple[int | None, str, int | None], dict[str, Any]] = {}
 
     day = gap_start
     while day <= gap_end:
@@ -601,71 +735,79 @@ def _soil_wet_evidence(
         if has_majority:
             days_with_majority += 1
 
-        sectors_for_day = []
-        for record_sector, equipment_set in daily_sector_equipment.get(day, {}).items():
-            equipment_count = len(equipment_set)
-            seconds = int(daily_sector_seconds.get(day, {}).get(record_sector, 0))
-            sector_equipment_days[record_sector] += equipment_count
-            sector_seconds[record_sector] += seconds
-            sectors_for_day.append({
-                "sector": record_sector,
-                "equipment_count": equipment_count,
-                "equipment": sorted(equipment_set),
+        locations_for_day = []
+        for key, item in daily_locations.get(day, {}).items():
+            equipment_set = set(item["equipment"])
+            seconds = int(item["seconds"])
+            total = location_totals.setdefault(
+                key, {"sector": item["sector"], "farm": item["farm"], "field": item["field"],
+                      "equipment_days": 0, "seconds": 0, "equipment": set()}
+            )
+            total["equipment_days"] += len(equipment_set)
+            total["seconds"] += seconds
+            total["equipment"].update(equipment_set)
+            locations_for_day.append({
+                "sector": item["sector"], "farm": item["farm"], "field": item["field"],
+                "equipment_count": len(equipment_set), "equipment": sorted(equipment_set),
                 "total_hours": round(seconds / 3600, 2),
             })
-        sectors_for_day.sort(key=lambda item: (-item["equipment_count"], -item["total_hours"], item["sector"]))
+        locations_for_day.sort(key=lambda item: (-item["equipment_count"], -item["total_hours"],
+                                                  item["sector"] is None, item["sector"] or 0,
+                                                  item["farm"].casefold(), item["field"] or 0))
 
         daily.append({
-            "date": _iso(day),
-            "equipment_count": count,
-            "equipment": equipments,
-            "majority": has_majority,
-            "total_hours": round(daily_seconds.get(day, 0) / 3600, 2),
-            "sectors": sectors_for_day,
+            "date": _iso(day), "equipment_count": count, "equipment": equipments,
+            "majority": has_majority, "total_hours": round(daily_seconds.get(day, 0) / 3600, 2),
+            "locations": locations_for_day,
+            "sectors": [item for item in locations_for_day if item["sector"] is not None],
         })
         day += timedelta(days=1)
 
-    ranked_sectors = sorted(
-        sector_equipment_days,
-        key=lambda item: (-sector_equipment_days[item], -sector_seconds[item], item),
+    ranked_locations = sorted(
+        location_totals.values(),
+        key=lambda item: (-item["equipment_days"], -item["seconds"], item["sector"] is None,
+                          item["sector"] or 0, item["farm"].casefold(), item["field"] or 0),
     )
-    sector_evidence = [
-        {
-            "sector": item,
-            "equipment_days": sector_equipment_days[item],
-            "total_hours": round(sector_seconds[item] / 3600, 2),
-            "matches_analyzed_sector": item == int(sector),
-        }
-        for item in ranked_sectors
-    ]
-    dominant_sector = ranked_sectors[0] if ranked_sectors else None
+    location_evidence = [{
+        "sector": item["sector"], "farm": item["farm"], "field": item["field"],
+        "equipment_days": item["equipment_days"], "equipment": sorted(item["equipment"]),
+        "total_hours": round(item["seconds"] / 3600, 2),
+        "matches_analyzed_sector": item["sector"] == int(sector) if item["sector"] is not None else False,
+    } for item in ranked_locations]
+    sector_evidence = [item for item in location_evidence if item["sector"] is not None]
+    dominant_sector = sector_evidence[0]["sector"] if sector_evidence else None
+    dominant_location = location_evidence[0] if location_evidence else None
 
     confirmed = bool(days_in_gap and majority_required and days_with_majority == days_in_gap)
+    probable = bool(
+        not confirmed and days_in_gap >= 2 and majority_required
+        and days_with_majority > days_in_gap / 2
+        and days_with_majority >= days_in_gap - 1
+    )
+    status = "confirmed" if confirmed else "probable" if probable else "unconfirmed"
     return {
-        "confirmed": confirmed,
-        "fleet_size": len(fleet),
-        "majority_required": majority_required,
-        "peak_equipment_count": peak_count,
-        "days_in_gap": days_in_gap,
-        "days_with_majority": days_with_majority,
-        "equipment": sorted(union_equipment),
-        "analyzed_sector": int(sector),
-        "dominant_sector": dominant_sector,
-        "sector_evidence": sector_evidence,
-        "daily": daily,
+        "status": status, "confirmed": confirmed, "probable": probable,
+        "fleet_size": len(fleet), "majority_required": majority_required,
+        "peak_equipment_count": peak_count, "days_in_gap": days_in_gap,
+        "days_with_majority": days_with_majority, "equipment": sorted(union_equipment),
+        "analyzed_sector": int(sector), "dominant_sector": dominant_sector,
+        "dominant_location": dominant_location, "sector_evidence": sector_evidence,
+        "location_evidence": location_evidence, "daily": daily,
     }
 
 
 def _return_field_evidence(previous: dict[str, Any], returned: dict[str, Any]) -> dict[str, Any]:
-    """Informação extra, sem interferir na identificação de retornos de setor."""
+    """Compara talhões sem confundir subconjunto com conjuntos idênticos."""
     before = set(previous["fields"])
     after = set(returned["fields"])
     common = before & after
     complete = previous["fields_complete"] and returned["fields_complete"]
     if not complete:
         status = "incomplete" if before or after else "unavailable"
-    elif after.issubset(before):
+    elif after == before:
         status = "same"
+    elif after and after < before:
+        status = "previous_only"
     elif common:
         status = "mixed"
     else:
@@ -678,9 +820,14 @@ def _return_field_evidence(previous: dict[str, Any], returned: dict[str, Any]) -
 
 
 def _field_evidence_text(evidence: dict[str, Any]) -> str:
-    descriptions = {"same": "os mesmos talhões", "different": "talhões diferentes",
-                    "mixed": "talhões em comum e diferentes", "incomplete": "dados de talhões parciais",
-                    "unavailable": "talhões não informados"}
+    descriptions = {
+        "same": "os mesmos talhões",
+        "previous_only": "somente talhões já trabalhados anteriormente",
+        "different": "talhões diferentes",
+        "mixed": "talhões em comum e diferentes",
+        "incomplete": "dados de talhões parciais",
+        "unavailable": "talhões não informados",
+    }
     before = _join_pt(evidence["previous_fields"]) or "não informados"
     after = _join_pt(evidence["return_fields"]) or "não informados"
     return (f" Talhões na última permanência: {before}; no retorno: {after}. "
@@ -772,46 +919,9 @@ def analyze_return_rows(
     for sector, operation_date in day_sector:
         sector_dates[sector].append(operation_date)
 
-    periods: list[dict[str, Any]] = []
-    for sector in sorted(sector_dates):
-        dates = sorted(set(sector_dates[sector]))
-        blocks: list[list[date]] = []
-        current: list[date] = []
-        for operation_date in dates:
-            if not current or (operation_date - current[-1]).days == 1:
-                current.append(operation_date)
-            else:
-                blocks.append(current)
-                current = [operation_date]
-        if current:
-            blocks.append(current)
-
-        for block in blocks:
-            equipment: set[int] = set()
-            tons = 0.0
-            loads = 0.0
-            for operation_date in block:
-                aggregate = day_sector[(sector, operation_date)]
-                equipment.update(aggregate["equipment"])
-                tons += aggregate["tons"]
-                loads += aggregate["loads"]
-
-            assignment = _assign_equipment_to_front(equipment, equipment_owner, fronts_by_code)
-
-            periods.append(
-                {
-                    "sector": sector,
-                    "sector_reference": _resolve_sector_reference(sector, sector_reference_index),
-                    "start": _iso(block[0]),
-                    "end": _iso(block[-1]),
-                    "days": len(block),
-                    **assignment,
-                    "tons": round(tons, 2),
-                    "loads": int(loads) if float(loads).is_integer() else round(loads, 2),
-                }
-            )
-
-    periods.sort(key=lambda item: (item["start"], item["sector"]))
+    # Períodos gerais também nascem da classificação diária. Só depois dias
+    # consecutivos da mesma frente/empate são agrupados para exibição.
+    periods = _group_daily_periods(day_assignments, day_sector, sector_reference_index)
 
     # A linha do tempo da frente analisada é construída pela atribuição diária.
     # Isso evita perder uma troca A -> outra frente -> A quando o setor continuou
@@ -936,7 +1046,10 @@ def analyze_return_rows(
     unknown_equipment = sorted({fleet for period in periods for fleet in period["unknown_equipment"]})
 
     report_lines: list[str] = []
-    report_lines.append(f"1. Foram identificados {len(returns)} retornos reais de setor")
+    if len(returns) == 1:
+        report_lines.append("1. Foi identificado 1 retorno real de setor")
+    else:
+        report_lines.append(f"1. Foram identificados {len(returns)} retornos reais de setor")
     if returns:
         report_lines.append(
             f"2. Os retornos ocorreram nos setores {_join_pt([item['sector'] for item in returns])}."
@@ -987,12 +1100,19 @@ def analyze_return_rows(
             )
         evidence = item.get("soil_wet_evidence") or {}
         if soil_wet_records:
-            soil_note = (
-                f" Solo úmido não foi comprovado pela maioria dos equipamentos: máximo de "
-                f"{evidence.get('peak_equipment_count', 0)} de {evidence.get('fleet_size', len(target['equipment']))} "
-                f"equipamentos, com maioria em {evidence.get('days_with_majority', 0)} de "
-                f"{evidence.get('days_in_gap', item['days_out'])} dias do intervalo."
-            )
+            if evidence.get("probable"):
+                soil_note = (
+                    f" Solo úmido provável — verificar: houve maioria dos equipamentos em "
+                    f"{evidence.get('days_with_majority', 0)} de {evidence.get('days_in_gap', item['days_out'])} "
+                    f"dias do intervalo, mas faltou comprovação em um dia."
+                )
+            else:
+                soil_note = (
+                    f" Solo úmido não foi comprovado pela maioria dos equipamentos: máximo de "
+                    f"{evidence.get('peak_equipment_count', 0)} de {evidence.get('fleet_size', len(target['equipment']))} "
+                    f"equipamentos, com maioria em {evidence.get('days_with_majority', 0)} de "
+                    f"{evidence.get('days_in_gap', item['days_out'])} dias do intervalo."
+                )
         else:
             soil_note = " Base de apontamentos de solo úmido não disponível para confirmação."
         sector_suffix = _sector_reference_report_suffix(item.get("sector_reference"))
@@ -1004,19 +1124,13 @@ def analyze_return_rows(
         line_number += 1
 
     for item in other_front_periods:
-        counts = [f"{entry['front']} com {entry['count']}" for entry in item["counts"]]
         period_text = _short_range(date.fromisoformat(item["start"]), date.fromisoformat(item["end"]))
         sector_suffix = _sector_reference_report_suffix(item.get("sector_reference"))
-        if len(counts) > 1:
-            report_lines.append(
-                f"{line_number}. No setor {item['sector']}{sector_suffix} em {period_text}, havia equipamentos de várias frentes: "
-                f"{_join_pt(counts)}. Pela regra de maior quantidade, a operação foi atribuída à {item['assigned_front']}."
-            )
-        else:
-            report_lines.append(
-                f"{line_number}. O setor {item['sector']}{sector_suffix}, em {period_text}, não foi considerado da {target['name']}: "
-                f"havia {counts[0] if counts else item['assigned_front']}, então o período foi atribuído à {item['assigned_front']}."
-            )
+        daily_text = _daily_count_series(item.get("daily") or [])
+        report_lines.append(
+            f"{line_number}. O setor {item['sector']}{sector_suffix}, em {period_text}, foi atribuído à "
+            f"{item['assigned_front']} pela maioria diária dos equipamentos. Contagem diária: {daily_text}."
+        )
         line_number += 1
 
     sector_reference_issues = []

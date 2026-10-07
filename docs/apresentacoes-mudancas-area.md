@@ -23,48 +23,53 @@ e o encerramento do CTT, inclusive quando não há retornos ou rastros seleciona
 Os layouts adicionais de conteúdo continuam no modelo, sem gerar páginas vazias.
 
 Após a capa, a abertura de seção e o sumário, vêm os indicadores, as tabelas
-de até oito retornos por slide, os destaques/conferências e os espaços de
-rastro escolhidos. O encerramento original do CTT é sempre a última página.
-O sumário acompanha a seleção: sem rastros, apresenta discussão dos resultados;
-sem retornos, informa a ausência de ocorrências, sem prometer uma tabela vazia.
-Somente o conteúdo da análise é compactado; os slides estruturais não são removidos.
+de até oito retornos por slide, as ocorrências de outra frente no mesmo setor,
+os períodos gerais atribuídos a outras frentes, as interrupções pendentes, as
+conferências de cadastro/empate/equipamentos e os rastros escolhidos. O
+encerramento original do CTT é sempre a última página. O sumário acompanha a
+seleção: sem rastros, apresenta discussão dos resultados; sem retornos, informa
+a ausência de ocorrências. Somente o conteúdo da análise é paginado; os slides
+estruturais não são removidos.
+
 O quarto slide reutiliza o layout CTT de dois blocos: retornos de setor e
-presença de outra frente em área já iniciada. Essa presença considera a atuação
-no mesmo setor durante a ausência da frente analisada, não o total genérico
-de períodos de outras frentes. Paradas/interrupções e empates não aparecem
-nesse slide; as evidências completas permanecem no relatório e nas notas.
-O slide **Destaques e conferências** contém somente o tópico **Retornos e
-ocupação**, com os três menores intervalos e evidências de outra frente no
-mesmo setor durante a ausência. O tópico de paradas/qualidade dos dados foi
-removido desse slide, sem remover as evidências das notas.
-Quando a frente informada na base corresponde à frente analisada, mas o
-equipamento pertence ao layout de outra frente, o destaque informa esse
-cruzamento. As notas e o relatório conservam datas, valores originais da
-coluna de frente e equipamentos correspondentes. A comprovação usa somente
-equipamentos da frente que recebeu a atribuição diária, sem incluir frotas
-desconhecidas ou de outra frente por engano. Sem frente informada ou com
-referência ambígua, não presume a frente da entrada de cana. Esses registros
-não comprovam autorização de colheita nem conclusão da área.
+presença de outra frente em área já iniciada. O bloco é executivo; todas as
+ocorrências ficam em tabelas próprias, sem corte arbitrário de duas entradas.
+A identificação de outra frente usa a classificação diária dos equipamentos.
+Dias consecutivos só são agrupados quando continuam atribuídos à mesma frente,
+impedindo que uma troca de frente seja transformada em falso empate pela união
+de frotas de vários dias. As tabelas preservam as contagens diárias e os
+equipamentos usados na decisão. Quando a frente informada na base diverge do
+layout do equipamento, a apresentação conserva essa evidência e explicita que
+ela não comprova autorização nem conclusão da área.
+
 Cada retorno aparece uma vez na tabela, incluindo repetições do mesmo setor,
 com fazenda, data da última colheita, data do retorno e dias fora. Nomes muito
 longos são abreviados apenas no slide; as notas conservam o cadastro integral.
-Como evidência extra, a coluna **Talhões no retorno** informa se a frente
-trabalhou somente talhões da sua última permanência, talhões diferentes ou
-talhões em comum e diferentes. A comparação considera os registros da frente
-selecionada nos dois períodos do mesmo setor, respeitando a atribuição diária.
-Não usa talhões de outra frente para comprovar a recorrência da frente analisada.
-Sem a coluna TALHÃO, mostra “Não informado”; com registros incompletos, mostra
-“Dados parciais”, sem concluir que os talhões eram diferentes. As listas
-completas, os talhões em comum e os períodos comparados ficam no relatório
-e nas notas. Essa informação não altera a regra nem a quantidade de retornos.
-O relatório completo continua na página e nas notas do apresentador. Os detalhes
-dos retornos, interrupções e evidências de solo úmido também ficam nas notas.
-Assim não se criam dezenas de slides de texto ou de continuação.
+Como evidência extra, a coluna **Talhões no retorno** distingue quatro casos:
+**Mesmos talhões** quando os conjuntos são idênticos, **Já trabalhados** quando
+o retorno usa apenas um subconjunto de talhões anteriores, **Comuns e
+diferentes** quando há antigos e novos, e **Talhões diferentes** quando não há
+interseção. Sem a coluna TALHÃO, mostra “Não informado”; com registros
+incompletos, mostra “Dados parciais”. Essa informação não altera a regra nem a
+quantidade de retornos.
 
-Sem apontamentos suficientes, a interrupção permanece pendente, sem confirmar
-sua causa. Paradas confirmadas não entram como mudanças de área. Os dias fora
-são intervalos entre colheitas, não uma afirmação de parada integral da frente.
-O limite é 150 slides; ao excedê-lo, processe um período menor.
+Interrupções sem deslocamento continuam visíveis para conferência. Solo Úmido
+é confirmado pela maioria dos equipamentos cadastrados da frente em todos os
+dias completos do intervalo. O setor do apontamento é contexto e não requisito:
+planilhas com Código da Zona vazio continuam válidas, preservando Fazenda e
+Talhão quando disponíveis. Se houver maioria em todos os dias, a parada é
+confirmada e não entra na contabilização de retornos. Se faltar comprovação em
+apenas um dia, mantendo maioria na maior parte do intervalo, a ocorrência fica
+como **Solo úmido provável · verificar**; caso contrário permanece como
+interrupção sem causa comprovada. Paradas confirmadas continuam disponíveis na
+tabela específica do sistema e nas notas, mas não são apresentadas como mudança
+de área no resumo executivo.
+
+As conferências de base também são visíveis na apresentação: setores não
+cadastrados ou ambíguos, empates de maioria diária e equipamentos sem frente
+cadastrada são paginados em vez de ficarem somente nas notas. O relatório
+completo continua nas notas do apresentador como trilha de auditoria. O limite
+global é de 150 slides; ao excedê-lo, processe um período menor.
 
 ## Rastros de colheita
 
@@ -99,7 +104,7 @@ fictícios nem atribuídas capturas genéricas a um setor.
 os parâmetros `unit`, `front`, `min_gap` e `digest` da análise concluída.
 `traces=none` omite os espaços; `traces=0,2,5` seleciona índices de ocorrências
 na lista `report.returns`. Sem esse parâmetro, vale a seleção padrão. O servidor
-valida quantidade, duplicações e existência dos índices na análise reprocessada.
+valida duplicações e existência dos índices na análise reprocessada; não há limite fixo de quantidade de rastros, além do limite global de slides.
 
 A exportação exige sessão ativa e respeita a verificação de origem. Todos
 os perfis autorizados a analisar podem exportar. O servidor reprocessa o

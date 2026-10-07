@@ -225,8 +225,7 @@ def initialize_databases():
             conn.close()
 
 
-def _upgrade_operational_schema(conn):
-    """Migrações aditivas dos dados operacionais sem recriar os bancos existentes."""
+def _create_return_soil_wet_table(conn):
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS main.return_analysis_soil_wet (
@@ -241,7 +240,7 @@ def _upgrade_operational_schema(conn):
             operation_code TEXT NOT NULL DEFAULT '',
             operation_description TEXT NOT NULL DEFAULT 'SOLO UMIDO',
             operation_group TEXT NOT NULL DEFAULT '',
-            sector INTEGER NOT NULL,
+            sector INTEGER,
             field INTEGER,
             farm TEXT NOT NULL DEFAULT '',
             import_file TEXT NOT NULL DEFAULT '',
@@ -251,6 +250,34 @@ def _upgrade_operational_schema(conn):
         )
         """
     )
+
+
+def _upgrade_operational_schema(conn):
+    """Migrações idempotentes dos dados operacionais sem perder registros existentes."""
+    _create_return_soil_wet_table(conn)
+    columns = {row[1]: row for row in conn.execute("PRAGMA main.table_info(return_analysis_soil_wet)")}
+    sector_column = columns.get("sector")
+    if sector_column and int(sector_column[3] or 0):
+        conn.execute("DROP INDEX IF EXISTS main.idx_return_soil_wet_unit_date")
+        conn.execute("DROP INDEX IF EXISTS main.idx_return_soil_wet_unit_sector_date")
+        conn.execute("DROP INDEX IF EXISTS main.idx_return_soil_wet_unit_equipment_date")
+        conn.execute("ALTER TABLE main.return_analysis_soil_wet RENAME TO return_analysis_soil_wet_legacy_v1")
+        _create_return_soil_wet_table(conn)
+        conn.execute(
+            """
+            INSERT INTO main.return_analysis_soil_wet (
+                unit_code, record_key, source_front, equipment, operation_date, start_time, end_time,
+                duration_seconds, operation_code, operation_description, operation_group, sector, field, farm,
+                import_file, updated_by, updated_at
+            )
+            SELECT unit_code, record_key, source_front, equipment, operation_date, start_time, end_time,
+                   duration_seconds, operation_code, operation_description, operation_group, sector, field, farm,
+                   import_file, updated_by, updated_at
+            FROM main.return_analysis_soil_wet_legacy_v1
+            """
+        )
+        conn.execute("DROP TABLE main.return_analysis_soil_wet_legacy_v1")
+
     conn.execute(
         "CREATE INDEX IF NOT EXISTS main.idx_return_soil_wet_unit_date ON return_analysis_soil_wet(unit_code, operation_date)"
     )
@@ -261,7 +288,7 @@ def _upgrade_operational_schema(conn):
         "CREATE INDEX IF NOT EXISTS main.idx_return_soil_wet_unit_equipment_date ON return_analysis_soil_wet(unit_code, equipment, operation_date)"
     )
     conn.execute(
-        "INSERT OR REPLACE INTO main.schema_info(key,value) VALUES ('return_soil_wet_schema_version','1')"
+        "INSERT OR REPLACE INTO main.schema_info(key,value) VALUES ('return_soil_wet_schema_version','2')"
     )
 
 
@@ -378,7 +405,7 @@ CREATE TABLE IF NOT EXISTS return_analysis_soil_wet (
     operation_code TEXT NOT NULL DEFAULT '',
     operation_description TEXT NOT NULL DEFAULT 'SOLO UMIDO',
     operation_group TEXT NOT NULL DEFAULT '',
-    sector INTEGER NOT NULL,
+    sector INTEGER,
     field INTEGER,
     farm TEXT NOT NULL DEFAULT '',
     import_file TEXT NOT NULL DEFAULT '',

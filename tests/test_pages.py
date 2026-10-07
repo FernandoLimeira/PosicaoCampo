@@ -183,20 +183,20 @@ class PageTests(unittest.TestCase):
         self.assertEqual(changed["status"], 409)
 
     def test_presentation_trace_selection_is_validated_against_current_analysis(self):
-        from backend.services.return_presentation import report_digest
+        from backend.services.return_presentation import report_digest, _plan
         from tests.test_return_presentation import sample_report
         from zipfile import ZipFile
         import xml.etree.ElementTree as ET
         report = sample_report()
         query = "unit=PPT&front=02&min_gap=1&digest=" + report_digest(report)
         with patch("backend.controllers.application_controller._analyze_return_request", return_value=report):
-            for value, slides in (("none", 7), ("0", 8)):
+            for value, selected in (("none", []), ("0", [0])):
                 response = self.request("/api/return-analysis/presentation", method="POST", role="member",
                                         overrides={"QUERY_STRING": query + "&traces=" + value})
                 self.assertEqual(response["status"], 200, response["body"] if response["status"] != 200 else "")
                 with ZipFile(io.BytesIO(response["body"])) as archive:
                     root = ET.fromstring(archive.read("ppt/presentation.xml"))
-                    self.assertEqual(len(root.find("{http://schemas.openxmlformats.org/presentationml/2006/main}sldIdLst")), slides)
+                    self.assertEqual(len(root.find("{http://schemas.openxmlformats.org/presentationml/2006/main}sldIdLst")), len(_plan(report, selected)))
             for value in ("-1", "999", "0,0", "true", "0&traces=none"):
                 with self.subTest(value=value):
                     response = self.request("/api/return-analysis/presentation", method="POST", role="member",
