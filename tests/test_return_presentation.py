@@ -116,7 +116,30 @@ class ReturnPresentationTests(unittest.TestCase):
             self.assertEqual(len({position['x'] for position in positions}), 3)
             self.assertGreaterEqual(len(ET.fromstring(archive.read("ppt/presentation.xml")).find("p:sldIdLst", NS)), 8)
 
-    def test_highlights_crosses_source_front_and_layout_without_claiming_completion(self):
+    def test_four_trace_passages_are_split_two_by_two_without_duplication(self):
+        rows = [{"date": date(2026, 10, day), "sector": sector, "equipment": 1001}
+                for day, sector in [(1, 101), (2, 202), (3, 101), (4, 202),
+                                    (5, 101), (6, 202), (7, 101)]]
+        report = analyze_return_rows(rows, [{"code": "02", "name": "Frente 02", "equipment": [1001]}],
+                                    "02", unit_code="PPT", unit_name="Paraguaçu Paulista")
+        selected = [index for index, item in enumerate(report["returns"]) if item["sector"] == 101]
+        content, _ = generate_return_presentation(report, trace_indices=selected)
+        with ZipFile(BytesIO(content)) as archive:
+            presentation = ET.fromstring(archive.read("ppt/presentation.xml"))
+            count = len(presentation.find("p:sldIdLst", NS))
+            trace_slides = [slide_text(archive, number) for number in range(1, count + 1)
+                            if "Rastros de colheita: setor 101" in slide_text(archive, number)]
+            self.assertEqual(len(trace_slides), 2)
+            joined = "\n".join(trace_slides)
+            for label in ("Primeira passagem", "Segunda passagem", "Terceira passagem", "4ª passagem"):
+                self.assertEqual(joined.splitlines().count(label), 1, label)
+            self.assertIn("Primeira passagem", trace_slides[0])
+            self.assertIn("Segunda passagem", trace_slides[0])
+            self.assertNotIn("Terceira passagem", trace_slides[0])
+            self.assertIn("Terceira passagem", trace_slides[1])
+            self.assertIn("4ª passagem", trace_slides[1])
+
+    def test_cut_order_execution_distinguishes_executor_from_cut_order_front(self):
         rows = [{"date": date(2026, 10, day), "sector": sector, "equipment": fleet,
                  "source_front": source}
                 for day, sector, fleet, source in [(1, 101, 1001, "02"), (2, 202, 1001, "02"),
@@ -125,17 +148,52 @@ class ReturnPresentationTests(unittest.TestCase):
             {"code": "02", "name": "Frente 02", "equipment": [1001]},
             {"code": "05", "name": "Frente 05", "equipment": [5001]},
         ], "02", unit_code="PPT", unit_name="Paraguaçu Paulista")
-        evidence = report["returns"][0]["other_fronts_in_sector"][0]["credited_target_evidence"]
-        self.assertEqual(evidence, [{"date": "2026-10-02", "source_front": "PPT FRENTE 02", "equipment": [5001]}])
+        coverage_items = report["returns"][0]["other_fronts_in_sector"]
+        self.assertEqual(len(coverage_items), 2, "Ordens de corte diferentes não devem ser misturadas")
+        cut_order_execution = coverage_items[0]
+        self.assertEqual(cut_order_execution["execution_mode"], "cut_order")
+        self.assertTrue(cut_order_execution["uses_target_cut_order"])
+        self.assertEqual(cut_order_execution["cut_order_front_code"], "02")
+        self.assertEqual(cut_order_execution["cut_order_front"], "Frente 02")
+        self.assertEqual(cut_order_execution["executor_front"], "Frente 05")
+        evidence = cut_order_execution["target_cut_order_evidence"]
+        self.assertEqual(evidence[0]["cut_order_front"], "PPT FRENTE 02")
+        self.assertEqual(evidence[0]["cut_order_front_code"], "02")
+        self.assertEqual(evidence[0]["equipment"], [5001])
+        self.assertIn("Frente 05 executou a colheita com a ordem de corte da Frente 02", report["report"])
+        self.assertNotIn("Não comprova autorização", report["report"])
         content, _ = generate_return_presentation(report, trace_indices=[])
         with ZipFile(BytesIO(content)) as archive:
             highlights = slide_text(archive, find_slide(archive, "Destaques da análise"))
             coverage = slide_text(archive, find_slide(archive, "Outra frente no setor durante a ausência"))
-            self.assertIn("Menores intervalos", highlights)
+            self.assertIn("1 retorno real", highlights)
             self.assertIn("Frente 05", coverage)
             self.assertIn("5001", coverage)
-            self.assertIn("base: Frente 02", coverage)
-            self.assertIn("não comprova autorização", coverage)
+            self.assertIn("Ordem de corte", coverage)
+            self.assertIn("Frente 02", coverage)
+            self.assertNotIn("não comprova autorização", coverage)
+
+    def test_verbose_other_front_periods_paginate_three_rows_per_slide(self):
+        report = sample_report()
+        source = report["other_front_periods"][0]
+        report["other_front_periods"] = [
+            {**source, "sector": 700 + index, "start": f"2026-10-{index:02d}", "end": f"2026-10-{index:02d}",
+             "daily": [{"date": f"2026-10-{index:02d}", "counts": source.get("counts", [])}]}
+            for index in range(1, 9)
+        ]
+        report["other_front_periods_count"] = 8
+        content, _ = generate_return_presentation(report, trace_indices=[])
+        with ZipFile(BytesIO(content)) as archive:
+            presentation = ET.fromstring(archive.read("ppt/presentation.xml"))
+            count = len(presentation.find("p:sldIdLst", NS))
+            titles = [slide_text(archive, number) for number in range(1, count + 1)]
+            pages = [text for text in titles if any(line.startswith("Períodos executados por outras frentes (") for line in text.splitlines())]
+            self.assertEqual(len(pages), 3)
+            self.assertIn("(1/3)", pages[0])
+            self.assertIn("(2/3)", pages[1])
+            self.assertIn("(3/3)", pages[2])
+            self.assertIn("701", pages[0])
+            self.assertIn("708", pages[2])
 
     def test_all_same_sector_other_front_occurrences_are_visible_without_cutoff(self):
         report = sample_report()
@@ -154,6 +212,20 @@ class ReturnPresentationTests(unittest.TestCase):
                 self.assertIn(f"Frente 0{index}", text)
                 self.assertIn(f"0{index}/10: {index}", text)
 
+    def test_tie_periods_do_not_appear_in_presentation(self):
+        report = sample_report()
+        report["tie_periods"] = [
+            {"sector": 3392, "start": "2026-04-10", "end": "2026-04-10"},
+            {"sector": 3205, "start": "2026-07-11", "end": "2026-07-11"},
+        ]
+        report["ties_count"] = 2
+        content, _ = generate_return_presentation(report, trace_indices=[])
+        with ZipFile(BytesIO(content)) as archive:
+            text = package_text(archive)
+            self.assertNotIn("Empate no setor", text)
+            self.assertNotIn("3392 · 10/04/2026", text)
+            self.assertNotIn("3205 · 11/07/2026", text)
+
     def test_overview_uses_two_topics_and_only_same_sector_coverage(self):
         report = sample_report()
         report["ties_count"] = 3
@@ -171,10 +243,10 @@ class ReturnPresentationTests(unittest.TestCase):
                 for removed in ("Paradas e interrupções", "empates", "99 períodos"):
                     self.assertNotIn(removed, text)
                 if with_coverage:
-                    self.assertIn("1 ocorrência de outra frente em 1 setor", text)
+                    self.assertIn("1 ocorrência de execução por outra frente em 1 setor", " ".join(text.split()))
                     self.assertIn("Todas as ocorrências são detalhadas", text)
                 else:
-                    self.assertIn("Nenhuma outra frente identificada", text)
+                    self.assertIn("Nenhuma execução de outra frente identificada", " ".join(text.split()))
 
     def test_ctt_structural_slides_always_keep_order_and_original_artwork(self):
         reference = PRESENTATION_TEMPLATE.with_name("apresentacao_ctt.pptx")
@@ -238,7 +310,7 @@ class ReturnPresentationTests(unittest.TestCase):
             self.assertGreaterEqual(len(slide_names), 8)
             self.assertEqual(len(slide_names), len(presentation.find("p:sldIdLst", NS)))
             all_text = "\n".join("\n".join(t.text or "" for t in ET.fromstring(generated.read(name)).findall(".//a:t", NS)) for name in slide_names)
-            for text in ("PPT / Frente 02", "01/10/2026", "10/10/2026", "04/10/2026", "101", "Retornos de setor", "Destaques da análise", "Menores intervalos", "Inserir rastro do setor 101"):
+            for text in ("PPT / Frente 02", "01/10/2026", "10/10/2026", "04/10/2026", "101", "Retornos de setor", "Destaques da análise", "Maior intervalo", "Inserir rastro do setor 101"):
                 self.assertIn(text, all_text)
             self.assertNotIn("{{", all_text)
             self.assertNotIn("Título do slide", all_text)

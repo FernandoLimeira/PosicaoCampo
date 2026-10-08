@@ -181,6 +181,15 @@ async function main() {
     sector_reference: {status: 'matched', section: '10', farm: 'Fazenda A'}, other_fronts_in_sector: [],
     soil_wet_evidence: {probable: true}}]});
   assert(element('#return-soil-wet-body').innerHTML.includes('Solo úmido provável'));
+  ctx.renderReturnOtherRows({target_front: {name: 'Frente 13'}, other_front_periods: [{
+    start: '2026-05-28', end: '2026-05-29', sector: 3104, assigned_front: 'Frente 15', executor_front: 'Frente 15',
+    execution_mode: 'cut_order', uses_target_cut_order: true, cut_order_front: 'Frente 13', equipment: [4300173, 4300254],
+    counts: [{code: '15', front: 'Frente 15', count: 2}], daily: [{date: '2026-05-28', counts: [{code: '15', front: 'Frente 15', count: 2}]}],
+    sector_reference: {status: 'matched', section: '10', farm: 'NOVA DAMASCO'},
+  }]});
+  assert(element('#return-other-body').innerHTML.includes('Frente 15'));
+  assert(element('#return-other-body').innerHTML.includes('Frente 13'));
+  assert(!element('#return-other-body').innerHTML.includes('Apoio'));
   console.log('OK: apresentação PPTX, arquivo/escopo processado, download, erros, sessão, bloqueio de duplicação e resultados obsoletos.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

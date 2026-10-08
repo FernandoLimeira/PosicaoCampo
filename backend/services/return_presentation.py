@@ -124,6 +124,7 @@ def _text(value):
 
 
 TABLE_ROWS = 8
+VERBOSE_TABLE_ROWS = 3
 
 
 def default_trace_indices(report):
@@ -164,6 +165,55 @@ def _farm(item):
     if reference.get("status") in {"matched", "multiple_sections"} and reference.get("farm"):
         return reference["farm"]
     return "Cadastro pendente"
+
+
+def _display_farm(item):
+    """Normaliza somente a exibição sem alterar o cadastro original."""
+    farm = " ".join(_farm(item).split())
+    if farm.startswith("FAZENDA ") and farm == farm.upper():
+        farm = farm[len("FAZENDA "):].strip() or farm
+    return farm
+
+
+def _cut_order_label(item, target_front_name=""):
+    cut_order = str(item.get("cut_order_front") or "").strip()
+    if item.get("execution_mode") == "cut_order" or item.get("uses_target_cut_order"):
+        cut_order = cut_order or target_front_name or "frente analisada"
+        return f"Ordem de corte: {cut_order}"
+    executor = str(item.get("assigned_front") or item.get("front") or "").strip()
+    if cut_order:
+        return (f"Ordem de corte: {cut_order}" if cut_order != executor
+                else f"Ordem da própria {cut_order}")
+    return "Ordem de corte não identificada"
+
+
+def _period_text(start, end):
+    first = _date(start)
+    last = _date(end)
+    return first if first == last else f"{first} a {last}"
+
+
+def _trace_pages(passages):
+    """Distribui até 3 passagens por slide sem repetir a última passagem anterior."""
+    passages = list(passages or [])
+    if not passages:
+        return []
+    count = len(passages)
+    if count <= 3:
+        return [passages]
+    groups = [3] * (count // 3)
+    remainder = count % 3
+    if remainder == 1:
+        groups[-1] = 2
+        groups.append(2)
+    elif remainder == 2:
+        groups.append(2)
+    pages = []
+    offset = 0
+    for size in groups:
+        pages.append(passages[offset:offset + size])
+        offset += size
+    return pages
 
 
 def _trace_passages(report, sector):
@@ -244,8 +294,6 @@ def _quality_lines(report):
             lines.append(f"Setor {item['sector']}: cadastro ambíguo · verificar")
         else:
             lines.append(f"Setor {item['sector']}: não cadastrado na base de setores/fazendas")
-    for item in report.get("tie_periods", []):
-        lines.append(f"Empate no setor {item['sector']} · {_date(item['start'])} a {_date(item['end'])}")
     unknown = report.get("unknown_equipment", [])
     if unknown:
         lines.append("Equipamentos sem frente cadastrada: " + ", ".join(str(value) for value in unknown))
@@ -267,21 +315,28 @@ def _plan(report, trace_indices=None):
     interruptions = report.get("possible_soil_wet", [])
     other_periods = report.get("other_front_periods", [])
     selected_traces = _trace_indices(report, trace_indices)
-    ranked = sorted(returns, key=lambda item: int(item["days_out"]))
     smallest = min(returns, key=lambda item: int(item["days_out"])) if returns else None
     context = (f"Menor intervalo: setor {smallest['sector']}, {smallest['days_out']} dias fora."
                if smallest else "Nenhum retorno real identificado no período.")
     coverage = [(item, entry) for item in returns for entry in item.get("other_fronts_in_sector", [])]
     covered_sectors = {item["sector"] for item, _ in coverage}
+    cut_order_coverage = [(item, entry) for item, entry in coverage if entry.get("uses_target_cut_order")]
+    independent_execution_coverage = [(item, entry) for item, entry in coverage if not entry.get("uses_target_cut_order")]
     if coverage:
+        situation_parts = []
+        if cut_order_coverage:
+            situation_parts.append(f"{len(cut_order_coverage)} com ordem de corte da {report['target_front']['name']}")
+        if independent_execution_coverage:
+            situation_parts.append(f"{len(independent_execution_coverage)} com outra ordem de corte ou sem ordem identificada")
         presence = [
-            (f"{len(coverage)} ocorrência de outra frente em {len(covered_sectors)} setor com retorno."
+            (f"{len(coverage)} ocorrência de execução por outra frente em {len(covered_sectors)} setor com retorno."
              if len(coverage) == len(covered_sectors) == 1
-             else f"{len(coverage)} ocorrências de outra frente em {len(covered_sectors)} setores com retorno."),
-            "Todas as ocorrências são detalhadas nas páginas seguintes; nenhuma é cortada por limite fixo.",
+             else f"{len(coverage)} ocorrências de execução por outra frente em {len(covered_sectors)} setores com retorno."),
+            " · ".join(situation_parts),
+            "Todas as ocorrências são detalhadas nas páginas seguintes.",
         ]
     else:
-        presence = ["Nenhuma outra frente identificada nos setores com retorno durante a ausência da frente analisada."]
+        presence = ["Nenhuma execução de outra frente identificada nos setores com retorno durante a ausência da frente analisada."]
 
     slides = [
         (1, {"cover_scope": f"Unidade {(report['unit'].get('name') or unit).title()}",
@@ -289,14 +344,14 @@ def _plan(report, trace_indices=None):
              "cover_period": "Retornos da frente aos setores após atuação em outras áreas.\n" + period,
              "_notes": report["report"]}),
         (2, {"section_label": "ANÁLISE OPERACIONAL", "section_title": "Motivação do trabalho",
-             "section_scope": "Identificar os retornos das frentes a setores já trabalhados, "
-                              "evidenciando a importância de concluir a colheita da área "
+             "section_scope": "Identificar os retornos das frentes a setores já trabalhados,\n"
+                              "evidenciando a importância de concluir a colheita da área\n"
                               "antes do deslocamento para um novo setor.",
              "section_caption": scope, "_notes": f"{scope}\n{period}"}),
         (3, {"agenda_title": "SUMÁRIO", "agenda_scope": f"Itens a serem discutidos · {scope}",
              "agenda_item1": "Indicadores da análise",
              "agenda_item2": "Retornos de setor" if returns else "Retornos: sem ocorrências",
-             "agenda_item3": "Outras frentes e ocupação do setor",
+             "agenda_item3": "Execução por outras frentes",
              "agenda_item4": "Interrupções e conferências",
              "agenda_item5": "Rastros selecionados" if selected_traces else "Discussão dos resultados",
              "agenda_context": period, "_notes": report["report"]}),
@@ -310,14 +365,14 @@ def _plan(report, trace_indices=None):
              ),
              "detail_right": _compact_lines("\n".join(presence)),
              "detail_left_caption": "Com trabalho em outra área",
-             "detail_right_caption": "Atuação no mesmo setor durante a ausência da frente analisada",
+             "detail_right_caption": "Frente executora pelo layout × ordem de corte registrada",
              "_notes": report["report"]}),
     ]
 
     for page, items in enumerate(_chunks(returns, TABLE_ROWS), 1):
         matrix = [["Setor", "Fazenda", "Última colheita", "Retorno", "Dias fora", "Talhões no retorno"]]
         for item in items:
-            farm = " ".join(_farm(item).split())
+            farm = _display_farm(item)
             if len(farm) > 19:
                 farm = farm[:18].rstrip() + "…"
             field_label = {
@@ -335,33 +390,37 @@ def _plan(report, trace_indices=None):
             "table_caption": "Talhões: última permanência × retorno. 'Já trabalhados' indica subconjunto, não igualdade.",
             "_table": matrix, "_notes": json.dumps(items, ensure_ascii=False, indent=2)}))
 
-    coverage_rows = [dict(sector=item["sector"], farm=_farm(item), **entry) for item, entry in coverage]
-    for page, items in enumerate(_chunks(coverage_rows, TABLE_ROWS), 1):
-        matrix = [["Setor", "Fazenda", "Outra frente", "Período", "Colhedoras por dia", "Equipamentos"]]
+    coverage_rows = [dict(sector=item["sector"], farm=_display_farm(item), **entry) for item, entry in coverage]
+    for page, items in enumerate(_chunks(coverage_rows, VERBOSE_TABLE_ROWS), 1):
+        matrix = [["Setor", "Fazenda", "Frente executora", "Ordem de corte", "Período", "Colhedoras por dia"]]
         for item in items:
+            executor = item.get("executor_front") or item.get("front") or "-"
+            equipment = _short_list(item.get("equipment", []), 4)
+            executor_text = executor + (f"\n{equipment}" if equipment else "")
             matrix.append([
-                str(item["sector"]), textwrap.shorten(item["farm"], width=19, placeholder="…"), item["front"],
-                f"{_date(item['start'])} a {_date(item['end'])}",
+                str(item["sector"]), textwrap.shorten(item["farm"], width=19, placeholder="…"), executor_text,
+                _cut_order_label(item, report["target_front"]["name"]),
+                _period_text(item["start"], item["end"]),
                 _coverage_count_text(item),
-                (_short_list(item.get("equipment", []), 5) or "-")
-                + (f" · base: {report['target_front']['name']}" if item.get("credited_target_evidence") else ""),
             ])
-        total = (len(coverage_rows) + TABLE_ROWS - 1) // TABLE_ROWS
+        total = (len(coverage_rows) + VERBOSE_TABLE_ROWS - 1) // VERBOSE_TABLE_ROWS
         slides.append((5, {**common, "summary_title": f"Outra frente no setor durante a ausência ({page}/{total})",
-            "table_caption": "Contagem diária preservada. Entrada informada para a frente analisada não comprova autorização nem conclusão.",
+            "table_caption": "A frente executora vem do layout; a frente registrada na base identifica a ordem de corte utilizada.",
             "_table": matrix, "_notes": json.dumps(items, ensure_ascii=False, indent=2)}))
 
-    for page, items in enumerate(_chunks(other_periods, TABLE_ROWS), 1):
-        matrix = [["Período", "Setor", "Fazenda", "Frente atribuída", "Contagem diária", "Equipamentos"]]
+    for page, items in enumerate(_chunks(other_periods, VERBOSE_TABLE_ROWS), 1):
+        matrix = [["Período", "Setor", "Fazenda", "Frente executora", "Ordem de corte", "Contagem diária"]]
         for item in items:
             matrix.append([
-                f"{_date(item['start'])} a {_date(item['end'])}", str(item["sector"]),
-                textwrap.shorten(_farm(item), width=19, placeholder="…"), item["assigned_front"],
-                _period_count_text(item), _short_list(item.get("equipment", []), 5) or "-",
+                _period_text(item["start"], item["end"]), str(item["sector"]),
+                textwrap.shorten(_display_farm(item), width=19, placeholder="…"),
+                item.get("executor_front") or item["assigned_front"],
+                _cut_order_label(item, report["target_front"]["name"]),
+                _period_count_text(item),
             ])
-        total = (len(other_periods) + TABLE_ROWS - 1) // TABLE_ROWS
-        slides.append((5, {**common, "summary_title": f"Períodos atribuídos a outras frentes ({page}/{total})",
-            "table_caption": "A frente responsável é definida por maioria diária; mudanças de frente geram períodos separados.",
+        total = (len(other_periods) + VERBOSE_TABLE_ROWS - 1) // VERBOSE_TABLE_ROWS
+        slides.append((5, {**common, "summary_title": f"Períodos executados por outras frentes ({page}/{total})",
+            "table_caption": "A maioria diária identifica a frente executora; a frente registrada na base identifica a ordem de corte utilizada.",
             "_table": matrix, "_notes": json.dumps(items, ensure_ascii=False, indent=2)}))
 
     for page, items in enumerate(_chunks(interruptions, TABLE_ROWS), 1):
@@ -373,7 +432,7 @@ def _plan(report, trace_indices=None):
             if item.get("other_fronts_in_sector"):
                 fronts = sorted({entry["front"] for entry in item["other_fronts_in_sector"]})
                 status += " · outra frente: " + ", ".join(fronts)
-            matrix.append([str(item["sector"]), textwrap.shorten(_farm(item), width=19, placeholder="…"),
+            matrix.append([str(item["sector"]), textwrap.shorten(_display_farm(item), width=19, placeholder="…"),
                            _date(item["exit_date"]), _date(item["return_date"]), str(item["days_out"]), status])
         total = (len(interruptions) + TABLE_ROWS - 1) // TABLE_ROWS
         slides.append((5, {**common, "summary_title": f"Interrupções para verificar ({page}/{total})",
@@ -382,7 +441,7 @@ def _plan(report, trace_indices=None):
 
     quality = _quality_lines(report)
     if not quality:
-        quality = ["Nenhuma pendência de cadastro, empate ou equipamento sem frente foi identificada."]
+        quality = ["Nenhuma pendência de cadastro ou equipamento sem frente foi identificada."]
     for page, lines in enumerate(_chunks(quality, 8), 1):
         total = (len(quality) + 7) // 8
         slides.append((12, {**common,
@@ -393,10 +452,19 @@ def _plan(report, trace_indices=None):
             "_notes": json.dumps({"quality": quality, "confirmed_soil_wet": report.get("confirmed_soil_wet", [])},
                                  ensure_ascii=False, indent=2)}))
 
-    left = ["Menores intervalos"]
-    left.extend(f"Setor {item['sector']}: {item['days_out']} {'dia' if int(item['days_out']) == 1 else 'dias'} fora" for item in ranked[:3])
-    left.append(f"Outra frente no setor durante a ausência: {len(coverage)} {'ocorrência' if len(coverage) == 1 else 'ocorrências'}.")
-    left.append(f"Períodos gerais atribuídos a outras frentes: {len(other_periods)}.")
+    longest = max(returns, key=lambda item: int(item["days_out"])) if returns else None
+    left = [
+        f"{report['returns_count']} {'retorno real' if report['returns_count'] == 1 else 'retornos reais'} em "
+        f"{report['return_sectors_count']} {'setor distinto' if report['return_sectors_count'] == 1 else 'setores distintos'}",
+    ]
+    if longest:
+        left.append(f"Maior intervalo: setor {longest['sector']}, {longest['days_out']} dias fora")
+    if smallest:
+        left.append(f"Menor intervalo: setor {smallest['sector']}, {smallest['days_out']} dias fora")
+    left.append(f"Execução de outra frente no setor durante a ausência: {len(coverage)}.")
+    if cut_order_coverage:
+        left.append(f"Execuções com ordem de corte da {report['target_front']['name']}: {len(cut_order_coverage)} ocorrência(s) no setor de retorno.")
+    left.append(f"Períodos executados por outras frentes: {len(other_periods)}.")
     left.append(f"Interrupções para verificar: {len(interruptions)}.")
     slides.append((12, {**common,
         "detail_title": "Destaques da análise",
@@ -420,14 +488,11 @@ def _plan(report, trace_indices=None):
             continue
         trace_sectors.add(sector)
         passages = _trace_passages(report, sector)
-        for offset in range(0, len(passages), 3):
-            compared = passages[offset:offset + 3]
-            if len(compared) == 1:
-                compared = [passages[offset - 1], *compared]
+        for compared in _trace_pages(passages):
             values = {**common, "summary_title": f"Rastros de colheita: setor {sector}",
-                "trace_context": textwrap.shorten(_farm(item), width=85, placeholder="…") +
+                "trace_context": textwrap.shorten(_display_farm(item), width=85, placeholder="…") +
                                  f"\n{report['target_front']['name']} · Passagens no período analisado",
-                "trace_caption": "Insira os rastros nos espaços lado a lado. Preserve a legenda, a escala e o período do mapa.",
+                "trace_caption": "Insira os rastros nos quadros lado a lado. Preserve a legenda, a escala e o período do mapa.",
                 "_notes": json.dumps({"sector": sector, "passages": compared,
                     "returns": [event for event in returns if event["sector"] == sector]}, ensure_ascii=False, indent=2)}
             for slot, passage in enumerate(compared, 1):
@@ -462,6 +527,18 @@ def _fill_slide(data, values):
             placeholder.set("type", "pic")
             slot = int(key.rsplit("_", 1)[-1]) if key != "trace_picture" else 0
             placeholder.set("idx", str(20 + slot))
+            sp_pr = shape.find("p:spPr", NS)
+            if sp_pr is not None:
+                for child in list(sp_pr):
+                    if child.tag in {f"{{{A}}}noFill", f"{{{A}}}solidFill", f"{{{A}}}gradFill", f"{{{A}}}pattFill"}:
+                        sp_pr.remove(child)
+                    elif child.tag == f"{{{A}}}ln":
+                        sp_pr.remove(child)
+                solid = ET.SubElement(sp_pr, f"{{{A}}}solidFill")
+                ET.SubElement(solid, f"{{{A}}}srgbClr", {"val": "F7F9F5"})
+                line = ET.SubElement(sp_pr, f"{{{A}}}ln", {"w": "12700"})
+                line_fill = ET.SubElement(line, f"{{{A}}}solidFill")
+                ET.SubElement(line_fill, f"{{{A}}}srgbClr", {"val": "D9E2D0"})
         if key not in values:
             if any((t.text or "") == "{{" + key + "}}" for t in shape.findall(".//a:t", NS)):
                 raise RuntimeError("Modelo de apresentação com campos não preenchidos.")

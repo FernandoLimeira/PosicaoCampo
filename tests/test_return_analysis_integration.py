@@ -171,6 +171,24 @@ class ReturnAnalysisIntegrationTests(unittest.TestCase):
         reference = self.analyze(activity, sector_base=base[:1])["possible_soil_wet"][0]["sector_reference"]
         self.assertEqual(reference["status"], "matched")
 
+    def test_source_front_target_marks_other_layout_as_cut_order_execution(self):
+        rows = [
+            {"date": date(2026, 10, 1), "sector": 101, "equipment": 2001, "source_front": "02"},
+            {"date": date(2026, 10, 2), "sector": 101, "equipment": 2001, "source_front": "02"},
+        ]
+        report = analyze_return_rows(rows, self.layouts, "02", unit_code="PPT", unit_name="Paraguaçu Paulista")
+        self.assertEqual(report["other_front_periods_count"], 1)
+        period = report["other_front_periods"][0]
+        self.assertEqual(period["assigned_front_code"], "03")
+        self.assertEqual(period["executor_front"], "Frente 03")
+        self.assertEqual(period["cut_order_front_code"], "02")
+        self.assertEqual(period["cut_order_front"], "Frente 02")
+        self.assertEqual(period["execution_mode"], "cut_order")
+        self.assertTrue(period["uses_target_cut_order"])
+        self.assertEqual(report["cut_order_periods_count"], 1)
+        self.assertEqual(report["independent_other_front_periods_count"], 0)
+        self.assertIn("executou a colheita usando a ordem de corte da Frente 02", report["report"])
+
     def test_other_front_periods_follow_daily_majority_without_false_tie(self):
         layouts = self.layouts + [{"code": "04", "name": "Frente 04", "equipment": [3001]}]
         rows = [

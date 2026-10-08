@@ -23,8 +23,8 @@ e o encerramento do CTT, inclusive quando não há retornos ou rastros seleciona
 Os layouts adicionais de conteúdo continuam no modelo, sem gerar páginas vazias.
 
 Após a capa, a abertura de seção e o sumário, vêm os indicadores, as tabelas
-de até oito retornos por slide, as ocorrências de outra frente no mesmo setor,
-os períodos gerais atribuídos a outras frentes, as interrupções pendentes, as
+de até oito retornos por slide, as ocorrências de execução por outra frente no mesmo
+setor, os períodos executados por outras frentes, as interrupções pendentes, as
 conferências de cadastro/empate/equipamentos e os rastros escolhidos. O
 encerramento original do CTT é sempre a última página. O sumário acompanha a
 seleção: sem rastros, apresenta discussão dos resultados; sem retornos, informa
@@ -32,15 +32,19 @@ a ausência de ocorrências. Somente o conteúdo da análise é paginado; os sli
 estruturais não são removidos.
 
 O quarto slide reutiliza o layout CTT de dois blocos: retornos de setor e
-presença de outra frente em área já iniciada. O bloco é executivo; todas as
-ocorrências ficam em tabelas próprias, sem corte arbitrário de duas entradas.
-A identificação de outra frente usa a classificação diária dos equipamentos.
-Dias consecutivos só são agrupados quando continuam atribuídos à mesma frente,
-impedindo que uma troca de frente seja transformada em falso empate pela união
-de frotas de vários dias. As tabelas preservam as contagens diárias e os
-equipamentos usados na decisão. Quando a frente informada na base diverge do
-layout do equipamento, a apresentação conserva essa evidência e explicita que
-ela não comprova autorização nem conclusão da área.
+execução de outra frente em área já iniciada. O bloco é executivo; todas as
+ocorrências ficam em tabelas próprias, sem corte arbitrário. A identificação da
+**frente executora** usa a classificação diária dos equipamentos pelo layout. A
+**ordem de corte** vem da frente registrada explicitamente na planilha. Quando a
+base informa a frente analisada e o layout identifica equipamentos de outra frente,
+o sistema registra **execução por outra frente com a ordem de corte da frente que
+deixou o setor**. Isso não é tratado como erro de cadastro. Dias consecutivos só
+são agrupados quando continuam com a mesma frente executora e a mesma ordem de
+corte, impedindo que uma troca de frente seja transformada em falso empate pela
+união de frotas de vários dias.
+As tabelas preservam as contagens diárias e os equipamentos usados na decisão.
+Tabelas com contagem diária extensa usam até três períodos por slide para
+evitar sobreposição de conteúdo.
 
 Cada retorno aparece uma vez na tabela, incluindo repetições do mesmo setor,
 com fazenda, data da última colheita, data do retorno e dias fora. Nomes muito
@@ -78,13 +82,12 @@ de rastro. Não há limite fixo de retornos selecionados; o limite global de 150
 slides continua protegendo a geração de apresentações excessivamente grandes. Por
 padrão, são selecionados os três maiores intervalos de setores distintos. Desmarque todos para baixar somente o resumo compacto.
 Cada setor selecionado reúne suas passagens em ordem cronológica. O slide
-mostra a **Primeira passagem** e a **Segunda passagem** em dois espaços de
-imagem lado a lado. Quando existe uma terceira passagem, usa três espaços
-lado a lado. Cada imagem tem o período correspondente e a instrução para
-inserir o rastro daquele setor e passagem. Selecionar mais de um retorno do
-mesmo setor não duplica a comparação. Havendo mais de três passagens, gera
-continuações com até três imagens por slide; uma passagem isolada compara
-com a passagem anterior. Todas as passagens identificadas do setor escolhido
+mostra até três passagens lado a lado. Quando o total deixaria uma única
+passagem isolada na última página, a distribuição é rebalanceada sem repetir
+períodos: quatro passagens viram **2 + 2**, sete viram **3 + 2 + 2**, e assim
+por diante. Cada imagem tem o período correspondente e a instrução para inserir
+o rastro daquele setor e passagem. Selecionar mais de um retorno do mesmo setor
+não duplica a comparação. Todas as passagens identificadas do setor escolhido
 aparecem, independentemente de qual retorno desse setor foi selecionado.
 A primeira passagem é a primeira encontrada no histórico importado, não
 uma afirmação sobre o início da safra. Retornos reais separam as passagens;

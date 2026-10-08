@@ -54,7 +54,7 @@ def _norm(value: Any) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def _source_front_code(value: Any, fronts: list[dict[str, Any]], unit_code: str = "") -> str | None:
+def _cut_order_front_code(value: Any, fronts: list[dict[str, Any]], unit_code: str = "") -> str | None:
     """Resolve only an explicit source front, without guessing from arbitrary digits."""
     text = str(value or "").strip()
     if not text:
@@ -432,16 +432,75 @@ def _assign_equipment_to_front(
     }
 
 
+def _assignment_execution_context(
+    assignment: dict[str, Any],
+    target_front_code: str = "",
+) -> dict[str, Any]:
+    """Distingue quem executou a colheita da ordem de corte usada no apontamento.
+
+    A frente executora vem do layout dos equipamentos. A coluna de frente da base
+    identifica a ordem de corte usada no registro. Quando são diferentes, não é
+    isso representa outra frente executando a colheita com a ordem de corte informada.
+    """
+    evidence = list(assignment.get("cut_order_evidence") or [])
+    resolved = [item for item in evidence if item.get("code")]
+    cut_order_codes = {str(item["code"]) for item in resolved}
+    cut_order_code = next(iter(cut_order_codes)) if len(cut_order_codes) == 1 else ""
+    cut_order_front = ""
+    if cut_order_code:
+        cut_order_front = next(
+            (str(item.get("front") or "").strip() for item in resolved if str(item.get("code")) == cut_order_code),
+            "",
+        )
+        if not cut_order_front:
+            cut_order_front = next(
+                (str(item.get("source_front") or "").strip() for item in resolved if str(item.get("code")) == cut_order_code),
+                "",
+            )
+
+    executor_code = str(assignment.get("assigned_front_code") or "")
+    executor_front = str(assignment.get("assigned_front") or "")
+    if assignment.get("tie"):
+        mode = "tie"
+    elif not executor_code:
+        mode = "unassigned"
+    elif cut_order_code and cut_order_code == executor_code:
+        mode = "own"
+    elif cut_order_code and cut_order_code != executor_code:
+        mode = "cut_order"
+    else:
+        mode = "executor_only"
+
+    uses_target_cut_order = bool(
+        mode == "cut_order" and target_front_code and cut_order_code == str(target_front_code)
+    )
+    return {
+        "mode": mode,
+        "cut_order_front_code": cut_order_code,
+        "cut_order_front": cut_order_front,
+        "executor_front_code": executor_code,
+        "executor_front": executor_front,
+        "uses_target_cut_order": uses_target_cut_order,
+        "cut_order_fronts": sorted({
+            str(item.get("source_front") or "").strip()
+            for item in evidence
+            if str(item.get("source_front") or "").strip()
+        }),
+    }
+
+
 def _assignment_period_key(assignment: dict[str, Any]) -> tuple[Any, ...]:
+    context = assignment.get("execution_context") or {}
+    context_key = (context.get("mode") or "", context.get("cut_order_front_code") or "")
     if assignment.get("tie"):
         if not assignment.get("counts"):
-            return ("tie",)
+            return ("tie", *context_key)
         maximum = max(int(item.get("count") or 0) for item in assignment["counts"])
         winners = tuple(sorted(item["code"] for item in assignment["counts"] if int(item.get("count") or 0) == maximum))
-        return ("tie", *winners)
+        return ("tie", *winners, *context_key)
     if assignment.get("assigned_front_code"):
-        return ("front", assignment["assigned_front_code"])
-    return ("unassigned",)
+        return ("front", assignment["assigned_front_code"], *context_key)
+    return ("unassigned", *context_key)
 
 
 def _group_daily_periods(
@@ -473,7 +532,8 @@ def _group_daily_periods(
                 "counts": assignment["counts"],
                 "equipment": assignment["equipment"],
                 "unknown_equipment": assignment["unknown_equipment"],
-                "source_front_evidence": assignment.get("source_front_evidence", []),
+                "cut_order_evidence": assignment.get("cut_order_evidence", []),
+                "execution_context": assignment.get("execution_context", {}),
                 "tons": round(float(aggregate.get("tons") or 0), 2),
                 "loads": aggregate.get("loads") or 0,
             }
@@ -511,6 +571,7 @@ def _group_daily_periods(
                 "assigned_front": assignment["assigned_front"],
                 "tie": assignment["tie"],
                 "counts": assignment["counts"],
+                "execution_context": assignment.get("execution_context", {}),
                 "equipment_set": set(assignment["equipment"]),
                 "unknown_set": set(assignment["unknown_equipment"]),
                 "tons": float(aggregate.get("tons") or 0),
@@ -561,10 +622,12 @@ def _aggregate_sector_coverage(
     gap_end: date,
     target_front_code: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Agrupa quem operou o mesmo setor durante a ausência da frente analisada.
+    """Agrupa quem executou no mesmo setor durante a ausência da frente analisada.
 
-    A decisão é sempre diária. Dias consecutivos só são unidos quando continuam
-    atribuídos à mesma frente; as contagens diárias ficam preservadas para auditoria.
+    A frente executora vem do layout. A frente registrada na base representa a
+    ordem de corte utilizada. Se a executora for outra frente e todos os seus
+    equipamentos estiverem lançados na ordem da frente analisada, o período é
+    marcado como execução com a ordem de corte da frente que deixou o setor.
     """
     relevant = []
     ties = []
@@ -577,6 +640,7 @@ def _aggregate_sector_coverage(
                     "date": _iso(day),
                     "counts": assignment["counts"],
                     "equipment": assignment["equipment"],
+                    "execution_context": assignment.get("execution_context", {}),
                 })
             elif assignment["assigned_front_code"] and assignment["assigned_front_code"] != target_front_code:
                 relevant.append((day, assignment))
@@ -589,21 +653,52 @@ def _aggregate_sector_coverage(
         count_entry = next((item for item in assignment["counts"] if item["code"] == code), None)
         count = int(count_entry["count"]) if count_entry else 0
         fleets = set(count_entry["equipment"] if count_entry else [])
-        credited = [{"date": _iso(operation_date), "source_front": item["source_front"],
-                     "equipment": sorted(fleets.intersection(item["equipment"]))}
-                    for item in assignment.get("source_front_evidence", [])
-                    if item["code"] == target_front_code and fleets.intersection(item["equipment"])]
-        daily = {"date": _iso(operation_date), "count": count, "equipment": sorted(fleets),
-                 "counts": assignment["counts"]}
+        context = assignment.get("execution_context") or {}
+        target_order_matches = [{
+            "date": _iso(operation_date),
+            "cut_order_front": item["source_front"],
+            "cut_order_front_code": item.get("code") or "",
+            "cut_order_front_name": item.get("front") or "",
+            "equipment": sorted(fleets.intersection(item["equipment"])),
+        } for item in assignment.get("cut_order_evidence", [])
+          if item.get("code") == target_front_code and fleets.intersection(item["equipment"])]
+        target_order_equipment = {fleet for item in target_order_matches for fleet in item["equipment"]}
+        uses_target_cut_order = bool(fleets and target_order_equipment == fleets)
+        cut_order_code = str(context.get("cut_order_front_code") or "")
+        cut_order_front = str(context.get("cut_order_front") or "")
+        if uses_target_cut_order:
+            cut_order_code = str(target_front_code)
+            if not cut_order_front:
+                cut_order_front = next(
+                    (str(item.get("cut_order_front_name") or item.get("cut_order_front") or "").strip()
+                     for item in target_order_matches),
+                    "",
+                )
+        execution_mode = "cut_order" if uses_target_cut_order else "other"
+        daily = {
+            "date": _iso(operation_date),
+            "count": count,
+            "equipment": sorted(fleets),
+            "counts": assignment["counts"],
+            "execution_mode": execution_mode,
+            "cut_order_front_code": cut_order_code,
+            "cut_order_front": cut_order_front,
+        }
 
-        if current and current["code"] == code and operation_date == current["_end_date"] + timedelta(days=1):
+        if (
+            current
+            and current["code"] == code
+            and current["execution_mode"] == execution_mode
+            and current.get("cut_order_front_code", "") == cut_order_code
+            and operation_date == current["_end_date"] + timedelta(days=1)
+        ):
             current["_end_date"] = operation_date
             current["end"] = _iso(operation_date)
             current["days"] += 1
             current["min_count"] = min(current["min_count"], count)
             current["max_count"] = max(current["max_count"], count)
             current["equipment_set"].update(fleets)
-            current["credited_target_evidence"].extend(credited)
+            current["target_cut_order_evidence"].extend(target_order_matches)
             current["daily"].append(daily)
             continue
 
@@ -615,13 +710,19 @@ def _aggregate_sector_coverage(
         current = {
             "code": code,
             "front": assignment["assigned_front"],
+            "executor_front_code": code,
+            "executor_front": assignment["assigned_front"],
+            "cut_order_front_code": cut_order_code,
+            "cut_order_front": cut_order_front,
+            "execution_mode": execution_mode,
+            "uses_target_cut_order": uses_target_cut_order,
             "start": _iso(operation_date),
             "end": _iso(operation_date),
             "days": 1,
             "min_count": count,
             "max_count": count,
             "equipment_set": set(fleets),
-            "credited_target_evidence": credited,
+            "target_cut_order_evidence": target_order_matches,
             "daily": [daily],
             "_end_date": operation_date,
         }
@@ -643,20 +744,18 @@ def _coverage_report_text(entries: list[dict[str, Any]]) -> str:
         daily = item.get("daily") or []
         if len(daily) > 1:
             count_text = _daily_count_series(daily, front_code=item["code"])
-            detail = f"{item['front']} em {period} ({count_text})"
         else:
             count = int(item.get("max_count") or item.get("min_count") or 0)
             count_text = f"{count} {'colhedora' if count == 1 else 'colhedoras'}"
+
+        if item.get("execution_mode") == "cut_order":
+            cut_order = str(item.get("cut_order_front") or "").strip() or "a frente analisada"
+            detail = (
+                f"{item['front']} executou a colheita com a ordem de corte da {cut_order} em {period} "
+                f"({count_text})"
+            )
+        else:
             detail = f"{item['front']} em {period} ({count_text})"
-        credited = item.get("credited_target_evidence", [])
-        if credited:
-            records = _join_pt([
-                f"{date.fromisoformat(entry['date']).strftime('%d/%m/%Y')}: frente informada "
-                f"{entry['source_front']}, equipamentos {', '.join(str(fleet) for fleet in entry['equipment'])}"
-                for entry in credited
-            ])
-            detail += f" [entrada registrada para a frente analisada com equipamentos de {item['front']} "
-            detail += f"conforme layout: {records}. Não comprova autorização nem conclusão da área]"
         parts.append(detail)
     return _join_pt(parts)
 
@@ -881,24 +980,32 @@ def analyze_return_rows(
     for row in rows:
         key = (row["sector"], row["date"])
         aggregate = day_sector.setdefault(key, {"equipment": set(), "tons": 0.0, "loads": 0.0,
-                                               "source_fronts": defaultdict(set)})
+                                               "cut_order_fronts": defaultdict(set)})
         aggregate["equipment"].add(row["equipment"])
         aggregate["tons"] += float(row.get("tons") or 0)
         aggregate["loads"] += float(row.get("loads") or 0)
         source = str(row.get("source_front") or "").strip()
         if source:
-            aggregate["source_fronts"][source].add(row["equipment"])
+            aggregate["cut_order_fronts"][source].add(row["equipment"])
 
     day_assignments: dict[tuple[int, date], dict[str, Any]] = {}
     for key, aggregate in day_sector.items():
         day_assignments[key] = _assign_equipment_to_front(
             aggregate["equipment"], equipment_owner, fronts_by_code
         )
-        day_assignments[key]["source_front_evidence"] = [
-            {"source_front": source, "code": _source_front_code(source, fronts, unit_code),
-             "equipment": sorted(fleets)}
-            for source, fleets in sorted(aggregate["source_fronts"].items())
-        ]
+        cut_order_evidence = []
+        for source, fleets in sorted(aggregate["cut_order_fronts"].items()):
+            source_code = _cut_order_front_code(source, fronts, unit_code)
+            cut_order_evidence.append({
+                "source_front": source,
+                "code": source_code,
+                "front": fronts_by_code.get(source_code, {}).get("name", "") if source_code else "",
+                "equipment": sorted(fleets),
+            })
+        day_assignments[key]["cut_order_evidence"] = cut_order_evidence
+        day_assignments[key]["execution_context"] = _assignment_execution_context(
+            day_assignments[key], normalized_target
+        )
 
     # Only equipment of the selected front, on days assigned to that front.
     # An unknown field prevents inferring that the complete sets are disjoint.
@@ -922,6 +1029,17 @@ def analyze_return_rows(
     # Períodos gerais também nascem da classificação diária. Só depois dias
     # consecutivos da mesma frente/empate são agrupados para exibição.
     periods = _group_daily_periods(day_assignments, day_sector, sector_reference_index)
+    for period in periods:
+        context = period.get("execution_context") or {}
+        period["execution_mode"] = context.get("mode") or "executor_only"
+        period["executor_front_code"] = period.get("assigned_front_code") or ""
+        period["executor_front"] = period.get("assigned_front") or ""
+        period["cut_order_front_code"] = context.get("cut_order_front_code") or ""
+        period["cut_order_front"] = context.get("cut_order_front") or ""
+        period["uses_target_cut_order"] = bool(
+            period["execution_mode"] == "cut_order"
+            and period["cut_order_front_code"] == normalized_target
+        )
 
     # A linha do tempo da frente analisada é construída pela atribuição diária.
     # Isso evita perder uma troca A -> outra frente -> A quando o setor continuou
@@ -1068,7 +1186,7 @@ def analyze_return_rows(
         coverage = item["other_fronts_in_sector"]
         if coverage:
             sector_activity = (
-                f" Durante a ausência, o próprio setor {item['sector']} também foi trabalhado por "
+                f" Durante a ausência, no próprio setor {item['sector']} foi identificada a seguinte execução: "
                 f"{_coverage_report_text(coverage)}."
             )
         else:
@@ -1090,7 +1208,7 @@ def analyze_return_rows(
         coverage = item["other_fronts_in_sector"]
         if coverage:
             verification = (
-                f" Durante a ausência, o setor {item['sector']} foi trabalhado por "
+                f" Durante a ausência, no setor {item['sector']} foi identificada a seguinte execução: "
                 f"{_coverage_report_text(coverage)}."
             )
         else:
@@ -1127,10 +1245,19 @@ def analyze_return_rows(
         period_text = _short_range(date.fromisoformat(item["start"]), date.fromisoformat(item["end"]))
         sector_suffix = _sector_reference_report_suffix(item.get("sector_reference"))
         daily_text = _daily_count_series(item.get("daily") or [])
-        report_lines.append(
-            f"{line_number}. O setor {item['sector']}{sector_suffix}, em {period_text}, foi atribuído à "
-            f"{item['assigned_front']} pela maioria diária dos equipamentos. Contagem diária: {daily_text}."
-        )
+        if item.get("uses_target_cut_order"):
+            cut_order = str(item.get("cut_order_front") or target["name"]).strip()
+            report_lines.append(
+                f"{line_number}. No setor {item['sector']}{sector_suffix}, em {period_text}, "
+                f"{item['assigned_front']} executou a colheita usando a ordem de corte da {cut_order}, "
+                f"frente que havia deixado o setor. A frente executora foi identificada pelo layout dos "
+                f"equipamentos. Contagem diária: {daily_text}."
+            )
+        else:
+            report_lines.append(
+                f"{line_number}. O setor {item['sector']}{sector_suffix}, em {period_text}, teve execução atribuída à "
+                f"{item['assigned_front']} pela maioria diária dos equipamentos. Contagem diária: {daily_text}."
+            )
         line_number += 1
 
     sector_reference_issues = []
@@ -1185,8 +1312,14 @@ def analyze_return_rows(
         "confirmed_soil_wet_sectors_count": len({item["sector"] for item in confirmed_soil_wet}),
         "soil_wet_base_used": bool(soil_wet_records),
         "returns_with_other_front_in_sector_count": sum(1 for item in returns if item["other_fronts_in_sector"]),
+        "returns_with_cut_order_in_sector_count": sum(
+            1 for item in returns
+            if any(entry.get("uses_target_cut_order") for entry in item["other_fronts_in_sector"])
+        ),
         "interruptions_with_other_front_in_sector_count": sum(1 for item in possible_soil_wet if item["other_fronts_in_sector"]),
         "other_front_periods_count": len(other_front_periods),
+        "cut_order_periods_count": sum(1 for item in other_front_periods if item.get("uses_target_cut_order")),
+        "independent_other_front_periods_count": sum(1 for item in other_front_periods if not item.get("uses_target_cut_order")),
         "ties_count": len(tie_periods),
         "unknown_equipment_count": len(unknown_equipment),
         "unknown_equipment": unknown_equipment,

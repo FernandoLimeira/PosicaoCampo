@@ -69,16 +69,27 @@ function returnDailyFrontCountText(daily, frontCode = '') {
   }).join(' · ');
 }
 
+function returnCutOrderText(item, targetFrontName = '') {
+  const cutOrder = String(item?.cut_order_front || '').trim();
+  if (item?.execution_mode === 'cut_order' || item?.uses_target_cut_order) {
+    return cutOrder || String(targetFrontName || 'Frente analisada').trim();
+  }
+  const executor = String(item?.assigned_front || item?.front || '').trim();
+  if (cutOrder) return cutOrder === executor ? `Própria (${cutOrder})` : cutOrder;
+  return 'Não identificada';
+}
+
 function returnSectorCoverageText(items) {
   const entries = Array.isArray(items) ? items : [];
-  if (!entries.length) return 'Nenhuma outra frente identificada';
+  if (!entries.length) return 'Nenhuma execução de outra frente identificada';
   return entries.map(item => {
     const period = returnFormatPeriod(item.start, item.end);
     const daily = returnDailyFrontCountText(item.daily, item.code);
     const count = daily || (Number(item.min_count) === Number(item.max_count)
       ? `${item.min_count} colhedora${Number(item.min_count) === 1 ? '' : 's'}`
       : `${item.min_count} a ${item.max_count} colhedoras`);
-    return `${item.front} · ${period} · ${count}`;
+    const cutOrder = returnCutOrderText(item);
+    return `${item.front} · ordem de corte ${cutOrder} · ${period} · ${count}`;
   }).join(' | ');
 }
 
@@ -553,9 +564,9 @@ function renderReturnKpis(report) {
   const kpis = [
     ['Retornos reais', report?.returns_count || 0, 'Com trabalho em outro setor no intervalo'],
     ['Interrupções', report?.possible_soil_wet_count || 0, 'Sem deslocamento comprovado'],
-    ['Retorno com outra frente', report?.returns_with_other_front_in_sector_count || 0, 'Outra frente trabalhou no setor durante a ausência'],
+    ['Retorno com outra frente', report?.returns_with_other_front_in_sector_count || 0, 'Execução de outra frente no setor durante a ausência'],
     ['Setores com retorno', report?.return_sectors_count || 0, 'Setores distintos com retorno real'],
-    ['Outras frentes', report?.other_front_periods_count || 0, 'Períodos atribuídos a outra frente'],
+    ['Outras frentes', report?.other_front_periods_count || 0, 'Períodos executados por equipamentos de outra frente'],
     ['Sem cadastro', report?.unknown_equipment_count || 0, 'Equipamentos fora da base de layouts'],
   ];
   container.innerHTML = kpis.map(([label, value, hint], index) => `
@@ -676,16 +687,18 @@ function renderReturnOtherRows(report) {
   if (!body) return;
   const rows = Array.isArray(report?.other_front_periods) ? report.other_front_periods : [];
   if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="7" class="return-table-empty">Nenhum período atribuído a outra frente.</td></tr>';
+    body.innerHTML = '<tr><td colspan="8" class="return-table-empty">Nenhum período executado por outra frente.</td></tr>';
     return;
   }
+  const targetName = String(report?.target_front?.name || '').trim();
   body.innerHTML = rows.map(item => `
     <tr>
       <td>${escapeHtml(returnFormatPeriod(item.start, item.end))}</td>
       <td><strong>${escapeHtml(item.sector)}</strong></td>
       <td>${escapeHtml(returnSectorSectionText(item))}</td>
       <td>${escapeHtml(returnSectorFarmText(item))}</td>
-      <td>${escapeHtml(item.assigned_front)}</td>
+      <td>${escapeHtml(item.executor_front || item.assigned_front)}</td>
+      <td>${escapeHtml(returnCutOrderText(item, targetName))}</td>
       <td>${escapeHtml(returnDailyFrontCountText(item.daily) || returnCountText(item.counts))}</td>
       <td>${escapeHtml((item.equipment || []).join(', '))}</td>
     </tr>
