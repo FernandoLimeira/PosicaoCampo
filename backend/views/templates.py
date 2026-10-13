@@ -4,7 +4,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 
 from ..config import TEMPLATE_DIR
 
-ASSET_VERSION = "20261006-rastros-layout-v25"
+ASSET_VERSION = "20261010-producao-v1"
 
 environment = Environment(
     loader=FileSystemLoader(str(TEMPLATE_DIR)),

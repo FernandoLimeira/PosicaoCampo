@@ -42,6 +42,19 @@ from ..models.database import (
     save_sacarose_positions,
     save_unit,
 )
+from ..models.production import (
+    get_user_access as get_production_user_access,
+    save_user_access as save_production_user_access,
+    list_catalog as list_production_catalog,
+    save_group as save_production_group,
+    delete_group as delete_production_group,
+    save_service_front as save_production_service_front,
+    delete_service_front as delete_production_service_front,
+    list_sector_options as list_production_sector_options,
+    list_my_items as list_production_my_items,
+    save_my_item as save_production_my_item,
+    remove_my_item as remove_production_my_item,
+)
 
 STATIC_ROOTS = {"css", "js", "assets"}
 PAGE_ROUTES = {
@@ -49,6 +62,7 @@ PAGE_ROUTES = {
     "/emitir-posicao-global": ("emissao.html", "emission"),
     "/": ("index.html", "dashboard"),
     "/sacarose": ("sacarose.html", "sacarose"),
+    "/producao": ("producao.html", "production"),
     "/setores": ("setores.html", "sectors"),
     "/relatorios": ("relatorios.html", "reports"),
     "/retornos": ("retornos.html", "returns"),
@@ -160,7 +174,19 @@ def _cookies(environ):
 
 
 def _session_user(environ):
-    return get_user_by_session(_cookies(environ).get(SESSION_COOKIE))
+    user = get_user_by_session(_cookies(environ).get(SESSION_COOKIE))
+    if not user:
+        return None
+    try:
+        user["production_access"] = get_production_user_access(int(user["id"]))
+    except (ValueError, TypeError):
+        user["production_access"] = {
+            "enabled": False,
+            "admin": False,
+            "permissions": {"view": False, "fill": False, "configure": False},
+            "units": [],
+        }
+    return user
 
 
 def _is_admin(user):
@@ -408,6 +434,7 @@ def application(environ, start_response):
                 str(payload.get("name", "")), str(payload.get("password", "")),
                 role=payload.get("role", "analyst"), base_unit=payload.get("base_unit", "PPT"),
                 email=payload.get("email", ""), is_active=payload.get("is_active", True),
+                production_access=payload.get("production_access"),
             )
             return _json(start_response, HTTPStatus.CREATED, {"user": created})
         except ValueError as exc:
@@ -437,6 +464,160 @@ def application(environ, start_response):
                     return _json(start_response, HTTPStatus.OK, {"ok": True, "user": updated})
             except (ValueError, TypeError) as exc:
                 return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path.startswith("/api/users/") and path.endswith("/production-access"):
+        parts = [part for part in path.split("/") if part]
+        if len(parts) == 4 and parts[:2] == ["api", "users"]:
+            if not user:
+                return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+            if not _is_admin(user):
+                return _json(start_response, HTTPStatus.FORBIDDEN, {"error": "Acesso exclusivo do Administrador."})
+            try:
+                target_user_id = int(parts[2])
+                if method == "GET":
+                    return _json(start_response, HTTPStatus.OK, {"access": get_production_user_access(target_user_id)})
+                if method == "PUT":
+                    payload = _json_body(environ)
+                    access = save_production_user_access(target_user_id, payload.get("access"), actor_id=user["id"])
+                    return _json(start_response, HTTPStatus.OK, {"ok": True, "access": access})
+            except PermissionError as exc:
+                return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
+            except (ValueError, TypeError) as exc:
+                return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path == "/api/production/access" and method == "GET":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            return _json(start_response, HTTPStatus.OK, {"access": get_production_user_access(user["id"])})
+        except ValueError as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path == "/api/production/catalog" and method == "GET":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            unit_code = (query.get("unit") or [None])[0]
+            include_inactive = (query.get("include_inactive") or ["0"])[0] == "1"
+            return _json(start_response, HTTPStatus.OK, list_production_catalog(user["id"], unit_code=unit_code, include_inactive=include_inactive))
+        except PermissionError as exc:
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
+        except ValueError as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path == "/api/production/catalog/groups" and method == "POST":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            group = save_production_group(user["id"], _json_body(environ))
+            return _json(start_response, HTTPStatus.CREATED, {"ok": True, "group": group})
+        except PermissionError as exc:
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
+        except (ValueError, TypeError) as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path.startswith("/api/production/catalog/groups/") and method == "PUT":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            group_id = int(path.rsplit("/", 1)[-1])
+            group = save_production_group(user["id"], _json_body(environ), group_id=group_id)
+            return _json(start_response, HTTPStatus.OK, {"ok": True, "group": group})
+        except PermissionError as exc:
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
+        except (ValueError, TypeError) as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path.startswith("/api/production/catalog/groups/") and method == "DELETE":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            group_id = int(path.rsplit("/", 1)[-1])
+            delete_production_group(user["id"], group_id)
+            return _json(start_response, HTTPStatus.OK, {"ok": True})
+        except PermissionError as exc:
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
+        except (ValueError, TypeError) as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path == "/api/production/catalog/fronts" and method == "POST":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            front = save_production_service_front(user["id"], _json_body(environ))
+            return _json(start_response, HTTPStatus.CREATED, {"ok": True, "front": front})
+        except PermissionError as exc:
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
+        except (ValueError, TypeError) as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path.startswith("/api/production/catalog/fronts/") and method == "PUT":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            front_id = int(path.rsplit("/", 1)[-1])
+            front = save_production_service_front(user["id"], _json_body(environ), front_id=front_id)
+            return _json(start_response, HTTPStatus.OK, {"ok": True, "front": front})
+        except PermissionError as exc:
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
+        except (ValueError, TypeError) as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path.startswith("/api/production/catalog/fronts/") and method == "DELETE":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            front_id = int(path.rsplit("/", 1)[-1])
+            delete_production_service_front(user["id"], front_id)
+            return _json(start_response, HTTPStatus.OK, {"ok": True})
+        except PermissionError as exc:
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
+        except (ValueError, TypeError) as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path == "/api/production/sector-options" and method == "GET":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            unit_code = (query.get("unit") or [""])[0]
+            sector = (query.get("sector") or [""])[0]
+            return _json(start_response, HTTPStatus.OK, {"items": list_production_sector_options(user["id"], unit_code, sector)})
+        except PermissionError as exc:
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
+        except ValueError as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path == "/api/production/my-items":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            if method == "GET":
+                unit_code = (query.get("unit") or [""])[0]
+                work_date = (query.get("date") or [""])[0]
+                return _json(start_response, HTTPStatus.OK, list_production_my_items(user["id"], unit_code, work_date))
+            if method == "POST":
+                item = save_production_my_item(user["id"], _json_body(environ))
+                return _json(start_response, HTTPStatus.CREATED, {"ok": True, "item": item})
+        except PermissionError as exc:
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
+        except (ValueError, TypeError) as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path.startswith("/api/production/my-items/"):
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            item_id = int(path.rsplit("/", 1)[-1])
+            if method == "PUT":
+                item = save_production_my_item(user["id"], _json_body(environ), item_id=item_id)
+                return _json(start_response, HTTPStatus.OK, {"ok": True, "item": item})
+            if method == "DELETE":
+                remove_production_my_item(user["id"], item_id)
+                return _json(start_response, HTTPStatus.OK, {"ok": True})
+        except PermissionError as exc:
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
+        except (ValueError, TypeError) as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
 
     if path == "/api/units" and method == "GET":
         if not user:
@@ -699,6 +880,8 @@ def application(environ, start_response):
             return _redirect(start_response, "/login")
         if path in {"/usuarios", "/usuarios/cadastro"} and not _is_admin(user):
             return _json(start_response, HTTPStatus.FORBIDDEN, {"error": "Acesso exclusivo do Administrador."})
+        if path == "/producao" and not user.get("production_access", {}).get("enabled"):
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": "Você não possui acesso à Produção Agrícola."})
         template, page = PAGE_ROUTES[path]
         return _page(start_response, template, user=user, page=page)
 

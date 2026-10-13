@@ -94,7 +94,7 @@ class PageTests(unittest.TestCase):
         return result
 
     def test_pages_require_a_session(self):
-        for path in ("/", "/sacarose", "/setores", "/relatorios", "/retornos", "/historico", "/usuarios", "/usuarios/cadastro", "/emitir-posicao-global"):
+        for path in ("/", "/sacarose", "/producao", "/setores", "/relatorios", "/retornos", "/historico", "/usuarios", "/usuarios/cadastro", "/emitir-posicao-global"):
             with self.subTest(path=path):
                 response = self.request(path)
                 self.assertEqual(response["status"], 302)
@@ -282,6 +282,7 @@ class PageTests(unittest.TestCase):
             ("/relatorios", 'id="excel-report-form"', 'id="return-analysis-form"'),
             ("/retornos", 'id="return-analysis-form"', 'id="excel-report-form"'),
             ("/sacarose", 'id="sacarose-form"', 'id="operation-form"'),
+            ("/producao", 'id="production-entry-form"', 'id="sacarose-form"'),
         ):
             with self.subTest(path=path):
                 html = self.request(path, role="admin")["body"]
@@ -329,12 +330,13 @@ class PageTests(unittest.TestCase):
         self.assertIn('overflow-y: auto;', declarations('.return-trace-list'))
         self.assertIn('.return-trace-list { grid-template-columns: 1fr; }', css)
         page = self.request('/retornos', role='member')['body']
-        self.assertIn('/css/retornos.css?v=20261006-rastros-layout-v25', page)
+        self.assertIn('/css/retornos.css?v=20261010-producao-v1', page)
 
     def test_script_dependencies_and_styles_are_scoped(self):
         expected = {
             "/": ["common.js", "export.js", "app.js"],
             "/sacarose": ["common.js", "export.js", "sacarose.js"],
+            "/producao": ["common.js", "producao.js"],
             "/emitir-posicao-global": ["common.js", "export.js", "emissao.js"],
             "/setores": ["common.js", "setores.js"],
             "/relatorios": ["common.js", "relatorios.js"],
@@ -350,6 +352,35 @@ class PageTests(unittest.TestCase):
                 self.assertEqual([Path(asset).name for asset in parser.assets if asset.startswith("/js/")], scripts)
                 self.assertIn("/css/base.css", parser.assets)
                 self.assertNotIn("/css/style.css", parser.assets)
+
+
+    def test_production_page_respects_user_units_and_exposes_popup_workflow(self):
+        self.assertEqual(self.request("/producao", role="member")["status"], 403)
+        self.assertEqual(self.request("/api/production/catalog", role="member", overrides={"QUERY_STRING": "unit=NRD"})["status"], 403)
+
+        user = self.db.create_user(
+            "ProductionAnalyst", "Production-pass-42", role="analyst", base_unit="NRD",
+            production_access={
+                "enabled": True,
+                "permissions": {"fill": True},
+                "units": ["NRD", "PPT"],
+            },
+        )
+        cookie = f"{config.SESSION_COOKIE}={self.db.create_session(user['id'])}"
+        page = self.request("/producao", cookie=cookie)
+        self.assertEqual(page["status"], 200)
+        for marker in (
+            'id="production-entry-modal"', 'id="production-entry-form"',
+            'data-production-status value="EM ATIVIDADE"', 'id="production-config-pane"',
+            'id="production-front-form"', 'id="production-items-body"',
+        ):
+            self.assertIn(marker, page["body"])
+        self.assertIn('href="/producao"', page["body"])
+
+        access = json.loads(self.request("/api/production/access", cookie=cookie)["body"])["access"]
+        self.assertEqual(access["units"], ["PPT", "NRD"])
+        self.assertTrue(access["permissions"]["fill"])
+        self.assertEqual(self.request("/api/production/catalog", cookie=cookie, overrides={"QUERY_STRING": "unit=RBR"})["status"], 403)
 
     def test_users_page_denies_non_admin_direct_access(self):
         self.assertEqual(self.request("/usuarios", role="member")["status"], 403)

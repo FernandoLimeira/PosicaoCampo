@@ -6,7 +6,7 @@ import time
 from typing import Any
 
 from ..config import MIN_PASSWORD_LENGTH, REMEMBER_SESSION_TTL_SECONDS, SESSION_TTL_SECONDS
-from .storage import ALL_USER_REFERENCES, auth_connection, connection, initialize_databases, validate_actor
+from .storage import ALL_USER_REFERENCES, auth_connection, connection, initialize_databases, seed_production_defaults, validate_actor
 from .security import hash_password, new_session_token, token_digest, verify_password
 
 
@@ -502,6 +502,7 @@ def init_db() -> None:
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         _repair_unit_identities(conn)
+        seed_production_defaults(conn)
         conn.execute(
             """
             UPDATE sacarose_positions
@@ -548,7 +549,8 @@ def _user_payload(row: sqlite3.Row) -> dict[str, Any]:
 
 
 def create_user(name: str, password: str, *, role: str = ROLE_USER,
-                base_unit: str = "PPT", email: str = "", is_active: bool = True) -> dict[str, Any]:
+                base_unit: str = "PPT", email: str = "", is_active: bool = True,
+                production_access: Any = None) -> dict[str, Any]:
     cleaned_name, password = _validate_credentials(name, password)
     if not isinstance(role, str) or role not in ALLOWED_ROLES:
         raise ValueError("Nível de acesso inválido.")
@@ -561,8 +563,11 @@ def create_user(name: str, password: str, *, role: str = ROLE_USER,
     email = email.strip()
     if len(email) > 254 or (email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email)):
         raise ValueError("Informe um e-mail válido (máximo de 254 caracteres).")
+    from .production import normalize_user_access, write_user_access
+    access = normalize_user_access(production_access)
     now = int(time.time())
     with auth_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
         try:
             cursor = conn.execute(
                 "INSERT INTO users (name, password_hash, role, is_active, created_at, email, base_unit) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -570,9 +575,12 @@ def create_user(name: str, password: str, *, role: str = ROLE_USER,
             )
         except sqlite3.IntegrityError as exc:
             raise ValueError("Este nome de usuário já está cadastrado.") from exc
+        user_id = int(cursor.lastrowid)
+        if role != ROLE_ADMIN:
+            write_user_access(conn, user_id, access, now=now)
         row = conn.execute(
             f"SELECT {USER_COLUMNS} FROM users WHERE id = ?",
-            (cursor.lastrowid,),
+            (user_id,),
         ).fetchone()
     return _user_payload(row)
 
@@ -619,13 +627,17 @@ def has_admin() -> bool:
 
 
 def list_users(current_user_id: int) -> list[dict[str, Any]]:
+    from .production import decorate_user_payload
     with auth_connection() as conn:
         rows = conn.execute(
             f"SELECT {USER_COLUMNS} FROM users WHERE role <> 'admin' OR id = ? "
             "ORDER BY CASE role WHEN 'admin' THEN 0 ELSE 1 END, name COLLATE NOCASE ASC, id ASC",
             (current_user_id,),
         ).fetchall()
-    return [_user_payload(row) for row in rows]
+        users = [_user_payload(row) for row in rows]
+        for payload in users:
+            decorate_user_payload(conn, payload)
+    return users
 
 
 def _editable_user(conn: sqlite3.Connection, user_id: int, current_user_id: int) -> sqlite3.Row:
@@ -645,6 +657,8 @@ def delete_user(user_id: int, current_user_id: int) -> None:
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         _editable_user(conn, user_id, current_user_id)
+        from .production import detach_user_data_before_delete
+        detach_user_data_before_delete(conn, user_id)
         for table, column in ALL_USER_REFERENCES:
             conn.execute(f"UPDATE main.{table} SET {column}=NULL WHERE {column}=?", (user_id,))
         conn.execute("DELETE FROM auth.users WHERE id = ?", (user_id,))
@@ -737,7 +751,9 @@ def get_user_by_session(token: str | None) -> dict[str, Any] | None:
             """,
             (digest, now),
         ).fetchone()
-    return _user_payload(row) if row else None
+        if not row:
+            return None
+        return _user_payload(row)
 
 
 def delete_session(token: str | None) -> None:

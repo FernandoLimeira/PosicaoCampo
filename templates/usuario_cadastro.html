@@ -45,12 +45,34 @@
           <option value="inactive">Desativado</option>
         </select>
       </label>
+
+      <section class="user-production-access" id="user-production-access" aria-labelledby="user-production-access-title">
+        <div class="user-production-access-head">
+          <div>
+            <span class="modal-kicker">Módulo</span>
+            <h3 id="user-production-access-title">Produção Agrícola</h3>
+            <p>Defina somente as unidades do analista. As frentes são escolhidas pelo próprio usuário dentro do módulo.</p>
+          </div>
+          <label class="user-access-toggle"><input id="production-access-enabled" type="checkbox" checked /><span>Liberar acesso</span></label>
+        </div>
+        <div class="user-production-permissions">
+          <label><input id="production-access-fill" type="checkbox" checked /><span>Preencher e editar</span></label>
+        </div>
+        <fieldset class="user-production-units">
+          <legend>Unidades liberadas</legend>
+          <label><input type="checkbox" data-production-access-unit value="PPT" checked /><span>PPT</span></label>
+          <label><input type="checkbox" data-production-access-unit value="NRD" /><span>NRD</span></label>
+          <label><input type="checkbox" data-production-access-unit value="RBR" /><span>RBR</span></label>
+          <label><input type="checkbox" data-production-access-unit value="PST" /><span>PST</span></label>
+        </fieldset>
+      </section>
+
       <button id="create-user-button" class="modal-button save" type="submit">Cadastrar usuário</button>
     </form>
     <p id="user-create-status" class="user-create-status" role="status" aria-live="polite"></p>
   </div>
   <footer class="modal-footer">
-    <div class="wizard-footer-info"><strong>Controle do Administrador</strong><p>A unidade base define o acesso inicial. Todas as unidades continuam disponíveis.</p></div>
+    <div class="wizard-footer-info"><strong>Controle do Administrador</strong><p>A unidade base continua como preferência inicial. Na Produção Agrícola, cada usuário enxerga somente as unidades liberadas aqui.</p></div>
     <div class="modal-footer-actions"><a class="modal-button secondary" href="/usuarios">Ver usuários cadastrados</a></div>
   </footer>
 </section>

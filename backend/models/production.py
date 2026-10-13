@@ -1,0 +1,619 @@
+"""Produção Agrícola: acesso por unidade, catálogo configurável e apontamentos diários.
+
+O acesso do usuário define apenas as unidades liberadas. A lista de frentes/serviços
+é montada pelo próprio usuário e permanece salva entre os dias. Cada atualização
+diária gera um registro separado, preservando o histórico.
+"""
+
+from __future__ import annotations
+
+import re
+import sqlite3
+import time
+from datetime import date
+from typing import Any
+
+from .database import ALLOWED_UNIT_CODES, UNIT_DEFINITIONS
+from .storage import auth_connection, connection, validate_actor
+
+MODULE_KEY = "production"
+STATUS_OPTIONS = (
+    "EM ATIVIDADE",
+    "SOLO ÚMIDO / TESTE",
+    "AGUARDANDO ATIVIDADE",
+    "PARADO / CRÍTICO",
+)
+DISPLAY_STYLES = {"operation", "front"}
+
+
+def _normalize_unit(value: Any) -> str:
+    unit = str(value or "").strip().upper()
+    if unit not in ALLOWED_UNIT_CODES:
+        raise ValueError("Unidade inválida para a Produção Agrícola.")
+    return unit
+
+
+def _normalize_work_date(value: Any) -> str:
+    text = str(value or "").strip()
+    try:
+        parsed = date.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError("Data do apontamento inválida.") from exc
+    if parsed.year < 2000 or parsed.year > 2100:
+        raise ValueError("Data do apontamento inválida.")
+    return parsed.isoformat()
+
+
+def _clean_text(value: Any, field: str, max_length: int, *, required: bool = False) -> str:
+    text = str(value or "").strip()
+    if required and not text:
+        raise ValueError(f"Informe {field}.")
+    if len(text) > max_length:
+        raise ValueError(f"{field.capitalize()} deve ter no máximo {max_length} caracteres.")
+    return text
+
+
+def _normalize_status(value: Any) -> str:
+    text = str(value or "").strip().upper()
+    if text not in STATUS_OPTIONS:
+        raise ValueError("Selecione um status válido.")
+    return text
+
+
+def _normalize_position(value: Any) -> int:
+    try:
+        position = int(value if value is not None else 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Ordem de exibição inválida.") from exc
+    if position < 0 or position > 9999:
+        raise ValueError("A ordem de exibição deve estar entre 0 e 9999.")
+    return position
+
+
+def normalize_user_access(payload: Any) -> dict[str, Any]:
+    if payload is None:
+        return {"enabled": False, "permissions": {"view": False, "fill": False}, "units": []}
+    if not isinstance(payload, dict):
+        raise ValueError("Configuração da Produção Agrícola inválida.")
+
+    enabled = payload.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise ValueError("Situação do acesso à Produção Agrícola inválida.")
+
+    raw_permissions = payload.get("permissions") or {}
+    if not isinstance(raw_permissions, dict):
+        raise ValueError("Permissões da Produção Agrícola inválidas.")
+    fill = raw_permissions.get("fill", False)
+    if not isinstance(fill, bool):
+        raise ValueError("Permissões da Produção Agrícola inválidas.")
+
+    raw_units = payload.get("units") or []
+    if not isinstance(raw_units, list):
+        raise ValueError("Unidades da Produção Agrícola inválidas.")
+    units: list[str] = []
+    for value in raw_units:
+        unit = _normalize_unit(value)
+        if unit not in units:
+            units.append(unit)
+    units.sort(key=lambda code: ALLOWED_UNIT_CODES.index(code))
+
+    if enabled and not units:
+        raise ValueError("Selecione ao menos uma unidade para a Produção Agrícola.")
+
+    return {
+        "enabled": enabled,
+        "permissions": {"view": enabled, "fill": bool(fill) if enabled else False},
+        "units": units if enabled else [],
+    }
+
+
+def write_user_access(conn: sqlite3.Connection, user_id: int, access: dict[str, Any], *, now: int | None = None) -> None:
+    timestamp = int(now if now is not None else time.time())
+    permissions = access["permissions"]
+    conn.execute(
+        """
+        INSERT INTO user_module_permissions(user_id,module_key,can_view,can_fill,updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(user_id,module_key) DO UPDATE SET
+            can_view=excluded.can_view, can_fill=excluded.can_fill, updated_at=excluded.updated_at
+        """,
+        (user_id, MODULE_KEY, int(permissions["view"]), int(permissions["fill"]), timestamp),
+    )
+    conn.execute("DELETE FROM user_module_units WHERE user_id=? AND module_key=?", (user_id, MODULE_KEY))
+    for unit in access["units"]:
+        conn.execute(
+            "INSERT INTO user_module_units(user_id,module_key,unit_code,updated_at) VALUES (?,?,?,?)",
+            (user_id, MODULE_KEY, unit, timestamp),
+        )
+
+
+def _access_from_conn(conn: sqlite3.Connection, user_id: int, *, role: str | None = None) -> dict[str, Any]:
+    if role is None:
+        row = conn.execute("SELECT role FROM users WHERE id=?", (user_id,)).fetchone()
+        if not row:
+            raise ValueError("Usuário não encontrado.")
+        role = row["role"]
+    if role == "admin":
+        return {
+            "enabled": True,
+            "admin": True,
+            "permissions": {"view": True, "fill": True, "configure": True},
+            "units": list(ALLOWED_UNIT_CODES),
+        }
+
+    permission = conn.execute(
+        "SELECT can_view,can_fill FROM user_module_permissions WHERE user_id=? AND module_key=?",
+        (user_id, MODULE_KEY),
+    ).fetchone()
+    units = [
+        row["unit_code"] for row in conn.execute(
+            "SELECT unit_code FROM user_module_units WHERE user_id=? AND module_key=?",
+            (user_id, MODULE_KEY),
+        ).fetchall()
+    ]
+    units.sort(key=lambda code: ALLOWED_UNIT_CODES.index(code) if code in ALLOWED_UNIT_CODES else len(ALLOWED_UNIT_CODES))
+    can_view = bool(permission and permission["can_view"])
+    can_fill = bool(permission and permission["can_fill"])
+    return {
+        "enabled": can_view,
+        "admin": False,
+        "permissions": {"view": can_view, "fill": can_fill, "configure": False},
+        "units": units if can_view else [],
+    }
+
+
+def get_user_access(user_id: int) -> dict[str, Any]:
+    with auth_connection() as conn:
+        return _access_from_conn(conn, user_id)
+
+
+def save_user_access(user_id: int, payload: Any, *, actor_id: int) -> dict[str, Any]:
+    access = normalize_user_access(payload)
+    with auth_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        actor = conn.execute("SELECT role,is_active FROM users WHERE id=?", (actor_id,)).fetchone()
+        if not actor or actor["role"] != "admin" or not bool(actor["is_active"]):
+            raise ValueError("Acesso exclusivo do Administrador.")
+        target = conn.execute("SELECT role FROM users WHERE id=?", (user_id,)).fetchone()
+        if not target or target["role"] == "admin":
+            raise ValueError("Usuário não encontrado.")
+        write_user_access(conn, user_id, access)
+        return _access_from_conn(conn, user_id, role=target["role"])
+
+
+def access_summary(access: dict[str, Any]) -> str:
+    if not access.get("enabled"):
+        return "Produção Agrícola: sem acesso"
+    units = ", ".join(access.get("units") or []) or "sem unidades"
+    suffix = " · preenchimento liberado" if access.get("permissions", {}).get("fill") else " · somente consulta"
+    return f"Produção Agrícola: {units}{suffix}"
+
+
+def decorate_user_payload(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+    access = _access_from_conn(conn, int(payload["id"]), role=str(payload.get("role") or ""))
+    payload["production_access"] = access
+    payload["access_summary"] = access_summary(access)
+    return payload
+
+
+def _require_access(conn: sqlite3.Connection, user_id: int, *, permission: str = "view", unit: str | None = None) -> dict[str, Any]:
+    row = conn.execute("SELECT id,role,is_active FROM auth.users WHERE id=?", (user_id,)).fetchone()
+    if not row or not bool(row["is_active"]):
+        raise PermissionError("Autenticação necessária.")
+    if row["role"] == "admin":
+        return {"role": "admin", "units": list(ALLOWED_UNIT_CODES), "can_fill": True}
+
+    permission_row = conn.execute(
+        "SELECT can_view,can_fill FROM auth.user_module_permissions WHERE user_id=? AND module_key=?",
+        (user_id, MODULE_KEY),
+    ).fetchone()
+    if not permission_row or not bool(permission_row["can_view"]):
+        raise PermissionError("Você não possui acesso à Produção Agrícola.")
+    if permission == "fill" and not bool(permission_row["can_fill"]):
+        raise PermissionError("Você possui acesso somente para consulta na Produção Agrícola.")
+
+    units = [
+        row[0] for row in conn.execute(
+            "SELECT unit_code FROM auth.user_module_units WHERE user_id=? AND module_key=?",
+            (user_id, MODULE_KEY),
+        )
+    ]
+    if unit is not None and unit not in units:
+        raise PermissionError(f"A unidade {unit} não está liberada para este usuário.")
+    return {"role": row["role"], "units": units, "can_fill": bool(permission_row["can_fill"])}
+
+
+def _require_admin(conn: sqlite3.Connection, user_id: int) -> None:
+    row = conn.execute("SELECT role,is_active FROM auth.users WHERE id=?", (user_id,)).fetchone()
+    if not row or row["role"] != "admin" or not bool(row["is_active"]):
+        raise PermissionError("A configuração das frentes de serviço é exclusiva do Administrador.")
+
+
+def list_catalog(user_id: int, *, unit_code: Any | None = None, include_inactive: bool = False) -> dict[str, Any]:
+    unit = _normalize_unit(unit_code) if unit_code is not None else None
+    with connection() as conn:
+        access = _require_access(conn, user_id, unit=unit)
+        if include_inactive and access["role"] != "admin":
+            include_inactive = False
+
+        group_where = "" if include_inactive else "WHERE g.is_active=1"
+        groups = [
+            {
+                "id": int(row["id"]), "name": row["name"], "position": int(row["position"]),
+                "is_active": bool(row["is_active"]), "fronts": [],
+            }
+            for row in conn.execute(
+                f"SELECT g.id,g.name,g.position,g.is_active FROM production_groups g {group_where} ORDER BY g.position,g.name COLLATE NOCASE"
+            ).fetchall()
+        ]
+        by_group = {item["id"]: item for item in groups}
+        if not groups:
+            return {"groups": [], "unit": unit, "can_configure": access["role"] == "admin"}
+
+        params: list[Any] = []
+        conditions = []
+        if not include_inactive:
+            conditions.append("f.is_active=1")
+        if unit:
+            conditions.append("EXISTS (SELECT 1 FROM production_service_front_units fu WHERE fu.service_front_id=f.id AND fu.unit_code=?)")
+            params.append(unit)
+        where = "WHERE " + " AND ".join(conditions) if conditions else ""
+        rows = conn.execute(
+            f"""
+            SELECT f.id,f.group_id,f.name,f.display_style,f.position,f.is_active
+            FROM production_service_fronts f
+            {where}
+            ORDER BY f.position,f.name COLLATE NOCASE
+            """,
+            params,
+        ).fetchall()
+        if rows:
+            front_ids = [int(row["id"]) for row in rows]
+            placeholders = ",".join("?" for _ in front_ids)
+            units_by_front: dict[int, list[str]] = {}
+            for mapping in conn.execute(
+                f"SELECT service_front_id,unit_code FROM production_service_front_units WHERE service_front_id IN ({placeholders}) ORDER BY unit_code",
+                front_ids,
+            ).fetchall():
+                units_by_front.setdefault(int(mapping["service_front_id"]), []).append(mapping["unit_code"])
+            for row in rows:
+                group = by_group.get(int(row["group_id"]))
+                if not group:
+                    continue
+                group["fronts"].append({
+                    "id": int(row["id"]), "group_id": int(row["group_id"]), "name": row["name"],
+                    "display_style": row["display_style"], "position": int(row["position"]),
+                    "is_active": bool(row["is_active"]), "units": units_by_front.get(int(row["id"]), []),
+                })
+        return {"groups": groups, "unit": unit, "can_configure": access["role"] == "admin"}
+
+
+def _group_payload(row: sqlite3.Row) -> dict[str, Any]:
+    return {"id": int(row["id"]), "name": row["name"], "position": int(row["position"]), "is_active": bool(row["is_active"])}
+
+
+def save_group(user_id: int, payload: Any, *, group_id: int | None = None) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("Dados do grupo inválidos.")
+    name = _clean_text(payload.get("name"), "o nome do grupo", 80, required=True)
+    position = _normalize_position(payload.get("position", 0))
+    is_active = payload.get("is_active", True)
+    if not isinstance(is_active, bool):
+        raise ValueError("Situação do grupo inválida.")
+    now = int(time.time())
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _require_admin(conn, user_id)
+        validate_actor(conn, user_id)
+        try:
+            if group_id is None:
+                cursor = conn.execute(
+                    """INSERT INTO production_groups(name,position,is_active,created_by,updated_by,created_at,updated_at)
+                       VALUES (?,?,?,?,?,?,?)""",
+                    (name, position, int(is_active), user_id, user_id, now, now),
+                )
+                group_id = int(cursor.lastrowid)
+            else:
+                if not conn.execute("SELECT 1 FROM production_groups WHERE id=?", (group_id,)).fetchone():
+                    raise ValueError("Grupo não encontrado.")
+                conn.execute(
+                    "UPDATE production_groups SET name=?,position=?,is_active=?,updated_by=?,updated_at=? WHERE id=?",
+                    (name, position, int(is_active), user_id, now, group_id),
+                )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError("Já existe um grupo com esse nome.") from exc
+        row = conn.execute("SELECT id,name,position,is_active FROM production_groups WHERE id=?", (group_id,)).fetchone()
+        return _group_payload(row)
+
+
+def delete_group(user_id: int, group_id: int) -> None:
+    """Apaga somente grupos ainda não vinculados a frentes/serviços.
+
+    Grupos com vínculos não são removidos para evitar exclusões em cascata e
+    preservar o histórico operacional.
+    """
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _require_admin(conn, user_id)
+        validate_actor(conn, user_id)
+        row = conn.execute("SELECT id,name FROM production_groups WHERE id=?", (group_id,)).fetchone()
+        if not row:
+            raise ValueError("Grupo não encontrado.")
+        linked = conn.execute(
+            "SELECT COUNT(*) FROM production_service_fronts WHERE group_id=?",
+            (group_id,),
+        ).fetchone()[0]
+        if int(linked or 0) > 0:
+            raise ValueError("Não é possível apagar este grupo porque existem frentes/serviços vinculados. Apague ou mova esses itens primeiro.")
+        conn.execute("DELETE FROM production_groups WHERE id=?", (group_id,))
+
+
+def delete_service_front(user_id: int, front_id: int) -> None:
+    """Apaga uma frente/serviço somente quando ela nunca foi utilizada.
+
+    Itens já usados permanecem protegidos para que lançamentos históricos não
+    percam sua referência de catálogo.
+    """
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _require_admin(conn, user_id)
+        validate_actor(conn, user_id)
+        row = conn.execute("SELECT id,name FROM production_service_fronts WHERE id=?", (front_id,)).fetchone()
+        if not row:
+            raise ValueError("Frente/serviço não encontrada.")
+        user_items = conn.execute(
+            "SELECT COUNT(*) FROM production_user_items WHERE service_front_id=?",
+            (front_id,),
+        ).fetchone()[0]
+        daily_entries = conn.execute(
+            "SELECT COUNT(*) FROM production_daily_entries WHERE service_front_id=?",
+            (front_id,),
+        ).fetchone()[0]
+        if int(user_items or 0) > 0 or int(daily_entries or 0) > 0:
+            raise ValueError("Não é possível apagar esta frente/serviço porque ela já foi usada em lançamentos. O histórico foi preservado.")
+        conn.execute("DELETE FROM production_service_front_units WHERE service_front_id=?", (front_id,))
+        conn.execute("DELETE FROM production_service_fronts WHERE id=?", (front_id,))
+
+
+def save_service_front(user_id: int, payload: Any, *, front_id: int | None = None) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("Dados da frente/serviço inválidos.")
+    name = _clean_text(payload.get("name"), "o nome da frente/serviço", 80, required=True)
+    try:
+        group_id = int(payload.get("group_id"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Selecione o grupo da frente/serviço.") from exc
+    display_style = str(payload.get("display_style") or "operation").strip().lower()
+    if display_style not in DISPLAY_STYLES:
+        raise ValueError("Tipo de exibição inválido.")
+    position = _normalize_position(payload.get("position", 0))
+    is_active = payload.get("is_active", True)
+    if not isinstance(is_active, bool):
+        raise ValueError("Situação da frente/serviço inválida.")
+    raw_units = payload.get("units") or []
+    if not isinstance(raw_units, list):
+        raise ValueError("Unidades da frente/serviço inválidas.")
+    units = []
+    for raw in raw_units:
+        unit = _normalize_unit(raw)
+        if unit not in units:
+            units.append(unit)
+    if not units:
+        raise ValueError("Selecione ao menos uma unidade para a frente/serviço.")
+    now = int(time.time())
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _require_admin(conn, user_id)
+        validate_actor(conn, user_id)
+        if not conn.execute("SELECT 1 FROM production_groups WHERE id=?", (group_id,)).fetchone():
+            raise ValueError("Grupo não encontrado.")
+        try:
+            if front_id is None:
+                cursor = conn.execute(
+                    """INSERT INTO production_service_fronts(
+                           group_id,name,display_style,position,is_active,created_by,updated_by,created_at,updated_at
+                       ) VALUES (?,?,?,?,?,?,?,?,?)""",
+                    (group_id, name, display_style, position, int(is_active), user_id, user_id, now, now),
+                )
+                front_id = int(cursor.lastrowid)
+            else:
+                if not conn.execute("SELECT 1 FROM production_service_fronts WHERE id=?", (front_id,)).fetchone():
+                    raise ValueError("Frente/serviço não encontrada.")
+                conn.execute(
+                    """UPDATE production_service_fronts
+                       SET group_id=?,name=?,display_style=?,position=?,is_active=?,updated_by=?,updated_at=? WHERE id=?""",
+                    (group_id, name, display_style, position, int(is_active), user_id, now, front_id),
+                )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError("Já existe uma frente/serviço com esse nome.") from exc
+        conn.execute("DELETE FROM production_service_front_units WHERE service_front_id=?", (front_id,))
+        conn.executemany(
+            "INSERT INTO production_service_front_units(service_front_id,unit_code) VALUES (?,?)",
+            [(front_id, unit) for unit in units],
+        )
+    catalog = list_catalog(user_id, include_inactive=True)
+    return next(
+        front for group in catalog["groups"]
+        for front in group["fronts"] if front["id"] == front_id
+    )
+
+
+def list_sector_options(user_id: int, unit_code: Any, sector: Any) -> list[dict[str, str]]:
+    unit = _normalize_unit(unit_code)
+    cleaned_sector = _clean_text(sector, "o setor", 32, required=True)
+    with connection() as conn:
+        _require_access(conn, user_id, unit=unit)
+        rows = conn.execute(
+            """SELECT sector,section,description FROM sector_base
+               WHERE sector=? COLLATE NOCASE ORDER BY section COLLATE NOCASE""",
+            (cleaned_sector,),
+        ).fetchall()
+        return [
+            {"sector": row["sector"], "section": row["section"] or "", "farm": row["description"] or ""}
+            for row in rows
+        ]
+
+
+def _catalog_front_for_unit(conn: sqlite3.Connection, front_id: int, unit: str, *, allow_inactive: bool = False) -> sqlite3.Row:
+    row = conn.execute(
+        """
+        SELECT f.id,f.group_id,f.name,f.display_style,f.position,f.is_active,g.name AS group_name,g.is_active AS group_active
+        FROM production_service_fronts f
+        JOIN production_groups g ON g.id=f.group_id
+        JOIN production_service_front_units fu ON fu.service_front_id=f.id AND fu.unit_code=?
+        WHERE f.id=?
+        """,
+        (unit, front_id),
+    ).fetchone()
+    if not row or (not allow_inactive and (not bool(row["is_active"]) or not bool(row["group_active"]))):
+        raise ValueError("Frente/serviço não disponível para esta unidade.")
+    return row
+
+
+def _entry_payload(row: sqlite3.Row | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    return {
+        "id": int(row["id"]), "work_date": row["work_date"], "sector": row["sector"] or "",
+        "section": row["section"] or "", "farm": row["farm"] or "", "status": row["status"],
+        "observation": row["observation"] or "", "updated_at": int(row["updated_at"] or 0),
+    }
+
+
+def list_my_items(user_id: int, unit_code: Any, work_date: Any) -> dict[str, Any]:
+    unit = _normalize_unit(unit_code)
+    selected_date = _normalize_work_date(work_date)
+    with connection() as conn:
+        access = _require_access(conn, user_id, unit=unit)
+        rows = conn.execute(
+            """
+            SELECT ui.id AS item_id,ui.service_front_id,ui.position,
+                   f.name AS service_name,f.display_style,f.is_active AS service_active,
+                   g.id AS group_id,g.name AS group_name,g.is_active AS group_active
+            FROM production_user_items ui
+            JOIN production_service_fronts f ON f.id=ui.service_front_id
+            JOIN production_groups g ON g.id=f.group_id
+            WHERE ui.owner_user_id=? AND ui.unit_code=? AND ui.is_active=1
+            ORDER BY ui.position,ui.id
+            """,
+            (user_id, unit),
+        ).fetchall()
+        items = []
+        for row in rows:
+            current = conn.execute(
+                "SELECT * FROM production_daily_entries WHERE user_item_id=? AND work_date=?",
+                (row["item_id"], selected_date),
+            ).fetchone()
+            latest = current or conn.execute(
+                """SELECT * FROM production_daily_entries
+                   WHERE user_item_id=? AND work_date<? ORDER BY work_date DESC,id DESC LIMIT 1""",
+                (row["item_id"], selected_date),
+            ).fetchone()
+            entry = _entry_payload(latest)
+            items.append({
+                "id": int(row["item_id"]), "service_front_id": int(row["service_front_id"]),
+                "service_name": row["service_name"], "display_style": row["display_style"],
+                "group_id": int(row["group_id"]), "group_name": row["group_name"],
+                "catalog_active": bool(row["service_active"]) and bool(row["group_active"]),
+                "entry": entry, "is_current_day": bool(entry and entry["work_date"] == selected_date),
+            })
+        return {
+            "unit": unit, "work_date": selected_date, "items": items,
+            "permissions": {"view": True, "fill": bool(access["can_fill"]), "configure": access["role"] == "admin"},
+        }
+
+
+def _normalize_entry_data(payload: dict[str, Any]) -> dict[str, str]:
+    return {
+        "work_date": _normalize_work_date(payload.get("work_date")),
+        "sector": _clean_text(payload.get("sector"), "o setor", 32, required=True),
+        "section": _clean_text(payload.get("section"), "a seção", 32),
+        "farm": _clean_text(payload.get("farm"), "a fazenda", 160),
+        "status": _normalize_status(payload.get("status")),
+        "observation": _clean_text(payload.get("observation"), "a observação", 2000),
+    }
+
+
+def save_my_item(user_id: int, payload: Any, *, item_id: int | None = None) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("Dados do apontamento inválidos.")
+    unit = _normalize_unit(payload.get("unit_code"))
+    try:
+        front_id = int(payload.get("service_front_id"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Selecione a frente/serviço.") from exc
+    entry = _normalize_entry_data(payload)
+    now = int(time.time())
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _require_access(conn, user_id, permission="fill", unit=unit)
+        validate_actor(conn, user_id)
+        front = _catalog_front_for_unit(conn, front_id, unit, allow_inactive=item_id is not None)
+
+        if item_id is None:
+            position = conn.execute(
+                "SELECT COALESCE(MAX(position),-1)+1 FROM production_user_items WHERE owner_user_id=? AND unit_code=? AND is_active=1",
+                (user_id, unit),
+            ).fetchone()[0]
+            cursor = conn.execute(
+                """INSERT INTO production_user_items(owner_user_id,unit_code,service_front_id,position,is_active,created_at,updated_at)
+                   VALUES (?,?,?,?,1,?,?)""",
+                (user_id, unit, front_id, int(position or 0), now, now),
+            )
+            item_id = int(cursor.lastrowid)
+        else:
+            item = conn.execute(
+                "SELECT id,unit_code FROM production_user_items WHERE id=? AND owner_user_id=? AND is_active=1",
+                (item_id, user_id),
+            ).fetchone()
+            if not item:
+                raise ValueError("Frente da sua lista não encontrada.")
+            if item["unit_code"] != unit:
+                raise ValueError("A unidade de uma frente já salva não pode ser alterada. Remova e adicione novamente.")
+            conn.execute(
+                "UPDATE production_user_items SET service_front_id=?,updated_at=? WHERE id=?",
+                (front_id, now, item_id),
+            )
+
+        conn.execute(
+            """
+            INSERT INTO production_daily_entries(
+                work_date,user_item_id,owner_user_id,unit_code,service_front_id,service_name,group_name,display_style,
+                sector,section,farm,status,observation,created_by,updated_by,created_at,updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(work_date,user_item_id) DO UPDATE SET
+                owner_user_id=excluded.owner_user_id, unit_code=excluded.unit_code,
+                service_front_id=excluded.service_front_id, service_name=excluded.service_name,
+                group_name=excluded.group_name, display_style=excluded.display_style,
+                sector=excluded.sector, section=excluded.section, farm=excluded.farm,
+                status=excluded.status, observation=excluded.observation,
+                updated_by=excluded.updated_by, updated_at=excluded.updated_at
+            """,
+            (
+                entry["work_date"], item_id, user_id, unit, front_id, front["name"], front["group_name"], front["display_style"],
+                entry["sector"], entry["section"], entry["farm"], entry["status"], entry["observation"],
+                user_id, user_id, now, now,
+            ),
+        )
+    result = list_my_items(user_id, unit, entry["work_date"])
+    return next(item for item in result["items"] if item["id"] == item_id)
+
+
+def remove_my_item(user_id: int, item_id: int) -> None:
+    now = int(time.time())
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        item = conn.execute(
+            "SELECT id,unit_code FROM production_user_items WHERE id=? AND owner_user_id=? AND is_active=1",
+            (item_id, user_id),
+        ).fetchone()
+        if not item:
+            raise ValueError("Frente da sua lista não encontrada.")
+        _require_access(conn, user_id, permission="fill", unit=item["unit_code"])
+        conn.execute("UPDATE production_user_items SET is_active=0,updated_at=? WHERE id=?", (now, item_id))
+
+
+def detach_user_data_before_delete(conn: sqlite3.Connection, user_id: int) -> None:
+    """Preserva o histórico e remove somente a lista pessoal do usuário excluído."""
+    conn.execute("UPDATE production_daily_entries SET owner_user_id=NULL WHERE owner_user_id=?", (user_id,))
+    conn.execute("DELETE FROM production_user_items WHERE owner_user_id=?", (user_id,))

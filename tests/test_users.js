@@ -13,6 +13,11 @@ function context(role = 'admin') {
       focus() { this.focused = true; }
     });
   }
+  const productionEnabled = { checked: true, disabled: false, listeners: {}, addEventListener(type, handler) { this.listeners[type] = handler; } };
+  const productionFill = { checked: true, disabled: false };
+  const productionUnits = ['PPT', 'NRD', 'RBR', 'PST'].map(value => ({ value, checked: value === 'PPT', disabled: false }));
+  elements.set('#production-access-enabled', productionEnabled);
+  elements.set('#production-access-fill', productionFill);
   const requests = [];
   elements.get('#quick-user-role').value = 'analyst';
   elements.get('#quick-user-base-unit').value = 'PPT';
@@ -20,18 +25,30 @@ function context(role = 'admin') {
   const ctx = vm.createContext({
     console: { error() {} },
     currentUser: { id: 1, role },
-    document: { querySelector: selector => elements.get(selector) || null },
+    document: {
+      querySelector(selector) {
+        if (selector === '#production-access-enabled, [data-production-access-enabled]') return productionEnabled;
+        if (selector === '#production-access-fill, [data-production-access-fill]') return productionFill;
+        return elements.get(selector) || null;
+      },
+      querySelectorAll(selector) {
+        if (selector === '[data-production-access-unit]:checked') return productionUnits.filter(input => input.checked);
+        if (selector === '[data-production-access-unit]') return productionUnits;
+        if (selector.includes('[data-production-access-unit]')) return [productionFill, ...productionUnits];
+        return [];
+      }
+    },
     apiRequest: async (url, options) => { requests.push({ url, options }); return {}; },
     showToast() {},
     escapeHtml: value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;'),
     formatServerTimestamp: () => '06/10/2026',
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/usuarios.js'), 'utf8'), ctx);
-  return { ctx, elements, requests };
+  return { ctx, elements, requests, productionUnits };
 }
 
 async function main() {
-  const { ctx, elements, requests } = context();
+  const { ctx, elements, requests, productionUnits } = context();
   const name = elements.get('#quick-user-name');
   const password = elements.get('#quick-user-password');
   const submit = elements.get('#create-user-button');
@@ -46,16 +63,22 @@ async function main() {
   elements.get('#quick-user-email').value = ' operador@example.com ';
   elements.get('#quick-user-role').value = 'coordinator';
   elements.get('#quick-user-base-unit').value = 'RBR';
+  elements.get('#quick-user-base-unit').listeners.change({ target: elements.get('#quick-user-base-unit') });
   elements.get('#quick-user-active').value = 'inactive';
   await send();
   assert.equal(requests[0].url, '/api/users');
   assert.equal(requests[0].options.method, 'POST');
-  assert.deepEqual(JSON.parse(requests[0].options.body), { name: 'Operador Teste', password: 'test-password-42', email: 'operador@example.com', role: 'coordinator', base_unit: 'RBR', is_active: false });
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    name: 'Operador Teste', password: 'test-password-42', email: 'operador@example.com',
+    role: 'coordinator', base_unit: 'RBR', is_active: false,
+    production_access: { enabled: true, permissions: { view: true, fill: true }, units: ['RBR'] }
+  });
   assert.equal(name.value, '');
   assert.equal(password.value, '');
   assert.equal(elements.get('#quick-user-email').value, '');
   assert.equal(elements.get('#quick-user-role').value, 'analyst');
   assert.equal(elements.get('#quick-user-active').value, 'active');
+  assert.deepEqual(productionUnits.filter(input => input.checked).map(input => input.value), ['PPT']);
   assert.equal(name.focused, true);
   assert.equal(submit.disabled, false);
   assert.equal(status.textContent, 'Usuário Operador Teste cadastrado com sucesso.');
