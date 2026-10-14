@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 import sqlite3
 import time
+import uuid
 from datetime import date
 from typing import Any
 
@@ -17,12 +18,7 @@ from .database import ALLOWED_UNIT_CODES, UNIT_DEFINITIONS
 from .storage import auth_connection, connection, validate_actor
 
 MODULE_KEY = "production"
-STATUS_OPTIONS = (
-    "EM ATIVIDADE",
-    "SOLO ÚMIDO / TESTE",
-    "AGUARDANDO ATIVIDADE",
-    "PARADO / CRÍTICO",
-)
+STATUS_STYLE_KEYS = {"active", "wet", "waiting", "stopped"}
 DISPLAY_STYLES = {"operation", "front"}
 
 
@@ -54,10 +50,7 @@ def _clean_text(value: Any, field: str, max_length: int, *, required: bool = Fal
 
 
 def _normalize_status(value: Any) -> str:
-    text = str(value or "").strip().upper()
-    if text not in STATUS_OPTIONS:
-        raise ValueError("Selecione um status válido.")
-    return text
+    return _clean_text(value, "o status", 120, required=True)
 
 
 def _normalize_position(value: Any) -> int:
@@ -227,6 +220,107 @@ def _require_admin(conn: sqlite3.Connection, user_id: int) -> None:
     row = conn.execute("SELECT role,is_active FROM auth.users WHERE id=?", (user_id,)).fetchone()
     if not row or row["role"] != "admin" or not bool(row["is_active"]):
         raise PermissionError("A configuração das frentes de serviço é exclusiva do Administrador.")
+
+
+def _status_payload(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": int(row["id"]),
+        "code": row["code"],
+        "name": row["name"],
+        "style_key": row["style_key"],
+        "position": int(row["position"]),
+        "is_active": bool(row["is_active"]),
+    }
+
+
+def list_statuses(user_id: int, *, include_inactive: bool = False) -> dict[str, Any]:
+    with connection() as conn:
+        access = _require_access(conn, user_id)
+        if include_inactive and access["role"] != "admin":
+            include_inactive = False
+        where = "" if include_inactive else "WHERE is_active=1"
+        rows = conn.execute(
+            f"SELECT id,code,name,style_key,position,is_active FROM production_statuses {where} "
+            "ORDER BY position,name COLLATE NOCASE"
+        ).fetchall()
+        return {
+            "statuses": [_status_payload(row) for row in rows],
+            "can_configure": access["role"] == "admin",
+        }
+
+
+def save_status(user_id: int, payload: Any, *, status_id: int | None = None) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("Dados do status inválidos.")
+    name = _clean_text(payload.get("name"), "o nome do status", 80, required=True)
+    style_key = str(payload.get("style_key") or "waiting").strip().lower()
+    if style_key not in STATUS_STYLE_KEYS:
+        raise ValueError("Cor do status inválida.")
+    position = _normalize_position(payload.get("position", 0))
+    is_active = payload.get("is_active", True)
+    if not isinstance(is_active, bool):
+        raise ValueError("Situação do status inválida.")
+    now = int(time.time())
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _require_admin(conn, user_id)
+        validate_actor(conn, user_id)
+        try:
+            if status_id is None:
+                code = f"CUSTOM-{uuid.uuid4().hex}"
+                cursor = conn.execute(
+                    """INSERT INTO production_statuses(
+                           code,name,style_key,position,is_active,created_by,updated_by,created_at,updated_at
+                       ) VALUES (?,?,?,?,?,?,?,?,?)""",
+                    (code, name, style_key, position, int(is_active), user_id, user_id, now, now),
+                )
+                status_id = int(cursor.lastrowid)
+            else:
+                if not conn.execute("SELECT 1 FROM production_statuses WHERE id=?", (status_id,)).fetchone():
+                    raise ValueError("Status não encontrado.")
+                conn.execute(
+                    """UPDATE production_statuses
+                       SET name=?,style_key=?,position=?,is_active=?,updated_by=?,updated_at=? WHERE id=?""",
+                    (name, style_key, position, int(is_active), user_id, now, status_id),
+                )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError("Já existe um status com esse nome.") from exc
+        row = conn.execute(
+            "SELECT id,code,name,style_key,position,is_active FROM production_statuses WHERE id=?",
+            (status_id,),
+        ).fetchone()
+        return _status_payload(row)
+
+
+def delete_status(user_id: int, status_id: int) -> None:
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _require_admin(conn, user_id)
+        validate_actor(conn, user_id)
+        row = conn.execute("SELECT id,code,name FROM production_statuses WHERE id=?", (status_id,)).fetchone()
+        if not row:
+            raise ValueError("Status não encontrado.")
+        used = conn.execute(
+            "SELECT COUNT(*) FROM production_daily_entries WHERE status=? COLLATE NOCASE",
+            (row["code"],),
+        ).fetchone()[0]
+        if int(used or 0) > 0:
+            raise ValueError("Não é possível apagar este status porque ele já foi usado em lançamentos. O histórico foi preservado.")
+        remaining = conn.execute("SELECT COUNT(*) FROM production_statuses WHERE id<>? AND is_active=1", (status_id,)).fetchone()[0]
+        if int(remaining or 0) < 1:
+            raise ValueError("Mantenha ao menos um status disponível para os lançamentos.")
+        conn.execute("DELETE FROM production_statuses WHERE id=?", (status_id,))
+
+
+def _validate_status_code(conn: sqlite3.Connection, value: Any) -> str:
+    code = _normalize_status(value)
+    row = conn.execute(
+        "SELECT code FROM production_statuses WHERE code=? COLLATE NOCASE AND is_active=1",
+        (code,),
+    ).fetchone()
+    if not row:
+        raise ValueError("Selecione um status válido.")
+    return row["code"]
 
 
 def list_catalog(user_id: int, *, unit_code: Any | None = None, include_inactive: bool = False) -> dict[str, Any]:
@@ -480,23 +574,35 @@ def _entry_payload(row: sqlite3.Row | None) -> dict[str, Any] | None:
     }
 
 
-def list_my_items(user_id: int, unit_code: Any, work_date: Any) -> dict[str, Any]:
+def list_my_items(user_id: int, unit_code: Any, work_date: Any, *, scope: str = "mine") -> dict[str, Any]:
     unit = _normalize_unit(unit_code)
     selected_date = _normalize_work_date(work_date)
+    normalized_scope = str(scope or "mine").strip().lower()
+    if normalized_scope not in {"mine", "all"}:
+        raise ValueError("Visualização da Produção Agrícola inválida.")
+
     with connection() as conn:
         access = _require_access(conn, user_id, unit=unit)
+        filters = ["ui.unit_code=?", "ui.is_active=1"]
+        params: list[Any] = [unit]
+        if normalized_scope == "mine":
+            filters.insert(0, "ui.owner_user_id=?")
+            params.insert(0, user_id)
+
         rows = conn.execute(
-            """
-            SELECT ui.id AS item_id,ui.service_front_id,ui.position,
+            f"""
+            SELECT ui.id AS item_id,ui.owner_user_id,ui.service_front_id,ui.position,
                    f.name AS service_name,f.display_style,f.is_active AS service_active,
-                   g.id AS group_id,g.name AS group_name,g.is_active AS group_active
+                   g.id AS group_id,g.name AS group_name,g.is_active AS group_active,
+                   COALESCE(owner.name, 'Usuário removido') AS owner_name
             FROM production_user_items ui
             JOIN production_service_fronts f ON f.id=ui.service_front_id
             JOIN production_groups g ON g.id=f.group_id
-            WHERE ui.owner_user_id=? AND ui.unit_code=? AND ui.is_active=1
-            ORDER BY ui.position,ui.id
+            LEFT JOIN auth.users owner ON owner.id=ui.owner_user_id
+            WHERE {' AND '.join(filters)}
+            ORDER BY owner.name COLLATE NOCASE,ui.position,ui.id
             """,
-            (user_id, unit),
+            tuple(params),
         ).fetchall()
         items = []
         for row in rows:
@@ -510,15 +616,18 @@ def list_my_items(user_id: int, unit_code: Any, work_date: Any) -> dict[str, Any
                 (row["item_id"], selected_date),
             ).fetchone()
             entry = _entry_payload(latest)
+            owner_user_id = int(row["owner_user_id"])
             items.append({
-                "id": int(row["item_id"]), "service_front_id": int(row["service_front_id"]),
+                "id": int(row["item_id"]), "owner_user_id": owner_user_id,
+                "owner_name": row["owner_name"], "is_own": owner_user_id == int(user_id),
+                "service_front_id": int(row["service_front_id"]),
                 "service_name": row["service_name"], "display_style": row["display_style"],
                 "group_id": int(row["group_id"]), "group_name": row["group_name"],
                 "catalog_active": bool(row["service_active"]) and bool(row["group_active"]),
                 "entry": entry, "is_current_day": bool(entry and entry["work_date"] == selected_date),
             })
         return {
-            "unit": unit, "work_date": selected_date, "items": items,
+            "unit": unit, "work_date": selected_date, "scope": normalized_scope, "items": items,
             "permissions": {"view": True, "fill": bool(access["can_fill"]), "configure": access["role"] == "admin"},
         }
 
@@ -548,6 +657,7 @@ def save_my_item(user_id: int, payload: Any, *, item_id: int | None = None) -> d
         conn.execute("BEGIN IMMEDIATE")
         _require_access(conn, user_id, permission="fill", unit=unit)
         validate_actor(conn, user_id)
+        entry["status"] = _validate_status_code(conn, entry["status"])
         front = _catalog_front_for_unit(conn, front_id, unit, allow_inactive=item_id is not None)
 
         if item_id is None:

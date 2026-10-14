@@ -1,8 +1,8 @@
-const PRODUCTION_STATUS = {
-  'EM ATIVIDADE': { className: 'is-active', countId: 'production-count-active' },
-  'SOLO ÚMIDO / TESTE': { className: 'is-wet', countId: 'production-count-wet' },
-  'AGUARDANDO ATIVIDADE': { className: 'is-waiting', countId: 'production-count-waiting' },
-  'PARADO / CRÍTICO': { className: 'is-stopped', countId: 'production-count-stopped' }
+const PRODUCTION_STATUS_STYLES = {
+  active: { className: 'is-active', label: 'Verde' },
+  wet: { className: 'is-wet', label: 'Amarelo' },
+  waiting: { className: 'is-waiting', label: 'Cinza' },
+  stopped: { className: 'is-stopped', label: 'Vermelho' }
 };
 
 const PRODUCTION_UNIT_NAMES = {
@@ -15,9 +15,12 @@ const PRODUCTION_UNIT_NAMES = {
 let productionAccess = null;
 let productionCatalog = { groups: [] };
 let productionConfigCatalog = { groups: [] };
+let productionStatuses = [];
+let productionConfigStatuses = [];
 let productionEditingFrontUnits = [];
 let productionEditingFrontActive = true;
 let productionItems = [];
+let productionListScope = 'mine';
 let sectorOptions = [];
 
 function localIsoDate(date = new Date()) {
@@ -102,24 +105,98 @@ async function loadProductionCatalog(unit) {
   return productionCatalog;
 }
 
+async function loadProductionStatuses({ includeInactive = false } = {}) {
+  const suffix = includeInactive ? '?include_inactive=1' : '';
+  const data = await apiRequest(`/api/production/statuses${suffix}`);
+  const statuses = Array.isArray(data.statuses) ? data.statuses : [];
+  if (includeInactive) productionConfigStatuses = statuses;
+  else productionStatuses = statuses;
+  return statuses;
+}
+
 async function loadProductionItems(unit) {
   const workDate = localIsoDate();
-  const data = await apiRequest(`/api/production/my-items?unit=${encodeURIComponent(unit)}&date=${encodeURIComponent(workDate)}`);
+  const scope = productionListScope === 'all' ? 'all' : 'mine';
+  const data = await apiRequest(`/api/production/my-items?unit=${encodeURIComponent(unit)}&date=${encodeURIComponent(workDate)}&scope=${encodeURIComponent(scope)}`);
   productionItems = Array.isArray(data.items) ? data.items : [];
   renderProductionItems(data);
   return data;
 }
 
+async function setProductionListScope(scope) {
+  const nextScope = scope === 'all' ? 'all' : 'mine';
+  if (productionListScope === nextScope) return;
+  productionListScope = nextScope;
+  document.querySelectorAll('[data-production-scope]').forEach(button => {
+    const active = button.dataset.productionScope === productionListScope;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  await loadProductionItems(currentProductionUnit());
+}
+
+function statusMeta(code) {
+  const statuses = [...productionStatuses, ...productionConfigStatuses];
+  const status = statuses.find(item => item.code === code);
+  const style = PRODUCTION_STATUS_STYLES[status?.style_key] || PRODUCTION_STATUS_STYLES.waiting;
+  return {
+    code: code || '',
+    name: status?.name || code || 'Sem status',
+    className: style.className,
+    styleLabel: style.label
+  };
+}
+
+function renderStatusOptions(selectedCode = selectedStatus()) {
+  const container = document.querySelector('#production-status-options');
+  if (!container) return;
+  container.innerHTML = productionStatuses.map(status => {
+    const style = PRODUCTION_STATUS_STYLES[status.style_key] || PRODUCTION_STATUS_STYLES.waiting;
+    const checked = status.code === selectedCode ? ' checked' : '';
+    return `<label class="production-status-option ${style.className}"><input type="checkbox" data-production-status value="${escapeHtml(status.code)}"${checked} /><span>${escapeHtml(status.name)}</span></label>`;
+  }).join('');
+  if (!container.innerHTML) {
+    container.innerHTML = '<div class="production-empty"><span>Nenhum status configurado.</span></div>';
+  }
+}
+
+function renderProductionSummary() {
+  const summary = document.querySelector('#production-summary');
+  if (!summary) return;
+  const counts = Object.fromEntries(productionStatuses.map(status => [status.code, 0]));
+  productionItems.forEach(item => {
+    if (!item.is_current_day) return;
+    const code = item.entry?.status;
+    if (Object.hasOwn(counts, code)) counts[code] += 1;
+  });
+  summary.innerHTML = productionStatuses.map(status => {
+    const style = PRODUCTION_STATUS_STYLES[status.style_key] || PRODUCTION_STATUS_STYLES.waiting;
+    return `<div class="production-summary-item ${style.className}"><span>${escapeHtml(status.name)}</span><strong>${counts[status.code] || 0}</strong></div>`;
+  }).join('');
+  summary.hidden = productionStatuses.length === 0;
+}
+
 function statusBadge(status) {
-  const config = PRODUCTION_STATUS[status] || { className: 'is-waiting' };
-  return `<span class="production-status-badge ${config.className}">${escapeHtml(status || 'Sem status')}</span>`;
+  const config = statusMeta(status);
+  return `<span class="production-status-badge ${config.className}">${escapeHtml(config.name)}</span>`;
 }
 
 function renderProductionItems(data) {
   const body = document.querySelector('#production-items-body');
   const empty = document.querySelector('#production-empty');
   const status = document.querySelector('#production-list-status');
+  const ownerHeading = document.querySelector('#production-owner-heading');
+  const actionsHeading = document.querySelector('#production-actions-heading');
+  const showingAll = productionListScope === 'all';
   if (!body) return;
+
+  if (ownerHeading) ownerHeading.hidden = !showingAll;
+  if (actionsHeading) actionsHeading.hidden = showingAll;
+  document.querySelectorAll('[data-production-scope]').forEach(button => {
+    const active = button.dataset.productionScope === productionListScope;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
 
   body.innerHTML = productionItems.map(item => {
     const entry = item.entry || {};
@@ -132,34 +209,41 @@ function renderProductionItems(data) {
         <button class="production-row-action" type="button" data-production-action="edit" data-item-id="${item.id}">Editar</button>
         <button class="production-row-action is-remove" type="button" data-production-action="remove" data-item-id="${item.id}">Remover</button>
       </div>` : '';
+    const actionCell = showingAll ? '' : `<td>${actions}</td>`;
+    const ownerCell = showingAll ? `<td><span class="production-owner-name">${escapeHtml(item.owner_name || '-')}</span></td>` : '';
     return `<tr>
       <td>${escapeHtml(item.group_name || '-')}</td>
       <td><div class="production-item-name"><strong>${escapeHtml(item.service_name || '-')}</strong><small>${escapeHtml(styleLabel)}</small></div></td>
+      ${ownerCell}
       <td>${escapeHtml(entry.sector || '-')}</td>
       <td>${escapeHtml(entry.farm || '-')}</td>
       <td>${statusBadge(entry.status)}</td>
       <td><div class="production-update-state ${current ? '' : 'is-pending'}"><strong>${updatedLabel}</strong><small>${escapeHtml(updatedDetail)}</small></div></td>
-      <td>${actions}</td>
+      ${actionCell}
     </tr>`;
   }).join('');
 
-  if (empty) empty.hidden = productionItems.length > 0;
+  if (empty) {
+    empty.hidden = productionItems.length > 0;
+    const emptyTitle = empty.querySelector('strong');
+    const emptyText = empty.querySelector('span');
+    if (emptyTitle) emptyTitle.textContent = showingAll ? 'Nenhum lançamento nesta unidade.' : 'Nenhuma frente adicionada.';
+    if (emptyText) emptyText.textContent = showingAll
+      ? 'Ainda não há frentes ou serviços acompanhados pelos analistas desta unidade.'
+      : 'Use “Adicionar frente” para montar sua lista de trabalho desta unidade.';
+  }
   if (status) {
-    status.textContent = productionItems.length
-      ? `${productionItems.length} ${productionItems.length === 1 ? 'item acompanhado' : 'itens acompanhados'}`
-      : '';
+    if (!productionItems.length) {
+      status.textContent = '';
+    } else if (showingAll) {
+      const analysts = new Set(productionItems.map(item => item.owner_user_id).filter(Boolean));
+      status.textContent = `${productionItems.length} ${productionItems.length === 1 ? 'lançamento' : 'lançamentos'} · ${analysts.size} ${analysts.size === 1 ? 'analista' : 'analistas'}`;
+    } else {
+      status.textContent = `${productionItems.length} ${productionItems.length === 1 ? 'lançamento meu' : 'lançamentos meus'}`;
+    }
   }
 
-  const counts = Object.fromEntries(Object.keys(PRODUCTION_STATUS).map(key => [key, 0]));
-  productionItems.forEach(item => {
-    if (!item.is_current_day) return;
-    const statusValue = item.entry?.status;
-    if (Object.hasOwn(counts, statusValue)) counts[statusValue] += 1;
-  });
-  Object.entries(PRODUCTION_STATUS).forEach(([name, config]) => {
-    const element = document.getElementById(config.countId);
-    if (element) element.textContent = String(counts[name] || 0);
-  });
+  renderProductionSummary();
 
   if (data?.permissions) {
     productionAccess.permissions = { ...productionAccess.permissions, ...data.permissions };
@@ -208,6 +292,12 @@ function selectedStatus() {
   return document.querySelector('[data-production-status]:checked')?.value || '';
 }
 
+function defaultStatusCode() {
+  return productionStatuses.find(status => status.code === 'EM ATIVIDADE')?.code
+    || productionStatuses[0]?.code
+    || '';
+}
+
 function resetSectorFields() {
   sectorOptions = [];
   const section = document.querySelector('#production-section-input');
@@ -251,13 +341,16 @@ function syncFarmFromSection() {
 function showEntryPane() {
   document.querySelector('#production-entry-pane').hidden = false;
   document.querySelector('#production-config-pane').hidden = true;
+  document.querySelector('#production-status-config-pane').hidden = true;
   document.querySelector('#production-entry-footer').hidden = false;
 
+  const editingItemId = document.querySelector('#production-item-id')?.value;
   const configButton = document.querySelector('#production-config-toggle');
-  if (configButton) configButton.hidden = !canConfigureProduction();
+  if (configButton) configButton.hidden = Boolean(editingItemId) || !canConfigureProduction();
+  const statusConfigButton = document.querySelector('#production-status-config-toggle');
+  if (statusConfigButton) statusConfigButton.hidden = !canConfigureProduction();
 
   const modalTitle = document.querySelector('#production-modal-title');
-  const editingItemId = document.querySelector('#production-item-id')?.value;
   if (modalTitle) modalTitle.textContent = editingItemId ? 'Editar frente' : 'Adicionar frente';
 }
 
@@ -265,10 +358,13 @@ async function showConfigPane() {
   if (!canConfigureProduction()) return;
   document.querySelector('#production-entry-pane').hidden = true;
   document.querySelector('#production-config-pane').hidden = false;
+  document.querySelector('#production-status-config-pane').hidden = true;
   document.querySelector('#production-entry-footer').hidden = true;
 
   const configButton = document.querySelector('#production-config-toggle');
   if (configButton) configButton.hidden = true;
+  const statusConfigButton = document.querySelector('#production-status-config-toggle');
+  if (statusConfigButton) statusConfigButton.hidden = true;
 
   const modalTitle = document.querySelector('#production-modal-title');
   if (modalTitle) modalTitle.textContent = 'Configuração';
@@ -279,12 +375,33 @@ async function showConfigPane() {
   clearFrontConfigForm();
 }
 
+async function showStatusConfigPane() {
+  if (!canConfigureProduction()) return;
+  document.querySelector('#production-entry-pane').hidden = true;
+  document.querySelector('#production-config-pane').hidden = true;
+  document.querySelector('#production-status-config-pane').hidden = false;
+  document.querySelector('#production-entry-footer').hidden = true;
+
+  const configButton = document.querySelector('#production-config-toggle');
+  if (configButton) configButton.hidden = true;
+  const statusConfigButton = document.querySelector('#production-status-config-toggle');
+  if (statusConfigButton) statusConfigButton.hidden = true;
+
+  const modalTitle = document.querySelector('#production-modal-title');
+  if (modalTitle) modalTitle.textContent = 'Configuração de status';
+
+  await loadProductionConfigStatuses();
+  clearStatusConfigForm();
+}
+
 function setProductionEntryEditMode(isEditing) {
   const serviceSection = document.querySelector('#production-service-section');
   if (serviceSection) serviceSection.hidden = Boolean(isEditing);
 
   const configButton = document.querySelector('#production-config-toggle');
   if (configButton) configButton.hidden = Boolean(isEditing) || !canConfigureProduction();
+  const statusConfigButton = document.querySelector('#production-status-config-toggle');
+  if (statusConfigButton) statusConfigButton.hidden = !canConfigureProduction();
 
   const modalTitle = document.querySelector('#production-modal-title');
   if (modalTitle) modalTitle.textContent = isEditing ? 'Editar frente' : 'Adicionar frente';
@@ -303,7 +420,7 @@ function clearEntryForm(defaultUnit = selectedNavbarProductionUnit()) {
   document.querySelector('#production-work-date').value = localIsoDate();
   setProductionEntryUnit(defaultUnit);
   renderEntryGroups();
-  setSelectedStatus('EM ATIVIDADE');
+  setSelectedStatus(defaultStatusCode());
   resetSectorFields();
   setProductionEntryEditMode(false);
 }
@@ -341,7 +458,7 @@ function openEditProductionItem(itemId) {
   document.querySelector('#production-sector-input').value = entry.sector || '';
   document.querySelector('#production-farm-input').value = entry.farm || '';
   document.querySelector('#production-observation-input').value = entry.observation || '';
-  setSelectedStatus(entry.status || 'EM ATIVIDADE');
+  setSelectedStatus(entry.status || defaultStatusCode());
   resetSectorFields();
   const section = document.querySelector('#production-section-input');
   section.innerHTML = `<option value="${escapeHtml(entry.section || '')}">${escapeHtml(entry.section || 'Sem seção')}</option>`;
@@ -415,7 +532,9 @@ async function removeProductionItem(itemId) {
 
 async function refreshProductionPage(unit = currentProductionUnit()) {
   setProductionContext(unit);
-  await Promise.all([loadProductionCatalog(unit), loadProductionItems(unit)]);
+  await Promise.all([loadProductionCatalog(unit), loadProductionStatuses()]);
+  renderStatusOptions(defaultStatusCode());
+  await loadProductionItems(unit);
 }
 
 function renderConfigGroupOptions() {
@@ -628,6 +747,118 @@ async function deleteConfigFront(frontId, frontName = '') {
   }
 }
 
+async function loadProductionConfigStatuses() {
+  productionConfigStatuses = await loadProductionStatuses({ includeInactive: true });
+  renderProductionStatusConfigList();
+  return productionConfigStatuses;
+}
+
+function nextStatusPosition() {
+  const highest = productionConfigStatuses.reduce((max, status) => Math.max(max, Number(status.position) || 0), 0);
+  return String(highest + 1);
+}
+
+function renderProductionStatusConfigList() {
+  const list = document.querySelector('#production-status-list');
+  if (!list) return;
+  list.innerHTML = productionConfigStatuses.map(status => {
+    const style = PRODUCTION_STATUS_STYLES[status.style_key] || PRODUCTION_STATUS_STYLES.waiting;
+    return `
+      <div class="production-config-list-item ${status.is_active ? '' : 'is-inactive'}">
+        <div class="production-config-list-item-copy">
+          <strong><span class="production-status-dot ${style.className}" aria-hidden="true"></span>${escapeHtml(status.name)}</strong>
+          <span>${style.label} · Ordem ${status.position}${status.is_active ? '' : ' · inativo'}</span>
+        </div>
+        <div class="production-config-list-actions">
+          <button type="button" data-status-action="edit" data-status-id="${status.id}">Editar</button>
+          <button class="is-delete" type="button" data-status-action="delete" data-status-id="${status.id}" data-status-name="${escapeHtml(status.name)}">Apagar</button>
+        </div>
+      </div>`;
+  }).join('') || '<div class="production-empty"><span>Nenhum status cadastrado.</span></div>';
+}
+
+function setStatusConfigEditorMode(isEditing = false, open = false) {
+  const editor = document.querySelector('#production-status-editor');
+  const title = document.querySelector('#production-status-editor-title');
+  const hint = editor?.querySelector('.production-config-editor-hint');
+  const submit = document.querySelector('#production-status-submit');
+  const cancel = document.querySelector('#production-status-clear');
+  if (title) title.textContent = isEditing ? 'Editar status' : 'Novo status';
+  if (hint) hint.textContent = isEditing ? 'Alterando status selecionado' : 'Clique para preencher';
+  if (submit) submit.textContent = isEditing ? 'Salvar alterações' : 'Adicionar status';
+  if (cancel) cancel.textContent = isEditing ? 'Cancelar edição' : 'Cancelar';
+  if (editor && open) editor.open = true;
+}
+
+function clearStatusConfigForm({ keepOpen = false } = {}) {
+  const id = document.querySelector('#production-status-id');
+  const name = document.querySelector('#production-status-name');
+  const style = document.querySelector('#production-status-style');
+  const position = document.querySelector('#production-status-position');
+  if (id) id.value = '';
+  if (name) name.value = '';
+  if (style) style.value = 'active';
+  if (position) position.value = '';
+  setStatusConfigEditorMode(false, keepOpen);
+}
+
+function editProductionStatus(statusId) {
+  const status = productionConfigStatuses.find(item => Number(item.id) === Number(statusId));
+  if (!status) return;
+  document.querySelector('#production-status-id').value = String(status.id);
+  document.querySelector('#production-status-name').value = status.name;
+  document.querySelector('#production-status-style').value = status.style_key || 'waiting';
+  document.querySelector('#production-status-position').value = String(status.position || 0);
+  setStatusConfigEditorMode(true, true);
+  document.querySelector('#production-status-name')?.focus();
+}
+
+async function submitProductionStatus(event) {
+  event.preventDefault();
+  const id = Number(document.querySelector('#production-status-id')?.value || 0);
+  const existing = id ? productionConfigStatuses.find(item => Number(item.id) === id) : null;
+  const payload = {
+    name: document.querySelector('#production-status-name')?.value.trim() || '',
+    style_key: document.querySelector('#production-status-style')?.value || 'waiting',
+    position: Number(document.querySelector('#production-status-position')?.value || 0),
+    is_active: id ? Boolean(existing?.is_active) : true
+  };
+  try {
+    await apiRequest(id ? `/api/production/statuses/${id}` : '/api/production/statuses', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(payload)
+    });
+    clearStatusConfigForm();
+    const editor = document.querySelector('#production-status-editor');
+    if (editor) editor.open = false;
+    await loadProductionConfigStatuses();
+    await loadProductionStatuses();
+    renderStatusOptions(defaultStatusCode());
+    renderProductionItems({ permissions: productionAccess?.permissions || {} });
+    showToast('Status salvo.');
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || 'Não foi possível salvar o status.', true);
+  }
+}
+
+async function deleteProductionStatus(statusId, statusName = '') {
+  const label = statusName ? ` “${statusName}”` : '';
+  if (!window.confirm(`Apagar o status${label}? Status já usado em lançamentos não pode ser apagado.`)) return;
+  try {
+    await apiRequest(`/api/production/statuses/${statusId}`, { method: 'DELETE' });
+    clearStatusConfigForm();
+    await loadProductionConfigStatuses();
+    await loadProductionStatuses();
+    renderStatusOptions(defaultStatusCode());
+    renderProductionItems({ permissions: productionAccess?.permissions || {} });
+    showToast('Status apagado.');
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || 'Não foi possível apagar o status.', true);
+  }
+}
+
 async function initializeProductionPage() {
   const accessMessage = document.querySelector('#production-access-message');
   try {
@@ -650,18 +881,27 @@ async function initializeProductionPage() {
 }
 
 document.querySelector('#production-add-button')?.addEventListener('click', openNewProductionItem);
+document.querySelector('.production-list-scope')?.addEventListener('click', async event => {
+  const button = event.target.closest('[data-production-scope]');
+  if (!button) return;
+  try {
+    await setProductionListScope(button.dataset.productionScope);
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || 'Não foi possível trocar a visualização dos lançamentos.', true);
+  }
+});
 document.querySelector('#production-entry-form')?.addEventListener('submit', submitProductionEntry);
 document.querySelector('#production-group-input')?.addEventListener('change', () => renderEntryFronts());
 document.querySelector('#production-sector-input')?.addEventListener('change', resolveSectorFromBase);
 document.querySelector('#production-sector-input')?.addEventListener('blur', resolveSectorFromBase);
 document.querySelector('#production-section-input')?.addEventListener('change', syncFarmFromSection);
 
-document.querySelectorAll('[data-production-status]').forEach(input => {
-  input.addEventListener('change', () => {
-    if (!input.checked) return;
-    document.querySelectorAll('[data-production-status]').forEach(other => {
-      if (other !== input) other.checked = false;
-    });
+document.querySelector('#production-status-options')?.addEventListener('change', event => {
+  const input = event.target.closest('[data-production-status]');
+  if (!input || !input.checked) return;
+  document.querySelectorAll('[data-production-status]').forEach(other => {
+    if (other !== input) other.checked = false;
   });
 });
 
@@ -682,6 +922,29 @@ document.querySelector('#production-items-body')?.addEventListener('click', even
 
 document.querySelector('#production-config-toggle')?.addEventListener('click', showConfigPane);
 document.querySelector('#production-config-back')?.addEventListener('click', showEntryPane);
+document.querySelector('#production-status-config-toggle')?.addEventListener('click', showStatusConfigPane);
+document.querySelector('#production-status-config-back')?.addEventListener('click', showEntryPane);
+document.querySelector('#production-status-form')?.addEventListener('submit', submitProductionStatus);
+document.querySelector('#production-status-clear')?.addEventListener('click', () => {
+  clearStatusConfigForm();
+  const editor = document.querySelector('#production-status-editor');
+  if (editor) editor.open = false;
+});
+document.querySelector('#production-status-editor')?.addEventListener('toggle', event => {
+  if (!event.currentTarget.open) return;
+  const statusId = document.querySelector('#production-status-id')?.value || '';
+  if (!statusId) {
+    const position = document.querySelector('#production-status-position');
+    if (position && !position.value) position.value = nextStatusPosition();
+  }
+  requestAnimationFrame(() => document.querySelector('#production-status-name')?.focus());
+});
+document.querySelector('#production-status-list')?.addEventListener('click', event => {
+  const button = event.target.closest('[data-status-action]');
+  if (!button) return;
+  if (button.dataset.statusAction === 'edit') editProductionStatus(Number(button.dataset.statusId));
+  if (button.dataset.statusAction === 'delete') deleteProductionStatus(Number(button.dataset.statusId), button.dataset.statusName || '');
+});
 document.querySelector('#production-group-form')?.addEventListener('submit', submitConfigGroup);
 document.querySelector('#production-front-form')?.addEventListener('submit', submitConfigFront);
 document.querySelector('#production-group-clear')?.addEventListener('click', () => {

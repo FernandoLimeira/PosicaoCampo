@@ -46,6 +46,9 @@ from ..models.production import (
     get_user_access as get_production_user_access,
     save_user_access as save_production_user_access,
     list_catalog as list_production_catalog,
+    list_statuses as list_production_statuses,
+    save_status as save_production_status,
+    delete_status as delete_production_status,
     save_group as save_production_group,
     delete_group as delete_production_group,
     save_service_front as save_production_service_front,
@@ -493,6 +496,37 @@ def application(environ, start_response):
         except ValueError as exc:
             return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
 
+    if path == "/api/production/statuses":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            if method == "GET":
+                include_inactive = (query.get("include_inactive") or ["0"])[0] == "1"
+                return _json(start_response, HTTPStatus.OK, list_production_statuses(user["id"], include_inactive=include_inactive))
+            if method == "POST":
+                status = save_production_status(user["id"], _json_body(environ))
+                return _json(start_response, HTTPStatus.CREATED, {"ok": True, "status": status})
+        except PermissionError as exc:
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
+        except (ValueError, TypeError) as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path.startswith("/api/production/statuses/"):
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            status_id = int(path.rsplit("/", 1)[-1])
+            if method == "PUT":
+                status = save_production_status(user["id"], _json_body(environ), status_id=status_id)
+                return _json(start_response, HTTPStatus.OK, {"ok": True, "status": status})
+            if method == "DELETE":
+                delete_production_status(user["id"], status_id)
+                return _json(start_response, HTTPStatus.OK, {"ok": True})
+        except PermissionError as exc:
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
+        except (ValueError, TypeError) as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
     if path == "/api/production/catalog" and method == "GET":
         if not user:
             return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
@@ -594,7 +628,11 @@ def application(environ, start_response):
             if method == "GET":
                 unit_code = (query.get("unit") or [""])[0]
                 work_date = (query.get("date") or [""])[0]
-                return _json(start_response, HTTPStatus.OK, list_production_my_items(user["id"], unit_code, work_date))
+                scope = (query.get("scope") or ["mine"])[0]
+                return _json(
+                    start_response, HTTPStatus.OK,
+                    list_production_my_items(user["id"], unit_code, work_date, scope=scope),
+                )
             if method == "POST":
                 item = save_production_my_item(user["id"], _json_body(environ))
                 return _json(start_response, HTTPStatus.CREATED, {"ok": True, "item": item})

@@ -19,7 +19,7 @@ CORE_DATA_TABLES = (
     "return_analysis_fronts", "return_analysis_equipment",
 )
 PRODUCTION_TABLES = (
-    "production_groups", "production_service_fronts", "production_service_front_units",
+    "production_statuses", "production_groups", "production_service_fronts", "production_service_front_units",
     "production_user_items", "production_daily_entries",
 )
 DATA_TABLES = CORE_DATA_TABLES + ("return_analysis_soil_wet",) + PRODUCTION_TABLES
@@ -268,6 +268,20 @@ def _create_return_soil_wet_table(conn):
 def _create_production_tables(conn):
     statements = (
         """
+        CREATE TABLE IF NOT EXISTS main.production_statuses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            style_key TEXT NOT NULL DEFAULT 'waiting',
+            position INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_by INTEGER,
+            updated_by INTEGER,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+        """,
+        """
         CREATE TABLE IF NOT EXISTS main.production_groups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL COLLATE NOCASE UNIQUE,
@@ -347,11 +361,11 @@ def _create_production_tables(conn):
     )
     for statement in statements:
         conn.execute(statement)
-    conn.execute("INSERT OR REPLACE INTO main.schema_info(key,value) VALUES ('production_schema_version','1')")
+    conn.execute("INSERT OR REPLACE INTO main.schema_info(key,value) VALUES ('production_schema_version','2')")
 
 
 def seed_production_defaults(conn):
-    """Cria somente os grupos iniciais; não cadastra frentes de serviço por suposição."""
+    """Cria os grupos e status iniciais sem supor frentes de serviço."""
     now_expr = "CAST(strftime('%s','now') AS INTEGER)"
     for position, name in enumerate(("Preparo e Plantio", "Tratos Culturais", "Fertirrigação")):
         conn.execute(
@@ -359,6 +373,19 @@ def seed_production_defaults(conn):
                 (name, position, is_active, created_by, updated_by, created_at, updated_at)
                 VALUES (?, ?, 1, NULL, NULL, {now_expr}, {now_expr})""",
             (name, position),
+        )
+    default_statuses = (
+        ("EM ATIVIDADE", "Em atividade", "active", 0),
+        ("SOLO ÚMIDO / TESTE", "Solo úmido / teste", "wet", 1),
+        ("AGUARDANDO ATIVIDADE", "Aguardando atividade", "waiting", 2),
+        ("PARADO / CRÍTICO", "Parado / crítico", "stopped", 3),
+    )
+    for code, name, style_key, position in default_statuses:
+        conn.execute(
+            f"""INSERT OR IGNORE INTO main.production_statuses
+                (code, name, style_key, position, is_active, created_by, updated_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 1, NULL, NULL, {now_expr}, {now_expr})""",
+            (code, name, style_key, position),
         )
 
 
@@ -574,6 +601,19 @@ CREATE TABLE IF NOT EXISTS return_analysis_soil_wet (
     updated_by INTEGER,
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (unit_code, record_key)
+);
+
+CREATE TABLE IF NOT EXISTS production_statuses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    style_key TEXT NOT NULL DEFAULT 'waiting',
+    position INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_by INTEGER,
+    updated_by INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS production_groups (

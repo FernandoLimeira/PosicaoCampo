@@ -23,20 +23,21 @@
 
   <div id="production-access-message" class="production-access-message" hidden></div>
 
-  <section class="production-summary" aria-label="Resumo dos status">
-    <div class="production-summary-item is-active"><span>Em atividade</span><strong id="production-count-active">0</strong></div>
-    <div class="production-summary-item is-wet"><span>Solo úmido / teste</span><strong id="production-count-wet">0</strong></div>
-    <div class="production-summary-item is-waiting"><span>Aguardando</span><strong id="production-count-waiting">0</strong></div>
-    <div class="production-summary-item is-stopped"><span>Parado / crítico</span><strong id="production-count-stopped">0</strong></div>
-  </section>
+  <section id="production-summary" class="production-summary" aria-label="Resumo dos status"></section>
 
   <section class="production-table-card" aria-labelledby="production-table-title">
     <div class="production-table-heading">
       <div>
-        <span>Minha lista</span>
+        <span>Lançamentos</span>
         <h2 id="production-table-title">Frentes e serviços acompanhados</h2>
       </div>
-      <p id="production-list-status" aria-live="polite"></p>
+      <div class="production-table-heading-actions">
+        <div class="production-list-scope" role="group" aria-label="Visualização dos lançamentos">
+          <button class="production-list-scope-button is-active" type="button" data-production-scope="mine" aria-pressed="true">Meus lançamentos</button>
+          <button class="production-list-scope-button" type="button" data-production-scope="all" aria-pressed="false">Todos da unidade</button>
+        </div>
+        <p id="production-list-status" aria-live="polite"></p>
+      </div>
     </div>
     <div class="production-table-wrap">
       <table class="production-table">
@@ -44,11 +45,12 @@
           <tr>
             <th>Grupo</th>
             <th>Frente / serviço</th>
+            <th id="production-owner-heading" hidden>Analista</th>
             <th>Setor</th>
             <th>Fazenda</th>
             <th>Status</th>
             <th>Atualização</th>
-            <th></th>
+            <th id="production-actions-heading"></th>
           </tr>
         </thead>
         <tbody id="production-items-body"></tbody>
@@ -139,15 +141,11 @@
               <span>Situação atual</span>
               <strong>Status da frente</strong>
             </div>
+            <button id="production-status-config-toggle" class="production-inline-text-button" type="button" hidden>Configurar status</button>
           </div>
           <fieldset class="production-status-field">
             <legend class="sr-only">Status</legend>
-            <div class="production-status-options">
-              <label class="production-status-option is-active"><input type="checkbox" data-production-status value="EM ATIVIDADE" /><span>Em atividade</span></label>
-              <label class="production-status-option is-wet"><input type="checkbox" data-production-status value="SOLO ÚMIDO / TESTE" /><span>Solo úmido / teste</span></label>
-              <label class="production-status-option is-waiting"><input type="checkbox" data-production-status value="AGUARDANDO ATIVIDADE" /><span>Aguardando atividade</span></label>
-              <label class="production-status-option is-stopped"><input type="checkbox" data-production-status value="PARADO / CRÍTICO" /><span>Parado / crítico</span></label>
-            </div>
+            <div id="production-status-options" class="production-status-options"></div>
           </fieldset>
         </section>
 
@@ -158,6 +156,37 @@
           </label>
         </section>
       </form>
+    </div>
+
+    <div id="production-status-config-pane" class="production-config-pane production-status-config-pane" hidden>
+      <div class="production-config-heading">
+        <div>
+          <h3>Status da Produção</h3>
+          <p>Defina os status disponíveis no preenchimento.</p>
+        </div>
+        <button id="production-status-config-back" class="production-secondary-button" type="button">Voltar ao preenchimento</button>
+      </div>
+
+      <section class="production-config-card production-status-config-card">
+        <div class="production-config-card-title"><strong>Status</strong><span>Nome, cor e ordem de exibição</span></div>
+        <details id="production-status-editor" class="production-config-editor">
+          <summary class="production-config-editor-summary">
+            <span id="production-status-editor-title">Novo status</span>
+            <span class="production-config-editor-hint">Clique para preencher</span>
+          </summary>
+          <form id="production-status-form" class="production-config-form production-config-form-collapsible">
+            <input id="production-status-id" type="hidden" />
+            <label class="field"><span>Nome</span><input id="production-status-name" type="text" maxlength="80" autocomplete="off" required placeholder="Ex.: Em atividade" /></label>
+            <label class="field"><span>Cor</span><select id="production-status-style" required><option value="active">Verde</option><option value="wet">Amarelo</option><option value="waiting">Cinza</option><option value="stopped">Vermelho</option></select></label>
+            <label class="field"><span>Ordem</span><input id="production-status-position" type="number" min="0" max="9999" inputmode="numeric" /></label>
+            <div class="production-config-form-actions">
+              <button class="production-secondary-button" type="button" id="production-status-clear">Cancelar</button>
+              <button class="production-primary-button" type="submit" id="production-status-submit">Adicionar status</button>
+            </div>
+          </form>
+        </details>
+        <div id="production-status-list" class="production-config-list"></div>
+      </section>
     </div>
 
     <div id="production-config-pane" class="production-config-pane" hidden>

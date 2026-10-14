@@ -371,7 +371,8 @@ class PageTests(unittest.TestCase):
         self.assertEqual(page["status"], 200)
         for marker in (
             'id="production-entry-modal"', 'id="production-entry-form"',
-            'data-production-status value="EM ATIVIDADE"', 'id="production-config-pane"',
+            'id="production-status-options"', 'id="production-status-config-toggle"',
+            'id="production-status-config-pane"', 'id="production-config-pane"',
             'id="production-front-form"', 'id="production-items-body"',
         ):
             self.assertIn(marker, page["body"])

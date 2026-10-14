@@ -218,6 +218,52 @@ class ProductionTests(unittest.TestCase):
                 2,
             )
 
+    def test_unit_view_consolidates_items_from_multiple_analysts_without_changing_ownership(self):
+        other = db.create_user(
+            "Analista 2",
+            "Analyst-two-42",
+            role="analyst",
+            base_unit="NRD",
+            production_access={
+                "enabled": True,
+                "permissions": {"fill": True},
+                "units": ["NRD"],
+            },
+        )
+        front_one = self._front(name="FRENTE ANALISTA 1")
+        front_two = self._front(name="FRENTE ANALISTA 2")
+
+        production.save_my_item(
+            self.user["id"],
+            {
+                "unit_code": "NRD", "service_front_id": front_one["id"],
+                "work_date": "2026-10-13", "sector": "3392", "section": "10",
+                "farm": "SANTA TEREZINHA", "status": "EM ATIVIDADE", "observation": "",
+            },
+        )
+        production.save_my_item(
+            other["id"],
+            {
+                "unit_code": "NRD", "service_front_id": front_two["id"],
+                "work_date": "2026-10-13", "sector": "3392", "section": "20",
+                "farm": "SANTA TEREZINHA II", "status": "EM ATIVIDADE", "observation": "",
+            },
+        )
+
+        mine = production.list_my_items(self.user["id"], "NRD", "2026-10-13")
+        self.assertEqual(mine["scope"], "mine")
+        self.assertEqual(len(mine["items"]), 1)
+        self.assertTrue(mine["items"][0]["is_own"])
+
+        consolidated = production.list_my_items(self.user["id"], "NRD", "2026-10-13", scope="all")
+        self.assertEqual(consolidated["scope"], "all")
+        self.assertEqual(len(consolidated["items"]), 2)
+        self.assertEqual({item["owner_name"] for item in consolidated["items"]}, {"Analista", "Analista 2"})
+        self.assertEqual(sum(bool(item["is_own"]) for item in consolidated["items"]), 1)
+
+        with self.assertRaisesRegex(ValueError, "Visualização"):
+            production.list_my_items(self.user["id"], "NRD", "2026-10-13", scope="other")
+
     def test_sector_base_is_read_only_and_fill_permission_is_enforced(self):
         before = None
         with storage.connection() as conn:
@@ -297,6 +343,48 @@ class ProductionTests(unittest.TestCase):
             self.assertEqual(row["status"], "PARADO / CRÍTICO")
             self.assertEqual(row["observation"], "Registro preservado")
             storage.check_integrity(conn)
+
+    def test_status_catalog_is_configurable_and_used_status_is_protected(self):
+        defaults = production.list_statuses(self.user["id"])["statuses"]
+        self.assertEqual([item["name"] for item in defaults], [
+            "Em atividade", "Solo úmido / teste", "Aguardando atividade", "Parado / crítico"
+        ])
+        with self.assertRaises(PermissionError):
+            production.save_status(self.user["id"], {"name": "Teste", "style_key": "active", "position": 9})
+
+        custom = production.save_status(
+            self.admin["id"],
+            {"name": "Em deslocamento", "style_key": "waiting", "position": 4, "is_active": True},
+        )
+        self.assertTrue(custom["code"].startswith("CUSTOM-"))
+        updated = production.save_status(
+            self.admin["id"],
+            {"name": "Em deslocamento / trajeto", "style_key": "wet", "position": 5, "is_active": True},
+            status_id=custom["id"],
+        )
+        self.assertEqual(updated["code"], custom["code"])
+        self.assertEqual(updated["style_key"], "wet")
+
+        front = self._front(name="FRENTE STATUS")
+        production.save_my_item(
+            self.user["id"],
+            {
+                "unit_code": "NRD",
+                "service_front_id": front["id"],
+                "work_date": "2026-10-10",
+                "sector": "3392",
+                "status": custom["code"],
+            },
+        )
+        with self.assertRaisesRegex(ValueError, "já foi usado em lançamentos"):
+            production.delete_status(self.admin["id"], custom["id"])
+
+        unused = production.save_status(
+            self.admin["id"],
+            {"name": "Temporário", "style_key": "stopped", "position": 99, "is_active": True},
+        )
+        production.delete_status(self.admin["id"], unused["id"])
+        self.assertFalse(any(item["id"] == unused["id"] for item in production.list_statuses(self.admin["id"], include_inactive=True)["statuses"]))
 
     def test_status_and_front_unit_validation(self):
         front = self._front(name="FRENTE UNIT", units=["NRD"])

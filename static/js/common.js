@@ -190,6 +190,7 @@ function setupSidebarFlyout(toggleSelector, panelSelector) {
 }
 
 const reportsMenu = setupSidebarFlyout('#reports-toggle', '#reports-flyout');
+setupSidebarFlyout('#production-toggle', '#production-flyout');
 setupSidebarFlyout('#users-toggle', '#users-flyout');
 function positionReportsFlyout() { reportsMenu?.position(); }
 document.querySelector('.nav-actions')?.addEventListener('scroll', () => sidebarFlyouts.forEach(menu => menu.close()));
