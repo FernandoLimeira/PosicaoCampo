@@ -127,12 +127,16 @@ async function setProductionListScope(scope) {
   const nextScope = scope === 'all' ? 'all' : 'mine';
   if (productionListScope === nextScope) return;
   productionListScope = nextScope;
+  syncProductionScopeButtons();
+  await loadProductionItems(currentProductionUnit());
+}
+
+function syncProductionScopeButtons() {
   document.querySelectorAll('[data-production-scope]').forEach(button => {
     const active = button.dataset.productionScope === productionListScope;
     button.classList.toggle('is-active', active);
     button.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
-  await loadProductionItems(currentProductionUnit());
 }
 
 function statusMeta(code) {
@@ -190,13 +194,13 @@ function renderProductionItems(data) {
   const showingAll = productionListScope === 'all';
   if (!body) return;
 
+  if (data?.permissions && productionAccess) {
+    productionAccess.permissions = { ...productionAccess.permissions, ...data.permissions };
+  }
+
   if (ownerHeading) ownerHeading.hidden = !showingAll;
   if (actionsHeading) actionsHeading.hidden = showingAll;
-  document.querySelectorAll('[data-production-scope]').forEach(button => {
-    const active = button.dataset.productionScope === productionListScope;
-    button.classList.toggle('is-active', active);
-    button.setAttribute('aria-pressed', active ? 'true' : 'false');
-  });
+  syncProductionScopeButtons();
 
   body.innerHTML = productionItems.map(item => {
     const entry = item.entry || {};
@@ -244,10 +248,6 @@ function renderProductionItems(data) {
   }
 
   renderProductionSummary();
-
-  if (data?.permissions) {
-    productionAccess.permissions = { ...productionAccess.permissions, ...data.permissions };
-  }
 }
 
 function groupsForEntry() {
@@ -863,7 +863,6 @@ async function initializeProductionPage() {
   const accessMessage = document.querySelector('#production-access-message');
   try {
     const unit = await loadProductionAccess();
-    setProductionContext(unit);
     await refreshProductionPage(unit);
     if (!canFillProduction() && accessMessage) {
       accessMessage.hidden = false;

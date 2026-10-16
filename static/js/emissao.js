@@ -61,6 +61,38 @@ document.querySelector('#emit-global-sacarose')?.addEventListener('click', async
   }
 });
 
+document.querySelector('#emit-global-production')?.addEventListener('click', async event => {
+  const button = event.currentTarget;
+  const status = document.querySelector('#production-emission-status');
+  button.disabled = true;
+  status.textContent = 'Carregando os lançamentos da Produção Agrícola…';
+  try {
+    const { access } = await apiRequest('/api/production/access');
+    const units = ['PPT', 'NRD', 'RBR', 'PST'].filter(code => access?.enabled && access.units?.includes(code));
+    if (!units.length) throw new Error('Nenhuma unidade está liberada para a Produção Agrícola.');
+
+    const workDate = localProductionExportDate();
+    const [statusPayload, ...unitPayloads] = await Promise.all([
+      apiRequest('/api/production/statuses'),
+      ...units.map(code => apiRequest(`/api/production/my-items?unit=${code}&date=${workDate}&scope=all`))
+    ]);
+    const reports = units.map((code, index) => ({ code, items: unitPayloads[index].items || [] }));
+    status.textContent = 'Gerando imagens em alta definição…';
+    const images = await generateProductionReportImages(reports, statusPayload.statuses || [], workDate);
+    const suffix = workDate.split('-').reverse().join('-');
+    images.forEach((blob, index) => {
+      const page = images.length > 1 ? `-Pagina-${index + 1}` : '';
+      downloadBlobFile(blob, `Producao-Agricola-Global-${suffix}${page}.png`);
+    });
+    status.textContent = `${images.length} ${images.length === 1 ? 'imagem emitida' : 'imagens emitidas'} com sucesso.`;
+  } catch (error) {
+    status.textContent = error.message || 'Não foi possível emitir a Produção Agrícola.';
+    showToast(status.textContent, true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
 document.addEventListener('report-unit-change', () => {
   updateSacaroseEmissionContext();
   const status = document.querySelector('#sacarose-emission-status');

@@ -337,7 +337,7 @@ class PageTests(unittest.TestCase):
             "/": ["common.js", "export.js", "app.js"],
             "/sacarose": ["common.js", "export.js", "sacarose.js"],
             "/producao": ["common.js", "producao.js"],
-            "/emitir-posicao-global": ["common.js", "export.js", "emissao.js"],
+            "/emitir-posicao-global": ["common.js", "export.js", "production-export.js", "emissao.js"],
             "/setores": ["common.js", "setores.js"],
             "/relatorios": ["common.js", "relatorios.js"],
             "/retornos": ["common.js", "return-analysis.js"],
@@ -377,6 +377,10 @@ class PageTests(unittest.TestCase):
         ):
             self.assertIn(marker, page["body"])
         self.assertIn('href="/producao"', page["body"])
+
+        emission = self.request('/emitir-posicao-global', cookie=cookie)["body"]
+        self.assertIn('id="emit-global-production"', emission)
+        self.assertIn('/js/production-export.js', emission)
 
         access = json.loads(self.request("/api/production/access", cookie=cookie)["body"])["access"]
         self.assertEqual(access["units"], ["PPT", "NRD"])
@@ -564,6 +568,7 @@ class PageTests(unittest.TestCase):
         emission = self.request('/emitir-posicao-global', role='member')["body"]
         self.assertIn('id="emit-global-position"', emission)
         self.assertIn('id="emit-global-sacarose"', emission)
+        self.assertNotIn('id="emit-global-production"', emission)
         self.assertNotIn('id="operation-form"', emission)
         self.assertNotIn('id="export-unit-image"', self.request('/', role='member')["body"])
         # A emissão individual foi adicionada à Sacarose depois da navegação global.

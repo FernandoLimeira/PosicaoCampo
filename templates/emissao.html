@@ -35,10 +35,27 @@
         <p id="sacarose-emission-status" class="emission-status" role="status" aria-live="polite"></p>
       </div>
     </article>
+
+    {% if user.role == 'admin' or (user.production_access is defined and user.production_access.enabled) %}
+    <article class="emission-card">
+      <div class="emission-card-copy">
+        <span class="emission-card-kicker">Produção Agrícola</span>
+        <h2>Frentes e serviços</h2>
+        <p>Gera imagens PNG com os lançamentos de todos os analistas nas unidades liberadas para você. Registros ainda não atualizados hoje são identificados.</p>
+      </div>
+      <div class="emission-card-actions">
+        <button id="emit-global-production" class="modal-button save" type="button">Emitir Produção Agrícola</button>
+        <p id="production-emission-status" class="emission-status" role="status" aria-live="polite"></p>
+      </div>
+    </article>
+    {% endif %}
   </div>
 </section>
 {% endblock %}
 {% block scripts %}
   <script src="/js/export.js?v={{ asset_version }}"></script>
+  {% if user.role == 'admin' or (user.production_access is defined and user.production_access.enabled) %}
+  <script src="/js/production-export.js?v={{ asset_version }}"></script>
+  {% endif %}
   <script src="/js/emissao.js?v={{ asset_version }}"></script>
 {% endblock %}
