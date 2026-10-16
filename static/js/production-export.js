@@ -196,9 +196,7 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
     if (item.is_current_day) counts[state] += 1;
     else counts.pending += 1;
     const sector = item.entry?.sector || 'Sem setor';
-    const stamp = item.is_current_day || !item.entry?.work_date
-      ? '' : ` · ${formatProductionExportDate(item.entry.work_date)}`;
-    services.get(serviceName).push({ label: `${sector}${stamp}`, state, pending: !item.is_current_day });
+    services.get(serviceName).push({ label: sector, state, pending: !item.is_current_day });
     const observation = item.entry?.observation?.trim();
     const noteKey = `${serviceName}\n${item.entry?.work_date || ''}\n${observation}`;
     if (observation && !seenNotes.has(noteKey)) {
@@ -214,13 +212,13 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
     const groupLines = productionExportWrap(ctx, groupName.toLocaleUpperCase('pt-BR'), 424,
       'bold 19px Bahnschrift, "Arial Narrow", sans-serif');
     rows.push({ type: 'group', nameLines: groupLines,
-      height: Math.max(32, groupLines.length * 22 + 8) });
+      height: Math.max(28, groupLines.length * 22 + 6) });
     for (const [serviceName, pills] of services) {
       const lines = [{ pills: [], height: 25 }];
       let used = 0;
       for (const pill of pills) {
         ctx.font = 'bold 16px "Arial Narrow", Arial, sans-serif';
-        pill.width = Math.min(278, Math.max(54, Math.ceil(ctx.measureText(pill.label).width) + 28));
+        pill.width = Math.min(278, Math.max(54, Math.ceil(ctx.measureText(pill.label).width) + 40));
         if (used && used + pill.width + 6 > 278) {
           lines.push({ pills: [], height: 25 });
           used = 0;
@@ -235,7 +233,7 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
       const nameLines = productionExportWrap(ctx, serviceName, 176,
         'bold 16px "Arial Narrow", Arial, sans-serif');
       rows.push({ type: 'service', nameLines, lines,
-        height: Math.max(29, lines.reduce((sum, line) => sum + line.height + 4, 0),
+        height: Math.max(33, lines.reduce((sum, line) => sum + line.height + 7, 1),
           nameLines.length * 20 + 6) });
     }
   }
@@ -390,7 +388,7 @@ function drawProductionExportCard(ctx, report, plan, x, y) {
             pill.width - 27, 'bold 16px "Arial Narrow", Arial, sans-serif'));
           pillX += pill.width + 6;
         }
-        lineY += line.height + 4;
+        lineY += line.height + 7;
       });
       productionExportRule(ctx, x + 17, cursor + row.height - 1, x + 489, '#29434b');
     } else {

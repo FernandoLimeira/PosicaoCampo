@@ -97,7 +97,9 @@ for (const name of ['production-export.js', 'emissao.js']) {
   const paint = canvas.getContext('2d');
   const plan = context.productionExportCardPlan(paint, staleReport,
     new Map([['CRITICO', { style_key: 'stopped' }]]), 520);
-  assert.equal(plan.rows.find(row => row.type === 'service').lines[0].pills[0].state, 'stopped');
+  const stalePill = plan.rows.find(row => row.type === 'service').lines[0].pills[0];
+  assert.equal(stalePill.state, 'stopped');
+  assert.equal(stalePill.label, '3392');
   context.drawProductionExportCard(paint, staleReport, plan, 26, 370);
   assert.ok(strokes.some(stroke => stroke.color === colors.stopped && stroke.dash.length));
   const mixedReport = { code: 'PPT', items: [
