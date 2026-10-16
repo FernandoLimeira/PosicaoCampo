@@ -55,7 +55,7 @@
 {% block scripts %}
   <script src="/js/export.js?v={{ asset_version }}"></script>
   {% if user.role == 'admin' or (user.production_access is defined and user.production_access.enabled) %}
-  <script src="/js/production-export.js?v={{ asset_version }}"></script>
+  <script src="/js/production-export.js?v={{ asset_version }}-daily-summary"></script>
   {% endif %}
-  <script src="/js/emissao.js?v={{ asset_version }}"></script>
+  <script src="/js/emissao.js?v={{ asset_version }}-daily-summary"></script>
 {% endblock %}

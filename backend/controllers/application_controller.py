@@ -57,6 +57,8 @@ from ..models.production import (
     list_my_items as list_production_my_items,
     save_my_item as save_production_my_item,
     remove_my_item as remove_production_my_item,
+    get_daily_summary as get_production_daily_summary,
+    save_daily_summary as save_production_daily_summary,
 )
 
 STATIC_ROOTS = {"css", "js", "assets"}
@@ -619,6 +621,23 @@ def application(environ, start_response):
         except PermissionError as exc:
             return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
         except ValueError as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path == "/api/production/daily-summary":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            if method == "GET":
+                unit_code = (query.get("unit") or [""])[0]
+                work_date = (query.get("date") or [""])[0]
+                summary = get_production_daily_summary(user["id"], unit_code, work_date)
+                return _json(start_response, HTTPStatus.OK, {"summary": summary})
+            if method == "PUT":
+                summary = save_production_daily_summary(user["id"], _json_body(environ))
+                return _json(start_response, HTTPStatus.OK, {"ok": True, "summary": summary})
+        except PermissionError as exc:
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
+        except (ValueError, TypeError) as exc:
             return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
 
     if path == "/api/production/my-items":

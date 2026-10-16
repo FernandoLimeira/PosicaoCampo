@@ -73,12 +73,19 @@ document.querySelector('#emit-global-production')?.addEventListener('click', asy
 
     const workDate = localProductionExportDate();
     const [statusPayload, ...unitPayloads] = await Promise.all([
-      apiRequest('/api/production/statuses'),
-      ...units.map(code => apiRequest(`/api/production/my-items?unit=${code}&date=${workDate}&scope=all`))
+      apiRequest('/api/production/statuses?include_inactive=1'),
+      ...units.map(async code => {
+        const [itemsPayload, summaryPayload] = await Promise.all([
+          apiRequest(`/api/production/my-items?unit=${code}&date=${workDate}&scope=all`),
+          apiRequest(`/api/production/daily-summary?unit=${code}&date=${workDate}`)
+        ]);
+        return { items: itemsPayload.items || [], summary: summaryPayload.summary || null };
+      })
     ]);
-    const byUnit = new Map(units.map((code, index) => [code, unitPayloads[index].items || []]));
+    const byUnit = new Map(units.map((code, index) => [code, unitPayloads[index]]));
     const reports = ['PPT', 'NRD', 'RBR', 'PST'].map(code => ({
-      code, restricted: !byUnit.has(code), items: byUnit.get(code) || []
+      code, restricted: !byUnit.has(code), items: byUnit.get(code)?.items || [],
+      summary: byUnit.get(code)?.summary || null
     }));
     status.textContent = 'Gerando imagem no formato da troca de turno…';
     const images = await generateProductionReportImages(reports, statusPayload.statuses || [], workDate);

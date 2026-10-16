@@ -76,6 +76,42 @@ class ProductionTests(unittest.TestCase):
             },
         )
 
+    def test_daily_summary_is_scoped_to_unit_date_and_shared_with_analysts(self):
+        empty = production.get_daily_summary(self.user["id"], "NRD", "2026-10-16")
+        self.assertIsNone(empty["rain_turn_mm"])
+        self.assertEqual(empty["changes"], "")
+
+        saved = production.save_daily_summary(self.user["id"], {
+            "unit_code": "NRD", "work_date": "2026-10-16",
+            "rain_turn_mm": "3,5", "rain_accumulated_mm": 10,
+            "changes": "Frente 54 em teste.\nSem mudanças nas demais frentes.",
+        })
+        self.assertEqual(saved["rain_turn_mm"], 3.5)
+        self.assertEqual(saved["rain_accumulated_mm"], 10)
+        self.assertIn("Frente 54", production.get_daily_summary(self.viewer["id"], "NRD", "2026-10-16")["changes"])
+        self.assertIsNone(production.get_daily_summary(self.user["id"], "PPT", "2026-10-16")["rain_turn_mm"])
+        self.assertIsNone(production.get_daily_summary(self.user["id"], "NRD", "2026-10-15")["rain_turn_mm"])
+
+        viewer_saved = production.save_daily_summary(self.viewer["id"], {
+            "unit_code": "NRD", "work_date": "2026-10-16",
+            "rain_turn_mm": 4, "rain_accumulated_mm": 10,
+            "changes": "Turno atualizado pelo analista da unidade.",
+        })
+        self.assertEqual(viewer_saved["rain_turn_mm"], 4)
+        with self.assertRaises(PermissionError):
+            production.get_daily_summary(self.user["id"], "RBR", "2026-10-16")
+        with self.assertRaises(PermissionError):
+            production.save_daily_summary(self.user["id"], {
+                "unit_code": "RBR", "work_date": "2026-10-16"
+            })
+        with self.assertRaisesRegex(ValueError, "Chuva do turno"):
+            production.save_daily_summary(self.user["id"], {
+                "unit_code": "NRD", "work_date": "2026-10-16", "rain_turn_mm": "-1"
+            })
+
+        db.init_db()
+        self.assertEqual(production.get_daily_summary(self.user["id"], "NRD", "2026-10-16")["rain_turn_mm"], 4)
+
     def test_access_is_unit_scoped_and_catalog_configuration_is_admin_only(self):
         access = production.get_user_access(self.user["id"])
         self.assertTrue(access["enabled"])
@@ -378,6 +414,17 @@ class ProductionTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "já foi usado em lançamentos"):
             production.delete_status(self.admin["id"], custom["id"])
+
+        production.save_status(
+            self.admin["id"],
+            {"name": updated["name"], "style_key": "wet", "position": 5, "is_active": False},
+            status_id=custom["id"],
+        )
+        self.assertNotIn(custom["code"], {
+            item["code"] for item in production.list_statuses(self.user["id"])["statuses"]
+        })
+        historical = production.list_statuses(self.user["id"], include_inactive=True)["statuses"]
+        self.assertEqual(next(item for item in historical if item["code"] == custom["code"])["style_key"], "wet")
 
         unused = production.save_status(
             self.admin["id"],

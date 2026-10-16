@@ -43,6 +43,10 @@ function canFillProduction() {
   return Boolean(productionAccess?.permissions?.fill);
 }
 
+function canEditProductionDailySummary() {
+  return Boolean(productionAccess?.enabled && allowedProductionUnits().includes(currentProductionUnit()));
+}
+
 function canConfigureProduction() {
   return Boolean(productionAccess?.permissions?.configure);
 }
@@ -121,6 +125,61 @@ async function loadProductionItems(unit) {
   productionItems = Array.isArray(data.items) ? data.items : [];
   renderProductionItems(data);
   return data;
+}
+
+async function loadProductionDailySummary(unit) {
+  const workDate = localIsoDate();
+  const save = document.querySelector('#production-daily-save');
+  if (save) save.disabled = true;
+  const { summary } = await apiRequest(`/api/production/daily-summary?unit=${encodeURIComponent(unit)}&date=${workDate}`);
+  if (unit !== currentProductionUnit() || workDate !== localIsoDate()) return;
+  const fields = [
+    ['#production-rain-turn', summary?.rain_turn_mm],
+    ['#production-rain-accumulated', summary?.rain_accumulated_mm],
+    ['#production-daily-changes', summary?.changes]
+  ];
+  fields.forEach(([selector, value]) => {
+    const input = document.querySelector(selector);
+    if (!input) return;
+    input.value = value ?? '';
+    input.disabled = !canEditProductionDailySummary();
+  });
+  if (save) {
+    save.hidden = !canEditProductionDailySummary();
+    save.disabled = false;
+  }
+  const status = document.querySelector('#production-daily-status');
+  if (status) status.textContent = summary?.updated_at
+    ? `Dados salvos para ${formatProductionDate(workDate)}.`
+    : `Sem dados salvos para ${formatProductionDate(workDate)}.`;
+}
+
+async function submitProductionDailySummary(event) {
+  event.preventDefault();
+  if (!canEditProductionDailySummary()) return;
+  const unit = currentProductionUnit();
+  const workDate = localIsoDate();
+  const save = document.querySelector('#production-daily-save');
+  const status = document.querySelector('#production-daily-status');
+  const payload = {
+    unit_code: unit, work_date: workDate,
+    rain_turn_mm: document.querySelector('#production-rain-turn')?.value || null,
+    rain_accumulated_mm: document.querySelector('#production-rain-accumulated')?.value || null,
+    changes: document.querySelector('#production-daily-changes')?.value.trim() || ''
+  };
+  if (save) save.disabled = true;
+  if (status) status.textContent = 'Salvando dados do dia…';
+  try {
+    await apiRequest('/api/production/daily-summary', { method: 'PUT', body: JSON.stringify(payload) });
+    await loadProductionDailySummary(unit);
+    showToast('Dados da imagem salvos.');
+  } catch (error) {
+    console.error(error);
+    if (status) status.textContent = error.message || 'Não foi possível salvar os dados do dia.';
+    showToast(status?.textContent || 'Não foi possível salvar os dados do dia.', true);
+  } finally {
+    if (save) save.disabled = false;
+  }
 }
 
 async function setProductionListScope(scope) {
@@ -532,7 +591,7 @@ async function removeProductionItem(itemId) {
 
 async function refreshProductionPage(unit = currentProductionUnit()) {
   setProductionContext(unit);
-  await Promise.all([loadProductionCatalog(unit), loadProductionStatuses()]);
+  await Promise.all([loadProductionCatalog(unit), loadProductionStatuses(), loadProductionDailySummary(unit)]);
   renderStatusOptions(defaultStatusCode());
   await loadProductionItems(unit);
 }
@@ -866,7 +925,7 @@ async function initializeProductionPage() {
     await refreshProductionPage(unit);
     if (!canFillProduction() && accessMessage) {
       accessMessage.hidden = false;
-      accessMessage.textContent = 'Seu acesso à Produção Agrícola está em modo de consulta. O administrador pode liberar preenchimento na tela de usuários.';
+      accessMessage.textContent = 'As frentes estão em modo de consulta. Você pode preencher chuva e mudanças da unidade.';
     }
   } catch (error) {
     console.error(error);
@@ -891,6 +950,7 @@ document.querySelector('.production-list-scope')?.addEventListener('click', asyn
   }
 });
 document.querySelector('#production-entry-form')?.addEventListener('submit', submitProductionEntry);
+document.querySelector('#production-daily-form')?.addEventListener('submit', submitProductionDailySummary);
 document.querySelector('#production-group-input')?.addEventListener('change', () => renderEntryFronts());
 document.querySelector('#production-sector-input')?.addEventListener('change', resolveSectorFromBase);
 document.querySelector('#production-sector-input')?.addEventListener('blur', resolveSectorFromBase);

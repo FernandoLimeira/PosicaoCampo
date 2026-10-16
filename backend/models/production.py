@@ -12,6 +12,7 @@ import sqlite3
 import time
 import uuid
 from datetime import date
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from .database import ALLOWED_UNIT_CODES, UNIT_DEFINITIONS
@@ -236,8 +237,6 @@ def _status_payload(row: sqlite3.Row) -> dict[str, Any]:
 def list_statuses(user_id: int, *, include_inactive: bool = False) -> dict[str, Any]:
     with connection() as conn:
         access = _require_access(conn, user_id)
-        if include_inactive and access["role"] != "admin":
-            include_inactive = False
         where = "" if include_inactive else "WHERE is_active=1"
         rows = conn.execute(
             f"SELECT id,code,name,style_key,position,is_active FROM production_statuses {where} "
@@ -630,6 +629,73 @@ def list_my_items(user_id: int, unit_code: Any, work_date: Any, *, scope: str = 
             "unit": unit, "work_date": selected_date, "scope": normalized_scope, "items": items,
             "permissions": {"view": True, "fill": bool(access["can_fill"]), "configure": access["role"] == "admin"},
         }
+
+
+def _normalize_rain(value: Any, field: str) -> float | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"{field} deve ser um número entre 0 e 9999,9 mm.")
+    try:
+        amount = Decimal(str(value).strip().replace(",", "."))
+    except InvalidOperation as exc:
+        raise ValueError(f"{field} deve ser um número entre 0 e 9999,9 mm.") from exc
+    if not amount.is_finite() or amount < 0 or amount > Decimal("9999.9") or amount != amount.quantize(Decimal("0.1")):
+        raise ValueError(f"{field} deve ser um número entre 0 e 9999,9 mm, com uma casa decimal.")
+    return float(amount)
+
+
+def _summary_payload(row: sqlite3.Row | None, unit: str, work_date: str) -> dict[str, Any]:
+    return {
+        "unit": unit, "work_date": work_date,
+        "rain_turn_mm": row["rain_turn_mm"] if row else None,
+        "rain_accumulated_mm": row["rain_accumulated_mm"] if row else None,
+        "changes": row["changes"] if row else "",
+        "updated_at": int(row["updated_at"]) if row else 0,
+    }
+
+
+def get_daily_summary(user_id: int, unit_code: Any, work_date: Any) -> dict[str, Any]:
+    unit = _normalize_unit(unit_code)
+    selected_date = _normalize_work_date(work_date)
+    with connection() as conn:
+        _require_access(conn, user_id, unit=unit)
+        row = conn.execute(
+            "SELECT * FROM production_daily_summaries WHERE unit_code=? AND work_date=?",
+            (unit, selected_date),
+        ).fetchone()
+        return _summary_payload(row, unit, selected_date)
+
+
+def save_daily_summary(user_id: int, payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("Dados do resumo diário inválidos.")
+    unit = _normalize_unit(payload.get("unit_code"))
+    selected_date = _normalize_work_date(payload.get("work_date"))
+    rain_turn = _normalize_rain(payload.get("rain_turn_mm"), "Chuva do turno")
+    rain_accumulated = _normalize_rain(payload.get("rain_accumulated_mm"), "Chuva acumulada")
+    changes = _clean_text(payload.get("changes"), "as mudanças", 2000)
+    now = int(time.time())
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _require_access(conn, user_id, unit=unit)
+        validate_actor(conn, user_id)
+        conn.execute(
+            """INSERT INTO production_daily_summaries(
+                unit_code,work_date,rain_turn_mm,rain_accumulated_mm,changes,updated_by,updated_at
+            ) VALUES (?,?,?,?,?,?,?)
+            ON CONFLICT(unit_code,work_date) DO UPDATE SET
+                rain_turn_mm=excluded.rain_turn_mm,
+                rain_accumulated_mm=excluded.rain_accumulated_mm,
+                changes=excluded.changes,
+                updated_by=excluded.updated_by,updated_at=excluded.updated_at""",
+            (unit, selected_date, rain_turn, rain_accumulated, changes, user_id, now),
+        )
+        row = conn.execute(
+            "SELECT * FROM production_daily_summaries WHERE unit_code=? AND work_date=?",
+            (unit, selected_date),
+        ).fetchone()
+        return _summary_payload(row, unit, selected_date)
 
 
 def _normalize_entry_data(payload: dict[str, Any]) -> dict[str, str]:
