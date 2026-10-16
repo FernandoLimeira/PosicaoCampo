@@ -76,8 +76,11 @@ document.querySelector('#emit-global-production')?.addEventListener('click', asy
       apiRequest('/api/production/statuses'),
       ...units.map(code => apiRequest(`/api/production/my-items?unit=${code}&date=${workDate}&scope=all`))
     ]);
-    const reports = units.map((code, index) => ({ code, items: unitPayloads[index].items || [] }));
-    status.textContent = 'Gerando imagens em alta definição…';
+    const byUnit = new Map(units.map((code, index) => [code, unitPayloads[index].items || []]));
+    const reports = ['PPT', 'NRD', 'RBR', 'PST'].map(code => ({
+      code, restricted: !byUnit.has(code), items: byUnit.get(code) || []
+    }));
+    status.textContent = 'Gerando imagem no formato da troca de turno…';
     const images = await generateProductionReportImages(reports, statusPayload.statuses || [], workDate);
     const suffix = workDate.split('-').reverse().join('-');
     images.forEach((blob, index) => {

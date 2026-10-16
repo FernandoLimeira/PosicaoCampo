@@ -21,7 +21,9 @@ const document = {
       getContext() {
         return {
           canvas,
-          fillRect() {}, beginPath() {}, roundRect() {}, fill() {},
+          fillRect() {}, strokeRect() {}, beginPath() {}, roundRect() {}, fill() {}, stroke() {},
+          moveTo() {}, lineTo() {}, quadraticCurveTo() {}, arc() {}, ellipse() {},
+          createLinearGradient() { return { addColorStop() {} }; },
           measureText(value) { return { width: value.length * 14 }; },
           fillText(value) { labels.push(value); }
         };
@@ -34,6 +36,7 @@ const document = {
 const context = vm.createContext({
   document, Date, console,
   getReportUnit: () => 'PPT',
+  loadImageAsset: async () => null,
   showToast(message) { throw new Error(message); },
   downloadBlobFile(blob, name) { downloads.push({ blob, name }); },
   async apiRequest(url) {
@@ -59,20 +62,23 @@ for (const name of ['production-export.js', 'emissao.js']) {
 
 (async () => {
   assert.equal(context.localProductionExportDate(new Date(2026, 9, 16)), '2026-10-16');
-  assert.equal(context.buildProductionExportPages([{ code: 'PPT', items: Array(19).fill({}) },
-    { code: 'NRD', items: [] }]).length, 2);
+  assert.equal(context.buildProductionExportPages([{ code: 'PPT', items: Array(49).fill({}) }]).length, 2);
 
   await button.click({ currentTarget: button });
   assert.equal(button.disabled, false);
-  assert.equal(downloads.length, 2);
+  assert.equal(downloads.length, 1);
   assert.ok(downloads.every(item => item.blob.type === 'image/png'));
-  assert.match(downloads[0].name, /^Producao-Agricola-Global-\d{2}-\d{2}-\d{4}-Pagina-1\.png$/);
+  assert.equal(downloads[0].blob.width, 1080);
+  assert.ok(downloads[0].blob.height >= 1920);
+  assert.match(downloads[0].name, /^Producao-Agricola-Global-\d{2}-\d{2}-\d{4}\.png$/);
   assert.ok(requests.some(url => url.includes('unit=PPT') && url.includes('scope=all')));
   assert.ok(requests.some(url => url.includes('unit=NRD') && url.includes('scope=all')));
   assert.ok(!requests.some(url => url.includes('unit=RBR')));
+  assert.ok(labels.includes('TROCA DE TURNO'));
+  assert.ok(labels.includes('PRODUÇÃO AGRÍCOLA'));
   assert.ok(labels.includes('Nenhum lançamento nesta unidade.'));
+  assert.ok(labels.some(value => value.startsWith('Unidade não liberada')));
   assert.ok(labels.includes('Frente 19'));
-  assert.ok(labels.includes('15/10/2026'));
-  assert.ok(labels.includes('Hoje'));
-  assert.match(status.textContent, /2 imagens emitidas/);
+  assert.ok(labels.some(value => value.includes('15/10/2026')));
+  assert.match(status.textContent, /1 imagem emitida/);
 })().catch(error => { console.error(error); process.exitCode = 1; });
