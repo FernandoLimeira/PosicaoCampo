@@ -35,6 +35,50 @@
       </footer>
     </section>
 {% endblock %}
+{% block modals %}
+<div id="user-access-modal" class="modal-backdrop" hidden>
+  <section class="editor-modal user-access-modal" role="dialog" aria-modal="true" aria-labelledby="user-access-modal-title" aria-describedby="user-access-modal-description">
+    <header class="modal-header">
+      <div>
+        <span class="modal-kicker">Gerenciamento de acesso</span>
+        <h2 id="user-access-modal-title">Produção Agrícola</h2>
+        <p id="user-access-modal-description" class="user-access-modal-description">Configure as permissões de <strong id="user-access-modal-name"></strong>.</p>
+      </div>
+      <button class="modal-close" type="button" data-close-modal="user-access-modal" aria-label="Fechar gerenciamento de acesso">×</button>
+    </header>
+    <div class="user-access-modal-body">
+      <p id="user-access-loading" class="access-loading" role="status">Carregando acessos...</p>
+      <form id="user-access-form" class="user-access-form" hidden>
+        <div class="user-access-option">
+          <div><strong>Acesso ao módulo</strong><p>Permite visualizar a Produção Agrícola nas unidades selecionadas.</p></div>
+          <label class="user-access-toggle"><input type="checkbox" data-production-access-enabled /><span>Liberado</span></label>
+        </div>
+        <div class="user-production-permissions">
+          <div><strong>Permissão de edição</strong><p>O usuário poderá preencher e alterar as informações das frentes.</p></div>
+          <label class="user-access-toggle"><input type="checkbox" data-production-access-fill /><span>Preencher e editar</span></label>
+        </div>
+        <fieldset class="user-production-units">
+          <legend>Unidades liberadas</legend>
+          <div class="user-production-units-grid">
+            <label><input type="checkbox" data-production-access-unit value="PPT" /><span><strong>PPT</strong><small>Paraguaçu Paulista</small></span></label>
+            <label><input type="checkbox" data-production-access-unit value="NRD" /><span><strong>NRD</strong><small>Narandiba</small></span></label>
+            <label><input type="checkbox" data-production-access-unit value="RBR" /><span><strong>RBR</strong><small>Rio Brilhante</small></span></label>
+            <label><input type="checkbox" data-production-access-unit value="PST" /><span><strong>PST</strong><small>Passa Tempo</small></span></label>
+          </div>
+        </fieldset>
+        <p id="user-access-status" class="user-access-status" role="status" aria-live="polite"></p>
+      </form>
+    </div>
+    <footer class="modal-footer">
+      <div class="wizard-footer-info"><strong>Permissões por usuário</strong><p>As alterações são aplicadas ao salvar.</p></div>
+      <div class="modal-footer-actions">
+        <button class="modal-button secondary" type="button" data-close-modal="user-access-modal">Cancelar</button>
+        <button id="user-access-save" class="modal-button save" type="submit" form="user-access-form" disabled>Salvar acessos</button>
+      </div>
+    </footer>
+  </section>
+</div>
+{% endblock %}
 {% block scripts %}
   <script src="/js/usuarios.js?v={{ asset_version }}"></script>
 {% endblock %}

@@ -132,6 +132,10 @@ async function main() {
   assert(ctx.userItemHtml({id:2, role:'analyst', is_active:false}).includes('>Ativar</button>'));
   assert(!ctx.userItemHtml({id:1, role:'admin', is_active:true}).includes('data-user-action="toggle"'));
   assert(!ctx.userItemHtml({id:2, email:'<script>alert(1)</script>', base_unit:'<img>', role:'analyst'}).includes('<script>'));
+  const managed = ctx.userItemHtml({id:2, name:'Analista', role:'analyst', is_active:true});
+  assert(managed.includes('Gerenciar acessos'));
+  assert(!managed.includes('user-access-panel'));
+  assert(!managed.includes('Cadastrado em'));
   const updates = [];
   ctx.apiRequest = async (url, options) => { updates.push({url, options}); return {}; };
   for (const active of ['true', 'false']) {
@@ -155,7 +159,58 @@ async function main() {
   assert(!list.innerHTML.includes('OutroAdmin'));
   assert(!list.innerHTML.includes('oculto@example.com'));
   assert(!list.innerHTML.includes('AdminInativo'));
-  console.log('OK: cadastro separado, mensagens, erros, envio único e restrição administrativa.');
+  const accessInputs = {
+    master: {checked:false, disabled:false, focus() { this.focused = true; }},
+    fill: {checked:false, disabled:false},
+    units: ['PPT', 'NRD', 'RBR', 'PST'].map(value => ({value, checked:false, disabled:false}))
+  };
+  const accessForm = {
+    hidden:true, dataset:{},
+    querySelector(selector) {
+      if (selector.includes('production-access-enabled')) return accessInputs.master;
+      if (selector.includes('production-access-fill')) return accessInputs.fill;
+      return null;
+    },
+    querySelectorAll(selector) {
+      if (selector === '[data-production-access-unit]:checked') return accessInputs.units.filter(input => input.checked);
+      if (selector === '[data-production-access-unit]') return accessInputs.units;
+      if (selector.includes('[data-production-access-unit]')) return [accessInputs.fill, ...accessInputs.units];
+      return [];
+    }
+  };
+  const accessModal = {hidden:true};
+  const accessLoading = {hidden:true, textContent:''};
+  const accessSave = {disabled:false};
+  const accessName = {textContent:''};
+  const accessStatus = {textContent:''};
+  const originalQuerySelector = ctx.document.querySelector;
+  ctx.document.querySelector = selector => ({
+    '#user-access-modal':accessModal, '#user-access-form':accessForm,
+    '#user-access-loading':accessLoading, '#user-access-save':accessSave,
+    '#user-access-modal-name':accessName, '#user-access-status':accessStatus
+  })[selector] || originalQuerySelector(selector);
+  ctx.openModal = () => { accessModal.hidden = false; };
+  ctx.closeModal = () => { accessModal.hidden = true; };
+  const accessRequests = [];
+  ctx.apiRequest = async (url, options) => {
+    accessRequests.push({url, options});
+    if (url.endsWith('/production-access') && !options) return {access:{enabled:true, permissions:{view:true,fill:false}, units:['NRD','RBR']}};
+    if (url === '/api/users') return {users:[]};
+    return {};
+  };
+  await ctx.openAccessModal({dataset:{userId:'2'}, closest:() => ({querySelector:() => ({textContent:'Analista'})})});
+  assert.equal(accessModal.hidden, false);
+  assert.equal(accessName.textContent, 'Analista');
+  assert.equal(accessForm.hidden, false);
+  assert.equal(accessInputs.master.checked, true);
+  assert.equal(accessInputs.fill.checked, false);
+  assert.deepEqual(accessInputs.units.filter(input => input.checked).map(input => input.value), ['NRD','RBR']);
+  await ctx.saveAccessForm(accessForm);
+  const savedAccess = accessRequests.find(request => request.options?.method === 'PUT');
+  assert.equal(savedAccess.url, '/api/users/2/production-access');
+  assert.deepEqual(JSON.parse(savedAccess.options.body), {access:{enabled:true, permissions:{view:true,fill:false}, units:['NRD','RBR']}});
+  assert.equal(accessModal.hidden, true);
+  console.log('OK: cadastro, modal de acessos, envio único e restrição administrativa.');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; });

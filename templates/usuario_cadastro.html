@@ -51,19 +51,25 @@
           <div>
             <span class="modal-kicker">Módulo</span>
             <h3 id="user-production-access-title">Produção Agrícola</h3>
-            <p>Defina somente as unidades do analista. As frentes são escolhidas pelo próprio usuário dentro do módulo.</p>
+            <p>Defina o acesso e as unidades disponíveis para este usuário. As frentes são escolhidas dentro do módulo.</p>
           </div>
-          <label class="user-access-toggle"><input id="production-access-enabled" type="checkbox" checked /><span>Liberar acesso</span></label>
+        </div>
+        <div class="user-access-option">
+          <div><strong>Acesso ao módulo</strong><p>Permite visualizar a Produção Agrícola nas unidades selecionadas.</p></div>
+          <label class="user-access-toggle"><input id="production-access-enabled" type="checkbox" checked /><span>Liberado</span></label>
         </div>
         <div class="user-production-permissions">
-          <label><input id="production-access-fill" type="checkbox" checked /><span>Preencher e editar</span></label>
+          <div><strong>Permissão de edição</strong><p>O usuário poderá preencher e alterar as informações das frentes.</p></div>
+          <label class="user-access-toggle"><input id="production-access-fill" type="checkbox" checked /><span>Preencher e editar</span></label>
         </div>
         <fieldset class="user-production-units">
           <legend>Unidades liberadas</legend>
-          <label><input type="checkbox" data-production-access-unit value="PPT" checked /><span>PPT</span></label>
-          <label><input type="checkbox" data-production-access-unit value="NRD" /><span>NRD</span></label>
-          <label><input type="checkbox" data-production-access-unit value="RBR" /><span>RBR</span></label>
-          <label><input type="checkbox" data-production-access-unit value="PST" /><span>PST</span></label>
+          <div class="user-production-units-grid">
+            <label><input type="checkbox" data-production-access-unit value="PPT" checked /><span><strong>PPT</strong><small>Paraguaçu Paulista</small></span></label>
+            <label><input type="checkbox" data-production-access-unit value="NRD" /><span><strong>NRD</strong><small>Narandiba</small></span></label>
+            <label><input type="checkbox" data-production-access-unit value="RBR" /><span><strong>RBR</strong><small>Rio Brilhante</small></span></label>
+            <label><input type="checkbox" data-production-access-unit value="PST" /><span><strong>PST</strong><small>Passa Tempo</small></span></label>
+          </div>
         </fieldset>
       </section>
 

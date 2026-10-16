@@ -428,6 +428,14 @@ class PageTests(unittest.TestCase):
         self.assertIn('type="email"', html)
         self.assertIn('(opcional)', html)
 
+    def test_registered_users_have_standard_access_modal(self):
+        html = self.request('/usuarios', role='admin')['body']
+        self.assertIn('id="user-access-modal" class="modal-backdrop" hidden', html)
+        self.assertIn('role="dialog" aria-modal="true"', html)
+        self.assertIn('id="user-access-form"', html)
+        self.assertIn('form="user-access-form"', html)
+        self.assertNotIn('Histórico de acesso', html)
+
     def test_role_profiles_are_enforced_by_pages_and_apis_without_unit_restrictions(self):
         for role in ('admin', 'coordinator', 'analyst'):
             profile = {

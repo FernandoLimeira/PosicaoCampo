@@ -1,5 +1,3 @@
-const USER_PRODUCTION_UNITS = ['PPT', 'NRD', 'RBR', 'PST'];
-
 function normalizeUserSearch(value) {
   return String(value ?? '')
     .normalize('NFD')
@@ -42,7 +40,7 @@ function userItemHtml(user) {
   const roleLabel = { admin: 'Administrador', coordinator: 'Coordenador', analyst: 'Analista', user: 'Usuário padrão' }[user.role] || 'Usuário padrão';
   const actions = !isCurrent ? `
       <div class="user-actions">
-        ${!isAdmin ? `<button class="user-action user-action-primary" type="button" data-user-action="access" data-user-id="${escapeHtml(user.id)}">Acessos</button>` : ''}
+        ${!isAdmin ? `<button class="user-action user-action-primary" type="button" data-user-action="access" data-user-id="${escapeHtml(user.id)}" aria-label="Gerenciar acessos de ${escapeHtml(user.name || 'usuário')}">Gerenciar acessos</button>` : ''}
         <button class="user-action" type="button" data-user-action="toggle" data-user-id="${escapeHtml(user.id)}" data-active="${isActive ? 'true' : 'false'}">${isActive ? 'Desativar' : 'Ativar'}</button>
         ${!isAdmin ? `
         <button class="user-action" type="button" data-user-action="password" data-user-id="${escapeHtml(user.id)}">Redefinir senha</button>
@@ -54,8 +52,7 @@ function userItemHtml(user) {
         <input class="user-password-input" type="password" autocomplete="new-password" required placeholder="Nova senha" aria-label="Nova senha para ${escapeHtml(user.name || 'usuário')}" />
         <button class="user-action user-action-primary" type="submit">Salvar senha</button>
         <button class="user-action" type="button" data-user-action="cancel-password">Cancelar</button>
-      </form>
-      <div class="user-access-panel" data-user-access-panel="${escapeHtml(user.id)}" hidden></div>` : ''}` : '';
+      </form>` : ''}` : '';
   return `
     <article class="user-list-item ${isActive ? '' : 'is-disabled'}" data-user-id="${escapeHtml(user.id)}">
       <div class="user-list-copy">
@@ -67,7 +64,6 @@ function userItemHtml(user) {
         <span>Unidade base: ${escapeHtml(user.base_unit || 'PPT')}</span>
         <span>E-mail: ${escapeHtml(user.email || 'Não informado')}</span>
         ${!isAdmin ? `<span class="user-access-summary">${escapeHtml(user.access_summary || 'Produção Agrícola: sem acesso')}</span>` : ''}
-        <span>Cadastrado em ${escapeHtml(formatServerTimestamp(user.created_at))}</span>
       </div>
       ${actions}
     </article>`;
@@ -280,70 +276,76 @@ async function resetUserPassword(form) {
   }
 }
 
-function accessPanelHtml(userId) {
-  return `<form class="user-access-form" data-user-access-form="${escapeHtml(userId)}">
-    <div class="access-panel-head">
-      <div><strong>Produção Agrícola</strong><span>Unidades liberadas para este usuário</span></div>
-      <button class="user-action" type="button" data-user-action="cancel-access">Fechar</button>
-    </div>
-    <label class="user-access-toggle"><input type="checkbox" data-production-access-enabled /><span>Liberar acesso</span></label>
-    <div class="user-production-permissions">
-      <label><input type="checkbox" data-production-access-fill /><span>Preencher e editar</span></label>
-    </div>
-    <fieldset class="user-production-units">
-      <legend>Unidades liberadas</legend>
-      ${USER_PRODUCTION_UNITS.map(unit => `<label><input type="checkbox" data-production-access-unit value="${unit}" /><span>${unit}</span></label>`).join('')}
-    </fieldset>
-    <div class="access-form-actions"><button class="user-action user-action-primary" type="submit">Salvar acessos</button></div>
-  </form>`;
-}
-
-function applyAccessToPanel(panel, access) {
-  const master = panel.querySelector('[data-production-access-enabled]');
-  const fill = panel.querySelector('[data-production-access-fill]');
+function applyAccessToForm(form, access) {
+  const master = form.querySelector('[data-production-access-enabled]');
+  const fill = form.querySelector('[data-production-access-fill]');
   if (master) master.checked = Boolean(access?.enabled);
   if (fill) fill.checked = Boolean(access?.permissions?.fill);
   const units = new Set(access?.units || []);
-  panel.querySelectorAll('[data-production-access-unit]').forEach(input => { input.checked = units.has(input.value); });
-  syncProductionAccessDisabled(panel);
+  form.querySelectorAll('[data-production-access-unit]').forEach(input => { input.checked = units.has(input.value); });
+  syncProductionAccessDisabled(form);
 }
 
-async function openAccessPanel(button) {
+let accessRequestId = 0;
+
+async function openAccessModal(button) {
   const userId = Number(button?.dataset.userId);
   const item = button.closest('.user-list-item');
-  const panel = item?.querySelector('.user-access-panel');
-  if (!userId || !panel) return;
-  if (!panel.hidden) {
-    panel.hidden = true;
-    return;
-  }
-  panel.hidden = false;
-  panel.innerHTML = '<div class="access-loading">Carregando acessos...</div>';
+  const modal = document.querySelector('#user-access-modal');
+  const form = document.querySelector('#user-access-form');
+  const loading = document.querySelector('#user-access-loading');
+  const save = document.querySelector('#user-access-save');
+  if (!userId || !item || !modal || !form || !loading || !save) return;
+  const requestId = ++accessRequestId;
+  document.querySelector('#user-access-modal-name').textContent = item.querySelector('.user-list-copy strong')?.textContent || 'usuário';
+  document.querySelector('#user-access-status').textContent = '';
+  form.dataset.userAccessForm = String(userId);
+  form.hidden = true;
+  save.disabled = true;
+  loading.hidden = false;
+  loading.textContent = 'Carregando acessos...';
+  openModal('user-access-modal');
   try {
     const data = await apiRequest(`/api/users/${userId}/production-access`);
-    panel.innerHTML = accessPanelHtml(userId);
-    applyAccessToPanel(panel, data.access);
+    if (requestId !== accessRequestId || modal.hidden) return;
+    applyAccessToForm(form, data.access);
+    form.hidden = false;
+    loading.hidden = true;
+    save.disabled = false;
+    form.querySelector('[data-production-access-enabled]')?.focus();
   } catch (error) {
+    if (requestId !== accessRequestId || modal.hidden) return;
     console.error(error);
-    panel.innerHTML = `<div class="access-empty">${escapeHtml(error.message || 'Não foi possível carregar os acessos.')}</div>`;
+    loading.textContent = error.message || 'Não foi possível carregar os acessos.';
   }
 }
 
 async function saveAccessForm(form) {
   const userId = Number(form?.dataset.userAccessForm);
   if (!userId) return;
+  const requestId = accessRequestId;
   const access = collectProductionAccess(form);
+  const save = document.querySelector('#user-access-save');
+  const status = document.querySelector('#user-access-status');
+  if (save?.disabled) return;
   try {
     validateProductionAccess(access);
+    if (save) save.disabled = true;
+    if (status) status.textContent = 'Salvando acessos...';
     await apiRequest(`/api/users/${userId}/production-access`, {
       method: 'PUT',
       body: JSON.stringify({ access })
     });
     showToast('Acessos atualizados.');
+    if (requestId === accessRequestId) closeModal('user-access-modal');
     await loadUsers();
   } catch (error) {
     console.error(error);
-    showToast(error.message || 'Não foi possível salvar os acessos.', true);
+    const message = error.message || 'Não foi possível salvar os acessos.';
+    if (status && requestId === accessRequestId) status.textContent = message;
+    showToast(message, true);
+  } finally {
+    if (save && requestId === accessRequestId) save.disabled = false;
   }
 }
 
@@ -366,18 +368,18 @@ document.querySelector('#users-list')?.addEventListener('click', event => {
   if (action === 'toggle') toggleUserActive(button);
   if (action === 'password') togglePasswordForm(button, true);
   if (action === 'cancel-password') togglePasswordForm(button, false);
-  if (action === 'access') openAccessPanel(button);
-  if (action === 'cancel-access') {
-    const panel = button.closest('.user-access-panel');
-    if (panel) panel.hidden = true;
+  if (action === 'access') openAccessModal(button);
+});
+
+document.querySelector('#user-access-form')?.addEventListener('change', event => {
+  if (event.target.matches('[data-production-access-enabled]')) {
+    syncProductionAccessDisabled(event.currentTarget);
   }
 });
 
-document.querySelector('#users-list')?.addEventListener('change', event => {
-  if (event.target.matches('[data-production-access-enabled]')) {
-    const panel = event.target.closest('.user-access-panel');
-    if (panel) syncProductionAccessDisabled(panel);
-  }
+document.querySelector('#user-access-form')?.addEventListener('submit', event => {
+  event.preventDefault();
+  saveAccessForm(event.currentTarget);
 });
 
 document.querySelector('#users-list')?.addEventListener('submit', event => {
@@ -385,12 +387,6 @@ document.querySelector('#users-list')?.addEventListener('submit', event => {
   if (passwordForm) {
     event.preventDefault();
     resetUserPassword(passwordForm);
-    return;
-  }
-  const accessForm = event.target.closest('[data-user-access-form]');
-  if (accessForm) {
-    event.preventDefault();
-    saveAccessForm(accessForm);
   }
 });
 
