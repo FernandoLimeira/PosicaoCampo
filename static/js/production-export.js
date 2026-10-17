@@ -12,6 +12,17 @@ const PRODUCTION_EXPORT_UNIT_NAMES = {
 const PRODUCTION_EXPORT_COLORS = {
   active: '#76b82a', wet: '#ffcc00', waiting: '#b2b2b2', stopped: '#e95b45'
 };
+// As etiquetas usam um leve preenchimento, contorno contínuo e ponto sólido,
+// independentemente de o lançamento ser do dia ou estar pendente.
+const PRODUCTION_EXPORT_PILL_BACKGROUNDS = {
+  active: 'rgba(118, 184, 42, 0.14)',
+  wet: 'rgba(221, 190, 0, 0.14)',
+  waiting: 'rgba(178, 178, 178, 0.12)',
+  stopped: 'rgba(233, 91, 69, 0.14)'
+};
+const PRODUCTION_EXPORT_PILL_BORDERS = {
+  active: '#679b2b', wet: '#bba020', waiting: '#969d9e', stopped: '#bf594d'
+};
 const PRODUCTION_EXPORT_BODY = '#0f1e24';
 const PRODUCTION_EXPORT_CARD = '#12252c';
 const PRODUCTION_EXPORT_TEXT = '#e9eef0';
@@ -42,11 +53,9 @@ function buildProductionExportPages(reports, limit = PRODUCTION_EXPORT_PAGE_LIMI
 function productionExportText(ctx, value, x, y, width, font, color = PRODUCTION_EXPORT_TEXT) {
   ctx.font = font;
   ctx.fillStyle = color;
-  let text = String(value ?? '').trim();
-  while (text.length > 1 && ctx.measureText(text).width > width) {
-    text = `${text.slice(0, -2)}…`;
-  }
-  ctx.fillText(text, x, y);
+  // A compressão horizontal do Canvas preserva os valores completos em vez de
+  // trocar números, nomes ou títulos por reticências na imagem exportada.
+  ctx.fillText(String(value ?? '').trim(), x, y, width);
 }
 
 function productionExportRoundRect(ctx, x, y, width, height, radius, color, stroke = false) {
@@ -203,7 +212,11 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
       seenNotes.add(noteKey);
       const dated = item.is_current_day || !item.entry?.work_date
         ? '' : ` (${formatProductionExportDate(item.entry.work_date)})`;
-      notes.push(`${serviceName}${dated}: ${observation}`);
+      const prefix = observation.toLocaleLowerCase('pt-BR').startsWith(serviceName.toLocaleLowerCase('pt-BR'))
+        ? '' : `${serviceName}${dated}: `;
+      for (const line of observation.split(/\r?\n/).map(value => value.trim()).filter(Boolean)) {
+        notes.push(`${prefix}${line}`);
+      }
     }
   }
 
@@ -214,44 +227,56 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
     rows.push({ type: 'group', nameLines: groupLines,
       height: Math.max(28, groupLines.length * 22 + 6) });
     for (const [serviceName, pills] of services) {
-      const lines = [{ pills: [], height: 25 }];
+      const lines = [{ pills: [], height: 24 }];
       let used = 0;
       for (const pill of pills) {
-        ctx.font = 'bold 16px "Arial Narrow", Arial, sans-serif';
-        pill.width = Math.min(278, Math.max(54, Math.ceil(ctx.measureText(pill.label).width) + 40));
-        if (used && used + pill.width + 6 > 278) {
-          lines.push({ pills: [], height: 25 });
+        ctx.font = 'bold 15px "Roboto Condensed", "Arial Narrow", Arial, sans-serif';
+        const pillArea = 260;
+        pill.width = Math.min(pillArea, Math.max(46, Math.ceil(ctx.measureText(pill.label).width) + 35));
+        if (used && used + pill.width > pillArea) {
+          lines.push({ pills: [], height: 24 });
           used = 0;
         }
-        pill.textLines = productionExportWrap(ctx, pill.label, pill.width - 27,
-          'bold 16px "Arial Narrow", Arial, sans-serif');
-        pill.height = Math.max(25, pill.textLines.length * 18 + 7);
+        pill.textLines = productionExportWrap(ctx, pill.label, pill.width - 24,
+          'bold 15px "Roboto Condensed", "Arial Narrow", Arial, sans-serif');
+        pill.height = Math.max(24, pill.textLines.length * 18 + 6);
         lines.at(-1).pills.push(pill);
         lines.at(-1).height = Math.max(lines.at(-1).height, pill.height);
-        used += pill.width + 6;
+        used += pill.width + 5;
       }
-      const nameLines = productionExportWrap(ctx, serviceName, 176,
-        'bold 16px "Arial Narrow", Arial, sans-serif');
+      const nameFont = 'bold 16px "Roboto Condensed", "Arial Narrow", Arial, sans-serif';
+      ctx.font = nameFont;
+      // Nomes comuns (ex.: Fertirrigação convencional) cabem em uma linha;
+      // descrições de serviços realmente longas continuam quebrando.
+      const nameLines = ctx.measureText(serviceName).width <= 155 * 1.46
+        ? [serviceName] : productionExportWrap(ctx, serviceName, 155, nameFont);
       rows.push({ type: 'service', nameLines, lines,
-        height: Math.max(33, lines.reduce((sum, line) => sum + line.height + 7, 1),
+        height: Math.max(30, lines.reduce((sum, line) => sum + line.height + 5, 0),
           nameLines.length * 20 + 6) });
     }
   }
   if (!rows.length) rows.push({ type: 'empty', height: 48 });
 
-  const noteLines = notes.flatMap(note => productionExportWrap(ctx, `• ${note}`, 466,
-    '16px "Arial Narrow", Arial, sans-serif'));
+  const noteLines = report.noteLinesOverride || notes.flatMap(note => productionExportWrap(ctx, `• ${note}`, 466,
+    '16px "Roboto Condensed", "Arial Narrow", Arial, sans-serif'));
   if (!noteLines.length) noteLines.push('• Sem observações registradas.');
   const changes = String(report.summary?.changes || '').split(/\r?\n/)
     .map(line => line.trim().replace(/^[•-]\s*/, '')).filter(Boolean);
-  const changeLines = (changes.length ? changes : ['Sem mudanças registradas.'])
+  const changeLines = report.changeLinesOverride || (changes.length ? changes : ['Sem mudanças registradas.'])
     .flatMap(line => productionExportWrap(ctx, `• ${line}`, 466,
-      '16px "Arial Narrow", Arial, sans-serif'));
+      '16px "Roboto Condensed", "Arial Narrow", Arial, sans-serif'));
   const extraSummary = counts.waiting || counts.stopped || counts.pending ? 24 : 0;
-  const contentHeight = 129 + extraSummary + rows.reduce((sum, row) => sum + row.height, 0)
-    + 16 + 36 + 14 + 26 + noteLines.length * 21 + 13 + 26 + changeLines.length * 21 + 22;
-  return { rows, noteLines, changeLines, rainText: productionExportRainText(report.summary),
-    counts, extraSummary, height: Math.max(minHeight, contentHeight) };
+  const rainText = productionExportRainText(report.summary);
+  const rainLines = productionExportWrap(ctx, rainText, 418,
+    'bold 18px "Roboto Condensed", "Arial Narrow", Arial, sans-serif');
+  const rainHeight = Math.max(36, rainLines.length * 22 + 12);
+  // Todas as seções são medidas com os mesmos espaçamentos usados no desenho.
+  // A altura cresce com dados reais, sem cortar observações ou deixar lacunas fixas.
+  const contentHeight = 125 + extraSummary + rows.reduce((sum, row) => sum + row.height, 0)
+    + 16 + rainHeight + 14 + 26 + noteLines.length * 21 + 13
+    + 26 + changeLines.length * 21 + 26;
+  return { rows, noteLines, changeLines, rainLines, rainHeight,
+    counts, extraSummary, contentHeight, height: Math.max(minHeight, contentHeight) };
 }
 
 function drawProductionExportHeader(ctx, workDate, background, pageNumber, totalPages, height) {
@@ -295,10 +320,10 @@ function drawProductionExportHeader(ctx, workDate, background, pageNumber, total
   if (totalPages > 1) productionExportText(ctx, `${pageNumber}/${totalPages}`, 989, 64, 55,
     'bold 21px Impact, "Arial Narrow", sans-serif', PRODUCTION_EXPORT_MUTED);
 
-  productionExportText(ctx, 'TROCA DE TURNO', 40, 181, 900,
-    'bold 71px Impact, "Arial Narrow", sans-serif');
-  productionExportText(ctx, 'PRODUÇÃO AGRÍCOLA', 40, 250, 970,
-    'bold 68px Impact, "Arial Narrow", sans-serif', PRODUCTION_EXPORT_COLORS.active);
+  productionExportText(ctx, 'TROCA DE TURNO', 40, 181, 520,
+    'bold 71px Impact, "Roboto Condensed", "Arial Narrow", sans-serif');
+  productionExportText(ctx, 'PRODUÇÃO AGRÍCOLA', 40, 250, 570,
+    'bold 68px Impact, "Roboto Condensed", "Arial Narrow", sans-serif', PRODUCTION_EXPORT_COLORS.active);
   productionExportText(ctx, 'Preparo, plantio, tratos culturais e fertirrigação', 40, 293, 930,
     'bold 24px "Arial Narrow", Arial, sans-serif', '#e7eeee');
   const legend = [
@@ -330,19 +355,24 @@ function drawProductionExportCard(ctx, report, plan, x, y) {
     'bold 43px Impact, "Arial Narrow", sans-serif');
   productionExportText(ctx, PRODUCTION_EXPORT_UNIT_NAMES[report.code], x + 80, y + 74, 310,
     '16px "Arial Narrow", Arial, sans-serif', '#c2d3d6');
-  productionExportText(ctx, String(report.items.length), x + 452, y + 52, 38,
-    'bold 38px Impact, "Arial Narrow", sans-serif', PRODUCTION_EXPORT_COLORS.active);
-  productionExportText(ctx, 'OPERAÇÕES', x + 421, y + 72, 72,
-    '12px "Arial Narrow", Arial, sans-serif', '#c2d3d6');
+  // Alinhar pela borda direita evita cortar contagens de 2 ou mais dígitos.
+  ctx.save();
+  ctx.textAlign = 'right';
+  productionExportText(ctx, report.continuation ? 'CONT.' : String(report.items.length),
+    x + 489, y + 52, 94,
+    'bold 38px Impact, "Roboto Condensed", "Arial Narrow", sans-serif', PRODUCTION_EXPORT_COLORS.active);
+  productionExportText(ctx, report.continuation ? 'INFORMAÇÕES' : 'OPERAÇÕES', x + 489, y + 72, 94,
+    '12px "Roboto Condensed", "Arial Narrow", Arial, sans-serif', '#c2d3d6');
+  ctx.restore();
 
   ctx.beginPath(); ctx.arc(x + 24, y + 97, 6, 0, Math.PI * 2);
   ctx.fillStyle = PRODUCTION_EXPORT_COLORS.active; ctx.fill();
-  productionExportText(ctx, `${counts.active} em atividade`, x + 34, y + 104, 138,
-    'bold 17px "Arial Narrow", Arial, sans-serif');
-  ctx.beginPath(); ctx.arc(x + 164, y + 97, 6, 0, Math.PI * 2);
+  productionExportText(ctx, `${counts.active} em atividade`, x + 34, y + 104, 150,
+    'bold 16px "Roboto Condensed", "Arial Narrow", Arial, sans-serif');
+  ctx.beginPath(); ctx.arc(x + 195, y + 97, 6, 0, Math.PI * 2);
   ctx.fillStyle = PRODUCTION_EXPORT_COLORS.wet; ctx.fill();
-  productionExportText(ctx, `${counts.wet} solo úmido`, x + 174, y + 104, 126,
-    'bold 17px "Arial Narrow", Arial, sans-serif');
+  productionExportText(ctx, `${counts.wet} solo úmido`, x + 205, y + 104, 155,
+    'bold 16px "Roboto Condensed", "Arial Narrow", Arial, sans-serif');
   if (plan.extraSummary) {
     const details = [
       ['waiting', counts.waiting, 'aguardando'],
@@ -374,37 +404,39 @@ function drawProductionExportCard(ctx, report, plan, x, y) {
         'bold 16px "Arial Narrow", Arial, sans-serif'));
       let lineY = cursor + 2;
       row.lines.forEach(line => {
-        let pillX = x + 200;
+        let pillX = x + 204;
         for (const pill of line.pills) {
           const color = PRODUCTION_EXPORT_COLORS[pill.state];
-          if (pill.pending) ctx.setLineDash([4, 3]);
-          productionExportRoundRect(ctx, pillX, lineY,
-            pill.width, pill.height, 13, color, true);
-          if (pill.pending) ctx.setLineDash([]);
+          productionExportRoundRect(ctx, pillX, lineY, pill.width, pill.height,
+            13, PRODUCTION_EXPORT_PILL_BACKGROUNDS[pill.state]);
+          productionExportRoundRect(ctx, pillX, lineY, pill.width, pill.height,
+            13, PRODUCTION_EXPORT_PILL_BORDERS[pill.state], true);
           ctx.beginPath(); ctx.arc(pillX + 12, lineY + 12, 6, 0, Math.PI * 2);
           ctx.fillStyle = color; ctx.fill();
           pill.textLines.forEach((textLine, textIndex) => productionExportText(ctx,
-            textLine, pillX + 22, lineY + 18 + textIndex * 18,
-            pill.width - 27, 'bold 16px "Arial Narrow", Arial, sans-serif'));
-          pillX += pill.width + 6;
+            textLine, pillX + 22, lineY + 17 + textIndex * 18,
+            pill.width - 24, 'bold 15px "Roboto Condensed", "Arial Narrow", Arial, sans-serif'));
+          pillX += pill.width + 5;
         }
         lineY += line.height + 7;
       });
       productionExportRule(ctx, x + 17, cursor + row.height - 1, x + 489, '#29434b');
     } else {
       productionExportText(ctx, report.restricted ? 'Unidade não liberada para este usuário.'
-        : 'Nenhum lançamento nesta unidade.', x + 17, cursor + 29, 455,
+        : report.continuation ? 'Continuação das informações da unidade.'
+          : 'Nenhum lançamento nesta unidade.', x + 17, cursor + 29, 455,
       '16px "Arial Narrow", Arial, sans-serif', PRODUCTION_EXPORT_MUTED);
     }
     cursor += row.height;
   }
 
   cursor += 16;
-  productionExportRoundRect(ctx, x + 17, cursor, 472, 36, 9, '#213b46');
+  productionExportRoundRect(ctx, x + 17, cursor, 472, plan.rainHeight, 9, '#213b46');
   productionExportText(ctx, '☁', x + 29, cursor + 26, 30, 'bold 23px Arial', PRODUCTION_EXPORT_MUTED);
-  productionExportText(ctx, plan.rainText, x + 60, cursor + 25, 417,
-    'bold 18px "Arial Narrow", Arial, sans-serif');
-  cursor += 50;
+  plan.rainLines.forEach((line, index) => productionExportText(ctx, line,
+    x + 60, cursor + 25 + index * 22, 418,
+    'bold 18px "Roboto Condensed", "Arial Narrow", Arial, sans-serif'));
+  cursor += plan.rainHeight + 14;
   productionExportText(ctx, 'OBSERVAÇÃO', x + 17, cursor + 20, 460,
     'bold 21px Bahnschrift, "Arial Narrow", sans-serif', PRODUCTION_EXPORT_COLORS.wet);
   cursor += 26;
@@ -472,13 +504,56 @@ function drawProductionExportFooter(ctx, y, workDate, height) {
 }
 
 function productionExportPageLayout(ctx, page, statusByCode) {
-  const plans = page.map((report, index) => productionExportCardPlan(ctx, report,
-    statusByCode, index < 2 ? 875 : 520));
+  const plans = page.map((report, index) => {
+    const items = report.items?.length || 0;
+    const isContinuation = Boolean(report.continuation);
+    const hasNotes = Boolean((report.summary?.changes || '').trim())
+      || Boolean(report.noteLinesOverride?.length)
+      || Boolean(report.changeLinesOverride?.length);
+    const dynamicMinimum = isContinuation
+      ? 300
+      : items === 0
+        ? 300
+        : items <= 4
+          ? 360
+          : items <= 10
+            ? 420
+            : 440 + Math.min(170, (items - 10) * 6);
+    const minimum = hasNotes ? dynamicMinimum : Math.max(280, dynamicMinimum - 20);
+    return productionExportCardPlan(ctx, report, statusByCode, minimum);
+  });
   const firstHeight = Math.max(plans[0].height, plans[1].height);
   const secondHeight = Math.max(plans[2].height, plans[3].height);
+  plans[0].height = plans[1].height = firstHeight;
+  plans[2].height = plans[3].height = secondHeight;
   const secondY = 370 + firstHeight + 16;
   const footerY = secondY + secondHeight + 16;
   return { page, plans, secondY, footerY, height: footerY + 123 };
+}
+
+function productionExportSplitTextPage(page, plans) {
+  const order = plans.map((plan, index) => ({ plan, index }))
+    .sort((a, b) => b.plan.contentHeight - a.plan.contentHeight);
+  for (const { plan, index } of order) {
+    const allLines = [...plan.noteLines, ...plan.changeLines];
+    if (allLines.length <= 2) continue;
+    const split = Math.ceil(allLines.length / 2);
+    const firstNotes = plan.noteLines.slice(0, split);
+    const firstChanges = plan.changeLines.slice(0, Math.max(0, split - plan.noteLines.length));
+    const restNotes = plan.noteLines.slice(split);
+    const restChanges = plan.changeLines.slice(Math.max(0, split - plan.noteLines.length));
+    const first = page.map((report, unitIndex) => unitIndex === index
+      ? { ...report, noteLinesOverride: firstNotes, changeLinesOverride: firstChanges }
+      : report);
+    const second = page.map((report, unitIndex) => ({
+      ...report, items: [], continuation: unitIndex === index,
+      summary: unitIndex === index ? report.summary : null,
+      noteLinesOverride: unitIndex === index ? restNotes : [],
+      changeLinesOverride: unitIndex === index ? restChanges : []
+    }));
+    return [first, second];
+  }
+  return null;
 }
 
 function prepareProductionExportPages(ctx, reports, statusByCode) {
@@ -491,14 +566,20 @@ function prepareProductionExportPages(ctx, reports, statusByCode) {
       ready.push(layout);
       continue;
     }
-    if (page.every(report => report.items.length <= 1)) {
-      throw new Error('Um apontamento excede o tamanho máximo da imagem. Reduza a observação desse registro.');
+    if (page.some(report => report.items.length > 1)) {
+      const first = page.map(report => ({ ...report,
+        items: report.items.slice(0, Math.ceil(report.items.length / 2)) }));
+      const second = page.map(report => ({ ...report,
+        // Mudanças de turno são informação diária, não devem ser repetidas
+        // em todas as imagens criadas por excesso de operações.
+        summary: report.summary ? { ...report.summary, changes: '' } : null,
+        items: report.items.slice(Math.ceil(report.items.length / 2)) }));
+      pending.unshift(first, second);
+    } else {
+      const split = productionExportSplitTextPage(page, layout.plans);
+      if (!split) throw new Error('Uma identificação excede o limite de tamanho da imagem. Revise os dados do lançamento.');
+      pending.unshift(...split);
     }
-    const first = page.map(report => ({ ...report,
-      items: report.items.slice(0, Math.ceil(report.items.length / 2)) }));
-    const second = page.map(report => ({ ...report,
-      items: report.items.slice(Math.ceil(report.items.length / 2)) }));
-    pending.unshift(first, second);
   }
   return ready;
 }

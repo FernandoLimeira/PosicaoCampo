@@ -849,8 +849,13 @@ class PageTests(unittest.TestCase):
         self.assertNotIn('href="/relatorios"', nav)
         self.assertNotIn('href="/" data-unit-context', nav)
         page = self.request('/usuarios', role='admin')['body']
-        for name in ('Relatório', 'CTT', 'Produção Agrícola', 'Emissão Global', 'Cadastro de Setores', 'Histórico', 'Usuários'):
-            self.assertIn(f'<strong>{name}</strong>', page)
+        for key in ('reports', 'ctt', 'production', 'emission', 'sectors', 'history', 'users'):
+            self.assertEqual(page.count(f'data-permission-target="{key}"'), 2)
+            self.assertEqual(page.count(f'data-permission-panel="{key}"'), 2)
+        self.assertIn('data-user-step="identity"', page)
+        self.assertIn('data-user-step="permissions"', page)
+        self.assertIn('data-permission-picker', page)
+        self.assertNotIn('user-access-accordion', page)
         self.assertNotIn('data-module-view="emission"', page)
         self.assertEqual(page.count('data-module-view="users"'), 2)
         self.assertEqual(page.count('data-module-edit="users"'), 2)

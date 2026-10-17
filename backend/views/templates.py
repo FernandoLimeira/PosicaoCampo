@@ -5,7 +5,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 from ..config import TEMPLATE_DIR
 from ..models.module_access import MODULES
 
-ASSET_VERSION = "20261017-ctt-relatorio-acessos-v4"
+ASSET_VERSION = "20261017-user-permissions-workspace-v5"
 
 environment = Environment(
     loader=FileSystemLoader(str(TEMPLATE_DIR)),

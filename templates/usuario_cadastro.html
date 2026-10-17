@@ -1,53 +1,36 @@
 {% from "partials/user_permission_fields.html" import permission_fields with context %}
-{# Formulário único de cadastro, incorporado pelo modal em usuarios.html. #}
-<form id="quick-user-form" class="quick-user-form user-create-form">
+{# Um único formulário. Etapas apenas alternam a apresentação, não os controles enviados. #}
+<form id="quick-user-form" class="quick-user-form user-create-form" novalidate>
+  <div class="user-create-steps" role="group" aria-label="Etapas do cadastro">
+    <button type="button" data-user-step-button="identity" class="user-step is-active" aria-current="step"><span class="user-step-index">1</span> Dados do usuário</button>
+    <span class="user-step-divider" aria-hidden="true"></span>
+    <button type="button" data-user-step-button="permissions" class="user-step"><span class="user-step-index">2</span> Permissões</button>
+  </div>
   <div class="user-create-modal-body">
-    <div class="user-section-heading user-identity-heading"><div><span class="modal-kicker">01 · Identificação</span><h3>Dados da conta</h3><p>Informações para autenticação e vínculo do usuário.</p></div></div>
-    <div class="user-create-fields">
-      <label class="field" for="quick-user-name">
-        <span>Usuário</span>
-        <input id="quick-user-name" type="text" autocomplete="off" maxlength="80" required placeholder="Usuário de acesso" />
-      </label>
-      <label class="field" for="quick-user-password">
-        <span>Senha</span>
-        <input id="quick-user-password" type="password" autocomplete="new-password" minlength="8" required placeholder="Mínimo de 8 caracteres" />
-      </label>
-      <label class="field" for="quick-user-email">
-        <span>E-mail <small>(opcional)</small></span>
-        <input id="quick-user-email" type="email" autocomplete="off" maxlength="254" placeholder="usuario@exemplo.com" />
-      </label>
-      <label class="field" for="quick-user-role">
-        <span>Nível de acesso</span>
-        <select id="quick-user-role" required>
-          <option value="coordinator">Coordenador</option>
-          <option value="analyst" selected>Analista</option>
-        </select>
-      </label>
-      <label class="field" for="quick-user-base-unit">
-        <span>Unidade base</span>
-        <select id="quick-user-base-unit" required>
-          <option value="PPT">PPT — Paraguaçu Paulista</option>
-          <option value="NRD">NRD — Narandiba</option>
-          <option value="RBR">RBR — Rio Brilhante</option>
-          <option value="PST">PST — Passa Tempo</option>
-        </select>
-      </label>
-      <label class="field" for="quick-user-active">
-        <span>Situação</span>
-        <select id="quick-user-active" required>
-          <option value="active">Ativo</option>
-          <option value="inactive">Desativado</option>
-        </select>
-      </label>
-    </div>
-    {{ permission_fields("create") }}
+    <section class="user-create-stage" data-user-step="identity" aria-label="Dados do usuário">
+      <div class="user-section-heading"><div><span class="modal-kicker">Identificação</span><h3>Dados da conta</h3><p>Informações para autenticação e vínculo do usuário.</p></div></div>
+      <div class="user-create-fields">
+        <label class="field" for="quick-user-name"><span>Usuário</span><input id="quick-user-name" type="text" autocomplete="off" maxlength="80" required placeholder="Usuário de acesso" /></label>
+        <label class="field" for="quick-user-password"><span>Senha</span><input id="quick-user-password" type="password" autocomplete="new-password" minlength="8" required placeholder="Mínimo de 8 caracteres" /></label>
+        <label class="field" for="quick-user-email"><span>E-mail <small>(opcional)</small></span><input id="quick-user-email" type="email" autocomplete="off" maxlength="254" placeholder="usuario@exemplo.com" /></label>
+        <label class="field" for="quick-user-role"><span>Nível de acesso</span><select id="quick-user-role" required><option value="coordinator">Coordenador</option><option value="analyst" selected>Analista</option></select></label>
+        <label class="field" for="quick-user-base-unit"><span>Unidade base</span><select id="quick-user-base-unit" required><option value="PPT">PPT — Paraguaçu Paulista</option><option value="NRD">NRD — Narandiba</option><option value="RBR">RBR — Rio Brilhante</option><option value="PST">PST — Passa Tempo</option></select></label>
+        <label class="field" for="quick-user-active"><span>Situação</span><select id="quick-user-active" required><option value="active">Ativo</option><option value="inactive">Desativado</option></select></label>
+      </div>
+      <div class="user-step-tip"><strong>Próxima etapa: acessos</strong><p>Depois de preencher os dados, escolha os módulos e as operações de cada unidade.</p></div>
+    </section>
+    <section class="user-create-stage" data-user-step="permissions" aria-label="Permissões do usuário" hidden>
+      {{ permission_fields("create") }}
+    </section>
     <p id="user-create-status" class="user-create-status" role="status" aria-live="polite"></p>
   </div>
   <footer class="modal-footer user-create-footer">
-    <div class="wizard-footer-info"><strong>Dados de acesso</strong><p>O cadastro fica disponível imediatamente após salvar.</p></div>
+    <div class="wizard-footer-info"><strong>Cadastro de usuário</strong><p data-user-step-help>Etapa 1 de 2 · Dados da conta</p></div>
     <div class="modal-footer-actions">
       <button class="modal-button secondary" type="button" data-close-modal="user-create-modal">Cancelar</button>
-      <button id="create-user-button" class="modal-button save" type="submit">Cadastrar usuário</button>
+      <button class="modal-button secondary" type="button" data-user-step-back hidden>Voltar</button>
+      <button class="modal-button save" type="button" data-user-step-next>Continuar para permissões</button>
+      <button id="create-user-button" class="modal-button save" type="submit" hidden>Cadastrar usuário</button>
     </div>
   </footer>
 </form>

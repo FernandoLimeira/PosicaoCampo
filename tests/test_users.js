@@ -270,7 +270,53 @@ async function main() {
   assert.deepEqual(JSON.parse(savedAccess.options.body), {access:{modules:configuredModules, production:{enabled:true, permissions:{view:true,fill:false,configure:false,summary:true}, units:['NRD','RBR'],
     unit_permissions:{NRD:{view:true,fill:false,summary:true},RBR:{view:true,fill:false,summary:true}}}}});
   assert.equal(accessModal.hidden, true);
-  console.log('OK: cadastro, modal de acessos, envio único e restrição administrativa.');
+  // Os painéis visuais não recriam campos nem alteram dados ao trocar de módulo.
+  const panels = ['reports','ctt','production','emission','sectors','history','users'].map(key =>
+    ({dataset:{permissionPanel:key},hidden:key!=='reports'}));
+  const navs = panels.map(panel => ({dataset:{permissionTarget:panel.dataset.permissionPanel},
+    attributes:{},classList:{toggle(name, on){this[name]=on;}},
+    setAttribute(name, value){this.attributes[name]=value;},focus(){this.focused=true;}}));
+  const picker = {value:'reports'};
+  const workspace = {querySelectorAll(selector) {
+      if (selector==='[data-permission-panel]') return panels;
+      if (selector==='[data-permission-target]') return navs;
+      return [];
+    },querySelector(selector){if (selector==='[data-permission-picker]') return picker;return null;}};
+  const stages = ['identity','permissions'].map(step => ({dataset:{userStep:step},hidden:step!=='identity'}));
+  const steps = stages.map(stage => ({dataset:{userStepButton:stage.dataset.userStep},
+    classList:{toggle(name,on){this[name]=on;}},setAttribute(){},removeAttribute(){}}));
+  const back = {hidden:true}, next = {hidden:false}, create = {hidden:true}, help = {textContent:''};
+  const invalidField = {checkValidity:()=>false,focus(){this.focused=true;},reportValidity(){this.reported=true;}};
+  const uiForm = {querySelector(selector) {
+    if (selector==='[data-permission-workspace]') return workspace;
+    if (selector==='[data-user-step-next]') return next;
+    if (selector==='[data-user-step-back]') return back;
+    if (selector==='#create-user-button') return create;
+    if (selector==='[data-user-step-help]') return help;
+    if (selector==='[data-permission-target="reports"]') return navs[0];
+    return null;
+  }, querySelectorAll(selector) {
+    if (selector==='[data-user-step]') return stages;
+    if (selector==='[data-user-step-button]') return steps;
+    if (selector==='.user-create-fields input, .user-create-fields select') return [invalidField];
+    return [];
+  }};
+  ctx.selectPermissionPanel(uiForm,'production');
+  assert.equal(panels.filter(panel=>!panel.hidden).length,1);
+  assert.equal(panels.find(panel=>!panel.hidden).dataset.permissionPanel,'production');
+  assert.equal(navs[2].attributes['aria-pressed'],'true');
+  assert.equal(picker.value,'production');
+  ctx.setCreateStep(uiForm,'permissions');
+  assert.equal(stages[0].hidden,true);
+  assert.equal(stages[1].hidden,false);
+  assert.equal(next.hidden,true);
+  assert.equal(create.hidden,false);
+  assert.equal(ctx.validateCreateFields(uiForm),false);
+  assert.equal(stages[0].hidden,false,'Dados inválidos voltam à primeira etapa');
+  assert.equal(invalidField.focused,true);
+  assert.equal(invalidField.reported,true);
+  assert.equal(create.hidden,true);
+  console.log('OK: cadastro, permissões, etapas, seleção de módulos e restrição administrativa.');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; });

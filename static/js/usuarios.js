@@ -135,6 +135,80 @@ function syncModuleAccessDisabled(root) {
   });
 }
 
+// A navegação visual usa os mesmos campos persistidos; não cria um segundo estado de permissões.
+function selectPermissionPanel(root, key = 'reports') {
+  if (!root) return;
+  const workspace = root.querySelector('[data-permission-workspace]');
+  if (!workspace) return;
+  const panels = Array.from(workspace.querySelectorAll('[data-permission-panel]'));
+  if (!panels.some(panel => panel.dataset.permissionPanel === key)) key = 'reports';
+  panels.forEach(panel => { panel.hidden = panel.dataset.permissionPanel !== key; });
+  workspace.querySelectorAll('[data-permission-target]').forEach(button => {
+    const active = button.dataset.permissionTarget === key;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  const picker = workspace.querySelector('[data-permission-picker]');
+  if (picker) picker.value = key;
+}
+
+function updatePermissionSummaries(root) {
+  const workspace = root?.querySelector('[data-permission-workspace]');
+  if (!workspace) return;
+  workspace.querySelectorAll('[data-permission-count]').forEach(label => {
+    const key = label.dataset.permissionCount;
+    if (key === 'emission') { label.textContent = 'Liberado'; return; }
+    if (key === 'production') {
+      const enabled = Boolean(root.querySelector('[data-production-access-enabled]')?.checked);
+      const quantity = enabled ? visibleProductionRows(root).length : 0;
+      label.textContent = quantity ? `${quantity} ${quantity === 1 ? 'unidade' : 'unidades'}` : 'Sem acesso';
+      return;
+    }
+    const panel = workspace.querySelector(`[data-permission-panel="${key}"]`);
+    const quantity = Array.from(panel?.querySelectorAll('[data-module-view]') || []).filter(input => input.checked).length;
+    label.textContent = quantity ? `${quantity} ${quantity === 1 ? 'função' : 'funções'}` : 'Sem acesso';
+  });
+}
+
+function focusPermissionMenu(root) {
+  const mobile = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 680px)').matches;
+  root.querySelector(mobile ? '[data-permission-picker]' : '[data-permission-target="reports"]')?.focus();
+}
+
+function setCreateStep(form, step, focus = false) {
+  if (!form) return;
+  const active = step === 'permissions' ? 'permissions' : 'identity';
+  form.querySelectorAll('[data-user-step]').forEach(panel => { panel.hidden = panel.dataset.userStep !== active; });
+  form.querySelectorAll('[data-user-step-button]').forEach(button => {
+    const selected = button.dataset.userStepButton === active;
+    button.classList.toggle('is-active', selected);
+    if (selected) button.setAttribute('aria-current', 'step');
+    else button.removeAttribute('aria-current');
+  });
+  const next = form.querySelector('[data-user-step-next]');
+  const back = form.querySelector('[data-user-step-back]');
+  const submit = form.querySelector('#create-user-button');
+  if (next) next.hidden = active !== 'identity';
+  if (back) back.hidden = active !== 'permissions';
+  if (submit) submit.hidden = active !== 'permissions';
+  const help = form.querySelector('[data-user-step-help]');
+  if (help) help.textContent = active === 'identity' ? 'Etapa 1 de 2 · Dados da conta' : 'Etapa 2 de 2 · Permissões por módulo';
+  if (focus) {
+    if (active === 'identity') form.querySelector('#quick-user-name')?.focus();
+    else focusPermissionMenu(form);
+  }
+}
+
+function validateCreateFields(form) {
+  const invalid = Array.from(form.querySelectorAll('.user-create-fields input, .user-create-fields select'))
+    .find(input => typeof input.checkValidity === 'function' && !input.checkValidity());
+  if (!invalid) return true;
+  setCreateStep(form, 'identity');
+  invalid.focus();
+  invalid.reportValidity();
+  return false;
+}
+
 const PRODUCTION_UNITS = ['PPT', 'NRD', 'RBR', 'PST'];
 
 function visibleProductionRows(root) {
@@ -167,6 +241,7 @@ function toggleProductionUnit(root, unit, active, flags = null) {
   }
   updateProductionPicker(root);
   syncProductionAccessDisabled(root);
+  updatePermissionSummaries(root);
 }
 
 function markProductionBaseUnit(root, unit) {
@@ -247,6 +322,9 @@ function resetCreateUserForm(form) {
     syncProductionAccessDisabled(form);
   }
   syncModuleAccessDisabled(form);
+  selectPermissionPanel(form, 'reports');
+  setCreateStep(form, 'identity');
+  updatePermissionSummaries(form);
   const status = document.querySelector('#user-create-status');
   if (status) {
     status.textContent = '';
@@ -290,19 +368,32 @@ async function createQuickUser(event) {
   const production_access = collectProductionAccess(form);
   const module_access = collectModuleAccess(form);
   if (!name || !password) {
+    setCreateStep(form, 'identity');
     updateStatus('Informe usuário e senha.', true);
     showToast('Informe usuário e senha.', true);
     return;
   }
   if (!['coordinator', 'analyst'].includes(role)) {
     const message = 'Selecione Coordenador ou Analista. Administradores não podem ser cadastrados por esta tela.';
+    setCreateStep(form, 'identity');
     updateStatus(message, true);
     showToast(message, true);
+    return;
+  }
+  if (!validateCreateFields(form)) {
+    updateStatus('Confira os dados da conta antes de continuar.', true);
+    return;
+  }
+  // Enter na primeira etapa avança; nunca cadastra sem a revisão das permissões.
+  if (form.querySelector('[data-user-step="identity"]')?.hidden === false) {
+    setCreateStep(form, 'permissions', true);
     return;
   }
   try {
     validateProductionAccess(production_access);
   } catch (error) {
+    setCreateStep(form, 'permissions');
+    selectPermissionPanel(form, 'production');
     updateStatus(error.message, true);
     showToast(error.message, true);
     return;
@@ -423,6 +514,7 @@ function applyAccessToForm(form, access, baseUnit = 'PPT') {
   Object.entries(unitPermissions).forEach(([unit, flags]) => toggleProductionUnit(form, unit, true, flags));
   updateProductionPicker(form);
   syncProductionAccessDisabled(form);
+  updatePermissionSummaries(form);
 }
 
 let accessRequestId = 0;
@@ -448,12 +540,18 @@ async function openAccessModal(button) {
     const data = await apiRequest(`/api/users/${userId}/access`);
     if (requestId !== accessRequestId || modal.hidden) return;
     applyAccessToForm(form, data.access, item.dataset.userBaseUnit || 'PPT');
+    selectPermissionPanel(form, 'reports');
     form.hidden = false;
     loading.hidden = true;
     save.hidden = !canManageUsers();
     save.disabled = !canManageUsers();
-    form.querySelectorAll('input, select, button').forEach(input => { if (!canManageUsers()) input.disabled = true; });
-    form.querySelector('summary')?.focus();
+    // Somente ações de alteração são bloqueadas; consulta deve permitir mudar de módulo.
+    if (!canManageUsers()) {
+      form.querySelectorAll('input, select, button').forEach(input => {
+        if (!input.matches('[data-permission-target], [data-permission-picker]')) input.disabled = true;
+      });
+    }
+    focusPermissionMenu(form);
   } catch (error) {
     if (requestId !== accessRequestId || modal.hidden) return;
     console.error(error);
@@ -493,11 +591,6 @@ async function saveAccessForm(form) {
 document.querySelector('#quick-user-form')?.addEventListener('submit', createQuickUser);
 document.querySelector('#open-user-create')?.addEventListener('click', openCreateUserModal);
 document.querySelector('#users-search')?.addEventListener('input', filterUsersList);
-document.querySelector('#quick-user-form')?.addEventListener('change', event => {
-  if (event.target.matches('[data-production-access-enabled]')) syncProductionAccessDisabled(event.currentTarget);
-  if (event.target.matches('[data-module-view]')) syncModuleAccessDisabled(event.currentTarget);
-});
-
 document.querySelector('#quick-user-base-unit')?.addEventListener('change', event => {
   const form = document.querySelector('#quick-user-form');
   const previous = form.dataset.baseUnit;
@@ -518,20 +611,32 @@ document.querySelector('#users-list')?.addEventListener('click', event => {
   if (action === 'access') openAccessModal(button);
 });
 
-document.querySelector('#user-access-form')?.addEventListener('change', event => {
-  if (event.target.matches('[data-production-access-enabled]')) syncProductionAccessDisabled(event.currentTarget);
-  if (event.target.matches('[data-module-view]')) syncModuleAccessDisabled(event.currentTarget);
-});
-
-// Eventos delegados aos mesmos controles reutilizados nos dois pop-ups.
+// Os dois formulários compartilham navegação, eventos e lógica de permissões.
 for (const selector of ['#quick-user-form', '#user-access-form']) {
-  document.querySelector(selector)?.addEventListener('click', event => {
-    const root = event.currentTarget;
+  const form = document.querySelector(selector);
+  form?.addEventListener('change', event => {
+    if (event.target.matches('[data-production-access-enabled]')) syncProductionAccessDisabled(form);
+    if (event.target.matches('[data-module-view]')) syncModuleAccessDisabled(form);
+    if (event.target.matches('[data-permission-picker]')) selectPermissionPanel(form, event.target.value);
+    updatePermissionSummaries(form);
+  });
+  form?.addEventListener('click', event => {
+    const nav = event.target.closest('[data-permission-target]');
+    const step = event.target.closest('[data-user-step-button]');
     const add = event.target.closest('[data-production-add-unit]');
     const remove = event.target.closest('[data-production-remove-unit]');
-    if (add) toggleProductionUnit(root, root.querySelector('[data-production-unit-picker]')?.value, true,
+    if (nav) selectPermissionPanel(form, nav.dataset.permissionTarget);
+    if (step) {
+      if (step.dataset.userStepButton === 'permissions' && !validateCreateFields(form)) return;
+      setCreateStep(form, step.dataset.userStepButton);
+    }
+    if (event.target.closest('[data-user-step-next]')) {
+      if (validateCreateFields(form)) setCreateStep(form, 'permissions', true);
+    }
+    if (event.target.closest('[data-user-step-back]')) setCreateStep(form, 'identity', true);
+    if (add) toggleProductionUnit(form, form.querySelector('[data-production-unit-picker]')?.value, true,
       { fill: true, summary: true });
-    if (remove) toggleProductionUnit(root, remove.closest('[data-production-unit-row]')?.dataset.productionUnitRow, false);
+    if (remove) toggleProductionUnit(form, remove.closest('[data-production-unit-row]')?.dataset.productionUnitRow, false);
   });
 }
 

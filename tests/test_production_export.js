@@ -7,6 +7,7 @@ const labels = [];
 const downloads = [];
 const requests = [];
 const strokes = [];
+const fills = [];
 const button = { disabled: false, addEventListener(type, listener) { this.click = listener; } };
 const status = { textContent: '' };
 const document = {
@@ -22,7 +23,8 @@ const document = {
       getContext() {
         return {
           canvas,
-          fillRect() {}, strokeRect() {}, beginPath() {}, roundRect() {}, fill() {},
+          fillRect() {}, strokeRect() {}, beginPath() {}, roundRect() {},
+          fill() { fills.push(this.fillStyle); },
           save() {}, restore() {},
           stroke() { strokes.push({ color: this.strokeStyle, dash: this.dash || [] }); },
           setLineDash(pattern) { this.dash = [...pattern]; },
@@ -101,7 +103,8 @@ for (const name of ['production-export.js', 'emissao.js']) {
   assert.equal(stalePill.state, 'stopped');
   assert.equal(stalePill.label, '3392');
   context.drawProductionExportCard(paint, staleReport, plan, 26, 370);
-  assert.ok(strokes.some(stroke => stroke.color === colors.stopped && stroke.dash.length));
+  assert.ok(strokes.some(stroke => stroke.color === '#bf594d' && !stroke.dash.length));
+  assert.ok(fills.includes('rgba(233, 91, 69, 0.14)'));
   const mixedReport = { code: 'PPT', items: [
     ['A', 'ATIVO'], ['B', 'UMIDO'], ['C', 'AGUARDA'], ['D', 'CRITICO']
   ].map(([sector, statusCode]) => ({
@@ -117,8 +120,15 @@ for (const name of ['production-export.js', 'emissao.js']) {
     .flatMap(line => line.pills).map(pill => pill.state).join(','),
   'active,wet,waiting,stopped');
   context.drawProductionExportCard(paint, mixedReport, mixedPlan, 26, 370);
+  for (const color of ['#679b2b', '#bba020', '#969d9e', '#bf594d']) {
+    assert.ok(strokes.some(stroke => stroke.color === color && !stroke.dash.length));
+  }
   for (const color of Object.values(colors)) {
-    assert.ok(strokes.some(stroke => stroke.color === color));
+    assert.ok(fills.includes(color), `Ponto colorido ausente: ${color}`);
+  }
+  for (const background of ['rgba(118, 184, 42, 0.14)', 'rgba(221, 190, 0, 0.14)',
+    'rgba(178, 178, 178, 0.12)', 'rgba(233, 91, 69, 0.14)']) {
+    assert.ok(fills.includes(background), `Fundo de etiqueta não aplicado: ${background}`);
   }
   const verbose = Array.from({ length: 48 }, (_, index) => ({
     group_name: 'Fertirrigação', service_name: `Frente longa ${index}`,
@@ -146,6 +156,35 @@ for (const name of ['production-export.js', 'emissao.js']) {
   }, new Map(), 0);
   assert.ok(longChanges.changeLines.length > 1);
   assert.ok(longChanges.height > 520);
+
+  // Indicadores completos: sem reticências em operações, serviços e setores.
+  const counterLabelsBefore = labels.length;
+  const manyOperationsReport = { code: 'PPT', items: Array.from({ length: 123 },
+    (_, index) => ({ group_name: 'Tratos culturais', service_name: 'Cultivo',
+      is_current_day: true, entry: { sector: String(index), status: 'ATIVO' } })) };
+  context.drawProductionExportCard(paint, manyOperationsReport,
+    context.productionExportCardPlan(paint, manyOperationsReport, mixedStatuses, 0), 26, 370);
+  assert.ok(labels.slice(counterLabelsBefore).includes('123'));
+  assert.ok(labels.slice(counterLabelsBefore).includes('OPERAÇÕES'));
+
+  const bigObservation = 'Operação com observações extensas '.repeat(420);
+  const oversized = context.prepareProductionExportPages(paint, [{ code: 'PPT', items: [{
+    group_name: 'Fertirrigação', service_name: 'Operação especial', is_current_day: true,
+    entry: { sector: '12345', status: 'ATIVO', observation: bigObservation }
+  }] }], mixedStatuses);
+  assert.ok(oversized.length > 1, 'Observação longa deve gerar páginas adicionais');
+  assert.ok(oversized.every(page => page.height * 4096 / 1080 <= 12000));
+  assert.equal(oversized.flatMap(page => page.page).reduce((sum, report) => sum + report.items.length, 0), 1);
+
+  const grid = context.productionExportPageLayout(paint, [
+    { code: 'PPT', items: [] }, { code: 'NRD', items: [{
+      group_name: 'Tratos culturais', service_name: 'Cultivo', is_current_day: true,
+      entry: { sector: '1', status: 'ATIVO' }
+    }] }, { code: 'RBR', items: [] }, { code: 'PST', items: [] }
+  ], mixedStatuses);
+  assert.equal(grid.plans[0].height, grid.plans[1].height);
+  assert.equal(grid.plans[2].height, grid.plans[3].height);
+  assert.ok(grid.plans.every(plan => plan.contentHeight <= plan.height));
 
   await button.click({ currentTarget: button });
   assert.equal(button.disabled, false);
