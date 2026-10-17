@@ -5,6 +5,7 @@ let currentUser = document.body.dataset.userId ? {
   role: document.body.dataset.userRole,
   base_unit: document.body.dataset.userBaseUnit || 'PPT'
 } : null;
+try { localStorage.removeItem('posicao-campo-v1-state'); } catch (_) { /* Cache legado indisponível. */ }
 const moduleAccess = JSON.parse(document.body.dataset.moduleAccess || '{}');
 function canEditModule(key) { return currentUser?.role === 'admin' || Boolean(moduleAccess[key]?.edit); }
 let toastTimer;

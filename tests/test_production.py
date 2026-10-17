@@ -98,6 +98,11 @@ class ProductionTests(unittest.TestCase):
             "changes": "Turno atualizado pelo analista da unidade.",
         })
         self.assertEqual(viewer_saved["rain_turn_mm"], 4)
+        rain_only = production.save_daily_summary(self.viewer["id"], {
+            "unit_code": "NRD", "work_date": "2026-10-16",
+            "rain_turn_mm": 5, "rain_accumulated_mm": 11,
+        })
+        self.assertEqual(rain_only["changes"], viewer_saved["changes"])
         with self.assertRaises(PermissionError):
             production.get_daily_summary(self.user["id"], "RBR", "2026-10-16")
         with self.assertRaises(PermissionError):
@@ -110,7 +115,7 @@ class ProductionTests(unittest.TestCase):
             })
 
         db.init_db()
-        self.assertEqual(production.get_daily_summary(self.user["id"], "NRD", "2026-10-16")["rain_turn_mm"], 4)
+        self.assertEqual(production.get_daily_summary(self.user["id"], "NRD", "2026-10-16")["rain_turn_mm"], 5)
 
     def test_daily_summary_and_global_catalog_permissions_are_independent(self):
         from backend.models.production import get_user_access, save_user_access
@@ -343,7 +348,8 @@ class ProductionTests(unittest.TestCase):
             {
                 "unit_code": "NRD", "service_front_id": front_one["id"],
                 "work_date": "2026-10-13", "sector": "3392", "section": "10",
-                "farm": "SANTA TEREZINHA", "status": "EM ATIVIDADE", "observation": "",
+                "farm": "SANTA TEREZINHA", "status": "EM ATIVIDADE",
+                "observation": "A mesma observação", "changes": "Mudança do analista 1",
             },
         )
         production.save_my_item(
@@ -351,7 +357,8 @@ class ProductionTests(unittest.TestCase):
             {
                 "unit_code": "NRD", "service_front_id": front_two["id"],
                 "work_date": "2026-10-13", "sector": "3392", "section": "20",
-                "farm": "SANTA TEREZINHA II", "status": "EM ATIVIDADE", "observation": "",
+                "farm": "SANTA TEREZINHA II", "status": "EM ATIVIDADE",
+                "observation": "A mesma observação", "changes": "Mudança do analista 2",
             },
         )
 
@@ -365,6 +372,11 @@ class ProductionTests(unittest.TestCase):
         self.assertEqual(len(consolidated["items"]), 2)
         self.assertEqual({item["owner_name"] for item in consolidated["items"]}, {"Analista", "Analista 2"})
         self.assertEqual(sum(bool(item["is_own"]) for item in consolidated["items"]), 1)
+        self.assertEqual({item["entry"]["changes"] for item in consolidated["items"]}, {
+            "Mudança do analista 1", "Mudança do analista 2",
+        })
+        self.assertEqual([item["entry"]["observation"] for item in consolidated["items"]],
+                         ["A mesma observação", "A mesma observação"])
 
         with self.assertRaisesRegex(ValueError, "Visualização"):
             production.list_my_items(self.user["id"], "NRD", "2026-10-13", scope="other")

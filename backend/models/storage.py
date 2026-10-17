@@ -346,6 +346,7 @@ def _create_production_tables(conn):
             farm TEXT NOT NULL DEFAULT '',
             status TEXT NOT NULL,
             observation TEXT NOT NULL DEFAULT '',
+            changes TEXT NOT NULL DEFAULT '',
             created_by INTEGER,
             updated_by INTEGER,
             created_at INTEGER NOT NULL,
@@ -374,7 +375,7 @@ def _create_production_tables(conn):
     )
     for statement in statements:
         conn.execute(statement)
-    conn.execute("INSERT OR REPLACE INTO main.schema_info(key,value) VALUES ('production_schema_version','3')")
+    conn.execute("INSERT OR REPLACE INTO main.schema_info(key,value) VALUES ('production_schema_version','4')")
 
 
 def seed_production_defaults(conn):
@@ -406,6 +407,9 @@ def _upgrade_operational_schema(conn):
     """Migrações idempotentes dos dados operacionais sem perder registros existentes."""
     _create_return_soil_wet_table(conn)
     _create_production_tables(conn)
+    entry_columns = {row[1] for row in conn.execute("PRAGMA main.table_info(production_daily_entries)")}
+    if "changes" not in entry_columns:
+        conn.execute("ALTER TABLE main.production_daily_entries ADD COLUMN changes TEXT NOT NULL DEFAULT ''")
     columns = {row[1]: row for row in conn.execute("PRAGMA main.table_info(return_analysis_soil_wet)")}
     sector_column = columns.get("sector")
     if sector_column and int(sector_column[3] or 0):
@@ -699,6 +703,7 @@ CREATE TABLE IF NOT EXISTS production_daily_entries (
     farm TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL,
     observation TEXT NOT NULL DEFAULT '',
+    changes TEXT NOT NULL DEFAULT '',
     created_by INTEGER,
     updated_by INTEGER,
     created_at INTEGER NOT NULL,

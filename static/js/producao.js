@@ -57,7 +57,7 @@ function updateProductionAccessMessage() {
   if (!message) return;
   message.hidden = canFillProduction();
   if (!message.hidden) message.textContent = canEditProductionDailySummary()
-    ? 'As frentes estão em modo de consulta. Você pode preencher chuva e mudanças da unidade.'
+    ? 'As frentes estão em modo de consulta. Você pode preencher a chuva da unidade.'
     : 'Esta unidade está liberada somente para consulta.';
 }
 
@@ -145,8 +145,7 @@ async function loadProductionDailySummary(unit) {
   if (unit !== currentProductionUnit() || workDate !== localIsoDate()) return;
   const fields = [
     ['#production-rain-turn', summary?.rain_turn_mm],
-    ['#production-rain-accumulated', summary?.rain_accumulated_mm],
-    ['#production-daily-changes', summary?.changes]
+    ['#production-rain-accumulated', summary?.rain_accumulated_mm]
   ];
   fields.forEach(([selector, value]) => {
     const input = document.querySelector(selector);
@@ -174,8 +173,7 @@ async function submitProductionDailySummary(event) {
   const payload = {
     unit_code: unit, work_date: workDate,
     rain_turn_mm: document.querySelector('#production-rain-turn')?.value || null,
-    rain_accumulated_mm: document.querySelector('#production-rain-accumulated')?.value || null,
-    changes: document.querySelector('#production-daily-changes')?.value.trim() || ''
+    rain_accumulated_mm: document.querySelector('#production-rain-accumulated')?.value || null
   };
   if (save) save.disabled = true;
   if (status) status.textContent = 'Salvando dados do dia…';
@@ -469,6 +467,8 @@ async function showStatusConfigPane() {
 function setProductionEntryEditMode(isEditing) {
   const serviceSection = document.querySelector('#production-service-section');
   if (serviceSection) serviceSection.hidden = Boolean(isEditing);
+  const notesSection = document.querySelector('#production-entry-notes');
+  if (notesSection) notesSection.hidden = !isEditing;
 
   const configButton = document.querySelector('#production-config-toggle');
   if (configButton) configButton.hidden = Boolean(isEditing) || !canConfigureProduction();
@@ -530,6 +530,7 @@ function openEditProductionItem(itemId) {
   document.querySelector('#production-sector-input').value = entry.sector || '';
   document.querySelector('#production-farm-input').value = entry.farm || '';
   document.querySelector('#production-observation-input').value = entry.observation || '';
+  document.querySelector('#production-changes-input').value = entry.changes || '';
   setSelectedStatus(entry.status || defaultStatusCode());
   resetSectorFields();
   const section = document.querySelector('#production-section-input');
@@ -564,7 +565,8 @@ async function submitProductionEntry(event) {
     section: document.querySelector('#production-section-input')?.value || '',
     farm: document.querySelector('#production-farm-input')?.value.trim() || '',
     status,
-    observation: document.querySelector('#production-observation-input')?.value.trim() || ''
+    observation: document.querySelector('#production-observation-input')?.value.trim() || '',
+    changes: document.querySelector('#production-changes-input')?.value.trim() || ''
   };
   if (!payload.sector) {
     showToast('Informe o setor.', true);

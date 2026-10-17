@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Produção Agrícola · Posição de Campo{% endblock %}
 {% block styles %}
-  <link rel="stylesheet" href="/css/producao.css?v={{ asset_version }}-daily-summary" />
+  <link rel="stylesheet" href="/css/producao.css?v={{ asset_version }}-front-notes" />
 {% endblock %}
 
 {% block content %}
@@ -29,8 +29,8 @@
     <div class="production-daily-heading">
       <div>
         <span>Imagem global</span>
-        <h2 id="production-daily-title">Chuva e mudanças do dia</h2>
-        <p>Dados compartilhados da unidade selecionada para a imagem da Produção Agrícola. Todos os analistas com acesso à unidade podem preencher.</p>
+        <h2 id="production-daily-title">Chuva do dia</h2>
+        <p>Dados compartilhados da unidade selecionada para a imagem da Produção Agrícola. Analistas com acesso ao resumo da unidade podem preencher.</p>
       </div>
     </div>
     <form id="production-daily-form" class="production-daily-form">
@@ -41,10 +41,6 @@
       <label class="field" for="production-rain-accumulated">
         <span>Chuva acumulada (mm)</span>
         <input id="production-rain-accumulated" type="number" min="0" max="9999.9" step="0.1" inputmode="decimal" placeholder="Ex.: 5" />
-      </label>
-      <label class="field production-daily-changes" for="production-daily-changes">
-        <span>Mudanças</span>
-        <textarea id="production-daily-changes" rows="2" maxlength="2000" placeholder="Uma mudança por linha. Deixe vazio quando não houver."></textarea>
       </label>
       <div class="production-daily-actions">
         <p id="production-daily-status" aria-live="polite"></p>
@@ -177,10 +173,14 @@
           </fieldset>
         </section>
 
-        <section class="production-form-section production-form-section-compact">
+        <section id="production-entry-notes" class="production-form-section production-form-section-compact" hidden>
           <label class="field" for="production-observation-input">
             <span>Observação <small>(opcional)</small></span>
             <textarea id="production-observation-input" rows="3" maxlength="2000" placeholder="Observação operacional da frente"></textarea>
+          </label>
+          <label class="field" for="production-changes-input">
+            <span>Mudanças <small>(opcional)</small></span>
+            <textarea id="production-changes-input" rows="3" maxlength="2000" placeholder="Mudanças desta frente"></textarea>
           </label>
         </section>
       </form>
@@ -275,7 +275,7 @@
     <footer id="production-entry-footer" class="modal-footer">
       <div class="wizard-footer-info">
         <strong id="production-entry-hint">Enter adiciona</strong>
-        <p>A unidade segue o navbar. Na observação, Enter continua criando uma nova linha.</p>
+        <p>A unidade segue o navbar. Nos campos de texto, Enter cria uma nova linha.</p>
       </div>
       <div class="modal-footer-actions">
         <button class="modal-button secondary" type="button" data-close-modal="production-entry-modal">Cancelar</button>
@@ -287,5 +287,5 @@
 {% endblock %}
 
 {% block scripts %}
-  <script src="/js/producao.js?v={{ asset_version }}-daily-summary"></script>
+  <script src="/js/producao.js?v={{ asset_version }}-front-notes"></script>
 {% endblock %}

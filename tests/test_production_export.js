@@ -80,6 +80,11 @@ for (const name of ['production-export.js', 'emissao.js']) {
 (async () => {
   assert.equal(context.localProductionExportDate(new Date(2026, 9, 16)), '2026-10-16');
   assert.equal(context.buildProductionExportPages([{ code: 'PPT', items: Array(49).fill({}) }]).length, 2);
+  const chunked = context.buildProductionExportPages([{
+    code: 'PPT', items: Array(49).fill({}), summary: { changes: 'Mudança legada' }
+  }]);
+  assert.equal(chunked[0][0].summary.changes, 'Mudança legada');
+  assert.equal(chunked[1][0].summary.changes, '');
   const colors = vm.runInContext('PRODUCTION_EXPORT_COLORS', context);
   assert.equal(colors.active, '#76b82a');
   assert.equal(colors.wet, '#ffcc00');
@@ -119,6 +124,16 @@ for (const name of ['production-export.js', 'emissao.js']) {
   assert.equal(mixedPlan.rows.find(row => row.type === 'service').lines
     .flatMap(line => line.pills).map(pill => pill.state).join(','),
   'active,wet,waiting,stopped');
+  const sharedObservation = context.productionExportCardPlan(paint, { code: 'PPT', items: [
+    { group_name: 'Preparo e Plantio', service_name: 'Preparo de solo', owner_name: 'Ana',
+      is_current_day: true, entry: { sector: '100', status: 'ATIVO', observation: 'Texto igual', changes: 'Mudança A' } },
+    { group_name: 'Preparo e Plantio', service_name: 'Preparo de solo', owner_name: 'Beto',
+      is_current_day: true, entry: { sector: '200', status: 'UMIDO', observation: 'Texto igual', changes: 'Mudança B' } }
+  ] }, mixedStatuses, 0);
+  assert.ok(sharedObservation.noteLines.join(' ').includes('setor 100 · Ana'));
+  assert.ok(sharedObservation.noteLines.join(' ').includes('setor 200 · Beto'));
+  assert.ok(sharedObservation.changeLines.join(' ').includes('Mudança A'));
+  assert.ok(sharedObservation.changeLines.join(' ').includes('Mudança B'));
   context.drawProductionExportCard(paint, mixedReport, mixedPlan, 26, 370);
   for (const color of ['#679b2b', '#bba020', '#969d9e', '#bf594d']) {
     assert.ok(strokes.some(stroke => stroke.color === color && !stroke.dash.length));
@@ -141,6 +156,18 @@ for (const name of ['production-export.js', 'emissao.js']) {
   assert.ok(responsive.length > 1);
   assert.equal(responsive.reduce((total, page) => total + page.page[0].items.length, 0), 48);
   assert.ok(responsive.every(page => page.height * 4096 / 1080 <= 12000));
+  const analystItems = Array.from({ length: 49 }, (_, index) => ({
+    group_name: 'Tratos culturais', service_name: 'Cultivo',
+    owner_name: `Analista ${index}`, is_current_day: true,
+    entry: { sector: String(index), status: 'ATIVO',
+      observation: `Observação ${index}`, changes: `Mudança ${index}` }
+  }));
+  const consolidatedPages = context.prepareProductionExportPages(paint, [{
+    code: 'PPT', items: analystItems, summary: { changes: 'Legado único' }
+  }], mixedStatuses);
+  const pptPlans = consolidatedPages.map(page => page.plans[0]);
+  assert.equal(pptPlans.reduce((sum, plan) => sum + plan.noteLines.filter(line => line.startsWith('•')).length, 0), 49);
+  assert.equal(pptPlans.reduce((sum, plan) => sum + plan.changeLines.filter(line => line.startsWith('•')).length, 0), 50);
   const longLabels = context.productionExportCardPlan(paint, { code: 'PPT', items: [{
     group_name: 'Grupo de atividades agrícolas com identificação excepcionalmente longa',
     service_name: 'Serviço de preparo, plantio e acompanhamento com identificação longa',

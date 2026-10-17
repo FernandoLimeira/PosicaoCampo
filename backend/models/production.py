@@ -620,7 +620,8 @@ def _entry_payload(row: sqlite3.Row | None) -> dict[str, Any] | None:
     return {
         "id": int(row["id"]), "work_date": row["work_date"], "sector": row["sector"] or "",
         "section": row["section"] or "", "farm": row["farm"] or "", "status": row["status"],
-        "observation": row["observation"] or "", "updated_at": int(row["updated_at"] or 0),
+        "observation": row["observation"] or "", "changes": row["changes"] or "",
+        "updated_at": int(row["updated_at"] or 0),
     }
 
 
@@ -650,21 +651,27 @@ def list_my_items(user_id: int, unit_code: Any, work_date: Any, *, scope: str = 
             JOIN production_groups g ON g.id=f.group_id
             LEFT JOIN auth.users owner ON owner.id=ui.owner_user_id
             WHERE {' AND '.join(filters)}
-            ORDER BY owner.name COLLATE NOCASE,ui.position,ui.id
+            ORDER BY g.position,g.id,f.position,f.id,owner.name COLLATE NOCASE,ui.position,ui.id
             """,
             tuple(params),
         ).fetchall()
+        latest_entries = {
+            row["user_item_id"]: row for row in conn.execute(
+                """SELECT entry.* FROM production_daily_entries entry
+                   JOIN (
+                     SELECT user_item_id,MAX(work_date) AS work_date
+                     FROM production_daily_entries
+                     WHERE unit_code=? AND work_date<=? AND user_item_id IS NOT NULL
+                     GROUP BY user_item_id
+                   ) newest ON newest.user_item_id=entry.user_item_id
+                           AND newest.work_date=entry.work_date
+                   WHERE entry.unit_code=?""",
+                (unit, selected_date, unit),
+            )
+        }
         items = []
         for row in rows:
-            current = conn.execute(
-                "SELECT * FROM production_daily_entries WHERE user_item_id=? AND work_date=?",
-                (row["item_id"], selected_date),
-            ).fetchone()
-            latest = current or conn.execute(
-                """SELECT * FROM production_daily_entries
-                   WHERE user_item_id=? AND work_date<? ORDER BY work_date DESC,id DESC LIMIT 1""",
-                (row["item_id"], selected_date),
-            ).fetchone()
+            latest = latest_entries.get(row["item_id"])
             entry = _entry_payload(latest)
             owner_user_id = int(row["owner_user_id"])
             items.append({
@@ -725,6 +732,7 @@ def save_daily_summary(user_id: int, payload: Any) -> dict[str, Any]:
     selected_date = _normalize_work_date(payload.get("work_date"))
     rain_turn = _normalize_rain(payload.get("rain_turn_mm"), "Chuva do turno")
     rain_accumulated = _normalize_rain(payload.get("rain_accumulated_mm"), "Chuva acumulada")
+    changes_provided = "changes" in payload
     changes = _clean_text(payload.get("changes"), "as mudanças", 2000)
     now = int(time.time())
     with connection() as conn:
@@ -738,9 +746,9 @@ def save_daily_summary(user_id: int, payload: Any) -> dict[str, Any]:
             ON CONFLICT(unit_code,work_date) DO UPDATE SET
                 rain_turn_mm=excluded.rain_turn_mm,
                 rain_accumulated_mm=excluded.rain_accumulated_mm,
-                changes=excluded.changes,
+                changes=CASE WHEN ? THEN excluded.changes ELSE production_daily_summaries.changes END,
                 updated_by=excluded.updated_by,updated_at=excluded.updated_at""",
-            (unit, selected_date, rain_turn, rain_accumulated, changes, user_id, now),
+            (unit, selected_date, rain_turn, rain_accumulated, changes, user_id, now, changes_provided),
         )
         row = conn.execute(
             "SELECT * FROM production_daily_summaries WHERE unit_code=? AND work_date=?",
@@ -757,6 +765,7 @@ def _normalize_entry_data(payload: dict[str, Any]) -> dict[str, str]:
         "farm": _clean_text(payload.get("farm"), "a fazenda", 160),
         "status": _normalize_status(payload.get("status")),
         "observation": _clean_text(payload.get("observation"), "a observação", 2000),
+        "changes": _clean_text(payload.get("changes"), "as mudanças", 2000),
     }
 
 
@@ -806,19 +815,19 @@ def save_my_item(user_id: int, payload: Any, *, item_id: int | None = None) -> d
             """
             INSERT INTO production_daily_entries(
                 work_date,user_item_id,owner_user_id,unit_code,service_front_id,service_name,group_name,display_style,
-                sector,section,farm,status,observation,created_by,updated_by,created_at,updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                sector,section,farm,status,observation,changes,created_by,updated_by,created_at,updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(work_date,user_item_id) DO UPDATE SET
                 owner_user_id=excluded.owner_user_id, unit_code=excluded.unit_code,
                 service_front_id=excluded.service_front_id, service_name=excluded.service_name,
                 group_name=excluded.group_name, display_style=excluded.display_style,
                 sector=excluded.sector, section=excluded.section, farm=excluded.farm,
-                status=excluded.status, observation=excluded.observation,
+                status=excluded.status, observation=excluded.observation, changes=excluded.changes,
                 updated_by=excluded.updated_by, updated_at=excluded.updated_at
             """,
             (
                 entry["work_date"], item_id, user_id, unit, front_id, front["name"], front["group_name"], front["display_style"],
-                entry["sector"], entry["section"], entry["farm"], entry["status"], entry["observation"],
+                entry["sector"], entry["section"], entry["farm"], entry["status"], entry["observation"], entry["changes"],
                 user_id, user_id, now, now,
             ),
         )

@@ -1,5 +1,4 @@
 // Painel: seleção de unidade e editor operacional.
-const STORAGE_KEY = 'posicao-campo-v1-state';
 
 
 
@@ -81,7 +80,7 @@ const defaultUnits = [
   }
 ];
 
-let units = loadState();
+let units = clone(defaultUnits);
 let unitMeta = {};
 let selectedUnitIndex = Math.max(0, units.findIndex(unit => unit.code === getReportUnit()));
 let currentEditorStep = 0;
@@ -133,32 +132,10 @@ function normalizeUnitsCollection(collection) {
   });
 }
 
-function loadState() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return clone(defaultUnits);
-    return normalizeUnitsCollection(JSON.parse(saved));
-  } catch (error) {
-    console.warn('Não foi possível carregar os dados locais.', error);
-    return clone(defaultUnits);
-  }
-}
-
-function saveState() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(units));
-  } catch (error) {
-    console.warn('Não foi possível salvar os dados locais.', error);
-  }
-}
-
-
-
 function applyServerPayload(data) {
   if (!Array.isArray(data?.units) || data.units.length !== defaultUnits.length) return false;
   units = normalizeUnitsCollection(data.units);
   unitMeta = data.meta && typeof data.meta === 'object' ? data.meta : {};
-  saveState();
   renderDashboard();
   return true;
 }
@@ -173,13 +150,7 @@ async function loadServerState() {
     : (currentUser?.name || 'Usuário');
 
   const data = await apiRequest('/api/units');
-  if (applyServerPayload(data)) return;
-
-  const synced = await apiRequest('/api/units/sync', {
-    method: 'POST',
-    body: JSON.stringify({ units })
-  });
-  applyServerPayload(synced);
+  if (!applyServerPayload(data)) throw new Error('Resposta de unidades inválida.');
 }
 
 async function saveUnitToServer(index, unit) {
@@ -703,7 +674,6 @@ function setupEvents() {
       const saved = await saveUnitToServer(index, updatedUnit);
       units[index] = normalizeUnitsCollection(units.map((unit, unitIndex) => unitIndex === index ? saved.unit : unit))[index];
       if (saved.meta) unitMeta[updatedUnit.code] = saved.meta;
-      saveState();
       renderDashboard();
       closeModal('data-modal');
       showToast(`${updatedUnit.code} atualizado e salvo no servidor.`);
@@ -713,7 +683,6 @@ function setupEvents() {
         const current = error.payload.current;
         if (current.unit) units[index] = normalizeUnitsCollection(units.map((unit, unitIndex) => unitIndex === index ? current.unit : unit))[index];
         if (current.meta) unitMeta[updatedUnit.code] = current.meta;
-        saveState();
         renderDashboard();
         showToast(`${updatedUnit.code} foi alterado por outro usuário. Revise os dados e salve novamente.`);
       } else {
@@ -727,7 +696,6 @@ function setupEvents() {
 }
 
 async function initializeApp() {
-  renderDashboard();
   buildUnitSelect();
   setupEvents();
 

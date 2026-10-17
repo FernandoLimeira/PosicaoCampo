@@ -97,7 +97,7 @@
 .production-daily-heading span { color: var(--green); font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
 .production-daily-heading h2 { margin: 4px 0; color: #253f32; font-size: 16px; }
 .production-daily-heading p { margin: 0; color: #718077; font-size: 11px; }
-.production-daily-form { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(260px, 2fr); gap: 12px; padding: 16px 20px; align-items: start; }
+.production-daily-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 16px 20px; align-items: start; }
 .production-daily-form .field { min-width: 0; }
 .production-daily-form .field + .field { margin-top: 0; }
 .production-daily-form input, .production-daily-form textarea { width: 100%; }
@@ -105,11 +105,9 @@
 .production-daily-actions p { margin: 0 auto 0 0; color: #607168; font-size: 11px; }
 @media (max-width: 760px) {
   .production-daily-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .production-daily-changes { grid-column: 1 / -1; }
 }
 @media (max-width: 480px) {
   .production-daily-form { grid-template-columns: 1fr; }
-  .production-daily-changes { grid-column: auto; }
   .production-daily-actions { align-items: stretch; flex-direction: column; }
 }
 

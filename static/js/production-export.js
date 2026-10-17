@@ -45,7 +45,8 @@ function buildProductionExportPages(reports, limit = PRODUCTION_EXPORT_PAGE_LIMI
   return Array.from({ length: pages }, (_, index) => ordered.map(report => ({
     code: report.code,
     restricted: Boolean(report.restricted),
-    summary: report.summary || null,
+    summary: index === 0 || !report.summary ? report.summary || null
+      : { ...report.summary, changes: '' },
     items: (report.items || []).slice(index * limit, (index + 1) * limit)
   })));
 }
@@ -193,7 +194,7 @@ function productionExportWrap(ctx, text, width, font) {
 function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
   const groups = new Map();
   const notes = [];
-  const seenNotes = new Set();
+  const changes = [];
   const counts = { active: 0, wet: 0, waiting: 0, stopped: 0, pending: 0 };
   for (const item of report.items) {
     const groupName = item.group_name || 'OUTROS SERVIÇOS';
@@ -206,16 +207,15 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
     else counts.pending += 1;
     const sector = item.entry?.sector || 'Sem setor';
     services.get(serviceName).push({ label: sector, state, pending: !item.is_current_day });
-    const observation = item.entry?.observation?.trim();
-    const noteKey = `${serviceName}\n${item.entry?.work_date || ''}\n${observation}`;
-    if (observation && !seenNotes.has(noteKey)) {
-      seenNotes.add(noteKey);
-      const dated = item.is_current_day || !item.entry?.work_date
-        ? '' : ` (${formatProductionExportDate(item.entry.work_date)})`;
-      const prefix = observation.toLocaleLowerCase('pt-BR').startsWith(serviceName.toLocaleLowerCase('pt-BR'))
-        ? '' : `${serviceName}${dated}: `;
-      for (const line of observation.split(/\r?\n/).map(value => value.trim()).filter(Boolean)) {
-        notes.push(`${prefix}${line}`);
+    const dated = item.is_current_day || !item.entry?.work_date
+      ? '' : ` (${formatProductionExportDate(item.entry.work_date)})`;
+    const owner = item.owner_name ? ` · ${item.owner_name}` : '';
+    const prefix = `${serviceName} · setor ${sector}${owner}${dated}: `;
+    for (const [field, target] of [['observation', notes], ['changes', changes]]) {
+      const value = item.entry?.[field]?.trim();
+      if (!value) continue;
+      for (const line of value.split(/\r?\n/).map(text => text.trim()).filter(Boolean)) {
+        target.push(`${prefix}${line}`);
       }
     }
   }
@@ -257,14 +257,19 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
   }
   if (!rows.length) rows.push({ type: 'empty', height: 48 });
 
-  const noteLines = report.noteLinesOverride || notes.flatMap(note => productionExportWrap(ctx, `• ${note}`, 466,
+  const noteLines = report.noteLinesOverride ?? notes.flatMap(note => productionExportWrap(ctx, `• ${note}`, 466,
     '16px "Roboto Condensed", "Arial Narrow", Arial, sans-serif'));
-  if (!noteLines.length) noteLines.push('• Sem observações registradas.');
-  const changes = String(report.summary?.changes || '').split(/\r?\n/)
+  if (!noteLines.length && !report.continuation && report.noteLinesOverride == null) {
+    noteLines.push('• Sem observações registradas.');
+  }
+  const legacyChanges = String(report.summary?.changes || '').split(/\r?\n/)
     .map(line => line.trim().replace(/^[•-]\s*/, '')).filter(Boolean);
-  const changeLines = report.changeLinesOverride || (changes.length ? changes : ['Sem mudanças registradas.'])
+  const changeLines = report.changeLinesOverride ?? ([...changes, ...legacyChanges])
     .flatMap(line => productionExportWrap(ctx, `• ${line}`, 466,
       '16px "Roboto Condensed", "Arial Narrow", Arial, sans-serif'));
+  if (!changeLines.length && !report.continuation && report.changeLinesOverride == null) {
+    changeLines.push('• Sem mudanças registradas.');
+  }
   const extraSummary = counts.waiting || counts.stopped || counts.pending ? 24 : 0;
   const rainText = productionExportRainText(report.summary);
   const rainLines = productionExportWrap(ctx, rainText, 418,

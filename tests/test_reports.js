@@ -40,7 +40,10 @@ function context(search = '?unit=PPT', stored = 'NRD', baseUnit = 'PPT', pathnam
     window: { innerWidth: 1280, innerHeight: 720, addEventListener() {}, location: { search, href: `http://localhost${pathname}${search}`, origin: 'http://localhost' } },
     history: { replaceState(...args) { ctx.lastURL = args[2]; } },
     sessionStorage: { getItem(key) { ctx.storageKey = key; return stored; }, setItem(key, value) { ctx.storageKey = key; ctx.stored = value; } },
-    localStorage: { getItem() { return null; } },
+    localStorage: {
+      getItem() { throw new Error('Dados operacionais não devem vir do cache compartilhado.'); },
+      removeItem(key) { ctx.removedStorageKey = key; }
+    },
   });
   run(ctx, 'common.js');
   return { ctx, elements, link };
@@ -52,6 +55,7 @@ function run(ctx, file, transform = source => source) {
 
 async function main() {
   const { ctx, elements, link } = context('?unit=rbr');
+  assert.equal(ctx.removedStorageKey, 'posicao-campo-v1-state');
   for (const [hour, expected] of [[0, 'Boa noite!'], [4, 'Boa noite!'], [5, 'Bom dia!'], [11, 'Bom dia!'], [12, 'Boa tarde!'], [17, 'Boa tarde!'], [18, 'Boa noite!'], [23, 'Boa noite!']]) {
     assert.equal(ctx.greetingForHour(hour), expected);
   }
