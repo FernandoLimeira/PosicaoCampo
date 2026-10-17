@@ -97,6 +97,33 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   flex-direction: column;
 }
 
+.module-standard-page {
+  width: var(--content-max);
+  margin: 0 auto;
+  padding: 18px clamp(14px, 2vw, 26px) 28px;
+}
+
+.module-standard-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 22px 24px;
+  border: 1px solid #dfe8e2;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.module-standard-header h1 { margin: 0; color: #183126; font-size: 28px; letter-spacing: -.6px; }
+.module-standard-header p { max-width: 690px; margin: 8px 0 0; color: #6d7e75; font-size: 12px; line-height: 1.55; }
+.module-standard-header .modal-button { flex: 0 0 auto; }
+.module-standard-card { border: 1px solid #dfe8e2; border-radius: 4px; background: #fff; }
+
+@media (max-width: 760px) {
+  .module-standard-header { align-items: stretch; flex-direction: column; gap: 14px; padding: 18px 16px; }
+  .module-standard-header h1 { font-size: 24px; }
+}
+
 .nav-brand {
   flex: 0 0 auto;
   display: flex;

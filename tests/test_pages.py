@@ -289,6 +289,17 @@ class PageTests(unittest.TestCase):
                 self.assertIn(required, html)
                 self.assertNotIn(excluded, html)
 
+    def test_management_pages_use_standard_page_layout(self):
+        for path in ('/historico', '/setores', '/usuarios', '/usuarios/cadastro'):
+            with self.subTest(path=path):
+                html = self.request(path, role='admin')['body']
+                self.assertIn('class="module-standard-page ', html)
+                self.assertIn('class="module-standard-header ', html)
+                self.assertNotIn('module-page-card', html)
+        history = self.request('/historico', role='admin')['body']
+        self.assertIn('id="history-pagination"', history)
+        self.assertNotIn('history-unit-filter', history)
+
     def test_sidebar_uses_shared_alignment(self):
         css = (config.STATIC_DIR / "css/base.css").read_text(encoding="utf-8")
         self.assertIn('--nav-item-inset: 12px;', css)

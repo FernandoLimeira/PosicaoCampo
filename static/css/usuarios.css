@@ -1,23 +1,15 @@
-/* Estilos usuarios: carregados pelo layout ou pela página correspondente. */
-.quick-user-form.user-create-form { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 640px; margin: 0 auto; padding: 24px; gap: 20px; }
+/* Cadastro e listagem usam a estrutura de página da Produção Agrícola. */
+.users-page-header { margin-bottom: 16px; }
+.quick-user-form.user-create-form { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 920px; margin: 0 auto; padding: 0; gap: 18px; border: 0; background: transparent; }
 .user-create-form .field + .field { margin-top: 0; }
 .user-create-form .modal-button { grid-column: 1 / -1; }
 .user-create-form .field small { text-transform: none; font-weight: 500; }
-.user-create-status { max-width: 640px; margin: 16px auto 0; color: var(--green-strong); font-size: 13px; }
+.user-create-status { max-width: 920px; margin: 16px auto 0; color: var(--green-strong); font-size: 13px; }
 .user-create-status.is-error { color: var(--red); }
-.users-modal {
-  width: min(720px, calc(100vw - 28px));
-  max-height: min(86vh, 760px);
-}
 
 .users-content {
   min-height: 0;
-  flex: 1 1 auto;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  padding: 18px 22px 22px;
-  background: #fff;
+  padding: 20px;
 }
 
 .quick-user-form {
@@ -116,18 +108,12 @@
 .user-delete[disabled] { opacity: .5; cursor: default; }
 
 @media (max-width: 680px) {
-.users-modal {
-    width: 100%;
-    max-height: calc(100dvh - 20px);
-  }
-
 .users-content {
     padding: 14px;
-    -webkit-overflow-scrolling: touch;
   }
 
 .quick-user-form { grid-template-columns: 1fr; }
-.quick-user-form.user-create-form { grid-template-columns: 1fr; padding: 18px; gap: 16px; }
+.quick-user-form.user-create-form { grid-template-columns: 1fr; gap: 16px; }
 
 .users-search-bar { align-items: stretch; flex-direction: column; gap: 7px; }
 

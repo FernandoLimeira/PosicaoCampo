@@ -5,14 +5,16 @@
 {% endblock %}
 
 {% block content %}
-<section class="editor-modal module-page-card users-modal" aria-labelledby="users-modal-title">
-      <header class="modal-header">
+<section class="module-standard-page users-page" aria-labelledby="users-page-title">
+      <header class="module-standard-header users-page-header">
         <div>
           <span class="modal-kicker">Acessos</span>
-          <h2 id="users-modal-title">Usuários cadastrados</h2>
+          <h1 id="users-page-title">Usuários cadastrados</h1>
+          <p>Gerencie contas e libere a Produção Agrícola por usuário e unidade.</p>
         </div>
+        <a class="modal-button save" href="/usuarios/cadastro">Cadastrar usuário</a>
       </header>
-      <div class="users-content">
+      <div class="module-standard-card users-content">
         <div class="users-search-bar">
           <label class="users-search-field" for="users-search">
             <span>Buscar usuário</span>
@@ -24,15 +26,6 @@
         <div id="users-list" class="users-list" aria-live="polite"></div>
         <div id="users-search-empty" class="users-search-empty" hidden>Nenhum usuário encontrado.</div>
       </div>
-      <footer class="modal-footer">
-        <div class="wizard-footer-info">
-          <strong>Controle do Administrador</strong>
-          <p>Somente administradores gerenciam contas. O acesso à Produção Agrícola é configurado por usuário e por unidade.</p>
-        </div>
-        <div class="modal-footer-actions">
-          <a class="modal-button save" href="/usuarios/cadastro">Cadastrar usuário</a>
-        </div>
-      </footer>
     </section>
 {% endblock %}
 {% block modals %}

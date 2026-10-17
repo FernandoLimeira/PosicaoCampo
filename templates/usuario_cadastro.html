@@ -4,11 +4,16 @@
   <link rel="stylesheet" href="/css/usuarios.css?v={{ asset_version }}" />
 {% endblock %}
 {% block content %}
-<section class="editor-modal module-page-card users-modal" aria-labelledby="user-create-title">
-  <header class="modal-header">
-    <div><span class="modal-kicker">Acessos</span><h2 id="user-create-title">Cadastrar usuário</h2></div>
+<section class="module-standard-page users-page" aria-labelledby="user-create-title">
+  <header class="module-standard-header users-page-header">
+    <div>
+      <span class="modal-kicker">Acessos</span>
+      <h1 id="user-create-title">Cadastrar usuário</h1>
+      <p>Cadastre a conta e defina o acesso à Produção Agrícola.</p>
+    </div>
+    <a class="modal-button secondary" href="/usuarios">Ver usuários cadastrados</a>
   </header>
-  <div class="users-content">
+  <div class="module-standard-card users-content users-create-content">
     <form id="quick-user-form" class="quick-user-form user-create-form">
       <label class="field" for="quick-user-name">
         <span>Usuário</span>
@@ -77,10 +82,6 @@
     </form>
     <p id="user-create-status" class="user-create-status" role="status" aria-live="polite"></p>
   </div>
-  <footer class="modal-footer">
-    <div class="wizard-footer-info"><strong>Controle do Administrador</strong><p>A unidade base continua como preferência inicial. Na Produção Agrícola, cada usuário enxerga somente as unidades liberadas aqui.</p></div>
-    <div class="modal-footer-actions"><a class="modal-button secondary" href="/usuarios">Ver usuários cadastrados</a></div>
-  </footer>
 </section>
 {% endblock %}
 {% block scripts %}

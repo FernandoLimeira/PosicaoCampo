@@ -69,19 +69,17 @@ async function loadHistory({ resetPage = true } = {}) {
   }
 }
 
-  document.querySelector('#history-unit-filter')?.addEventListener('change', () => loadHistory({ resetPage: true }));
-  document.querySelector('#history-page-prev')?.addEventListener('click', () => {
-    if (historyPage <= 1) return;
-    historyPage -= 1;
-    renderHistoryPage();
-  });
-  document.querySelector('#history-page-next')?.addEventListener('click', () => {
-    const totalPages = Math.max(1, Math.ceil(historyItems.length / HISTORY_PAGE_SIZE));
-    if (historyPage >= totalPages) return;
-    historyPage += 1;
-    renderHistoryPage();
-  });
-
+document.querySelector('#history-page-prev')?.addEventListener('click', () => {
+  if (historyPage <= 1) return;
+  historyPage -= 1;
+  renderHistoryPage();
+});
+document.querySelector('#history-page-next')?.addEventListener('click', () => {
+  const totalPages = Math.max(1, Math.ceil(historyItems.length / HISTORY_PAGE_SIZE));
+  if (historyPage >= totalPages) return;
+  historyPage += 1;
+  renderHistoryPage();
+});
 
 document.addEventListener('report-unit-change', () => loadHistory());
 loadHistory();

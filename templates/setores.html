@@ -5,9 +5,14 @@
 {% endblock %}
 
 {% block content %}
-<section class="editor-modal module-page-card sector-base-modal" aria-labelledby="sector-base-modal-title">
-      <header class="modal-header sector-base-modal-header">
-        <h2 id="sector-base-modal-title">Cadastro de setores</h2>
+<section class="module-standard-page sector-base-page" aria-labelledby="sector-base-page-title">
+      <header class="module-standard-header sector-base-page-header">
+        <div>
+          <span class="modal-kicker">Base de consulta</span>
+          <h1 id="sector-base-page-title">Cadastro de setores</h1>
+          <p>Ao digitar um setor nas frentes, o sistema mostra a seção e a fazenda cadastradas aqui.</p>
+        </div>
+        <a class="modal-button secondary" href="/">Voltar ao painel</a>
       </header>
 
       <div class="sector-base-content">
@@ -84,15 +89,6 @@
         </div>
       </div>
 
-      <footer class="modal-footer">
-        <div class="wizard-footer-info">
-          <strong>Base de consulta</strong>
-          <p>Ao digitar um setor nas frentes, o sistema mostra automaticamente a Seção e a Fazenda encontradas nesta base.</p>
-        </div>
-        <div class="modal-footer-actions">
-          <a class="modal-button secondary" href="/">Voltar ao painel</a>
-        </div>
-      </footer>
     </section>
 {% endblock %}
 {% block scripts %}
