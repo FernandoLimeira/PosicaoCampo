@@ -7,11 +7,7 @@ function getSacarosePole(unitCode = getReportUnit()) {
 
 function updateSacaroseEmissionContext() {
   const pole = getSacarosePole();
-  const description = document.querySelector('#sacarose-emission-description');
   const button = document.querySelector('#emit-global-sacarose');
-  if (description) {
-    description.textContent = `Filtro atual: ${getReportUnit()}. A emissão será do ${pole.label}, reunindo ${pole.units.join(' e ')}.`;
-  }
   if (button) button.textContent = `Emitir Sacarose · ${pole.label}`;
 }
 

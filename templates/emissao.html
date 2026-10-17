@@ -16,7 +16,6 @@
       <div class="emission-card-copy">
         <span class="emission-card-kicker">Operação</span>
         <h2>Posição de Campo</h2>
-        <p>Gera uma imagem HD consolidada com a posição atual das quatro unidades: PPT, NRD, RBR e PST.</p>
       </div>
       <div class="emission-card-actions">
         <button id="emit-global-position" class="modal-button save" type="button">Emitir Posição de Campo</button>
@@ -28,7 +27,6 @@
       <div class="emission-card-copy">
         <span class="emission-card-kicker">Sacarose</span>
         <h2>Posição de colheita</h2>
-        <p id="sacarose-emission-description">A unidade selecionada no filtro lateral define o polo que será emitido.</p>
       </div>
       <div class="emission-card-actions">
         <button id="emit-global-sacarose" class="modal-button save" type="button">Emitir Sacarose</button>
@@ -57,5 +55,5 @@
   {% if user.role == 'admin' or (user.production_access is defined and user.production_access.enabled) %}
   <script src="/js/production-export.js?v={{ asset_version }}-prod-report-layout-v8"></script>
   {% endif %}
-  <script src="/js/emissao.js?v={{ asset_version }}-daily-summary"></script>
+  <script src="/js/emissao.js?v={{ asset_version }}-compact-cards"></script>
 {% endblock %}
