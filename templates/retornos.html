@@ -14,7 +14,7 @@
             <p>Identifica quando uma frente sai de um setor e retorna depois, atribuindo cada período à frente com maior quantidade de equipamentos cadastrados.</p>
           </div>
           <div class="return-page-actions">
-            <button id="return-open-layouts" class="excel-filter-reset return-layout-config-button" type="button">Configurar layouts</button>
+            {% if user.module_access.returns.edit %}<button id="return-open-layouts" class="excel-filter-reset return-layout-config-button" type="button">Configurar layouts</button>{% endif %}
             <a class="excel-page-back" href="/" data-unit-context>Posição de Campo</a>
           </div>
         </header>
@@ -44,8 +44,8 @@
               <small id="return-analysis-file-name">Nenhum arquivo selecionado</small>
             </label>
             <div class="return-process-actions">
-              <input id="return-soil-wet-file" class="return-hidden-file" type="file" accept=".xlsx,.xlsm,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.ms-excel" />
-              <button id="return-soil-wet-import" class="modal-button secondary" type="button">Atualizar apontamentos</button>
+              {% if user.module_access.returns.edit %}<input id="return-soil-wet-file" class="return-hidden-file" type="file" accept=".xlsx,.xlsm,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.ms-excel" />
+              <button id="return-soil-wet-import" class="modal-button secondary" type="button">Atualizar apontamentos</button>{% endif %}
               <button id="return-analysis-process" class="modal-button save" type="submit">Processar análise</button>
             </div>
             <div id="return-soil-wet-status" class="return-soil-wet-status" aria-live="polite">Base de solo úmido: consultando...</div>

@@ -64,6 +64,7 @@ function renderUnit() {
   document.querySelector('#unit-title').textContent = UNIT_NAMES[activeUnit];
   const rows = Array.isArray(units[activeUnit]) ? units[activeUnit] : [];
   document.querySelector('#sacarose-rows').innerHTML = rows.length ? rows.map(rowHtml).join('') : rowHtml();
+  if (!canEditModule('sacarose')) document.querySelectorAll('#sacarose-rows input, #sacarose-rows select, #sacarose-rows button').forEach(input => { input.disabled = true; });
   history.replaceState(null, '', `/sacarose?unit=${activeUnit}`);
   setStatus('');
 }
@@ -126,7 +127,7 @@ async function save(event) {
 async function loadData() {
   setStatus('Carregando…');
   const [unitPayload, sectorPayload, sacarosePayload] = await Promise.all([
-    apiRequest('/api/units'), apiRequest('/api/sector-base'), apiRequest('/api/sacarose')
+    apiRequest('/api/units/meta'), apiRequest('/api/sector-base'), apiRequest('/api/sacarose')
   ]);
   versions = unitPayload.meta || {};
   sectorBase = Array.isArray(sectorPayload.items) ? sectorPayload.items : [];
@@ -162,7 +163,7 @@ document.querySelector('#export-sacarose-unit').addEventListener('click', async 
   } catch (error) { showToast(error.message || 'Não foi possível emitir a imagem.', true); }
   finally { button.disabled = false; }
 });
-document.querySelector('#add-row').addEventListener('click', () => {
+document.querySelector('#add-row')?.addEventListener('click', () => {
   document.querySelector('#sacarose-rows').insertAdjacentHTML('beforeend', rowHtml());
   document.querySelector('#sacarose-rows tr:last-child .front-input')?.focus();
 });

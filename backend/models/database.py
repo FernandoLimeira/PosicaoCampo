@@ -550,7 +550,7 @@ def _user_payload(row: sqlite3.Row) -> dict[str, Any]:
 
 def create_user(name: str, password: str, *, role: str = ROLE_USER,
                 base_unit: str = "PPT", email: str = "", is_active: bool = True,
-                production_access: Any = None) -> dict[str, Any]:
+                production_access: Any = None, module_access: Any = None, actor_id: int | None = None) -> dict[str, Any]:
     cleaned_name, password = _validate_credentials(name, password)
     if not isinstance(role, str) or role not in ALLOWED_ROLES:
         raise ValueError("Nível de acesso inválido.")
@@ -565,9 +565,17 @@ def create_user(name: str, password: str, *, role: str = ROLE_USER,
         raise ValueError("Informe um e-mail válido (máximo de 254 caracteres).")
     from .production import normalize_user_access, write_user_access
     access = normalize_user_access(production_access)
+    from .module_access import normalize_module_access, write_module_access
+    permissions = normalize_module_access(module_access)
     now = int(time.time())
     with auth_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
+        if actor_id is not None:
+            from .module_access import validate_delegated_grants
+            actor = conn.execute("SELECT role FROM users WHERE id=? AND is_active=1", (actor_id,)).fetchone()
+            if permissions is None and (not actor or actor["role"] != "admin"):
+                raise ValueError("Informe os acessos de cada módulo.")
+            validate_delegated_grants(conn, actor_id, permissions or {}, access)
         try:
             cursor = conn.execute(
                 "INSERT INTO users (name, password_hash, role, is_active, created_at, email, base_unit) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -578,6 +586,7 @@ def create_user(name: str, password: str, *, role: str = ROLE_USER,
         user_id = int(cursor.lastrowid)
         if role != ROLE_ADMIN:
             write_user_access(conn, user_id, access, now=now)
+            write_module_access(conn, user_id, permissions, now=now)
         row = conn.execute(
             f"SELECT {USER_COLUMNS} FROM users WHERE id = ?",
             (user_id,),
@@ -628,6 +637,7 @@ def has_admin() -> bool:
 
 def list_users(current_user_id: int) -> list[dict[str, Any]]:
     from .production import decorate_user_payload
+    from .module_access import module_access_from_conn
     with auth_connection() as conn:
         rows = conn.execute(
             f"SELECT {USER_COLUMNS} FROM users WHERE role <> 'admin' OR id = ? "
@@ -637,6 +647,7 @@ def list_users(current_user_id: int) -> list[dict[str, Any]]:
         users = [_user_payload(row) for row in rows]
         for payload in users:
             decorate_user_payload(conn, payload)
+            payload["module_access"] = module_access_from_conn(conn, payload["id"], role=payload["role"])
     return users
 
 
@@ -649,6 +660,8 @@ def _editable_user(conn: sqlite3.Connection, user_id: int, current_user_id: int)
     ).fetchone()
     if not row:
         raise ValueError("Usuário não encontrado.")
+    from .module_access import validate_delegated_target
+    validate_delegated_target(conn, current_user_id, user_id)
     return row
 
 
@@ -802,6 +815,13 @@ def list_units_payload() -> dict[str, Any]:
                 "updated_by": row["updated_by_name"] or "-",
             }
     return {"units": units, "meta": meta}
+
+
+def list_unit_versions() -> dict[str, Any]:
+    """Somente revisões para sincronização da Sacarose; não expõe dados de campo."""
+    with connection() as conn:
+        rows = conn.execute("SELECT code,version FROM units WHERE code IN ('PPT','NRD','RBR','PST')").fetchall()
+    return {"meta": {row["code"]: {"version": int(row["version"] or 1)} for row in rows}}
 
 
 def list_units() -> list[dict[str, Any]]:

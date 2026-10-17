@@ -40,15 +40,25 @@ function allowedProductionUnits() {
 }
 
 function canFillProduction() {
-  return Boolean(productionAccess?.permissions?.fill);
+  return Boolean(productionAccess?.unit_permissions?.[currentProductionUnit()]?.fill ?? productionAccess?.permissions?.fill);
 }
 
 function canEditProductionDailySummary() {
-  return Boolean(productionAccess?.enabled && allowedProductionUnits().includes(currentProductionUnit()));
+  return Boolean(productionAccess?.enabled && allowedProductionUnits().includes(currentProductionUnit()) &&
+    (productionAccess?.unit_permissions?.[currentProductionUnit()]?.summary ?? productionAccess?.permissions?.summary));
 }
 
 function canConfigureProduction() {
   return Boolean(productionAccess?.permissions?.configure);
+}
+
+function updateProductionAccessMessage() {
+  const message = document.querySelector('#production-access-message');
+  if (!message) return;
+  message.hidden = canFillProduction();
+  if (!message.hidden) message.textContent = canEditProductionDailySummary()
+    ? 'As frentes estão em modo de consulta. Você pode preencher chuva e mudanças da unidade.'
+    : 'Esta unidade está liberada somente para consulta.';
 }
 
 function selectedNavbarProductionUnit() {
@@ -255,6 +265,9 @@ function renderProductionItems(data) {
 
   if (data?.permissions && productionAccess) {
     productionAccess.permissions = { ...productionAccess.permissions, ...data.permissions };
+    const addButton = document.querySelector('#production-add-button');
+    if (addButton) addButton.hidden = !canFillProduction();
+    updateProductionAccessMessage();
   }
 
   if (ownerHeading) ownerHeading.hidden = !showingAll;
@@ -923,10 +936,7 @@ async function initializeProductionPage() {
   try {
     const unit = await loadProductionAccess();
     await refreshProductionPage(unit);
-    if (!canFillProduction() && accessMessage) {
-      accessMessage.hidden = false;
-      accessMessage.textContent = 'As frentes estão em modo de consulta. Você pode preencher chuva e mudanças da unidade.';
-    }
+    updateProductionAccessMessage();
   } catch (error) {
     console.error(error);
     if (accessMessage) {

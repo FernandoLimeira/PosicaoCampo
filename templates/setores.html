@@ -12,10 +12,11 @@
           <h1 id="sector-base-page-title">Cadastro de setores</h1>
           <p>Ao digitar um setor nas frentes, o sistema mostra a seção e a fazenda cadastradas aqui.</p>
         </div>
-        <a class="modal-button secondary" href="/">Voltar ao painel</a>
+        <a class="modal-button secondary" href="{{ user.home_path|default('/') }}">Voltar</a>
       </header>
 
       <div class="sector-base-content">
+        {% if user.module_access.sectors.edit %}
         <div class="sector-base-config-grid">
           <section class="sector-base-import-card">
             <div class="sector-base-compact-heading">
@@ -54,6 +55,7 @@
           </section>
         </div>
 
+        {% endif %}
         <div class="sector-base-list-toolbar">
           <label class="sector-base-search-field" for="sector-base-search">
             <span>Buscar na base</span>

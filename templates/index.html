@@ -12,7 +12,7 @@
           </div>
           <div class="dashboard-heading-actions">
             <span id="preview-unit-label">Exibindo a unidade selecionada</span>
-            <button id="open-data-modal" class="dashboard-fill-button" type="button">Preencher</button>
+            {% if user.module_access.dashboard.edit %}<button id="open-data-modal" class="dashboard-fill-button" type="button">Preencher</button>{% endif %}
           </div>
         </section>
 

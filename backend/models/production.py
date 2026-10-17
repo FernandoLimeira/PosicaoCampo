@@ -1,8 +1,7 @@
-"""Produção Agrícola: acesso por unidade, catálogo configurável e apontamentos diários.
+"""Produção Agrícola: permissões por unidade, catálogo e apontamentos diários.
 
-O acesso do usuário define apenas as unidades liberadas. A lista de frentes/serviços
-é montada pelo próprio usuário e permanece salva entre os dias. Cada atualização
-diária gera um registro separado, preservando o histórico.
+A autorização por unidade é independente da lista pessoal de frentes; cada
+atualização diária mantém histórico separado.
 """
 
 from __future__ import annotations
@@ -65,39 +64,61 @@ def _normalize_position(value: Any) -> int:
 
 
 def normalize_user_access(payload: Any) -> dict[str, Any]:
+    """Aceita permissões específicas por unidade e configurações legadas.
+
+    unit_permissions é o formato atual; units + permissions continua válido
+    para chamadas antigas. Nunca ampliamos o acesso de um registro existente.
+    """
     if payload is None:
-        return {"enabled": False, "permissions": {"view": False, "fill": False}, "units": []}
+        payload = {"enabled": False}
     if not isinstance(payload, dict):
         raise ValueError("Configuração da Produção Agrícola inválida.")
-
     enabled = payload.get("enabled", True)
     if not isinstance(enabled, bool):
         raise ValueError("Situação do acesso à Produção Agrícola inválida.")
-
     raw_permissions = payload.get("permissions") or {}
     if not isinstance(raw_permissions, dict):
         raise ValueError("Permissões da Produção Agrícola inválidas.")
-    fill = raw_permissions.get("fill", False)
-    if not isinstance(fill, bool):
-        raise ValueError("Permissões da Produção Agrícola inválidas.")
+    for key in ("fill", "configure", "summary"):
+        if key in raw_permissions and not isinstance(raw_permissions[key], bool):
+            raise ValueError("Permissões da Produção Agrícola inválidas.")
 
-    raw_units = payload.get("units") or []
-    if not isinstance(raw_units, list):
-        raise ValueError("Unidades da Produção Agrícola inválidas.")
-    units: list[str] = []
-    for value in raw_units:
-        unit = _normalize_unit(value)
-        if unit not in units:
-            units.append(unit)
-    units.sort(key=lambda code: ALLOWED_UNIT_CODES.index(code))
-
-    if enabled and not units:
-        raise ValueError("Selecione ao menos uma unidade para a Produção Agrícola.")
-
+    per_unit: dict[str, dict[str, bool]] = {}
+    if "unit_permissions" in payload:
+        items = payload["unit_permissions"]
+        if not isinstance(items, dict):
+            raise ValueError("Permissões por unidade inválidas.")
+        for raw_unit, flags in items.items():
+            unit = _normalize_unit(raw_unit)
+            if not isinstance(flags, dict) or set(flags) != {"view", "fill", "summary"}:
+                raise ValueError(f"Permissões da unidade {unit} inválidas.")
+            if any(not isinstance(flags[key], bool) for key in ("view", "fill", "summary")):
+                raise ValueError(f"Permissões da unidade {unit} inválidas.")
+            if not flags["view"]:
+                raise ValueError(f"Libere a consulta antes das operações da unidade {unit}.")
+            per_unit[unit] = {"view": True, "fill": flags["fill"], "summary": flags["summary"]}
+    else:
+        raw_units = payload.get("units") or []
+        if not isinstance(raw_units, list):
+            raise ValueError("Unidades da Produção Agrícola inválidas.")
+        for raw_unit in raw_units:
+            unit = _normalize_unit(raw_unit)
+            per_unit[unit] = {"view": True, "fill": raw_permissions.get("fill", False),
+                              "summary": raw_permissions.get("summary", enabled)}
+    if not enabled:
+        per_unit.clear()
+    if enabled and not per_unit:
+        raise ValueError("Adicione pelo menos uma unidade à Produção Agrícola.")
+    per_unit = {code: per_unit[code] for code in ALLOWED_UNIT_CODES if code in per_unit}
+    configure = enabled and raw_permissions.get("configure", False)
+    if configure and set(per_unit) != set(ALLOWED_UNIT_CODES):
+        raise ValueError("A configuração global exige acesso às quatro unidades.")
     return {
         "enabled": enabled,
-        "permissions": {"view": enabled, "fill": bool(fill) if enabled else False},
-        "units": units if enabled else [],
+        "permissions": {"view": enabled, "fill": any(p["fill"] for p in per_unit.values()),
+                        "configure": configure, "summary": any(p["summary"] for p in per_unit.values())},
+        "units": list(per_unit),
+        "unit_permissions": per_unit,
     }
 
 
@@ -106,19 +127,46 @@ def write_user_access(conn: sqlite3.Connection, user_id: int, access: dict[str, 
     permissions = access["permissions"]
     conn.execute(
         """
-        INSERT INTO user_module_permissions(user_id,module_key,can_view,can_fill,updated_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO user_module_permissions(user_id,module_key,can_view,can_fill,can_configure,updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(user_id,module_key) DO UPDATE SET
-            can_view=excluded.can_view, can_fill=excluded.can_fill, updated_at=excluded.updated_at
+            can_view=excluded.can_view, can_fill=excluded.can_fill,
+            can_configure=excluded.can_configure, updated_at=excluded.updated_at
         """,
-        (user_id, MODULE_KEY, int(permissions["view"]), int(permissions["fill"]), timestamp),
+        (user_id, MODULE_KEY, int(permissions["view"]), int(permissions["fill"]), int(permissions["configure"]), timestamp),
+    )
+    conn.execute(
+        """INSERT INTO user_module_permissions(user_id,module_key,can_view,can_fill,updated_at)
+           VALUES (?, 'production_daily_summary', ?, ?, ?) ON CONFLICT(user_id,module_key) DO UPDATE SET
+           can_view=excluded.can_view,can_fill=excluded.can_fill,updated_at=excluded.updated_at""",
+        (user_id, int(permissions["view"]), int(permissions["summary"]), timestamp),
     )
     conn.execute("DELETE FROM user_module_units WHERE user_id=? AND module_key=?", (user_id, MODULE_KEY))
-    for unit in access["units"]:
+    for unit, flags in access["unit_permissions"].items():
         conn.execute(
-            "INSERT INTO user_module_units(user_id,module_key,unit_code,updated_at) VALUES (?,?,?,?)",
-            (user_id, MODULE_KEY, unit, timestamp),
+            """INSERT INTO user_module_units(user_id,module_key,unit_code,can_fill,can_summary,updated_at)
+               VALUES (?,?,?,?,?,?)""",
+            (user_id, MODULE_KEY, unit, int(flags["fill"]), int(flags["summary"]), timestamp),
         )
+
+
+def _unit_access_from_conn(conn: sqlite3.Connection, user_id: int, *, schema: str = "") -> dict[str, dict[str, bool]]:
+    """Colunas NULL significam permissões legadas (herdam as regras globais)."""
+    permission = conn.execute(
+        f"SELECT can_fill FROM {schema}user_module_permissions WHERE user_id=? AND module_key=?",
+        (user_id, MODULE_KEY),
+    ).fetchone()
+    old_fill = bool(permission and permission["can_fill"])
+    old_summary = _can_update_summary(conn, user_id, schema=schema)
+    rows = conn.execute(
+        f"SELECT unit_code,can_fill,can_summary FROM {schema}user_module_units WHERE user_id=? AND module_key=?",
+        (user_id, MODULE_KEY),
+    )
+    available = {row["unit_code"]: {"view": True,
+        "fill": old_fill if row["can_fill"] is None else bool(row["can_fill"]),
+        "summary": old_summary if row["can_summary"] is None else bool(row["can_summary"])}
+        for row in rows if row["unit_code"] in ALLOWED_UNIT_CODES}
+    return {unit: available[unit] for unit in ALLOWED_UNIT_CODES if unit in available}
 
 
 def _access_from_conn(conn: sqlite3.Connection, user_id: int, *, role: str | None = None) -> dict[str, Any]:
@@ -131,28 +179,24 @@ def _access_from_conn(conn: sqlite3.Connection, user_id: int, *, role: str | Non
         return {
             "enabled": True,
             "admin": True,
-            "permissions": {"view": True, "fill": True, "configure": True},
+            "permissions": {"view": True, "fill": True, "configure": True, "summary": True},
             "units": list(ALLOWED_UNIT_CODES),
+            "unit_permissions": {unit: {"view": True, "fill": True, "summary": True} for unit in ALLOWED_UNIT_CODES},
         }
-
     permission = conn.execute(
-        "SELECT can_view,can_fill FROM user_module_permissions WHERE user_id=? AND module_key=?",
+        "SELECT can_view,can_configure FROM user_module_permissions WHERE user_id=? AND module_key=?",
         (user_id, MODULE_KEY),
     ).fetchone()
-    units = [
-        row["unit_code"] for row in conn.execute(
-            "SELECT unit_code FROM user_module_units WHERE user_id=? AND module_key=?",
-            (user_id, MODULE_KEY),
-        ).fetchall()
-    ]
-    units.sort(key=lambda code: ALLOWED_UNIT_CODES.index(code) if code in ALLOWED_UNIT_CODES else len(ALLOWED_UNIT_CODES))
-    can_view = bool(permission and permission["can_view"])
-    can_fill = bool(permission and permission["can_fill"])
+    enabled = bool(permission and permission["can_view"])
+    per_unit = _unit_access_from_conn(conn, user_id) if enabled else {}
     return {
-        "enabled": can_view,
+        "enabled": enabled,
         "admin": False,
-        "permissions": {"view": can_view, "fill": can_fill, "configure": False},
-        "units": units if can_view else [],
+        "permissions": {"view": enabled, "fill": any(p["fill"] for p in per_unit.values()),
+                        "configure": bool(enabled and permission and permission["can_configure"]),
+                        "summary": any(p["summary"] for p in per_unit.values())},
+        "units": list(per_unit),
+        "unit_permissions": per_unit,
     }
 
 
@@ -165,12 +209,11 @@ def save_user_access(user_id: int, payload: Any, *, actor_id: int) -> dict[str, 
     access = normalize_user_access(payload)
     with auth_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        actor = conn.execute("SELECT role,is_active FROM users WHERE id=?", (actor_id,)).fetchone()
-        if not actor or actor["role"] != "admin" or not bool(actor["is_active"]):
-            raise ValueError("Acesso exclusivo do Administrador.")
+        from .module_access import _validate_manager, validate_delegated_grants
+        _validate_manager(conn, user_id, actor_id)
         target = conn.execute("SELECT role FROM users WHERE id=?", (user_id,)).fetchone()
-        if not target or target["role"] == "admin":
-            raise ValueError("Usuário não encontrado.")
+        # O endpoint legado altera somente a Produção, não outros módulos.
+        validate_delegated_grants(conn, actor_id, {}, access)
         write_user_access(conn, user_id, access)
         return _access_from_conn(conn, user_id, role=target["role"])
 
@@ -195,32 +238,40 @@ def _require_access(conn: sqlite3.Connection, user_id: int, *, permission: str =
     if not row or not bool(row["is_active"]):
         raise PermissionError("Autenticação necessária.")
     if row["role"] == "admin":
-        return {"role": "admin", "units": list(ALLOWED_UNIT_CODES), "can_fill": True}
-
+        return {"role": "admin", "units": list(ALLOWED_UNIT_CODES), "can_fill": True,
+                "can_summary": True, "can_configure": True}
     permission_row = conn.execute(
-        "SELECT can_view,can_fill FROM auth.user_module_permissions WHERE user_id=? AND module_key=?",
+        "SELECT can_view,can_configure FROM auth.user_module_permissions WHERE user_id=? AND module_key=?",
         (user_id, MODULE_KEY),
     ).fetchone()
     if not permission_row or not bool(permission_row["can_view"]):
         raise PermissionError("Você não possui acesso à Produção Agrícola.")
-    if permission == "fill" and not bool(permission_row["can_fill"]):
-        raise PermissionError("Você possui acesso somente para consulta na Produção Agrícola.")
-
-    units = [
-        row[0] for row in conn.execute(
-            "SELECT unit_code FROM auth.user_module_units WHERE user_id=? AND module_key=?",
-            (user_id, MODULE_KEY),
-        )
-    ]
-    if unit is not None and unit not in units:
+    per_unit = _unit_access_from_conn(conn, user_id, schema="auth.")
+    if unit is not None and unit not in per_unit:
         raise PermissionError(f"A unidade {unit} não está liberada para este usuário.")
-    return {"role": row["role"], "units": units, "can_fill": bool(permission_row["can_fill"])}
+    selected = per_unit.get(unit) if unit else None
+    can_fill = selected["fill"] if selected else any(p["fill"] for p in per_unit.values())
+    can_summary = selected["summary"] if selected else any(p["summary"] for p in per_unit.values())
+    if permission == "fill" and not can_fill:
+        raise PermissionError("Você possui acesso somente para consulta nesta unidade da Produção Agrícola.")
+    if permission == "summary" and not can_summary:
+        raise PermissionError("Você não possui permissão para atualizar o resumo diário desta unidade.")
+    return {"role": row["role"], "units": list(per_unit), "can_fill": can_fill,
+            "can_summary": can_summary, "can_configure": bool(permission_row["can_configure"])}
 
 
-def _require_admin(conn: sqlite3.Connection, user_id: int) -> None:
-    row = conn.execute("SELECT role,is_active FROM auth.users WHERE id=?", (user_id,)).fetchone()
-    if not row or row["role"] != "admin" or not bool(row["is_active"]):
-        raise PermissionError("A configuração das frentes de serviço é exclusiva do Administrador.")
+def _can_update_summary(conn: sqlite3.Connection, user_id: int, *, schema: str = "") -> bool:
+    row = conn.execute(
+        f"SELECT can_fill FROM {schema}user_module_permissions WHERE user_id=? AND module_key='production_daily_summary'",
+        (user_id,),
+    ).fetchone()
+    return bool(row["can_fill"]) if row is not None else True  # legado mantido
+
+
+def _require_configure(conn: sqlite3.Connection, user_id: int) -> None:
+    access = _require_access(conn, user_id)
+    if not access["can_configure"] or set(access["units"]) != set(ALLOWED_UNIT_CODES):
+        raise PermissionError("A configuração da Produção Agrícola requer permissão global e todas as unidades.")
 
 
 def _status_payload(row: sqlite3.Row) -> dict[str, Any]:
@@ -244,7 +295,7 @@ def list_statuses(user_id: int, *, include_inactive: bool = False) -> dict[str, 
         ).fetchall()
         return {
             "statuses": [_status_payload(row) for row in rows],
-            "can_configure": access["role"] == "admin",
+            "can_configure": access["can_configure"],
         }
 
 
@@ -262,7 +313,7 @@ def save_status(user_id: int, payload: Any, *, status_id: int | None = None) -> 
     now = int(time.time())
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        _require_admin(conn, user_id)
+        _require_configure(conn, user_id)
         validate_actor(conn, user_id)
         try:
             if status_id is None:
@@ -294,7 +345,7 @@ def save_status(user_id: int, payload: Any, *, status_id: int | None = None) -> 
 def delete_status(user_id: int, status_id: int) -> None:
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        _require_admin(conn, user_id)
+        _require_configure(conn, user_id)
         validate_actor(conn, user_id)
         row = conn.execute("SELECT id,code,name FROM production_statuses WHERE id=?", (status_id,)).fetchone()
         if not row:
@@ -326,7 +377,7 @@ def list_catalog(user_id: int, *, unit_code: Any | None = None, include_inactive
     unit = _normalize_unit(unit_code) if unit_code is not None else None
     with connection() as conn:
         access = _require_access(conn, user_id, unit=unit)
-        if include_inactive and access["role"] != "admin":
+        if include_inactive and not access["can_configure"]:
             include_inactive = False
 
         group_where = "" if include_inactive else "WHERE g.is_active=1"
@@ -341,7 +392,7 @@ def list_catalog(user_id: int, *, unit_code: Any | None = None, include_inactive
         ]
         by_group = {item["id"]: item for item in groups}
         if not groups:
-            return {"groups": [], "unit": unit, "can_configure": access["role"] == "admin"}
+            return {"groups": [], "unit": unit, "can_configure": access["can_configure"]}
 
         params: list[Any] = []
         conditions = []
@@ -378,7 +429,7 @@ def list_catalog(user_id: int, *, unit_code: Any | None = None, include_inactive
                     "display_style": row["display_style"], "position": int(row["position"]),
                     "is_active": bool(row["is_active"]), "units": units_by_front.get(int(row["id"]), []),
                 })
-        return {"groups": groups, "unit": unit, "can_configure": access["role"] == "admin"}
+        return {"groups": groups, "unit": unit, "can_configure": access["can_configure"]}
 
 
 def _group_payload(row: sqlite3.Row) -> dict[str, Any]:
@@ -396,7 +447,7 @@ def save_group(user_id: int, payload: Any, *, group_id: int | None = None) -> di
     now = int(time.time())
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        _require_admin(conn, user_id)
+        _require_configure(conn, user_id)
         validate_actor(conn, user_id)
         try:
             if group_id is None:
@@ -427,7 +478,7 @@ def delete_group(user_id: int, group_id: int) -> None:
     """
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        _require_admin(conn, user_id)
+        _require_configure(conn, user_id)
         validate_actor(conn, user_id)
         row = conn.execute("SELECT id,name FROM production_groups WHERE id=?", (group_id,)).fetchone()
         if not row:
@@ -449,7 +500,7 @@ def delete_service_front(user_id: int, front_id: int) -> None:
     """
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        _require_admin(conn, user_id)
+        _require_configure(conn, user_id)
         validate_actor(conn, user_id)
         row = conn.execute("SELECT id,name FROM production_service_fronts WHERE id=?", (front_id,)).fetchone()
         if not row:
@@ -496,7 +547,7 @@ def save_service_front(user_id: int, payload: Any, *, front_id: int | None = Non
     now = int(time.time())
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        _require_admin(conn, user_id)
+        _require_configure(conn, user_id)
         validate_actor(conn, user_id)
         if not conn.execute("SELECT 1 FROM production_groups WHERE id=?", (group_id,)).fetchone():
             raise ValueError("Grupo não encontrado.")
@@ -627,7 +678,7 @@ def list_my_items(user_id: int, unit_code: Any, work_date: Any, *, scope: str = 
             })
         return {
             "unit": unit, "work_date": selected_date, "scope": normalized_scope, "items": items,
-            "permissions": {"view": True, "fill": bool(access["can_fill"]), "configure": access["role"] == "admin"},
+            "permissions": {"view": True, "fill": bool(access["can_fill"]), "configure": access["can_configure"], "summary": access["can_summary"]},
         }
 
 
@@ -678,7 +729,7 @@ def save_daily_summary(user_id: int, payload: Any) -> dict[str, Any]:
     now = int(time.time())
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        _require_access(conn, user_id, unit=unit)
+        _require_access(conn, user_id, permission="summary", unit=unit)
         validate_actor(conn, user_id)
         conn.execute(
             """INSERT INTO production_daily_summaries(

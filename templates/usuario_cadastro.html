@@ -1,20 +1,9 @@
-{% extends "base.html" %}
-{% block title %}Cadastrar usuário · Posição de Campo{% endblock %}
-{% block styles %}
-  <link rel="stylesheet" href="/css/usuarios.css?v={{ asset_version }}" />
-{% endblock %}
-{% block content %}
-<section class="module-standard-page users-page" aria-labelledby="user-create-title">
-  <header class="module-standard-header users-page-header">
-    <div>
-      <span class="modal-kicker">Acessos</span>
-      <h1 id="user-create-title">Cadastrar usuário</h1>
-      <p>Cadastre a conta e defina o acesso à Produção Agrícola.</p>
-    </div>
-    <a class="modal-button secondary" href="/usuarios">Ver usuários cadastrados</a>
-  </header>
-  <div class="module-standard-card users-content users-create-content">
-    <form id="quick-user-form" class="quick-user-form user-create-form">
+{% from "partials/user_permission_fields.html" import permission_fields with context %}
+{# Formulário único de cadastro, incorporado pelo modal em usuarios.html. #}
+<form id="quick-user-form" class="quick-user-form user-create-form">
+  <div class="user-create-modal-body">
+    <div class="user-section-heading user-identity-heading"><div><span class="modal-kicker">01 · Identificação</span><h3>Dados da conta</h3><p>Informações para autenticação e vínculo do usuário.</p></div></div>
+    <div class="user-create-fields">
       <label class="field" for="quick-user-name">
         <span>Usuário</span>
         <input id="quick-user-name" type="text" autocomplete="off" maxlength="80" required placeholder="Usuário de acesso" />
@@ -50,40 +39,15 @@
           <option value="inactive">Desativado</option>
         </select>
       </label>
-
-      <section class="user-production-access" id="user-production-access" aria-labelledby="user-production-access-title">
-        <div class="user-production-access-head">
-          <div>
-            <span class="modal-kicker">Módulo</span>
-            <h3 id="user-production-access-title">Produção Agrícola</h3>
-            <p>Defina o acesso e as unidades disponíveis para este usuário. As frentes são escolhidas dentro do módulo.</p>
-          </div>
-        </div>
-        <div class="user-access-option">
-          <div><strong>Acesso ao módulo</strong><p>Permite visualizar a Produção Agrícola nas unidades selecionadas.</p></div>
-          <label class="user-access-toggle"><input id="production-access-enabled" type="checkbox" checked /><span>Liberado</span></label>
-        </div>
-        <div class="user-production-permissions">
-          <div><strong>Permissão de edição</strong><p>O usuário poderá preencher e alterar as informações das frentes.</p></div>
-          <label class="user-access-toggle"><input id="production-access-fill" type="checkbox" checked /><span>Preencher e editar</span></label>
-        </div>
-        <fieldset class="user-production-units">
-          <legend>Unidades liberadas</legend>
-          <div class="user-production-units-grid">
-            <label><input type="checkbox" data-production-access-unit value="PPT" checked /><span><strong>PPT</strong><small>Paraguaçu Paulista</small></span></label>
-            <label><input type="checkbox" data-production-access-unit value="NRD" /><span><strong>NRD</strong><small>Narandiba</small></span></label>
-            <label><input type="checkbox" data-production-access-unit value="RBR" /><span><strong>RBR</strong><small>Rio Brilhante</small></span></label>
-            <label><input type="checkbox" data-production-access-unit value="PST" /><span><strong>PST</strong><small>Passa Tempo</small></span></label>
-          </div>
-        </fieldset>
-      </section>
-
-      <button id="create-user-button" class="modal-button save" type="submit">Cadastrar usuário</button>
-    </form>
+    </div>
+    {{ permission_fields("create") }}
     <p id="user-create-status" class="user-create-status" role="status" aria-live="polite"></p>
   </div>
-</section>
-{% endblock %}
-{% block scripts %}
-  <script src="/js/usuarios.js?v={{ asset_version }}"></script>
-{% endblock %}
+  <footer class="modal-footer user-create-footer">
+    <div class="wizard-footer-info"><strong>Dados de acesso</strong><p>O cadastro fica disponível imediatamente após salvar.</p></div>
+    <div class="modal-footer-actions">
+      <button class="modal-button secondary" type="button" data-close-modal="user-create-modal">Cancelar</button>
+      <button id="create-user-button" class="modal-button save" type="submit">Cadastrar usuário</button>
+    </div>
+  </footer>
+</form>

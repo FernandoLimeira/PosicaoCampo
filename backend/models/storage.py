@@ -456,7 +456,7 @@ def _upgrade_user_profile(conn):
 
 
 def _upgrade_user_access_schema(conn):
-    """Permissões genéricas por módulo e unidades liberadas para cada usuário."""
+    """Permissões genéricas e ações de Produção Agrícola por unidade."""
     statements = (
         """
         CREATE TABLE IF NOT EXISTS auth.user_module_permissions (
@@ -484,7 +484,15 @@ def _upgrade_user_access_schema(conn):
     )
     for statement in statements:
         conn.execute(statement)
-    conn.execute("INSERT OR REPLACE INTO auth.schema_info(key,value) VALUES ('user_access_version','2')")
+    columns = {row[1] for row in conn.execute("PRAGMA auth.table_info(user_module_permissions)")}
+    if "can_configure" not in columns:
+        conn.execute("ALTER TABLE auth.user_module_permissions ADD COLUMN can_configure INTEGER NOT NULL DEFAULT 0")
+    unit_columns = {row[1] for row in conn.execute("PRAGMA auth.table_info(user_module_units)")}
+    for field in ("can_fill", "can_summary"):
+        if field not in unit_columns:
+            # NULL significa configuração legada: conserva os acessos anteriores.
+            conn.execute(f"ALTER TABLE auth.user_module_units ADD COLUMN {field} INTEGER DEFAULT NULL")
+    conn.execute("INSERT OR REPLACE INTO auth.schema_info(key,value) VALUES ('user_access_version','4')")
 
 
 # Somente FKs internas ao mesmo arquivo. Referências de autoria são verificadas
@@ -508,6 +516,7 @@ CREATE TABLE IF NOT EXISTS auth.user_module_permissions (
     module_key TEXT NOT NULL COLLATE NOCASE,
     can_view INTEGER NOT NULL DEFAULT 0,
     can_fill INTEGER NOT NULL DEFAULT 0,
+    can_configure INTEGER NOT NULL DEFAULT 0,
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (user_id, module_key),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -517,6 +526,8 @@ CREATE TABLE IF NOT EXISTS auth.user_module_units (
     user_id INTEGER NOT NULL,
     module_key TEXT NOT NULL COLLATE NOCASE,
     unit_code TEXT NOT NULL COLLATE NOCASE,
+    can_fill INTEGER DEFAULT NULL,
+    can_summary INTEGER DEFAULT NULL,
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (user_id, module_key, unit_code),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE

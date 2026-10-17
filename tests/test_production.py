@@ -112,6 +112,75 @@ class ProductionTests(unittest.TestCase):
         db.init_db()
         self.assertEqual(production.get_daily_summary(self.user["id"], "NRD", "2026-10-16")["rain_turn_mm"], 4)
 
+    def test_daily_summary_and_global_catalog_permissions_are_independent(self):
+        from backend.models.production import get_user_access, save_user_access
+        # A conta de consulta pode preencher o resumo sem editar frentes (regra antiga).
+        self.assertTrue(get_user_access(self.viewer["id"])["permissions"]["summary"])
+        self.assertFalse(get_user_access(self.viewer["id"])["permissions"]["fill"])
+        save_user_access(self.viewer["id"], {
+            "enabled": True, "permissions": {"fill": False, "summary": False}, "units": ["NRD"],
+        }, actor_id=self.admin["id"])
+        with self.assertRaisesRegex(PermissionError, "resumo diário"):
+            production.save_daily_summary(self.viewer["id"], {
+                "unit_code": "NRD", "work_date": "2026-10-16", "changes": "Não autorizado"
+            })
+        self.assertEqual(production.get_daily_summary(self.viewer["id"], "NRD", "2026-10-16")["changes"], "")
+        save_user_access(self.viewer["id"], {
+            "enabled": True,
+            "permissions": {"fill": False, "summary": False, "configure": True},
+            "units": ["PPT", "NRD", "RBR", "PST"],
+        }, actor_id=self.admin["id"])
+        self.assertTrue(production.list_catalog(self.viewer["id"], unit_code="NRD")["can_configure"])
+        production.save_group(self.viewer["id"], {"name": "Grupo autorizado", "position": 100})
+        with self.assertRaisesRegex(ValueError, "quatro unidades"):
+            save_user_access(self.viewer["id"], {
+                "enabled": True, "permissions": {"configure": True}, "units": ["NRD"],
+            }, actor_id=self.admin["id"])
+
+    def test_different_actions_per_unit_and_legacy_access_are_preserved(self):
+        from backend.models.production import get_user_access, save_user_access
+        # Contas anteriores à migração têm o comportamento herdado por unidade.
+        with storage.auth_connection() as conn:
+            conn.execute("UPDATE user_module_units SET can_fill=NULL,can_summary=NULL WHERE user_id=?", (self.user["id"],))
+        db.init_db()  # migração repetida não deve sobrescrever acessos.
+        self.assertTrue(get_user_access(self.user["id"])["unit_permissions"]["PPT"]["fill"])
+        self.assertTrue(get_user_access(self.user["id"])["unit_permissions"]["NRD"]["fill"])
+
+        access = save_user_access(self.user["id"], {
+            "enabled": True, "permissions": {"configure": False},
+            "unit_permissions": {
+                "PPT": {"view": True, "fill": True, "summary": False},
+                "NRD": {"view": True, "fill": False, "summary": True},
+                "RBR": {"view": True, "fill": False, "summary": False},
+            }
+        }, actor_id=self.admin["id"])
+        self.assertEqual(access["units"], ["PPT", "NRD", "RBR"])
+        self.assertTrue(access["unit_permissions"]["PPT"]["fill"])
+        self.assertFalse(access["unit_permissions"]["NRD"]["fill"])
+        self.assertTrue(access["unit_permissions"]["NRD"]["summary"])
+        self.assertFalse(access["unit_permissions"]["PPT"]["summary"])
+        self.assertEqual(production.list_my_items(self.user["id"], "NRD", "2026-10-16")["permissions"]["fill"], False)
+        with storage.connection() as conn:
+            with self.assertRaisesRegex(PermissionError, "somente para consulta"):
+                production._require_access(conn, self.user["id"], permission="fill", unit="NRD")
+            with self.assertRaisesRegex(PermissionError, "resumo diário"):
+                production._require_access(conn, self.user["id"], permission="summary", unit="PPT")
+            with self.assertRaisesRegex(PermissionError, "resumo diário"):
+                production._require_access(conn, self.user["id"], permission="summary", unit="RBR")
+            production._require_access(conn, self.user["id"], permission="fill", unit="PPT")
+            production._require_access(conn, self.user["id"], permission="summary", unit="NRD")
+        # Reabrir base não pode reativar operação negada.
+        db.init_db()
+        self.assertFalse(get_user_access(self.user["id"])["unit_permissions"]["NRD"]["fill"])
+        for bad in (
+            {"view": False, "fill": True, "summary": False},
+            {"view": True, "fill": 1, "summary": False},
+        ):
+            with self.assertRaises(ValueError):
+                save_user_access(self.user["id"], {
+                    "enabled": True, "unit_permissions": {"PPT": bad}
+                }, actor_id=self.admin["id"])
+
     def test_access_is_unit_scoped_and_catalog_configuration_is_admin_only(self):
         access = production.get_user_access(self.user["id"])
         self.assertTrue(access["enabled"])

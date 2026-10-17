@@ -3,28 +3,92 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
+const moduleKeys = ['dashboard','emission','sacarose','reports','returns','sectors','history','users'];
+
 function context(role = 'admin') {
   const elements = new Map();
   for (const id of ['quick-user-form', 'quick-user-name', 'quick-user-password', 'quick-user-email', 'quick-user-role', 'quick-user-base-unit', 'quick-user-active', 'create-user-button', 'user-create-status']) {
     elements.set(`#${id}`, {
       value: '', textContent: '', disabled: false, listeners: {},
-      classList: { toggle(name, enabled) { this[name] = enabled; } },
+      classList: { toggle(name, enabled) { this[name] = enabled; }, remove(name) { this[name] = false; } },
       addEventListener(type, handler) { this.listeners[type] = handler; },
       focus() { this.focused = true; }
     });
   }
-  const productionEnabled = { checked: true, disabled: false, listeners: {}, addEventListener(type, handler) { this.listeners[type] = handler; } };
-  const productionFill = { checked: true, disabled: false };
-  const productionUnits = ['PPT', 'NRD', 'RBR', 'PST'].map(value => ({ value, checked: value === 'PPT', disabled: false }));
-  elements.set('#production-access-enabled', productionEnabled);
-  elements.set('#production-access-fill', productionFill);
+  const moduleViews = moduleKeys.filter(key => key !== 'emission').map(key => ({ dataset:{moduleView:key}, checked:true, disabled:false }));
+  const moduleEdits = moduleKeys.filter(key => !['emission','reports','history'].includes(key))
+    .map(key => ({ dataset:{moduleEdit:key}, checked:true, disabled:false }));
+  function mockAccessForm(form) {
+    form.dataset = {};
+    const master = {checked:true,disabled:false};
+    const configure = {checked:false,disabled:false};
+    const rows = ['PPT','NRD','RBR','PST'].map(unit => {
+      const fill = {checked:true,disabled:false};
+      const summary = {checked:true,disabled:false};
+      const badge = {hidden:true};
+      return {hidden:true,dataset:{productionUnitRow:unit},querySelector(selector) {
+        if (selector === '[data-production-unit-fill]') return fill;
+        if (selector === '[data-production-unit-summary]') return summary;
+        if (selector === '[data-unit-base-label]') return badge;
+        return null;
+      }, fill, summary};
+    });
+    const options = rows.map(row => ({value:row.dataset.productionUnitRow,disabled:false}));
+    const picker = {value:'PPT',querySelectorAll:()=>options,get selectedOptions(){return options.filter(option => option.value === this.value);}};
+    const add = {disabled:false};
+    const empty = {hidden:true};
+    const selectors = {
+      '[data-production-access-enabled]':master,'[data-production-access-configure]':configure,
+      '[data-production-unit-picker]':picker,'[data-production-add-unit]':add,
+      '[data-production-unit-empty]':empty
+    };
+    form.querySelector = selector => {
+      const unit = selector.match(/^\[data-production-unit-row="([^"]+)"\]$/);
+      if (unit) return rows.find(row => row.dataset.productionUnitRow===unit[1]) || null;
+      const edit = selector.match(/^\[data-module-edit="([^"]+)"\]$/);
+      if (edit) return moduleEdits.find(input => input.dataset.moduleEdit===edit[1]) || null;
+      return selectors[selector] || null;
+    };
+    form.querySelectorAll = selector => {
+      if (selector === '[data-production-unit-row]') return rows;
+      if (selector === '[data-module-view]') return moduleViews;
+      if (selector.includes('[data-production-unit-fill]')) return [configure,picker,add,...rows.flatMap(row=>[row.fill,row.summary])];
+      if (selector === '[data-production-access-configure], [data-production-unit-picker], [data-production-add-unit], [data-production-unit-fill], [data-production-unit-summary], [data-production-remove-unit]') return [configure,picker,add,...rows.flatMap(row=>[row.fill,row.summary])];
+      return [];
+    };
+    return {master,configure,rows,picker,add};
+  }
+  const form = elements.get('#quick-user-form');
+  const production = mockAccessForm(form);
+  form.querySelector = ((previous) => (selector) => {
+    if (selector === '#quick-user-base-unit') return elements.get('#quick-user-base-unit');
+    return previous(selector);
+  })(form.querySelector);
+  form.reset = () => {
+    for (const key of ['quick-user-name', 'quick-user-password', 'quick-user-email']) elements.get(`#${key}`).value = '';
+    elements.get('#quick-user-role').value = 'analyst';
+    elements.get('#quick-user-base-unit').value = 'PPT';
+    elements.get('#quick-user-active').value = 'active';
+    production.master.checked = true;
+    production.configure.checked = false;
+    moduleViews.forEach(input=>input.checked=input.dataset.moduleView!=='users');
+    moduleEdits.forEach(input=>input.checked=input.dataset.moduleEdit!=='users');
+  };
+  elements.set('#user-create-modal', { hidden: true });
+  elements.set('#open-user-create', { focused: false, focus() { this.focused = true; }, listeners: {}, addEventListener(type, handler) { this.listeners[type] = handler; } });
   const requests = [];
   elements.get('#quick-user-role').value = 'analyst';
   elements.get('#quick-user-base-unit').value = 'PPT';
   elements.get('#quick-user-active').value = 'active';
   const ctx = vm.createContext({
-    console: { error() {} },
+    console: {error() {}},
     currentUser: { id: 1, role },
+    window: { location: { search: '', href: 'https://test.invalid/usuarios' }, history: { replaceState() {} } },
+    URLSearchParams,
+    URL,
+    requestAnimationFrame(callback) { callback(); },
+    openModal(id) { elements.get(`#${id}`).hidden = false; },
+    closeModal(id) { elements.get(`#${id}`).hidden = true; },
     document: {
       querySelector(selector) {
         if (selector === '#production-access-enabled, [data-production-access-enabled]') return productionEnabled;
@@ -44,17 +108,20 @@ function context(role = 'admin') {
     formatServerTimestamp: () => '06/10/2026',
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/usuarios.js'), 'utf8'), ctx);
-  return { ctx, elements, requests, productionUnits };
+  return { ctx, elements, requests, productionUnits:production.rows, production, mockAccessForm, moduleViews, moduleEdits };
 }
 
 async function main() {
-  const { ctx, elements, requests, productionUnits } = context();
+  const { ctx, elements, requests, productionUnits, mockAccessForm } = context();
   const name = elements.get('#quick-user-name');
   const password = elements.get('#quick-user-password');
   const submit = elements.get('#create-user-button');
   const status = elements.get('#user-create-status');
   const send = () => elements.get('#quick-user-form').listeners.submit({ preventDefault() {} });
   assert.equal(requests.length, 0, 'Cadastro não deve consultar a listagem');
+  elements.get('#open-user-create').listeners.click();
+  assert.equal(elements.get('#user-create-modal').hidden, false, 'Botão deve abrir modal');
+  assert.equal(name.focused, true, 'Foco começa no campo de usuário');
   await send();
   assert.equal(requests.length, 0);
   assert.equal(status.textContent, 'Informe usuário e senha.');
@@ -71,15 +138,18 @@ async function main() {
   assert.deepEqual(JSON.parse(requests[0].options.body), {
     name: 'Operador Teste', password: 'test-password-42', email: 'operador@example.com',
     role: 'coordinator', base_unit: 'RBR', is_active: false,
-    production_access: { enabled: true, permissions: { view: true, fill: true }, units: ['RBR'] }
+    production_access: { enabled: true, permissions: { view: true, fill: true, configure: false, summary: true }, units: ['RBR'],
+      unit_permissions: {RBR:{view:true,fill:true,summary:true}} },
+    module_access: Object.fromEntries(moduleKeys.map(key => [key, {view:key!=='users', edit:!['emission','reports','history','users'].includes(key)}]))
   });
   assert.equal(name.value, '');
   assert.equal(password.value, '');
   assert.equal(elements.get('#quick-user-email').value, '');
   assert.equal(elements.get('#quick-user-role').value, 'analyst');
   assert.equal(elements.get('#quick-user-active').value, 'active');
-  assert.deepEqual(productionUnits.filter(input => input.checked).map(input => input.value), ['PPT']);
-  assert.equal(name.focused, true);
+  assert.deepEqual(productionUnits.filter(row => !row.hidden).map(row => row.dataset.productionUnitRow), ['PPT']);
+  assert.equal(elements.get('#open-user-create').focused, true);
+  assert.equal(elements.get('#user-create-modal').hidden, true);
   assert.equal(submit.disabled, false);
   assert.equal(status.textContent, 'Usuário Operador Teste cadastrado com sucesso.');
   assert.equal(status.classList['is-error'], false);
@@ -159,25 +229,13 @@ async function main() {
   assert(!list.innerHTML.includes('OutroAdmin'));
   assert(!list.innerHTML.includes('oculto@example.com'));
   assert(!list.innerHTML.includes('AdminInativo'));
-  const accessInputs = {
-    master: {checked:false, disabled:false, focus() { this.focused = true; }},
-    fill: {checked:false, disabled:false},
-    units: ['PPT', 'NRD', 'RBR', 'PST'].map(value => ({value, checked:false, disabled:false}))
-  };
-  const accessForm = {
-    hidden:true, dataset:{},
-    querySelector(selector) {
-      if (selector.includes('production-access-enabled')) return accessInputs.master;
-      if (selector.includes('production-access-fill')) return accessInputs.fill;
-      return null;
-    },
-    querySelectorAll(selector) {
-      if (selector === '[data-production-access-unit]:checked') return accessInputs.units.filter(input => input.checked);
-      if (selector === '[data-production-access-unit]') return accessInputs.units;
-      if (selector.includes('[data-production-access-unit]')) return [accessInputs.fill, ...accessInputs.units];
-      return [];
-    }
-  };
+  const accessForm = {hidden:true,dataset:{},listeners:{}, addEventListener(type,handler){this.listeners[type]=handler;},
+    querySelector(selector) {if (selector === 'summary') return {focus(){}}; return null;} };
+  const accessInputs = mockAccessForm(accessForm);
+  const configuredModules = Object.fromEntries(
+    ['dashboard','emission','sacarose','reports','returns','sectors','history','users'].map(key => [key, {view:true,edit:!['emission','reports','history'].includes(key)}])
+  );
+  // A edição usa a mesma configuração compartilhada do cadastro.
   const accessModal = {hidden:true};
   const accessLoading = {hidden:true, textContent:''};
   const accessSave = {disabled:false};
@@ -194,21 +252,23 @@ async function main() {
   const accessRequests = [];
   ctx.apiRequest = async (url, options) => {
     accessRequests.push({url, options});
-    if (url.endsWith('/production-access') && !options) return {access:{enabled:true, permissions:{view:true,fill:false}, units:['NRD','RBR']}};
+    if (url.endsWith('/access') && !options) return {access:{modules:configuredModules, production:{enabled:true, permissions:{view:true,fill:false,configure:false,summary:true},
+      units:['NRD','RBR'],unit_permissions:{NRD:{view:true,fill:false,summary:true},RBR:{view:true,fill:false,summary:true}}}}};
     if (url === '/api/users') return {users:[]};
     return {};
   };
-  await ctx.openAccessModal({dataset:{userId:'2'}, closest:() => ({querySelector:() => ({textContent:'Analista'})})});
+  await ctx.openAccessModal({dataset:{userId:'2'}, closest:() => ({dataset:{userBaseUnit:'NRD'},querySelector:() => ({textContent:'Analista'})})});
   assert.equal(accessModal.hidden, false);
   assert.equal(accessName.textContent, 'Analista');
   assert.equal(accessForm.hidden, false);
   assert.equal(accessInputs.master.checked, true);
-  assert.equal(accessInputs.fill.checked, false);
-  assert.deepEqual(accessInputs.units.filter(input => input.checked).map(input => input.value), ['NRD','RBR']);
+  assert.equal(accessInputs.rows.find(row=>row.dataset.productionUnitRow==='NRD').fill.checked, false);
+  assert.deepEqual(accessInputs.rows.filter(row=>!row.hidden).map(row=>row.dataset.productionUnitRow), ['NRD','RBR']);
   await ctx.saveAccessForm(accessForm);
   const savedAccess = accessRequests.find(request => request.options?.method === 'PUT');
-  assert.equal(savedAccess.url, '/api/users/2/production-access');
-  assert.deepEqual(JSON.parse(savedAccess.options.body), {access:{enabled:true, permissions:{view:true,fill:false}, units:['NRD','RBR']}});
+  assert.equal(savedAccess.url, '/api/users/2/access');
+  assert.deepEqual(JSON.parse(savedAccess.options.body), {access:{modules:configuredModules, production:{enabled:true, permissions:{view:true,fill:false,configure:false,summary:true}, units:['NRD','RBR'],
+    unit_permissions:{NRD:{view:true,fill:false,summary:true},RBR:{view:true,fill:false,summary:true}}}}});
   assert.equal(accessModal.hidden, true);
   console.log('OK: cadastro, modal de acessos, envio único e restrição administrativa.');
 }

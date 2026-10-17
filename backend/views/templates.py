@@ -3,8 +3,9 @@
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
 from ..config import TEMPLATE_DIR
+from ..models.module_access import MODULES
 
-ASSET_VERSION = "20261010-producao-v1"
+ASSET_VERSION = "20261017-ctt-relatorio-acessos-v4"
 
 environment = Environment(
     loader=FileSystemLoader(str(TEMPLATE_DIR)),
@@ -14,6 +15,8 @@ environment = Environment(
 
 
 def render_template(name: str, *, user=None, page="login") -> bytes:
+    if user is not None and "module_access" not in user:
+        user = {**user, "module_access": {item["key"]: {"view": True, "edit": item["edit"]} for item in MODULES}}
     return environment.get_template(name).render(
-        user=user, page=page, asset_version=ASSET_VERSION,
+        user=user, page=page, asset_version=ASSET_VERSION, modules=MODULES,
     ).encode("utf-8")

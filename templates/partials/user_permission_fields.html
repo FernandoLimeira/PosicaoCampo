@@ -1,0 +1,66 @@
+{# Uma única fonte para cadastro e edição; as sete áreas reutilizam os mesmos campos. #}
+{% macro module_panel(group, caption, mode) %}
+<details class="user-access-accordion" {% if mode == 'manage' and group == 'CTT' %}open{% endif %}>
+  <summary><span><strong>{{ group }}</strong><small>{{ caption }}</small></span><span class="user-accordion-chevron" aria-hidden="true">⌄</span></summary>
+  <section class="user-permission-section" aria-label="Acessos de {{ group }}">
+    <div class="user-module-grid">
+      {% for module in modules if module.group == group %}
+      <div class="user-module-row" data-module-row="{{ module.key }}">
+        <div class="user-module-description"><strong>{{ module.name }}</strong><small>{{ module.description }}</small></div>
+        <div class="user-module-controls">
+          <label><input type="checkbox" data-module-view="{{ module.key }}" {% if module.key != 'users' %}checked{% endif %} /><span>Consultar</span></label>
+          {% if module.edit %}<label><input type="checkbox" data-module-edit="{{ module.key }}" {% if module.key != 'users' %}checked{% endif %} /><span>{% if module.key == 'users' %}Gerenciar{% else %}Editar{% endif %}</span></label>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% if group == 'Usuários' %}<p class="user-access-hint">Gerenciar permite criar e alterar contas não administradoras. Gestores delegados só podem conceder acessos que já possuem.</p>{% endif %}
+  </section>
+</details>
+{% endmacro %}
+
+{% macro permission_fields(mode) %}
+<div class="user-permission-layout">
+  {{ module_panel('Relatório', 'Produtividade e mudanças de área', mode) }}
+  {{ module_panel('CTT', 'Sacarose e Posição de Campo', mode) }}
+  <details class="user-access-accordion" data-production-panel>
+    <summary><span><strong>Produção Agrícola</strong><small>Operações e permissões por unidade</small></span><span class="user-accordion-chevron" aria-hidden="true">⌄</span></summary>
+    <section class="user-production-access" aria-label="Permissões da Produção Agrícola">
+      <div class="user-production-top">
+        <label class="user-production-toggle"><input {% if mode == 'create' %}id="production-access-enabled"{% endif %} data-production-access-enabled type="checkbox" {% if mode == 'create' %}checked{% endif %}/><span><strong>Acessar Produção Agrícola</strong><small>Habilitar a consulta às unidades vinculadas abaixo</small></span></label>
+        <label class="user-production-toggle user-production-configure"><input data-production-access-configure type="checkbox" /><span><strong>Configuração global</strong><small>Gerenciar frentes, grupos e status; requer as quatro unidades</small></span></label>
+      </div>
+      <div class="user-unit-toolbar">
+        <div><strong>Operações por unidade</strong><p>A unidade base inicia o cadastro. Adicione outras unidades e defina cada operação separadamente.</p></div>
+        <div class="user-unit-add-control">
+          <label class="user-visually-hidden" for="production-unit-picker-{{ mode }}">Unidade para adicionar</label>
+          <select id="production-unit-picker-{{ mode }}" data-production-unit-picker aria-label="Unidade para adicionar">
+            {% for code, name in [('PPT','Paraguaçu Paulista'),('NRD','Narandiba'),('RBR','Rio Brilhante'),('PST','Passa Tempo')] %}<option value="{{ code }}">{{ code }} · {{ name }}</option>{% endfor %}
+          </select>
+          <button type="button" data-production-add-unit class="user-unit-add">+ Adicionar</button>
+        </div>
+      </div>
+      <div class="user-unit-list" data-production-unit-list>
+        {% for code, name in [('PPT','Paraguaçu Paulista'),('NRD','Narandiba'),('RBR','Rio Brilhante'),('PST','Passa Tempo')] %}
+        <div class="user-unit-row" data-production-unit-row="{{ code }}" hidden>
+          <div class="user-unit-heading"><div><strong>{{ code }} <span data-unit-base-label hidden>· Base</span></strong><small>{{ name }}</small></div><button type="button" data-production-remove-unit aria-label="Remover {{ name }}">Remover</button></div>
+          <div class="user-unit-operations">
+            <span class="user-unit-view"><span aria-hidden="true">✓</span> Consultar</span>
+            <label><input type="checkbox" data-production-unit-fill checked /> Preencher frentes</label>
+            <label><input type="checkbox" data-production-unit-summary checked /> Resumo diário</label>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <p data-production-unit-empty class="user-unit-empty" hidden>Nenhuma unidade vinculada. Adicione a unidade base para permitir o acesso.</p>
+    </section>
+  </details>
+  <details class="user-access-accordion">
+    <summary><span><strong>Emissão Global</strong><small>Acesso automático para todos os analistas</small></span><span class="user-accordion-chevron" aria-hidden="true">⌄</span></summary>
+    <section class="user-permission-section"><p class="user-access-hint">A emissão consolidada permanece liberada para todos os usuários ativos. Não exige uma permissão individual.</p></section>
+  </details>
+  {{ module_panel('Cadastro de Setores', 'Consultar e manter a base de setores', mode) }}
+  {{ module_panel('Histórico', 'Consultar registros de alterações', mode) }}
+  {{ module_panel('Usuários', 'Consultar ou administrar contas e permissões', mode) }}
+</div>
+{% endmacro %}

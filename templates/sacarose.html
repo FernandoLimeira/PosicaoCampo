@@ -19,7 +19,7 @@
     <form id="sacarose-form" class="sacarose-card">
       <header class="card-header">
         <div><span id="unit-pole">Polo</span><h2 id="unit-title">Unidade</h2></div>
-        <button id="add-row" class="secondary-button" type="button">Adicionar frente</button>
+        {% if user.module_access.sacarose.edit %}<button id="add-row" class="secondary-button" type="button">Adicionar frente</button>{% endif %}
       </header>
 
       <div class="table-wrap">
@@ -49,7 +49,7 @@
           </div>
           <div class="sacarose-actions">
             <button id="export-sacarose-unit" class="secondary-button" type="button">Emitir imagem da unidade</button>
-            <button id="save-button" class="primary-button" type="submit">Salvar Sacarose</button>
+            {% if user.module_access.sacarose.edit %}<button id="save-button" class="primary-button" type="submit">Salvar Sacarose</button>{% endif %}
           </div>
         </div>
       </footer>

@@ -29,6 +29,7 @@ from ..models.database import (
     list_history,
     list_users,
     list_units_payload,
+    list_unit_versions,
     list_sector_base,
     list_sacarose_positions,
     list_return_analysis_layouts,
@@ -41,6 +42,10 @@ from ..models.database import (
     delete_sector_base_item,
     save_sacarose_positions,
     save_unit,
+)
+from ..models.module_access import (
+    get_module_access, get_full_user_access, save_full_user_access,
+    required_permission, user_can, landing_page,
 )
 from ..models.production import (
     get_user_access as get_production_user_access,
@@ -63,7 +68,7 @@ from ..models.production import (
 
 STATIC_ROOTS = {"css", "js", "assets"}
 PAGE_ROUTES = {
-    "/usuarios/cadastro": ("usuario_cadastro.html", "user-create"),
+    "/usuarios/cadastro": ("usuarios.html", "users"),
     "/emitir-posicao-global": ("emissao.html", "emission"),
     "/": ("index.html", "dashboard"),
     "/sacarose": ("sacarose.html", "sacarose"),
@@ -183,7 +188,9 @@ def _session_user(environ):
     if not user:
         return None
     try:
+        user["module_access"] = get_module_access(int(user["id"]))
         user["production_access"] = get_production_user_access(int(user["id"]))
+        user["home_path"] = landing_page(user["module_access"], user["production_access"]["enabled"])
     except (ValueError, TypeError):
         user["production_access"] = {
             "enabled": False,
@@ -371,7 +378,7 @@ def application(environ, start_response):
 
     if path == "/login" and method == "GET":
         if user:
-            return _redirect(start_response, "/")
+            return _redirect(start_response, user.get("home_path", "/"))
         return _page(start_response, "login.html")
 
     if path == "/register" and method == "GET":
@@ -404,7 +411,11 @@ def application(environ, start_response):
         except ValueError:
             return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Nome ou senha inválidos."})
         _clear_login_failures(environ, username)
-        return _json(start_response, HTTPStatus.OK, {"user": logged}, [_auth_cookie(token, environ, remember_me=remember_me)])
+        from ..models.module_access import get_module_access
+        modules = get_module_access(logged["id"])
+        production = get_production_user_access(logged["id"])
+        landing = landing_page(modules, production["enabled"])
+        return _json(start_response, HTTPStatus.OK, {"user": logged, "landing_page": landing}, [_auth_cookie(token, environ, remember_me=remember_me)])
 
     if path == "/api/auth/logout" and method == "POST":
         token = _cookies(environ).get(SESSION_COOKIE)
@@ -417,18 +428,24 @@ def application(environ, start_response):
         return _json(start_response, HTTPStatus.OK, {"user": user})
 
 
+    required = required_permission(path, method)
+    if required and user:
+        modules, action = required
+        if not any(user_can(user, module, action) for module in modules):
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": "Você não possui permissão para esta operação."})
+
     if path == "/api/users" and method == "GET":
         if not user:
             return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
-        if not _is_admin(user):
-            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": "Acesso exclusivo do Administrador."})
+        if not user_can(user, "users", "view"):
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": "Sem acesso ao módulo Usuários."})
         return _json(start_response, HTTPStatus.OK, {"users": list_users(user["id"])})
 
     if path == "/api/users" and method == "POST":
         if not user:
             return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
-        if not _is_admin(user):
-            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": "Acesso exclusivo do Administrador."})
+        if not user_can(user, "users", "edit"):
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": "Sem permissão para gerenciar usuários."})
         try:
             payload = _json_body(environ)
             if payload.get("role") == "admin":
@@ -440,8 +457,11 @@ def application(environ, start_response):
                 role=payload.get("role", "analyst"), base_unit=payload.get("base_unit", "PPT"),
                 email=payload.get("email", ""), is_active=payload.get("is_active", True),
                 production_access=payload.get("production_access"),
+                module_access=payload.get("module_access"), actor_id=user["id"],
             )
             return _json(start_response, HTTPStatus.CREATED, {"user": created})
+        except PermissionError as exc:
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
         except ValueError as exc:
             return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
 
@@ -450,8 +470,10 @@ def application(environ, start_response):
         if len(parts) >= 3 and parts[0] == "api" and parts[1] == "users":
             if not user:
                 return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
-            if not _is_admin(user):
-                return _json(start_response, HTTPStatus.FORBIDDEN, {"error": "Acesso exclusivo do Administrador."})
+            is_user_change = (len(parts) == 3 and method == "DELETE") or (
+                len(parts) == 4 and parts[3] in {"password", "active"} and method == "PUT")
+            if is_user_change and not user_can(user, "users", "edit"):
+                return _json(start_response, HTTPStatus.FORBIDDEN, {"error": "Sem permissão para gerenciar usuários."})
             try:
                 user_id = int(parts[2])
                 if len(parts) == 3 and method == "DELETE":
@@ -467,6 +489,27 @@ def application(environ, start_response):
                         raise ValueError("Situação do usuário inválida.")
                     updated = set_user_active(user_id, payload["is_active"], user["id"])
                     return _json(start_response, HTTPStatus.OK, {"ok": True, "user": updated})
+            except PermissionError as exc:
+                return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
+            except (ValueError, TypeError) as exc:
+                return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path.startswith("/api/users/") and path.endswith("/access") and not path.endswith("/production-access"):
+        parts = [part for part in path.split("/") if part]
+        if len(parts) == 4 and parts[:2] == ["api", "users"] and method in {"GET", "PUT"}:
+            if not user:
+                return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+            if not user_can(user, "users", "view" if method == "GET" else "edit"):
+                return _json(start_response, HTTPStatus.FORBIDDEN, {"error": "Sem permissão para o módulo Usuários."})
+            try:
+                target_id = int(parts[2])
+                if method == "GET":
+                    access = get_full_user_access(target_id, actor_id=user["id"])
+                else:
+                    access = save_full_user_access(target_id, _json_body(environ).get("access"), actor_id=user["id"])
+                return _json(start_response, HTTPStatus.OK, {"access": access})
+            except PermissionError as exc:
+                return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
             except (ValueError, TypeError) as exc:
                 return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
 
@@ -475,12 +518,12 @@ def application(environ, start_response):
         if len(parts) == 4 and parts[:2] == ["api", "users"]:
             if not user:
                 return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
-            if not _is_admin(user):
-                return _json(start_response, HTTPStatus.FORBIDDEN, {"error": "Acesso exclusivo do Administrador."})
+            if not user_can(user, "users", "view" if method == "GET" else "edit"):
+                return _json(start_response, HTTPStatus.FORBIDDEN, {"error": "Sem permissão para o módulo Usuários."})
             try:
                 target_user_id = int(parts[2])
                 if method == "GET":
-                    return _json(start_response, HTTPStatus.OK, {"access": get_production_user_access(target_user_id)})
+                    return _json(start_response, HTTPStatus.OK, {"access": get_full_user_access(target_user_id, actor_id=user["id"])["production"]})
                 if method == "PUT":
                     payload = _json_body(environ)
                     access = save_production_user_access(target_user_id, payload.get("access"), actor_id=user["id"])
@@ -675,6 +718,11 @@ def application(environ, start_response):
             return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
         except (ValueError, TypeError) as exc:
             return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path == "/api/units/meta" and method == "GET":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        return _json(start_response, HTTPStatus.OK, list_unit_versions())
 
     if path == "/api/units" and method == "GET":
         if not user:
@@ -932,13 +980,25 @@ def application(environ, start_response):
         unit_code = (query.get("unit") or [None])[0]
         return _json(start_response, HTTPStatus.OK, {"history": list_history(limit, unit_code)})
 
+    if path == "/sem-acesso" and method == "GET":
+        if not user:
+            return _redirect(start_response, "/login")
+        return _respond(start_response, HTTPStatus.FORBIDDEN,
+                        b"Nenhum modulo liberado para esta conta. Solicite acesso ao administrador.",
+                        [("Content-Type", "text/plain; charset=utf-8")])
+
     if path in PAGE_ROUTES and method == "GET":
         if not user:
             return _redirect(start_response, "/login")
-        if path in {"/usuarios", "/usuarios/cadastro"} and not _is_admin(user):
-            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": "Acesso exclusivo do Administrador."})
+        if path in {"/usuarios", "/usuarios/cadastro"} and not user_can(user, "users", "view"):
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": "Sem acesso ao módulo Usuários."})
         if path == "/producao" and not user.get("production_access", {}).get("enabled"):
             return _json(start_response, HTTPStatus.FORBIDDEN, {"error": "Você não possui acesso à Produção Agrícola."})
+        page_key = PAGE_ROUTES[path][1]
+        if page_key not in {"production", "users"} and not user_can(user, page_key):
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": "Você não possui acesso a este módulo."})
+        if path == "/usuarios/cadastro":
+            return _redirect(start_response, "/usuarios?novo=1")
         template, page = PAGE_ROUTES[path]
         return _page(start_response, template, user=user, page=page)
 

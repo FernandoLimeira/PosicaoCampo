@@ -47,7 +47,8 @@ form.addEventListener('submit', async event => {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Não foi possível entrar.');
     const baseUnit = ['PPT', 'NRD', 'RBR', 'PST'].includes(data.user?.base_unit) ? data.user.base_unit : 'PPT';
-    window.location.href = `/?unit=${baseUnit}`;
+    const landing = data.landing_page || '/';
+    window.location.href = `${landing}${landing === '/' ? `?unit=${baseUnit}` : ''}`;
   } catch (error) {
     showError(error.message || 'Não foi possível entrar.');
   } finally {

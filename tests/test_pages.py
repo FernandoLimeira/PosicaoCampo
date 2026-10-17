@@ -248,7 +248,7 @@ class PageTests(unittest.TestCase):
             self.assertIn(f'id="{identifier}"', page)
 
     def test_pages_share_layout_and_assets_exist(self):
-        for path in ("/", "/sacarose", "/setores", "/relatorios", "/retornos", "/historico", "/usuarios", "/usuarios/cadastro", "/emitir-posicao-global"):
+        for path in ("/", "/sacarose", "/setores", "/relatorios", "/retornos", "/historico", "/usuarios", "/emitir-posicao-global"):
             with self.subTest(path=path):
                 response = self.request(path, role="admin")
                 self.assertEqual(response["status"], 200)
@@ -277,8 +277,7 @@ class PageTests(unittest.TestCase):
             ("/", 'id="operation-form"', 'id="excel-report-form"'),
             ("/setores", 'id="sector-base-import-form"', 'id="operation-form"'),
             ("/historico", 'id="history-list"', 'id="sector-base-list"'),
-            ("/usuarios", 'id="users-list"', 'id="quick-user-form"'),
-            ("/usuarios/cadastro", 'id="quick-user-form"', 'id="users-list"'),
+            ("/usuarios", 'id="users-list"', 'id="sector-base-list"'),
             ("/relatorios", 'id="excel-report-form"', 'id="return-analysis-form"'),
             ("/retornos", 'id="return-analysis-form"', 'id="excel-report-form"'),
             ("/sacarose", 'id="sacarose-form"', 'id="operation-form"'),
@@ -290,7 +289,7 @@ class PageTests(unittest.TestCase):
                 self.assertNotIn(excluded, html)
 
     def test_management_pages_use_standard_page_layout(self):
-        for path in ('/historico', '/setores', '/usuarios', '/usuarios/cadastro'):
+        for path in ('/historico', '/setores', '/usuarios'):
             with self.subTest(path=path):
                 html = self.request(path, role='admin')['body']
                 self.assertIn('class="module-standard-page ', html)
@@ -316,8 +315,10 @@ class PageTests(unittest.TestCase):
         self.assertIsNotNone(declarations)
         for declaration in ('display: inline-flex;', 'align-items: center;', 'justify-content: center;', 'text-align: center;'):
             self.assertIn(declaration, declarations.group(1))
-        html = self.request('/usuarios/cadastro', role='admin')["body"]
-        self.assertIn('<a class="modal-button secondary" href="/usuarios">Ver usuários cadastrados</a>', html)
+        html = self.request('/usuarios', role='admin')["body"]
+        self.assertIn('id="open-user-create"', html)
+        self.assertIn('id="user-create-modal"', html)
+        self.assertIn('id="create-user-button"', html)
 
     def test_trace_picker_resets_global_input_size_and_contains_long_content(self):
         css = (config.STATIC_DIR / "css/retornos.css").read_text(encoding="utf-8")
@@ -341,7 +342,7 @@ class PageTests(unittest.TestCase):
         self.assertIn('overflow-y: auto;', declarations('.return-trace-list'))
         self.assertIn('.return-trace-list { grid-template-columns: 1fr; }', css)
         page = self.request('/retornos', role='member')['body']
-        self.assertIn('/css/retornos.css?v=20261010-producao-v1', page)
+        self.assertRegex(page, r'/css/retornos\.css\?v=[A-Za-z0-9_-]+')
 
     def test_script_dependencies_and_styles_are_scoped(self):
         expected = {
@@ -354,7 +355,6 @@ class PageTests(unittest.TestCase):
             "/retornos": ["common.js", "return-analysis.js"],
             "/historico": ["common.js", "historico.js"],
             "/usuarios": ["common.js", "usuarios.js"],
-            "/usuarios/cadastro": ["common.js", "usuarios.js"],
         }
         for path, scripts in expected.items():
             with self.subTest(path=path):
@@ -408,19 +408,19 @@ class PageTests(unittest.TestCase):
             self.assertNotIn('id="users-toggle"', html)
             self.assertNotIn('id="users-flyout"', html)
 
-    def test_admin_users_submenu_has_separate_pages(self):
-        for path in ('/usuarios', '/usuarios/cadastro'):
-            html = self.request(path, role='admin')["body"]
-            self.assertRegex(html, r'id="users-toggle"[^>]*aria-expanded="false"[^>]*aria-controls="users-flyout"')
-            self.assertRegex(html, r'id="users-flyout"[^>]*\bhidden\b')
-            submenu = html.split('<nav id="users-flyout"', 1)[1].split('</nav>', 1)[0]
-            self.assertEqual(submenu.count('<a '), 2)
-            self.assertIn('href="/usuarios/cadastro"', submenu)
-            self.assertIn('>Cadastrar usuário</span>', submenu)
-            self.assertIn('href="/usuarios"', submenu)
-            self.assertIn('>Usuários cadastrados</span>', submenu)
-            self.assertEqual(submenu.count('aria-current="page"'), 1)
-            self.assertNotIn('users-close', submenu)
+    def test_admin_users_navigation_is_single_page_and_legacy_link_redirects(self):
+        html = self.request('/usuarios', role='admin')["body"]
+        self.assertIn('href="/usuarios" aria-current="page"', html)
+        self.assertNotIn('users-flyout', html)
+        self.assertNotIn('href="/usuarios/cadastro"', html)
+        self.assertIn('id="user-create-modal" class="modal-backdrop" hidden', html)
+        self.assertIn('id="quick-user-form"', html)
+        self.assertIn('id="users-list"', html)
+        self.assertIn('id="user-access-modal"', html)
+        self.assertEqual(html.count('id="quick-user-form"'), 1)
+        legacy = self.request('/usuarios/cadastro', role='admin')
+        self.assertEqual(legacy['status'], 302)
+        self.assertEqual(legacy['headers']['Location'], '/usuarios?novo=1')
 
     def test_backup_feature_is_removed(self):
         self.assertEqual(self.request("/api/backup", role="admin", method="POST")["status"], 404)
@@ -428,7 +428,7 @@ class PageTests(unittest.TestCase):
         self.assertFalse((config.DATA_DIR / "backups").exists())
 
     def test_user_registration_exposes_profiles_and_optional_email(self):
-        html = self.request('/usuarios/cadastro', role='admin')['body']
+        html = self.request('/usuarios', role='admin')['body']
         for element_id in ('quick-user-role', 'quick-user-email', 'quick-user-base-unit', 'quick-user-active'):
             self.assertIn(f'id="{element_id}"', html)
         self.assertNotIn('<option value="admin">', html)
@@ -471,13 +471,13 @@ class PageTests(unittest.TestCase):
             cookie = login['headers']['Set-Cookie'].split(';', 1)[0]
             html = self.request('/', cookie=cookie)['body']
             self.assertIn('data-user-base-unit="RBR"', html)
-            self.assertEqual('id="users-toggle"' in html, role == 'admin')
+            self.assertEqual('href="/usuarios"' in html, role == 'admin')
             for page in ('/', '/sacarose', '/relatorios', '/retornos', '/emitir-posicao-global'):
                 self.assertEqual(self.request(page, cookie=cookie)['status'], 200)
             data = json.loads(self.request('/api/units', cookie=cookie)['body'])
             self.assertEqual({unit['code'] for unit in data['units']}, {'PPT','NRD','RBR','PST'})
             if role == 'admin':
-                self.assertEqual(self.request('/usuarios/cadastro', cookie=cookie)['status'], 200)
+                self.assertEqual(self.request('/usuarios/cadastro', cookie=cookie)['status'], 302)
                 self.assertEqual(self.request('/api/users', cookie=cookie)['status'], 200)
             else:
                 for page in ('/usuarios', '/usuarios/cadastro', '/api/users'):
@@ -565,8 +565,8 @@ class PageTests(unittest.TestCase):
             for element_id in ('greeting', 'today', 'current-time', 'logout-button'):
                 self.assertIn(f'id="{element_id}"', footer)
             self.assertIn('class="menu-icon"', footer)
-            self.assertIn('</svg><span>Emissão global</span>', html)
-            self.assertIn('</svg><span>Cadastro de setores</span>', html)
+            self.assertIn('</svg><span>Emissão Global</span>', html)
+            self.assertIn('</svg><span>Cadastro de Setores</span>', html)
             self.assertIn('</svg><span>Sair</span>', footer)
             self.assertNotIn('<select id="report-unit"', html)
             self.assertEqual(re.findall(r'data-report-unit="([A-Z]+)"', html), ['PPT', 'NRD', 'RBR', 'PST'])
@@ -576,13 +576,19 @@ class PageTests(unittest.TestCase):
             self.assertNotIn("COA · COCAL · SAFRA 2026", html)
             self.assertNotIn("Segurança · Qualidade · Pessoas · Resultados", html)
             self.assertIn('href="/emitir-posicao-global"', html)
-            self.assertIn("Cadastro de setores", html)
+            self.assertIn("Cadastro de Setores", html)
             group = html.split('<nav id="reports-flyout"', 1)[1].split('</nav>', 1)[0]
             self.assertNotIn('reports-close', group)
             self.assertNotIn('Fechar menu de relatórios', group)
-            for label in ("Posição de Campo", "Sacarose", "Acontecimentos de produtividade por frota e operador", "Análise de mudanças de área"):
+            for label in ("Produtividade por frota e operador", "Análise de mudanças de área"):
                 self.assertIn(label, group)
-            self.assertNotIn("Emissão global", group)
+            for removed in ("Posição de Campo", "Sacarose", "Emissão Global"):
+                self.assertNotIn(f'<span>{removed}</span>', group)
+            self.assertRegex(html, r'id="ctt-toggle"[^>]*aria-controls="ctt-flyout"')
+            ctt = html.split('<nav id="ctt-flyout"', 1)[1].split('</nav>', 1)[0]
+            for label in ("Posição de Campo", "Sacarose"):
+                self.assertIn(f'<span>{label}</span>', ctt)
+            self.assertNotIn('Produtividade por frota e operador', ctt)
             self.assertNotIn('>Painel</a>', html)
         emission = self.request('/emitir-posicao-global', role='member')["body"]
         self.assertIn('id="emit-global-position"', emission)
@@ -729,6 +735,184 @@ class PageTests(unittest.TestCase):
     def test_template_and_source_files_are_not_public(self):
         for path in ("/templates/base.html", "/base.html", "/css/../../backend/config.py", "/css/../js/common.js"):
             self.assertEqual(self.request(path, role="admin")["status"], 404, path)
+
+
+    def test_module_permissions_enforced_on_pages_and_direct_api_calls(self):
+        from backend.models.module_access import MODULES
+        permissions = {item['key']: {'view': False, 'edit': False} for item in MODULES}
+        permissions['sacarose']['view'] = True
+        response = self.request('/api/users', role='admin', method='POST', body={
+            'name': 'OnlyReadSacarose', 'password': 'Test-password-42', 'role': 'analyst',
+            'module_access': permissions,
+            'production_access': {'enabled': False, 'permissions': {'fill': False}, 'units': []},
+        })
+        self.assertEqual(response['status'], 201, response['body'])
+        created = json.loads(response['body'])['user']
+        cookie = f"{config.SESSION_COOKIE}={self.db.create_session(created['id'])}"
+        self.assertEqual(self.request('/sacarose', cookie=cookie)['status'], 200)
+        self.assertEqual(self.request('/', cookie=cookie)['status'], 403)
+        self.assertEqual(self.request('/setores', cookie=cookie)['status'], 403)
+        self.assertEqual(self.request('/retornos', cookie=cookie)['status'], 403)
+        self.assertEqual(self.request('/emitir-posicao-global', cookie=cookie)['status'], 200)  # emissão livre para analistas
+        self.assertEqual(self.request('/api/sacarose', cookie=cookie)['status'], 200)
+        self.assertEqual(self.request('/api/sacarose', cookie=cookie, method='POST')['status'], 403)
+        self.assertEqual(self.request('/api/units', cookie=cookie)['status'], 200)  # dados necessários à emissão global
+        self.assertEqual(self.request('/api/units/meta', cookie=cookie)['status'], 200)  # revisões sem dados de campo
+        self.assertEqual(self.request('/api/sector-base', cookie=cookie)['status'], 200)  # base para leitura
+        self.assertEqual(self.request('/api/sector-base', cookie=cookie, method='POST')['status'], 403)
+        self.assertEqual(self.request('/api/return-analysis/layouts', cookie=cookie)['status'], 403)
+        self.assertEqual(self.request('/api/units/PPT', cookie=cookie, method='PUT')['status'], 403)
+        login = self.request('/api/auth/login', method='POST', body={
+            'name':'OnlyReadSacarose', 'password':'Test-password-42'
+        })
+        self.assertEqual(json.loads(login['body'])['landing_page'], '/sacarose')
+
+    def test_modules_and_production_are_saved_atomically_and_reject_invalid_escalations(self):
+        from backend.models.module_access import MODULES
+        permissions = {item['key']: {'view': False, 'edit': False} for item in MODULES}
+        target = self.db.create_user('AccessManagedAnalyst', 'Test-password-42')
+        path = f"/api/users/{target['id']}/access"
+        access = {'modules': permissions, 'production': {'enabled': True, 'permissions': {
+            'fill': False, 'configure': False
+        }, 'units': ['PPT']}}
+        response = self.request(path, role='admin', method='PUT', body={'access': access})
+        self.assertEqual(response['status'], 200, response['body'])
+        self.assertFalse(json.loads(self.request(path, role='admin')['body'])['access']['modules']['dashboard']['view'])
+        # Configuração de catálogo compartilhado não pode escapar para outras unidades.
+        invalid = {'modules': {**permissions, 'dashboard': {'view': True, 'edit': True}},
+                   'production': {'enabled': True, 'permissions': {'fill': True, 'configure': True},
+                                  'units': ['PPT']}}
+        self.assertEqual(self.request(path, role='admin', method='PUT', body={'access': invalid})['status'], 400)
+        stored = json.loads(self.request(path, role='admin')['body'])['access']
+        self.assertFalse(stored['modules']['dashboard']['view'])
+        self.assertFalse(stored['production']['permissions']['configure'])
+        self.assertEqual(self.request(path, role='member')['status'], 403)
+        self.assertEqual(self.request(path, role='member', method='PUT', body={'access': access})['status'], 403)
+        invalid_modules = {**permissions, 'dashboard': {'view': False, 'edit': True}}
+        self.assertEqual(self.request(path, role='admin', method='PUT', body={
+            'access': {'modules': invalid_modules, 'production': access['production']}
+        })['status'], 400)
+        access['production']['units'] = ['PPT','NRD','RBR','PST']
+        access['production']['permissions']['configure'] = True
+        response = self.request(path, role='admin', method='PUT', body={'access': access})
+        self.assertEqual(response['status'], 200, response['body'])
+        self.assertTrue(json.loads(response['body'])['access']['production']['permissions']['configure'])
+
+    def test_production_unit_permissions_are_enforced_by_http_routes(self):
+        from backend.models.module_access import MODULES
+        modules = {spec["key"]: {"view": False, "edit": False} for spec in MODULES}
+        created = self.db.create_user(
+            "UnitMatrixAnalyst", "Test-password-42", role="analyst", base_unit="PPT",
+            module_access=modules,
+            production_access={"enabled": True, "unit_permissions": {
+                "PPT": {"view": True, "fill": False, "summary": True},
+                "NRD": {"view": True, "fill": True, "summary": False},
+            }},
+        )
+        cookie = f"{config.SESSION_COOKIE}={self.db.create_session(created['id'])}"
+        self.assertEqual(self.request('/emitir-posicao-global', cookie=cookie)['status'], 200)
+        for unit, expected_fill in (("PPT", False), ("NRD", True)):
+            response = self.request('/api/production/my-items', cookie=cookie, overrides={
+                'QUERY_STRING': f'unit={unit}&date=2026-10-16'
+            })
+            self.assertEqual(response['status'], 200, response['body'])
+            self.assertEqual(json.loads(response['body'])['permissions']['fill'], expected_fill)
+        self.assertEqual(self.request('/api/production/my-items', cookie=cookie, overrides={
+            'QUERY_STRING': 'unit=PST&date=2026-10-16'
+        })['status'], 403)
+        summary_path = '/api/production/daily-summary'
+        update = {"unit_code": "PPT", "work_date": "2026-10-16", "changes": "Autorizado"}
+        self.assertEqual(self.request(summary_path, cookie=cookie, method="PUT", body=update)['status'], 200)
+        update['unit_code'] = 'NRD'
+        self.assertEqual(self.request(summary_path, cookie=cookie, method="PUT", body=update)['status'], 403)
+        update['unit_code'] = 'PST'
+        self.assertEqual(self.request(summary_path, cookie=cookie, method="PUT", body=update)['status'], 403)
+
+    def test_ctt_report_independent_permissions_and_seven_access_sections(self):
+        from backend.models.module_access import MODULES
+        modules = {spec["key"]: {"view": False, "edit": False} for spec in MODULES}
+        modules["sacarose"] = {"view": True, "edit": False}
+        modules["returns"] = {"view": True, "edit": False}
+        analyst = self.db.create_user('CTTOnlyAnalyst', 'Strong-password-42', role='analyst', module_access=modules)
+        cookie = f"{config.SESSION_COOKIE}={self.db.create_session(analyst['id'])}"
+        self.assertEqual(self.request('/sacarose', cookie=cookie)['status'], 200)
+        self.assertEqual(self.request('/', cookie=cookie)['status'], 403)
+        self.assertEqual(self.request('/relatorios', cookie=cookie)['status'], 403)
+        self.assertEqual(self.request('/retornos', cookie=cookie)['status'], 200)
+        self.assertEqual(self.request('/api/sacarose', cookie=cookie)['status'], 200)
+        self.assertEqual(self.request('/api/units/sync', cookie=cookie, method='POST')['status'], 403)
+        self.assertEqual(self.request('/api/users', cookie=cookie)['status'], 403)
+        self.assertEqual(self.request('/emitir-posicao-global', cookie=cookie)['status'], 200)
+        nav = self.request('/sacarose', cookie=cookie)['body']
+        self.assertIn('id="ctt-toggle"', nav)
+        self.assertIn('id="reports-toggle"', nav)
+        self.assertNotIn('href="/relatorios"', nav)
+        self.assertNotIn('href="/" data-unit-context', nav)
+        page = self.request('/usuarios', role='admin')['body']
+        for name in ('Relatório', 'CTT', 'Produção Agrícola', 'Emissão Global', 'Cadastro de Setores', 'Histórico', 'Usuários'):
+            self.assertIn(f'<strong>{name}</strong>', page)
+        self.assertNotIn('data-module-view="emission"', page)
+        self.assertEqual(page.count('data-module-view="users"'), 2)
+        self.assertEqual(page.count('data-module-edit="users"'), 2)
+
+    def test_delegated_users_are_limited_and_cannot_escalate(self):
+        from backend.models.module_access import MODULES
+        none = {spec["key"]: {"view": False, "edit": False} for spec in MODULES}
+        delegate = dict(none)
+        delegate['users'] = {"view": True, "edit": True}
+        delegate['sacarose'] = {"view": True, "edit": False}
+        manager = self.db.create_user('DelegatedManager', 'Strong-password-42', role='analyst', module_access=delegate)
+        cookie = f"{config.SESSION_COOKIE}={self.db.create_session(manager['id'])}"
+        observer = {**none, 'users': {"view": True, "edit": False}}
+        viewer = self.db.create_user('ReadOnlyManager', 'Strong-password-42', role='analyst', module_access=observer)
+        view_cookie = f"{config.SESSION_COOKIE}={self.db.create_session(viewer['id'])}"
+        self.assertEqual(self.request('/usuarios', cookie=view_cookie)['status'], 200)
+        self.assertEqual(self.request('/api/users', cookie=view_cookie)['status'], 200)
+        viewer_page = self.request('/usuarios', cookie=view_cookie)['body']
+        self.assertNotIn('id="open-user-create"', viewer_page)
+        self.assertEqual(self.request(f"/api/users/{manager['id']}/access", cookie=view_cookie)['status'], 200)
+        self.assertEqual(self.request(f"/api/users/{manager['id']}/access", cookie=view_cookie, method='PUT',
+            body={'access': {'modules': observer, 'production': {'enabled': False}}})['status'], 403)
+        self.assertEqual(self.request('/api/users', cookie=view_cookie, method='POST', body={})['status'], 403)
+        self.assertEqual(self.request('/api/users', cookie=cookie)['status'], 200)
+        permitted = {'name': 'NewDelegate', 'password': 'Strong-password-42', 'role': 'analyst',
+                     'module_access': delegate, 'production_access': {'enabled': False}}
+        self.assertEqual(self.request('/api/users', cookie=cookie, method='POST', body=permitted)['status'], 201)
+        forbidden = {**permitted, 'name': 'AttemptEscalation',
+                     'module_access': {**delegate, 'dashboard': {'view': True, 'edit': True}}}
+        self.assertEqual(self.request('/api/users', cookie=cookie, method='POST', body=forbidden)['status'], 403)
+        self.assertEqual(self.request('/api/users', cookie=cookie, method='POST', body={**permitted, 'name': 'NoProduction',
+            'production_access': {'enabled': True, 'units': ['PPT'], 'permissions': {'view': True, 'fill': True}}})['status'], 403)
+        self.assertEqual(self.request(f"/api/users/{self.admin['id']}/access", cookie=cookie)['status'], 400)
+        self.assertEqual(self.request(f"/api/users/{manager['id']}/access", cookie=cookie, method='PUT',
+            body={'access': {'modules': delegate, 'production': {'enabled': False}}})['status'], 403)
+        sub = next(item for item in self.db.list_users(self.admin['id']) if item['name'] == 'NewDelegate')
+        # Gestores delegados podem editar subordinados dentro do próprio escopo.
+        self.assertEqual(self.request(f"/api/users/{sub['id']}/password", cookie=cookie, method='PUT',
+            body={'password': 'Different-strong-42'})['status'], 200)
+        # Nunca podem excluir contas com autorizações superiores.
+        self.assertEqual(self.request(f"/api/users/{self.member['id']}", cookie=cookie, method='DELETE')['status'], 403)
+        self.assertEqual(self.request(f"/api/users/{self.member['id']}/active", cookie=cookie, method='PUT',
+            body={'is_active': False})['status'], 403)
+        self.assertEqual(self.request(f"/api/users/{sub['id']}", cookie=cookie, method='DELETE')['status'], 200)
+        self.assertEqual(self.request('/usuarios/cadastro', cookie=cookie)['status'], 302)
+        # O endpoint legado deve respeitar as mesmas regras que o endpoint unificado.
+        target = self.db.create_user('DelegateTarget', 'Strong-password-42')
+        self.assertEqual(self.request(f"/api/users/{target['id']}/production-access", cookie=cookie, method='PUT',
+            body={'access': {'enabled': True, 'units': ['PPT'], 'permissions': {'view': True}}})['status'], 403)
+
+    def test_user_permission_controls_are_not_duplicated(self):
+        page = self.request('/usuarios', role='admin')
+        self.assertEqual(page['status'], 200)
+        parser = PageParser()
+        parser.feed(page['body'])
+        self.assertEqual(len(parser.ids), len(set(parser.ids)))
+        self.assertIn('data-module-view="dashboard"', page['body'])
+        self.assertIn('data-production-access-configure', page['body'])
+        self.assertNotIn('Unidades liberadas', page['body'])
+        self.assertEqual(page['body'].count('data-production-unit-row="PPT"'), 2)
+        self.assertNotIn('data-module-view="emission"', page['body'])
+        self.assertEqual(page['body'].count('data-module-view="dashboard"'), 2)  # cadastro e gestão
 
 
 if __name__ == "__main__":

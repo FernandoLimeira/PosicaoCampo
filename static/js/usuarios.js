@@ -1,3 +1,11 @@
+function canViewUsers() {
+  return currentUser?.role === 'admin' || (typeof moduleAccess !== 'undefined' && Boolean(moduleAccess.users?.view));
+}
+
+function canManageUsers() {
+  return currentUser?.role === 'admin' || (typeof moduleAccess !== 'undefined' && Boolean(moduleAccess.users?.edit));
+}
+
 function normalizeUserSearch(value) {
   return String(value ?? '')
     .normalize('NFD')
@@ -38,23 +46,23 @@ function userItemHtml(user) {
   if (isAdmin && !isCurrent) return '';
   const isActive = user.is_active !== false;
   const roleLabel = { admin: 'Administrador', coordinator: 'Coordenador', analyst: 'Analista', user: 'Usuário padrão' }[user.role] || 'Usuário padrão';
-  const actions = !isCurrent ? `
+  const visibleModules = Object.values(user.module_access || {}).filter(access => access?.view).length;
+  const actions = !isCurrent && !isAdmin ? `
       <div class="user-actions">
-        ${!isAdmin ? `<button class="user-action user-action-primary" type="button" data-user-action="access" data-user-id="${escapeHtml(user.id)}" aria-label="Gerenciar acessos de ${escapeHtml(user.name || 'usuário')}">Gerenciar acessos</button>` : ''}
-        <button class="user-action" type="button" data-user-action="toggle" data-user-id="${escapeHtml(user.id)}" data-active="${isActive ? 'true' : 'false'}">${isActive ? 'Desativar' : 'Ativar'}</button>
-        ${!isAdmin ? `
+        <button class="user-action ${canManageUsers() ? 'user-action-primary' : ''}" type="button" data-user-action="access" data-user-id="${escapeHtml(user.id)}" aria-label="${canManageUsers() ? 'Gerenciar' : 'Consultar'} acessos de ${escapeHtml(user.name || 'usuário')}">${canManageUsers() ? 'Gerenciar acessos' : 'Consultar acessos'}</button>
+        ${canManageUsers() ? `<button class="user-action" type="button" data-user-action="toggle" data-user-id="${escapeHtml(user.id)}" data-active="${isActive ? 'true' : 'false'}">${isActive ? 'Desativar' : 'Ativar'}</button>
         <button class="user-action" type="button" data-user-action="password" data-user-id="${escapeHtml(user.id)}">Redefinir senha</button>
         <button class="user-delete" type="button" data-user-action="delete" data-user-id="${escapeHtml(user.id)}">Excluir</button>
         ` : ''}
       </div>
-      ${!isAdmin ? `
+      ${canManageUsers() ? `
       <form class="user-password-form" data-user-id="${escapeHtml(user.id)}" hidden>
         <input class="user-password-input" type="password" autocomplete="new-password" required placeholder="Nova senha" aria-label="Nova senha para ${escapeHtml(user.name || 'usuário')}" />
         <button class="user-action user-action-primary" type="submit">Salvar senha</button>
         <button class="user-action" type="button" data-user-action="cancel-password">Cancelar</button>
       </form>` : ''}` : '';
   return `
-    <article class="user-list-item ${isActive ? '' : 'is-disabled'}" data-user-id="${escapeHtml(user.id)}">
+    <article class="user-list-item ${isActive ? '' : 'is-disabled'}" data-user-id="${escapeHtml(user.id)}" data-user-base-unit="${escapeHtml(user.base_unit || 'PPT')}">
       <div class="user-list-copy">
         <strong>${escapeHtml(user.name || 'Usuário')}${isCurrent ? ' · conectado' : ''}</strong>
         <span class="user-badges">
@@ -63,7 +71,7 @@ function userItemHtml(user) {
         </span>
         <span>Unidade base: ${escapeHtml(user.base_unit || 'PPT')}</span>
         <span>E-mail: ${escapeHtml(user.email || 'Não informado')}</span>
-        ${!isAdmin ? `<span class="user-access-summary">${escapeHtml(user.access_summary || 'Produção Agrícola: sem acesso')}</span>` : ''}
+        ${!isAdmin ? `<span class="user-access-summary">${visibleModules} ${visibleModules === 1 ? 'módulo liberado' : 'módulos liberados'} · ${escapeHtml(user.access_summary || 'Produção Agrícola: sem acesso')}</span>` : ''}
       </div>
       ${actions}
     </article>`;
@@ -72,8 +80,8 @@ function userItemHtml(user) {
 async function loadUsers() {
   const list = document.querySelector('#users-list');
   if (!list) return;
-  if (currentUser?.role !== 'admin') {
-    list.innerHTML = '<div class="history-empty">Acesso exclusivo do Administrador.</div>';
+  if (!canViewUsers()) {
+    list.innerHTML = '<div class="history-empty">Sem acesso ao módulo Usuários.</div>';
     return;
   }
   list.innerHTML = '<div class="history-loading">Carregando usuários...</div>';
@@ -97,36 +105,168 @@ async function loadUsers() {
   }
 }
 
+function collectModuleAccess(root) {
+  const permissions = {};
+  root.querySelectorAll('[data-module-view]').forEach(view => {
+    const key = view.dataset.moduleView;
+    const edit = root.querySelector(`[data-module-edit="${key}"]`);
+    permissions[key] = { view: Boolean(view.checked), edit: Boolean(view.checked && edit?.checked) };
+  });
+  // Emissão global não é um controle de acesso individual.
+  permissions.emission = { view: true, edit: false };
+  return permissions;
+}
+
+function applyModuleAccess(root, access) {
+  root.querySelectorAll('[data-module-view]').forEach(view => {
+    const key = view.dataset.moduleView;
+    view.checked = Boolean(access?.[key]?.view);
+    const edit = root.querySelector(`[data-module-edit="${key}"]`);
+    if (edit) edit.checked = Boolean(access?.[key]?.edit);
+  });
+  syncModuleAccessDisabled(root);
+}
+
+function syncModuleAccessDisabled(root) {
+  if (!root) return;
+  root.querySelectorAll('[data-module-view]').forEach(view => {
+    const edit = root.querySelector(`[data-module-edit="${view.dataset.moduleView}"]`);
+    if (edit) edit.disabled = !view.checked;
+  });
+}
+
+const PRODUCTION_UNITS = ['PPT', 'NRD', 'RBR', 'PST'];
+
+function visibleProductionRows(root) {
+  return Array.from(root.querySelectorAll('[data-production-unit-row]')).filter(row => !row.hidden);
+}
+
+function updateProductionPicker(root) {
+  const picker = root.querySelector('[data-production-unit-picker]');
+  if (!picker) return;
+  picker.querySelectorAll('option').forEach(option => {
+    option.disabled = !root.querySelector(`[data-production-unit-row="${option.value}"]`)?.hidden;
+  });
+  if (!picker.value || picker.selectedOptions[0]?.disabled) {
+    picker.value = PRODUCTION_UNITS.find(code => root.querySelector(`[data-production-unit-row="${code}"]`)?.hidden) || '';
+  }
+  const add = root.querySelector('[data-production-add-unit]');
+  if (add) add.disabled = !picker.value || !PRODUCTION_UNITS.some(code => root.querySelector(`[data-production-unit-row="${code}"]`)?.hidden);
+  const empty = root.querySelector('[data-production-unit-empty]');
+  if (empty) empty.hidden = visibleProductionRows(root).length !== 0;
+}
+
+function toggleProductionUnit(root, unit, active, flags = null) {
+  if (!PRODUCTION_UNITS.includes(unit)) return;
+  const row = root.querySelector(`[data-production-unit-row="${unit}"]`);
+  if (!row) return;
+  row.hidden = !active;
+  if (flags) {
+    row.querySelector('[data-production-unit-fill]').checked = Boolean(flags.fill);
+    row.querySelector('[data-production-unit-summary]').checked = Boolean(flags.summary);
+  }
+  updateProductionPicker(root);
+  syncProductionAccessDisabled(root);
+}
+
+function markProductionBaseUnit(root, unit) {
+  root.dataset.baseUnit = unit;
+  root.querySelectorAll('[data-production-unit-row]').forEach(row => {
+    const label = row.querySelector('[data-unit-base-label]');
+    if (label) label.hidden = row.dataset.productionUnitRow !== unit;
+  });
+}
+
+function initializeProductionUnits(root, unit = 'PPT') {
+  markProductionBaseUnit(root, unit);
+  root.querySelectorAll('[data-production-unit-row]').forEach(row => {
+    row.hidden = true;
+    row.querySelector('[data-production-unit-fill]').checked = true;
+    row.querySelector('[data-production-unit-summary]').checked = true;
+  });
+  toggleProductionUnit(root, unit, true, { fill: true, summary: true });
+}
+
 function collectProductionAccess(root = document) {
-  const master = root.querySelector('#production-access-enabled, [data-production-access-enabled]');
+  const master = root.querySelector('[data-production-access-enabled]');
   if (!master) return null;
   const enabled = Boolean(master.checked);
-  const fillInput = root.querySelector('#production-access-fill, [data-production-access-fill]');
-  const units = Array.from(root.querySelectorAll('[data-production-access-unit]:checked')).map(input => input.value);
-  return {
-    enabled,
-    permissions: { view: enabled, fill: enabled && Boolean(fillInput?.checked) },
-    units: enabled ? units : []
-  };
+  const unit_permissions = {};
+  if (enabled) visibleProductionRows(root).forEach(row => {
+    unit_permissions[row.dataset.productionUnitRow] = {
+      view: true,
+      fill: Boolean(row.querySelector('[data-production-unit-fill]')?.checked),
+      summary: Boolean(row.querySelector('[data-production-unit-summary]')?.checked)
+    };
+  });
+  return { enabled,
+    permissions: {
+      view: enabled,
+      fill: Object.values(unit_permissions).some(item => item.fill),
+      summary: Object.values(unit_permissions).some(item => item.summary),
+      configure: enabled && Boolean(root.querySelector('[data-production-access-configure]')?.checked),
+    },
+    units: Object.keys(unit_permissions), unit_permissions };
 }
 
 function validateProductionAccess(access) {
   if (!access?.enabled) return;
-  if (!access.units.length) throw new Error('Selecione ao menos uma unidade para a Produção Agrícola.');
+  if (!access.units.length) throw new Error('Adicione ao menos uma unidade para a Produção Agrícola.');
+  if (access.permissions.configure && access.units.length !== 4) throw new Error('A configuração global exige as quatro unidades.');
 }
 
 function syncProductionAccessDisabled(root = document) {
-  const master = root.querySelector('#production-access-enabled, [data-production-access-enabled]');
-  if (!master) return;
-  const enabled = Boolean(master.checked);
-  root.querySelectorAll('#production-access-fill, [data-production-access-fill], [data-production-access-unit]').forEach(input => {
+  if (!root) return;
+  const enabled = Boolean(root.querySelector('[data-production-access-enabled]')?.checked);
+  root.querySelectorAll('[data-production-access-configure], [data-production-unit-picker], [data-production-add-unit], [data-production-unit-fill], [data-production-unit-summary], [data-production-remove-unit]').forEach(input => {
     input.disabled = !enabled;
   });
+  if (enabled) updateProductionPicker(root);
+}
+
+function resetCreateUserForm(form) {
+  if (!form) return;
+  form.reset();
+  // Recria somente a unidade base; evita herdar unidades de outro cadastro.
+  initializeProductionUnits(form, form.querySelector('#quick-user-base-unit')?.value || 'PPT');
+  syncProductionAccessDisabled(form);
+  // Nunca conceder gerenciamento de usuários como padrão; gestores delegados
+  // iniciam com os próprios limites, sem possibilidade de escalada.
+  form.querySelectorAll('[data-module-view]').forEach(view => {
+    const key = view.dataset.moduleView;
+    if (key === 'users') view.checked = false;
+    else if (currentUser?.role !== 'admin' && typeof moduleAccess !== 'undefined') view.checked = Boolean(moduleAccess[key]?.view);
+    const edit = form.querySelector(`[data-module-edit="${key}"]`);
+    if (edit && (key === 'users' || currentUser?.role !== 'admin')) {
+      edit.checked = key !== 'users' && Boolean(typeof moduleAccess !== 'undefined' && moduleAccess[key]?.edit);
+    }
+  });
+  if (currentUser?.role !== 'admin') {
+    const master = form.querySelector('[data-production-access-enabled]');
+    if (master) master.checked = false;
+    syncProductionAccessDisabled(form);
+  }
+  syncModuleAccessDisabled(form);
+  const status = document.querySelector('#user-create-status');
+  if (status) {
+    status.textContent = '';
+    status.classList.remove('is-error');
+  }
+}
+
+function openCreateUserModal() {
+  if (!canManageUsers()) return;
+  const form = document.querySelector('#quick-user-form');
+  if (!form) return;
+  resetCreateUserForm(form);
+  openModal('user-create-modal');
+  requestAnimationFrame(() => document.querySelector('#quick-user-name')?.focus());
 }
 
 async function createQuickUser(event) {
   event.preventDefault();
-  if (currentUser?.role !== 'admin') return;
+  if (!canManageUsers()) return;
+  const form = document.querySelector('#quick-user-form');
   const nameInput = document.querySelector('#quick-user-name');
   const passwordInput = document.querySelector('#quick-user-password');
   const emailInput = document.querySelector('#quick-user-email');
@@ -147,7 +287,8 @@ async function createQuickUser(event) {
   const role = roleInput?.value || 'analyst';
   const base_unit = baseUnitInput?.value || 'PPT';
   const is_active = activeInput?.value !== 'inactive';
-  const production_access = collectProductionAccess(document);
+  const production_access = collectProductionAccess(form);
+  const module_access = collectModuleAccess(form);
   if (!name || !password) {
     updateStatus('Informe usuário e senha.', true);
     showToast('Informe usuário e senha.', true);
@@ -171,24 +312,14 @@ async function createQuickUser(event) {
   try {
     await apiRequest('/api/users', {
       method: 'POST',
-      body: JSON.stringify({ name, password, email, role, base_unit, is_active, production_access })
+      body: JSON.stringify({ name, password, email, role, base_unit, is_active, production_access, module_access })
     });
-    if (nameInput) nameInput.value = '';
-    if (passwordInput) passwordInput.value = '';
-    if (emailInput) emailInput.value = '';
-    if (roleInput) roleInput.value = 'analyst';
-    if (baseUnitInput) baseUnitInput.value = 'PPT';
-    if (activeInput) activeInput.value = 'active';
-    const master = document.querySelector('#production-access-enabled');
-    if (master) master.checked = true;
-    const fill = document.querySelector('#production-access-fill');
-    if (fill) fill.checked = true;
-    document.querySelectorAll('[data-production-access-unit]').forEach(input => { input.checked = input.value === 'PPT'; });
-    syncProductionAccessDisabled(document);
+    resetCreateUserForm(form);
     updateStatus(`Usuário ${name} cadastrado com sucesso.`);
     showToast(`Conta de ${name} criada.`);
-    nameInput?.focus();
     await loadUsers();
+    closeModal('user-create-modal');
+    document.querySelector('#open-user-create')?.focus();
   } catch (error) {
     console.error(error);
     const message = error.message || 'Não foi possível criar a conta.';
@@ -276,13 +407,21 @@ async function resetUserPassword(form) {
   }
 }
 
-function applyAccessToForm(form, access) {
+function applyAccessToForm(form, access, baseUnit = 'PPT') {
+  applyModuleAccess(form, access?.modules);
+  const production = access?.production;
   const master = form.querySelector('[data-production-access-enabled]');
-  const fill = form.querySelector('[data-production-access-fill]');
-  if (master) master.checked = Boolean(access?.enabled);
-  if (fill) fill.checked = Boolean(access?.permissions?.fill);
-  const units = new Set(access?.units || []);
-  form.querySelectorAll('[data-production-access-unit]').forEach(input => { input.checked = units.has(input.value); });
+  const configure = form.querySelector('[data-production-access-configure]');
+  if (master) master.checked = Boolean(production?.enabled);
+  if (configure) configure.checked = Boolean(production?.permissions?.configure);
+  markProductionBaseUnit(form, baseUnit);
+  const unitPermissions = production?.unit_permissions || Object.fromEntries((production?.units || []).map(unit =>
+    [unit, { view: true, fill: Boolean(production?.permissions?.fill), summary: Boolean(production?.permissions?.summary) }]));
+  form.querySelectorAll('[data-production-unit-row]').forEach(row => {
+    row.hidden = true;
+  });
+  Object.entries(unitPermissions).forEach(([unit, flags]) => toggleProductionUnit(form, unit, true, flags));
+  updateProductionPicker(form);
   syncProductionAccessDisabled(form);
 }
 
@@ -306,13 +445,15 @@ async function openAccessModal(button) {
   loading.textContent = 'Carregando acessos...';
   openModal('user-access-modal');
   try {
-    const data = await apiRequest(`/api/users/${userId}/production-access`);
+    const data = await apiRequest(`/api/users/${userId}/access`);
     if (requestId !== accessRequestId || modal.hidden) return;
-    applyAccessToForm(form, data.access);
+    applyAccessToForm(form, data.access, item.dataset.userBaseUnit || 'PPT');
     form.hidden = false;
     loading.hidden = true;
-    save.disabled = false;
-    form.querySelector('[data-production-access-enabled]')?.focus();
+    save.hidden = !canManageUsers();
+    save.disabled = !canManageUsers();
+    form.querySelectorAll('input, select, button').forEach(input => { if (!canManageUsers()) input.disabled = true; });
+    form.querySelector('summary')?.focus();
   } catch (error) {
     if (requestId !== accessRequestId || modal.hidden) return;
     console.error(error);
@@ -324,15 +465,15 @@ async function saveAccessForm(form) {
   const userId = Number(form?.dataset.userAccessForm);
   if (!userId) return;
   const requestId = accessRequestId;
-  const access = collectProductionAccess(form);
+  const access = { modules: collectModuleAccess(form), production: collectProductionAccess(form) };
   const save = document.querySelector('#user-access-save');
   const status = document.querySelector('#user-access-status');
   if (save?.disabled) return;
   try {
-    validateProductionAccess(access);
+    validateProductionAccess(access.production);
     if (save) save.disabled = true;
     if (status) status.textContent = 'Salvando acessos...';
-    await apiRequest(`/api/users/${userId}/production-access`, {
+    await apiRequest(`/api/users/${userId}/access`, {
       method: 'PUT',
       body: JSON.stringify({ access })
     });
@@ -350,14 +491,20 @@ async function saveAccessForm(form) {
 }
 
 document.querySelector('#quick-user-form')?.addEventListener('submit', createQuickUser);
+document.querySelector('#open-user-create')?.addEventListener('click', openCreateUserModal);
 document.querySelector('#users-search')?.addEventListener('input', filterUsersList);
-document.querySelector('#production-access-enabled')?.addEventListener('change', () => syncProductionAccessDisabled(document));
+document.querySelector('#quick-user-form')?.addEventListener('change', event => {
+  if (event.target.matches('[data-production-access-enabled]')) syncProductionAccessDisabled(event.currentTarget);
+  if (event.target.matches('[data-module-view]')) syncModuleAccessDisabled(event.currentTarget);
+});
 
 document.querySelector('#quick-user-base-unit')?.addEventListener('change', event => {
-  const checked = Array.from(document.querySelectorAll('[data-production-access-unit]:checked'));
-  if (checked.length <= 1) {
-    document.querySelectorAll('[data-production-access-unit]').forEach(input => { input.checked = input.value === event.target.value; });
-  }
+  const form = document.querySelector('#quick-user-form');
+  const previous = form.dataset.baseUnit;
+  const onlyPrevious = visibleProductionRows(form).length === 1 && !form.querySelector(`[data-production-unit-row="${previous}"]`)?.hidden;
+  if (onlyPrevious) toggleProductionUnit(form, previous, false);
+  markProductionBaseUnit(form, event.target.value);
+  toggleProductionUnit(form, event.target.value, true);
 });
 
 document.querySelector('#users-list')?.addEventListener('click', event => {
@@ -372,10 +519,21 @@ document.querySelector('#users-list')?.addEventListener('click', event => {
 });
 
 document.querySelector('#user-access-form')?.addEventListener('change', event => {
-  if (event.target.matches('[data-production-access-enabled]')) {
-    syncProductionAccessDisabled(event.currentTarget);
-  }
+  if (event.target.matches('[data-production-access-enabled]')) syncProductionAccessDisabled(event.currentTarget);
+  if (event.target.matches('[data-module-view]')) syncModuleAccessDisabled(event.currentTarget);
 });
+
+// Eventos delegados aos mesmos controles reutilizados nos dois pop-ups.
+for (const selector of ['#quick-user-form', '#user-access-form']) {
+  document.querySelector(selector)?.addEventListener('click', event => {
+    const root = event.currentTarget;
+    const add = event.target.closest('[data-production-add-unit]');
+    const remove = event.target.closest('[data-production-remove-unit]');
+    if (add) toggleProductionUnit(root, root.querySelector('[data-production-unit-picker]')?.value, true,
+      { fill: true, summary: true });
+    if (remove) toggleProductionUnit(root, remove.closest('[data-production-unit-row]')?.dataset.productionUnitRow, false);
+  });
+}
 
 document.querySelector('#user-access-form')?.addEventListener('submit', event => {
   event.preventDefault();
@@ -390,5 +548,14 @@ document.querySelector('#users-list')?.addEventListener('submit', event => {
   }
 });
 
-syncProductionAccessDisabled(document);
+initializeProductionUnits(document.querySelector('#quick-user-form'), document.querySelector('#quick-user-base-unit')?.value || 'PPT');
+syncModuleAccessDisabled(document.querySelector('#quick-user-form'));
 loadUsers();
+
+// Mantém links antigos de cadastro funcionais sem restaurar uma segunda tela.
+if (new URLSearchParams(window.location.search).get('novo') === '1') {
+  openCreateUserModal();
+  const url = new URL(window.location.href);
+  url.searchParams.delete('novo');
+  window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+}

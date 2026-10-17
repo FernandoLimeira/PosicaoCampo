@@ -11,11 +11,11 @@
   {% block styles %}{% endblock %}
 </head>
 <body data-page="{{ page }}" data-app-build="{{ asset_version }}"
-      {% if user %}data-user-id="{{ user.id }}" data-user-role="{{ user.role }}" data-user-name="{{ user.name }}" data-user-base-unit="{{ user.base_unit|default('PPT', true) }}"{% endif %}>
+      {% if user %}data-user-id="{{ user.id }}" data-user-role="{{ user.role }}" data-user-name="{{ user.name }}" data-user-base-unit="{{ user.base_unit|default('PPT', true) }}" data-module-access="{{ user.module_access|tojson|forceescape }}"{% endif %}>
   {% if user %}
   <div class="dashboard-shell">
     <nav class="app-navbar" aria-label="Navegação principal">
-      <a class="nav-brand" href="/" data-unit-context aria-label="Posição de Campo"><span>Posição<br />de Campo</span></a>
+      <a class="nav-brand" href="{{ user.home_path|default('/') }}" data-unit-context aria-label="Posição de Campo"><span>Posição<br />de Campo</span></a>
       <div class="nav-unit-selector" aria-label="Filtro de unidade">
         <span class="nav-unit-selector-label" id="report-unit-label">Unidade</span>
         <div id="report-unit" class="report-unit-buttons" role="group" aria-labelledby="report-unit-label">
@@ -25,19 +25,26 @@
         </div>
       </div>
       <div class="nav-actions">
-        <button id="reports-toggle" class="nav-link nav-reports-toggle{% if page in ['dashboard', 'sacarose', 'reports', 'returns'] %} is-active{% endif %}" type="button" aria-expanded="false" aria-controls="reports-flyout">{{ icon('reports') }}<span>Relatórios</span></button>
+        {% if user.module_access.reports.view or user.module_access.returns.view %}
+        <button id="reports-toggle" class="nav-link nav-reports-toggle{% if page in ['reports', 'returns'] %} is-active{% endif %}" type="button" aria-expanded="false" aria-controls="reports-flyout">{{ icon('reports') }}<span>Relatório</span></button>
+        {% endif %}
+        {% if user.module_access.dashboard.view or user.module_access.sacarose.view %}
+        <button id="ctt-toggle" class="nav-link nav-reports-toggle{% if page in ['dashboard', 'sacarose'] %} is-active{% endif %}" type="button" aria-expanded="false" aria-controls="ctt-flyout">{{ icon('dashboard') }}<span>CTT</span></button>
+        {% endif %}
         {% if user.role == 'admin' or (user.production_access is defined and user.production_access.enabled) %}
         <button id="production-toggle" class="nav-link nav-reports-toggle{% if page == 'production' %} is-active{% endif %}" type="button" aria-expanded="false" aria-controls="production-flyout">{{ icon('production') }}<span>Produção Agrícola</span></button>
         {% endif %}
-        <a class="nav-link{% if page == 'emission' %} is-active{% endif %}" href="/emitir-posicao-global"{% if page == 'emission' %} aria-current="page"{% endif %}>{{ icon('emission') }}<span>Emissão global</span></a>
+        {% if user.module_access.emission.view %}
+        <a class="nav-link{% if page == 'emission' %} is-active{% endif %}" href="/emitir-posicao-global"{% if page == 'emission' %} aria-current="page"{% endif %}>{{ icon('emission') }}<span>Emissão Global</span></a>
+        {% endif %}
         {% for key, href, label in [
-          ('sectors', '/setores', 'Cadastro de setores'),
+          ('sectors', '/setores', 'Cadastro de Setores'),
           ('history', '/historico', 'Histórico')
         ] %}
-        <a class="nav-link{% if page == key %} is-active{% endif %}" href="{{ href }}"{% if page == key %} aria-current="page"{% endif %}>{{ icon(key) }}<span>{{ label }}</span></a>
+        {% if user.module_access[key].view %}<a class="nav-link{% if page == key %} is-active{% endif %}" href="{{ href }}"{% if page == key %} aria-current="page"{% endif %}>{{ icon(key) }}<span>{{ label }}</span></a>{% endif %}
         {% endfor %}
-        {% if user.role == 'admin' %}
-        <button id="users-toggle" class="nav-link nav-reports-toggle{% if page in ['users', 'user-create'] %} is-active{% endif %}" type="button" aria-expanded="false" aria-controls="users-flyout">{{ icon('users') }}<span>Usuários</span></button>
+        {% if user.module_access.users.view %}
+        <a class="nav-link{% if page == 'users' %} is-active{% endif %}" href="/usuarios"{% if page == 'users' %} aria-current="page"{% endif %}>{{ icon('users') }}<span>Usuários</span></a>
         {% endif %}
         {% block nav_actions %}{% endblock %}
       </div>
@@ -51,35 +58,37 @@
         <button id="logout-button" class="nav-logout" type="button">{{ icon('logout') }}<span>Sair</span></button>
       </div>
     </nav>
-    <nav id="reports-flyout" class="nav-report-flyout" aria-label="Relatórios" hidden>
-      <div class="nav-report-heading">
-        <strong>Relatórios</strong>
-      </div>
+    {% if user.module_access.reports.view or user.module_access.returns.view %}
+    <nav id="reports-flyout" class="nav-report-flyout" aria-label="Relatório" hidden>
+      <div class="nav-report-heading"><strong>Relatório</strong></div>
       <div class="nav-report-items">
         {% for key, href, label in [
-          ('dashboard', '/', 'Posição de Campo'),
-          ('sacarose', '/sacarose', 'Sacarose'),
-          ('reports', '/relatorios', 'Acontecimentos de produtividade por frota e operador'),
+          ('reports', '/relatorios', 'Produtividade por frota e operador'),
           ('returns', '/retornos', 'Análise de mudanças de área')
         ] %}
-        <a class="nav-link{% if page == key %} is-active{% endif %}" href="{{ href }}" data-unit-context{% if page == key %} aria-current="page"{% endif %}>{{ icon(key) }}<span>{{ label }}</span></a>
+        {% if user.module_access[key].view %}<a class="nav-link{% if page == key %} is-active{% endif %}" href="{{ href }}" data-unit-context{% if page == key %} aria-current="page"{% endif %}>{{ icon(key) }}<span>{{ label }}</span></a>{% endif %}
         {% endfor %}
       </div>
     </nav>
+    {% endif %}
+    {% if user.module_access.dashboard.view or user.module_access.sacarose.view %}
+    <nav id="ctt-flyout" class="nav-report-flyout" aria-label="CTT" hidden>
+      <div class="nav-report-heading"><strong>CTT</strong></div>
+      <div class="nav-report-items">
+        {% for key, href, label in [
+          ('dashboard', '/', 'Posição de Campo'),
+          ('sacarose', '/sacarose', 'Sacarose')
+        ] %}
+        {% if user.module_access[key].view %}<a class="nav-link{% if page == key %} is-active{% endif %}" href="{{ href }}" data-unit-context{% if page == key %} aria-current="page"{% endif %}>{{ icon(key) }}<span>{{ label }}</span></a>{% endif %}
+        {% endfor %}
+      </div>
+    </nav>
+    {% endif %}
     {% if user.role == 'admin' or (user.production_access is defined and user.production_access.enabled) %}
     <nav id="production-flyout" class="nav-report-flyout" aria-label="Produção Agrícola" hidden>
       <div class="nav-report-heading"><strong>Produção Agrícola</strong></div>
       <div class="nav-report-items">
         <a class="nav-link{% if page == 'production' %} is-active{% endif %}" href="/producao" data-unit-context{% if page == 'production' %} aria-current="page"{% endif %}>{{ icon('production') }}<span>Frentes e serviços</span></a>
-      </div>
-    </nav>
-    {% endif %}
-    {% if user.role == 'admin' %}
-    <nav id="users-flyout" class="nav-report-flyout" aria-label="Usuários" hidden>
-      <div class="nav-report-heading"><strong>Usuários</strong></div>
-      <div class="nav-report-items">
-        <a class="nav-link{% if page == 'user-create' %} is-active{% endif %}" href="/usuarios/cadastro"{% if page == 'user-create' %} aria-current="page"{% endif %}>{{ icon('user-add') }}<span>Cadastrar usuário</span></a>
-        <a class="nav-link{% if page == 'users' %} is-active{% endif %}" href="/usuarios"{% if page == 'users' %} aria-current="page"{% endif %}>{{ icon('users') }}<span>Usuários cadastrados</span></a>
       </div>
     </nav>
     {% endif %}
