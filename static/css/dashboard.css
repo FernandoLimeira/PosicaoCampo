@@ -94,7 +94,7 @@
   min-height: 40px;
   padding: 0 18px;
   border: 1px solid var(--green);
-  border-radius: 4px;
+  border-radius: var(--control-radius);
   background: var(--green);
   color: #fff;
   font-size: 11px;
@@ -342,10 +342,10 @@
   padding: 12px 14px;
   display: flex;
   align-items: center;
-  background: var(--surface);
-  border: 1px solid #e1ebe5;
-  border-radius: 4px;
-  box-shadow: 0 5px 16px rgba(25, 69, 44, .04);
+  background: var(--data-surface);
+  border: 1px solid var(--data-border);
+  border-radius: var(--data-radius);
+  box-shadow: var(--data-shadow);
 }
 
 .metric-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
@@ -369,9 +369,9 @@
 .form-section {
   min-width: 0;
   padding: 16px;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 4px;
+  background: var(--data-surface);
+  border: 1px solid var(--data-border);
+  border-radius: var(--data-radius);
 }
 
 .form-section-wide { grid-column: 1 / -1; }
@@ -476,7 +476,7 @@
 
 .unit-side-stack { grid-template-columns: 1fr; }
 
-.unit-main-block { padding: 14px; border-radius: 4px; }
+.unit-main-block { padding: 14px; border-radius: var(--data-radius); }
 
 .unit-header { align-items: flex-start; }
 
@@ -546,7 +546,7 @@
 
 .unit-card { gap: 10px; }
 
-.unit-main-block, .rain-turn-block, .notes-changes-block { border-radius: 4px; }
+.unit-main-block, .rain-turn-block, .notes-changes-block { border-radius: var(--data-radius); }
 
 .unit-state { font-size: 9px; }
 
@@ -859,9 +859,9 @@
 
 .operation-editor-modal .form-section {
   padding: 16px 18px;
-  border-color: #dce8e0;
-  border-radius: 4px;
-  box-shadow: 0 5px 18px rgba(25,69,44,.04);
+  border-color: var(--data-border);
+  border-radius: var(--data-radius);
+  box-shadow: var(--data-shadow);
 }
 
 .operation-editor-modal .section-heading {
@@ -878,20 +878,20 @@
   flex: 0 0 auto;
   min-height: 32px;
   padding: 0 11px;
-  border: 1px solid #bcd7c5;
-  border-radius: 4px;
-  background: #f4faf6;
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  background: var(--control-surface);
   font-size: 10px;
 }
 
 .operation-editor-modal .section-action:hover {
   border-color: var(--green);
-  background: #eaf5ee;
+  background: var(--control-hover);
 }
 
 .operation-editor-modal .editable-table-wrap {
-  border: 1px solid #e3ebe6;
-  border-radius: 4px;
+  border: 1px solid var(--data-border);
+  border-radius: var(--data-radius);
 }
 
 .operation-editor-modal .editable-table th { padding: 8px 9px; }
@@ -902,9 +902,9 @@
 
 .operation-editor-modal .metric-field {
   padding: 10px;
-  border: 1px solid #e4ece7;
-  border-radius: 4px;
-  background: #fbfdfc;
+  border: 1px solid var(--data-border);
+  border-radius: var(--control-radius);
+  background: var(--data-surface);
 }
 
 .operation-editor-modal .notes-form-grid { gap: 12px; }
@@ -918,9 +918,9 @@
 
 .operation-editor-modal .rain-edit-row {
   padding: 9px;
-  border: 1px solid #e4ece7;
-  border-radius: 4px;
-  background: #fbfdfc;
+  border: 1px solid var(--data-border);
+  border-radius: var(--control-radius);
+  background: var(--data-surface);
 }
 
 .operation-editor-modal .wizard-footer-info { gap: 2px; }

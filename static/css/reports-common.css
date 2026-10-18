@@ -21,7 +21,7 @@
   gap: 22px;
   margin-bottom: 14px;
   padding: 18px 20px;
-  background: linear-gradient(135deg, #ffffff 0%, #f4faf6 100%);
+  background: #fff;
 }
 
 .excel-page-header > div { min-width: 0; }
@@ -56,10 +56,10 @@
 .excel-filter-reset {
   min-height: 34px;
   padding: 7px 12px;
-  border: 1px solid #cddbd2;
-  border-radius: 4px;
-  background: #fff;
-  color: #365344;
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  background: var(--control-surface);
+  color: var(--control-text);
   font: inherit;
   font-size: 9px;
   font-weight: 800;
@@ -67,7 +67,7 @@
 }
 
 .excel-page-back:hover,
-.excel-filter-reset:hover { border-color: #91b39e; background: #f7fbf8; }
+.excel-filter-reset:hover { border-color: #8fbc9d; background: var(--control-hover); }
 
 .excel-upload-panel {
   display: grid;
@@ -87,7 +87,7 @@
 .excel-shift-rules span {
   padding: 5px 8px;
   border: 1px solid #dbe7df;
-  border-radius: 4px;
+  border-radius: var(--control-radius);
   background: #f8fbf9;
   color: #63746a;
   font-size: 8px;
@@ -108,7 +108,7 @@
   min-height: 36px;
   padding: 7px 9px;
   border: 1px solid #cad8cf;
-  border-radius: 4px;
+  border-radius: var(--control-radius);
   background: #fff;
   color: #29483a;
   font: inherit;
@@ -151,7 +151,7 @@
   padding: 10px 11px;
   border: 1px solid #e0e9e3;
   border-left: 4px solid #7a8b82;
-  border-radius: 4px;
+  border-radius: var(--data-radius);
   background: var(--data-surface);
 }
 

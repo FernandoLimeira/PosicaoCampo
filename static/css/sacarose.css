@@ -54,7 +54,7 @@
 
 .sacarose-option-toggle input { width: 18px; height: 18px; accent-color: var(--green); }
 
-.primary-button, .secondary-button { min-height: 40px; padding: 10px 17px; border-radius: 7px; cursor: pointer; font-weight: 800; }
+.primary-button, .secondary-button { min-height: 40px; padding: 10px 17px; border-radius: var(--control-radius); cursor: pointer; font-weight: 800; }
 
 .primary-button { border: 1px solid var(--green); color: #fff; background: var(--green); }
 
@@ -62,9 +62,9 @@
 
 .primary-button:disabled { opacity: .6; cursor: wait; }
 
-.secondary-button { border: 1px solid #aec5b5; color: #2d6042; background: #f4faf6; }
+.secondary-button { border: 1px solid var(--control-border); color: var(--control-text); background: var(--control-surface); }
 
-.secondary-button:hover { background: #e9f4ed; }
+.secondary-button:hover { border-color: #8fbc9d; background: var(--control-hover); }
 
 .table-wrap { overflow-x: auto; }
 

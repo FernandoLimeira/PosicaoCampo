@@ -35,9 +35,10 @@
 .sector-base-import-card,
 .sector-base-manual-card {
   padding: 15px;
-  border: 1px solid #e1ebe5;
-  border-radius: 4px;
-  background: #fff;
+  border: 1px solid var(--data-border);
+  border-radius: var(--data-radius);
+  background: var(--data-surface);
+  box-shadow: var(--data-shadow);
 }
 
 .sector-base-config-grid {
@@ -249,7 +250,7 @@
   align-items: center;
   min-height: 22px;
   padding: 3px 7px;
-  border-radius: 4px;
+  border-radius: var(--control-radius);
   background: #edf7f0;
   color: #28613b;
   font-size: 9px;
@@ -264,19 +265,20 @@
 
 .sector-base-action {
   padding: 6px 8px;
-  border: 1px solid #d8e4dc;
-  border-radius: 4px;
-  background: #fff;
-  color: #2f6d45;
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  background: var(--control-surface);
+  color: var(--control-text);
   font-size: 9px;
   font-weight: 800;
 }
 
 .sector-base-action + .sector-base-action { margin-left: 5px; }
 
-.sector-base-action.danger { color: #a5313a; }
+.sector-base-action.danger { color: #a5313a; border-color: #e9d9dc; background: #fff; }
 
-.sector-base-action:hover { background: #f5f9f6; }
+.sector-base-action:hover { background: var(--control-hover); }
+.sector-base-action.danger:hover { background: #fff2f3; border-color: #dcb6be; }
 
 .sector-base-pagination {
   margin-top: 10px;
@@ -297,15 +299,15 @@
 .sector-base-page-button {
   min-height: 32px;
   padding: 6px 11px;
-  border: 1px solid #d8e4dc;
-  border-radius: 4px;
-  background: #fff;
-  color: #2f6d45;
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  background: var(--control-surface);
+  color: var(--control-text);
   font-size: 9px;
   font-weight: 850;
 }
 
-.sector-base-page-button:hover:not(:disabled) { background: #edf7f0; }
+.sector-base-page-button:hover:not(:disabled) { background: var(--control-hover); border-color: #8fbc9d; }
 
 .sector-base-page-button:disabled { opacity: .42; cursor: default; }
 
@@ -366,7 +368,7 @@
 .sector-base-import-card,
 .sector-base-manual-card {
   padding: 10px 12px;
-  border-radius: 4px;
+  border-radius: var(--data-radius);
 }
 
 .sector-base-import-card { gap: 7px; }

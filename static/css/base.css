@@ -16,6 +16,11 @@
   --data-header: #28563e;
   --data-radius: 10px;
   --data-shadow: 0 4px 18px rgba(25, 69, 44, .05);
+  --control-radius: 6px;
+  --control-border: #c6ddce;
+  --control-surface: #f0f7f2;
+  --control-hover: #e1f0e6;
+  --control-text: #246139;
   --yellow: #e0aa00;
   --yellow-soft: #fff8dc;
   --red: #d83b4a;
@@ -116,9 +121,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   justify-content: space-between;
   gap: 28px;
   padding: 22px 24px;
-  border: 1px solid #dfe8e2;
-  border-radius: 4px;
+  border: 1px solid var(--data-border);
+  border-radius: var(--data-radius);
   background: #fff;
+  box-shadow: var(--data-shadow);
 }
 
 .module-standard-header h1 { margin: 0; color: #183126; font-size: 28px; letter-spacing: -.6px; }
@@ -330,7 +336,7 @@ body.modal-open { overflow: hidden; }
   flex-direction: column;
   color: var(--text);
   background: #fff;
-  border-radius: 4px;
+  border-radius: var(--data-radius);
   box-shadow: 0 24px 80px rgba(12, 43, 26, .26);
 }
 
@@ -353,14 +359,14 @@ body.modal-open { overflow: hidden; }
   height: 34px;
   padding: 0;
   border: 0;
-  border-radius: 4px;
-  background: #f1f5f2;
-  color: #52645a;
+  border-radius: var(--control-radius);
+  background: var(--control-surface);
+  color: var(--control-text);
   font-size: 23px;
   line-height: 1;
 }
 
-.modal-close:hover { background: #e8efea; }
+.modal-close:hover { background: var(--control-hover); }
 
 .editor-unit-summary { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 
@@ -414,7 +420,7 @@ body.modal-open { overflow: hidden; }
 input, select, textarea {
   width: 100%;
   border: 1px solid #cfdcd4;
-  border-radius: 4px;
+  border-radius: var(--control-radius);
   background: #fff;
   color: #1e382b;
   transition: border-color .15s ease, box-shadow .15s ease;
@@ -443,16 +449,23 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 .modal-button {
   min-height: 38px;
   padding: 0 16px;
-  border-radius: 4px;
+  border-radius: var(--control-radius);
   font-size: 11px;
   font-weight: 800;
 }
 
-.modal-button.secondary { border: 1px solid #cad7cf; background: #fff; color: #53665b; }
+.modal-button.secondary { border: 1px solid var(--control-border); background: var(--control-surface); color: var(--control-text); }
+.modal-button.secondary:hover:not(:disabled) { background: var(--control-hover); border-color: #8fbc9d; }
 
 .modal-button.save { border: 1px solid var(--green); background: var(--green); color: #fff; }
+.modal-button.save:hover:not(:disabled) { background: var(--green-strong); border-color: var(--green-strong); }
 
 .modal-button.danger { border: 1px solid var(--red); background: var(--red); color: #fff; }
+
+:is(.modal-button, .primary-button, .secondary-button, .production-primary-button, .production-secondary-button, .production-config-toggle, .dashboard-fill-button, .excel-page-back, .excel-filter-reset, .history-page-button, .sector-base-page-button, .user-action, .user-delete, .user-unit-add) {
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.modal-button:disabled { opacity: .5; cursor: default; }
 
 .toast {
   position: fixed;
@@ -528,7 +541,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 
 .modal-backdrop { padding: 10px; align-items: stretch; }
 
-.editor-modal { width: 100%; max-height: calc(100dvh - 20px); border-radius: 4px; }
+.editor-modal { width: 100%; max-height: calc(100dvh - 20px); border-radius: var(--data-radius); }
 
 .modal-header { padding: 18px; }
 
@@ -601,8 +614,8 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .operation-editor-modal .modal-close {
   width: 32px;
   height: 32px;
-  border: 1px solid #e0e9e3;
-  background: #f8faf9;
+  border: 1px solid var(--control-border);
+  background: var(--control-surface);
 }
 
 .section-description {
@@ -615,9 +628,9 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
 .operation-editor-modal .notes-form-grid .field {
   padding: 11px;
-  border: 1px solid #e4ece7;
-  border-radius: 4px;
-  background: #fbfdfc;
+  border: 1px solid var(--data-border);
+  border-radius: var(--control-radius);
+  background: var(--data-surface);
 }
 
 .operation-editor-modal .modal-footer {
@@ -629,7 +642,7 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
 .operation-editor-modal .modal-button {
   min-height: 36px;
-  border-radius: 4px;
+  border-radius: var(--control-radius);
 }
 
 .operation-editor-modal .modal-button.save:hover { background: var(--green-strong); }

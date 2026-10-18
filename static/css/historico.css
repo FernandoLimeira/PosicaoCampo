@@ -54,17 +54,17 @@ body[data-page="history"] .app-content { height: 100dvh; min-height: 0; }
 .history-page-button {
   min-height: 34px;
   padding: 0 12px;
-  border: 1px solid #cad7cf;
-  border-radius: 4px;
-  background: #fff;
-  color: #496457;
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  background: var(--control-surface);
+  color: var(--control-text);
   font-size: 10px;
   font-weight: 800;
 }
 
 .history-page-button:hover:not(:disabled) {
-  background: #f3f8f5;
-  border-color: #b8ccbf;
+  background: var(--control-hover);
+  border-color: #8fbc9d;
 }
 
 .history-page-button:disabled {
