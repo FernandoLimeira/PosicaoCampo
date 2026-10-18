@@ -106,6 +106,8 @@ async function loadProductionAccess() {
   productionAccess = data.access || { enabled: false, permissions: {}, units: [] };
   const addButton = document.querySelector('#production-add-button');
   if (addButton) addButton.hidden = !canFillProduction();
+  const rainButton = document.querySelector('#production-rain-button');
+  if (rainButton) rainButton.hidden = !canEditProductionDailySummary();
   const configButton = document.querySelector('#production-config-toggle');
   if (configButton) configButton.hidden = !canConfigureProduction();
 
@@ -164,6 +166,17 @@ async function loadProductionDailySummary(unit) {
     : `Sem dados salvos para ${formatProductionDate(workDate)}.`;
 }
 
+async function openProductionRainModal() {
+  if (!canEditProductionDailySummary()) return;
+  const unit = currentProductionUnit();
+  const label = document.querySelector('#production-rain-unit');
+  if (label) label.textContent = productionUnitLabel(unit);
+  await loadProductionDailySummary(unit);
+  if (unit !== currentProductionUnit()) return;
+  openModal('production-rain-modal');
+  document.querySelector('#production-rain-turn')?.focus();
+}
+
 async function submitProductionDailySummary(event) {
   event.preventDefault();
   if (!canEditProductionDailySummary()) return;
@@ -181,6 +194,7 @@ async function submitProductionDailySummary(event) {
   try {
     await apiRequest('/api/production/daily-summary', { method: 'PUT', body: JSON.stringify(payload) });
     await loadProductionDailySummary(unit);
+    closeModal('production-rain-modal');
     showToast('Dados da imagem salvos.');
   } catch (error) {
     console.error(error);
@@ -285,6 +299,8 @@ function renderProductionItems(data) {
     productionAccess.permissions = { ...productionAccess.permissions, ...data.permissions };
     const addButton = document.querySelector('#production-add-button');
     if (addButton) addButton.hidden = !canFillProduction();
+    const rainButton = document.querySelector('#production-rain-button');
+    if (rainButton) rainButton.hidden = !canEditProductionDailySummary();
     updateProductionAccessMessage();
   }
 
@@ -972,10 +988,20 @@ async function initializeProductionPage() {
     }
     const addButton = document.querySelector('#production-add-button');
     if (addButton) addButton.hidden = true;
+    const rainButton = document.querySelector('#production-rain-button');
+    if (rainButton) rainButton.hidden = true;
   }
 }
 
 document.querySelector('#production-add-button')?.addEventListener('click', openNewProductionItem);
+document.querySelector('#production-rain-button')?.addEventListener('click', async () => {
+  try {
+    await openProductionRainModal();
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || 'Não foi possível carregar a chuva da unidade.', true);
+  }
+});
 document.querySelector('#production-filter-group')?.addEventListener('change', event => {
   productionFilterGroup = event.target.value;
   productionFilterFront = '';

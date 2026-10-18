@@ -4,6 +4,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const elements = new Map();
+const modalEvents = [];
+const requests = [];
 function element(selector) {
   if (!elements.has(selector)) elements.set(selector, {
     innerHTML: '', textContent: '', value: '', hidden: false,
@@ -21,8 +23,15 @@ const context = vm.createContext({
   document, console,
   getReportUnit: () => 'NRD',
   escapeHtml: value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;'),
-  openModal() {},
-  apiRequest: async () => ({})
+  openModal(id) { modalEvents.push(`open:${id}`); },
+  closeModal(id) { modalEvents.push(`close:${id}`); },
+  showToast() {},
+  apiRequest: async (url, options) => {
+    requests.push({ url, options });
+    return url.includes('/daily-summary?')
+      ? { summary: { rain_turn_mm: 2, rain_accumulated_mm: 5, updated_at: 1 } }
+      : {};
+  }
 });
 const scripts = ['production-consolidation.js', 'producao.js'];
 for (const name of scripts) {
@@ -75,3 +84,17 @@ assert.equal(element('#production-list-status').textContent, '1 lançamento · 1
 vm.runInContext("productionFilterFront = '8'", context);
 context.renderProductionItems();
 assert.equal(element('#production-empty').hidden, false);
+
+(async () => {
+  vm.runInContext('productionAccess.permissions.summary = true', context);
+  await context.openProductionRainModal();
+  assert.equal(element('#production-rain-unit').textContent, 'NRD — Narandiba');
+  assert.equal(element('#production-rain-turn').value, 2);
+  assert.ok(modalEvents.includes('open:production-rain-modal'));
+  element('#production-rain-turn').value = '3';
+  await context.submitProductionDailySummary({ preventDefault() {} });
+  const save = requests.find(request => request.options?.method === 'PUT');
+  assert.equal(JSON.parse(save.options.body).unit_code, 'NRD');
+  assert.equal(JSON.parse(save.options.body).rain_turn_mm, '3');
+  assert.ok(modalEvents.includes('close:production-rain-modal'));
+})().catch(error => { console.error(error); process.exitCode = 1; });

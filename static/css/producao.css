@@ -30,7 +30,7 @@
 .production-page-header h1 { margin: 0; color: #183126; font-size: 28px; letter-spacing: -.6px; }
 .production-page-header p { max-width: 690px; margin: 8px 0 0; color: #6d7e75; font-size: 12px; line-height: 1.55; }
 
-.production-page-actions { display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
+.production-page-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 14px; }
 .production-current-context { min-width: 130px; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .production-current-context span { color: #73837a; font-size: 9px; font-weight: 800; letter-spacing: .7px; text-transform: uppercase; }
 .production-current-context strong { color: #1a442d; font-size: 18px; }
@@ -92,15 +92,12 @@
 .production-summary-item.is-waiting { border-left-color: #87948d; }
 .production-summary-item.is-stopped { border-left-color: #c13c45; }
 
-.production-daily-card { margin-bottom: 16px; border: 1px solid #dfe8e2; border-radius: 4px; background: #fff; }
-.production-daily-heading { padding: 17px 20px 12px; border-bottom: 1px solid #e5ece8; }
-.production-daily-heading span { color: var(--green); font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
-.production-daily-heading h2 { margin: 4px 0; color: #253f32; font-size: 16px; }
-.production-daily-heading p { margin: 0; color: #718077; font-size: 11px; }
+.production-rain-modal { width: min(560px, calc(100vw - 30px)); }
 .production-daily-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 16px 20px; align-items: start; }
+.production-rain-context { grid-column: 1 / -1; margin: 0 0 4px; color: #607168; font-size: 11px; }
 .production-daily-form .field { min-width: 0; }
 .production-daily-form .field + .field { margin-top: 0; }
-.production-daily-form input, .production-daily-form textarea { width: 100%; }
+.production-daily-form input { width: 100%; }
 .production-daily-actions { grid-column: 1 / -1; display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
 .production-daily-actions p { margin: 0 auto 0 0; color: #607168; font-size: 11px; }
 @media (max-width: 760px) {

@@ -385,8 +385,11 @@ class PageTests(unittest.TestCase):
             'id="production-status-options"', 'id="production-status-config-toggle"',
             'id="production-status-config-pane"', 'id="production-config-pane"',
             'id="production-front-form"', 'id="production-items-body"',
+            'id="production-rain-button"', 'id="production-rain-modal"',
+            'id="production-daily-form"',
         ):
             self.assertIn(marker, page["body"])
+        self.assertNotIn('class="production-daily-card"', page["body"])
         self.assertIn('href="/producao"', page["body"])
 
         emission = self.request('/emitir-posicao-global', cookie=cookie)["body"]

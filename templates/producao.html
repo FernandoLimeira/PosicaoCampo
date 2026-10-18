@@ -17,6 +17,7 @@
         <strong id="production-current-unit">-</strong>
         <small id="production-current-date">-</small>
       </div>
+      <button id="production-rain-button" class="production-secondary-button" type="button" hidden>Informar chuva</button>
       <button id="production-add-button" class="production-primary-button" type="button">Adicionar frente</button>
     </div>
   </header>
@@ -24,30 +25,6 @@
   <div id="production-access-message" class="production-access-message" hidden></div>
 
   <section id="production-summary" class="production-summary" aria-label="Resumo dos status"></section>
-
-  <section class="production-daily-card" aria-labelledby="production-daily-title">
-    <div class="production-daily-heading">
-      <div>
-        <span>Imagem global</span>
-        <h2 id="production-daily-title">Chuva do dia</h2>
-        <p>Dados compartilhados da unidade selecionada para a imagem da Produção Agrícola. Analistas com acesso ao resumo da unidade podem preencher.</p>
-      </div>
-    </div>
-    <form id="production-daily-form" class="production-daily-form">
-      <label class="field" for="production-rain-turn">
-        <span>Chuva no turno (mm)</span>
-        <input id="production-rain-turn" type="number" min="0" max="9999.9" step="0.1" inputmode="decimal" placeholder="Ex.: 3" />
-      </label>
-      <label class="field" for="production-rain-accumulated">
-        <span>Chuva acumulada (mm)</span>
-        <input id="production-rain-accumulated" type="number" min="0" max="9999.9" step="0.1" inputmode="decimal" placeholder="Ex.: 5" />
-      </label>
-      <div class="production-daily-actions">
-        <p id="production-daily-status" aria-live="polite"></p>
-        <button id="production-daily-save" class="production-primary-button" type="submit">Salvar dados do dia</button>
-      </div>
-    </form>
-  </section>
 
   <section class="production-table-card" aria-labelledby="production-table-title">
     <div class="production-table-heading">
@@ -93,6 +70,34 @@
 {% endblock %}
 
 {% block modals %}
+<div id="production-rain-modal" class="modal-backdrop" hidden>
+  <section class="editor-modal production-rain-modal" role="dialog" aria-modal="true" aria-labelledby="production-daily-title">
+    <header class="modal-header production-modal-header">
+      <div>
+        <span class="modal-kicker">Produção Agrícola</span>
+        <h2 id="production-daily-title">Chuva da unidade</h2>
+      </div>
+      <button class="modal-close" type="button" data-close-modal="production-rain-modal" aria-label="Fechar">×</button>
+    </header>
+    <form id="production-daily-form" class="production-daily-form">
+      <p class="production-rain-context">Dados de <strong id="production-rain-unit">-</strong> para a imagem global de hoje.</p>
+      <label class="field" for="production-rain-turn">
+        <span>Chuva no turno (mm)</span>
+        <input id="production-rain-turn" type="number" min="0" max="9999.9" step="0.1" inputmode="decimal" placeholder="Ex.: 3" />
+      </label>
+      <label class="field" for="production-rain-accumulated">
+        <span>Chuva acumulada (mm)</span>
+        <input id="production-rain-accumulated" type="number" min="0" max="9999.9" step="0.1" inputmode="decimal" placeholder="Ex.: 5" />
+      </label>
+      <div class="production-daily-actions">
+        <p id="production-daily-status" aria-live="polite"></p>
+        <button class="modal-button secondary" type="button" data-close-modal="production-rain-modal">Cancelar</button>
+        <button id="production-daily-save" class="modal-button save" type="submit">Salvar chuva</button>
+      </div>
+    </form>
+  </section>
+</div>
+
 <div id="production-entry-modal" class="modal-backdrop" hidden>
   <section class="editor-modal production-editor-modal" role="dialog" aria-modal="true" aria-labelledby="production-modal-title">
     <header class="modal-header production-modal-header">
