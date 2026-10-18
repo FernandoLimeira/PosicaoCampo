@@ -173,8 +173,8 @@
 .return-table-wrap {
   margin-top: 10px;
   overflow: auto;
-  border: 1px solid #e2ebe5;
-  border-radius: 4px;
+  border: 1px solid var(--data-border);
+  border-radius: var(--data-radius);
 }
 
 .return-table {
@@ -186,9 +186,6 @@
 
 .return-table th {
   padding: 8px 9px;
-  border-bottom: 1px solid #dfe9e2;
-  background: #f4f8f5;
-  color: #536b5e;
   font-size: 7px;
   font-weight: 900;
   letter-spacing: .04em;
@@ -199,8 +196,6 @@
 
 .return-table td {
   padding: 9px;
-  border-bottom: 1px solid #edf2ef;
-  color: #40574b;
   font-size: 8px;
   line-height: 1.45;
   vertical-align: top;
@@ -208,7 +203,6 @@
 
 .return-table tbody tr:last-child td { border-bottom: 0; }
 
-.return-table tbody tr:hover td { background: #f8fbf9; }
 
 .return-table td strong { color: #234536; }
 

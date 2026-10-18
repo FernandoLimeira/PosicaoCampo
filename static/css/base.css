@@ -9,6 +9,13 @@
   --line: #dbe7df;
   --surface: #ffffff;
   --page: #f4f7f5;
+  --data-surface: #e9efeb;
+  --data-alternate: #e2eae5;
+  --data-hover: #d8e8dd;
+  --data-border: #cddbd1;
+  --data-header: #28563e;
+  --data-radius: 10px;
+  --data-shadow: 0 4px 18px rgba(25, 69, 44, .05);
   --yellow: #e0aa00;
   --yellow-soft: #fff8dc;
   --red: #d83b4a;
@@ -117,7 +124,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .module-standard-header h1 { margin: 0; color: #183126; font-size: 28px; letter-spacing: -.6px; }
 .module-standard-header p { max-width: 690px; margin: 8px 0 0; color: #6d7e75; font-size: 12px; line-height: 1.55; }
 .module-standard-header .modal-button { flex: 0 0 auto; }
-.module-standard-card { border: 1px solid #dfe8e2; border-radius: 4px; background: #fff; }
+.module-standard-card { border: 1px solid var(--data-border); border-radius: var(--data-radius); background: #fff; box-shadow: var(--data-shadow); }
 
 @media (max-width: 760px) {
   .module-standard-header { align-items: stretch; flex-direction: column; gap: 14px; padding: 18px 16px; }
@@ -238,9 +245,35 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .table-wrap {
   width: 100%;
   overflow-x: auto;
-  border: 1px solid #e5eee8;
-  border-radius: 4px;
-  background: #fff;
+  border: 1px solid var(--data-border);
+  border-radius: var(--data-radius);
+  background: var(--data-surface);
+}
+
+/* Aparência compartilhada das tabelas; cada módulo define suas colunas e tamanhos. */
+@media screen {
+:is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table) th {
+  background: var(--data-header);
+  color: #f4faf6;
+  border-bottom: 1px solid #1c4430;
+}
+:is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table) td {
+  background: var(--data-surface);
+  color: #2e4839;
+  border-bottom: 1px solid var(--data-border);
+  transition: background-color .15s ease;
+}
+:is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table) tbody tr:nth-child(even) td {
+  background: var(--data-alternate);
+}
+:is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table) tbody tr:is(:hover, :focus-within) td {
+  background: var(--data-hover);
+}
+:is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table) tbody tr:is(:hover, :focus-within) td:first-child {
+  box-shadow: inset 3px 0 #3b8b58;
+}
+:is(.user-list-item, .history-item):nth-child(even) { background: var(--data-alternate); }
+:is(.user-list-item, .history-item):is(:hover, :focus-within) { background: var(--data-hover); border-color: #9cbea7; }
 }
 
 .empty-table-row td { padding: 18px 8px; text-align: center; color: #85958c; font-style: italic; }

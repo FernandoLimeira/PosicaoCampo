@@ -77,11 +77,11 @@
 
 .excel-browser-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 
-.excel-browser-column { min-width: 0; border: 1px solid #e2ebe5; border-radius: 4px; overflow: hidden; background: #fbfdfc; }
+.excel-browser-column { min-width: 0; border: 1px solid var(--data-border); border-radius: var(--data-radius); overflow: hidden; background: var(--data-surface); }
 
-.excel-browser-title { display: flex; align-items: center; justify-content: space-between; padding: 9px 10px; border-bottom: 1px solid #e6ece8; background: #f4f8f5; }
+.excel-browser-title { display: flex; align-items: center; justify-content: space-between; padding: 9px 10px; border-bottom: 1px solid #1c4430; background: var(--data-header); }
 
-.excel-browser-title strong { color: #2d4b3c; font-size: 10px; }
+.excel-browser-title strong { color: #f4faf6; font-size: 10px; }
 
 .excel-browser-title span { min-width: 22px; padding: 2px 6px; border-radius: 4px; background: #e4eee8; color: #496357; font-size: 8px; font-weight: 900; text-align: center; }
 
@@ -95,8 +95,8 @@
   gap: 8px;
   padding: 10px;
   border: 0;
-  border-bottom: 1px solid #edf2ef;
-  background: #fff;
+  border-bottom: 1px solid var(--data-border);
+  background: var(--data-surface);
   color: inherit;
   text-align: left;
   cursor: pointer;
@@ -104,7 +104,8 @@
 
 .excel-entity-row:last-child { border-bottom: 0; }
 
-.excel-entity-row:hover { background: #f3faf5; }
+.excel-entity-row:nth-child(even) { background: var(--data-alternate); }
+.excel-entity-row:is(:hover, :focus-visible) { background: var(--data-hover); box-shadow: inset 3px 0 #3b8b58; }
 
 .excel-entity-icon { font-size: 16px; text-align: center; }
 
@@ -135,9 +136,9 @@
 .excel-comparison-card {
   min-width: 0;
   padding: 11px;
-  border: 1px solid #dfe8e2;
-  border-radius: 4px;
-  background: #fbfdfc;
+  border: 1px solid var(--data-border);
+  border-radius: 6px;
+  background: var(--data-surface);
 }
 
 .excel-comparison-card.is-best { border-color: #8ccba2; background: #f1faf4; }

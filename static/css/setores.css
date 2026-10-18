@@ -198,9 +198,9 @@
   min-height: 0;
   flex: 1 1 auto;
   overflow: auto;
-  border: 1px solid #e1e9e4;
-  border-radius: 4px;
-  background: #fff;
+  border: 1px solid var(--data-border);
+  border-radius: var(--data-radius);
+  background: var(--data-surface);
 }
 
 .sector-base-table {
@@ -215,9 +215,6 @@
   top: 0;
   z-index: 1;
   padding: 9px 10px;
-  color: #6f7f76;
-  background: #f5f8f6;
-  border-bottom: 1px solid #dce6e0;
   font-size: 9px;
   font-weight: 850;
   text-align: left;
@@ -226,15 +223,12 @@
 
 .sector-base-table td {
   padding: 9px 10px;
-  border-bottom: 1px solid #edf1ee;
-  color: #314a3d;
   font-size: 11px;
   vertical-align: middle;
 }
 
 .sector-base-table tbody tr:last-child td { border-bottom: 0; }
 
-.sector-base-table tbody tr:hover { background: #fbfdfb; }
 
 .sector-base-table td:nth-child(1) { width: 12%; }
 

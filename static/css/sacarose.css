@@ -20,7 +20,7 @@
 
 .unit-tab.is-active { color: #fff; border-color: var(--green); background: var(--green); box-shadow: 0 4px 12px #1d51352b; }
 
-.sacarose-card { overflow: hidden; border: 1px solid #d9e3dc; border-radius: 10px; background: #fff; box-shadow: 0 10px 30px #1d38281a; }
+.sacarose-card { overflow: hidden; border: 1px solid var(--data-border); border-radius: var(--data-radius); background: #fff; box-shadow: var(--data-shadow); }
 
 .card-header, .card-footer { padding: 18px 20px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 
@@ -70,9 +70,9 @@
 
 .sacarose-table { width: 100%; min-width: 880px; border-collapse: collapse; table-layout: fixed; }
 
-.sacarose-table th { padding: 11px 10px; color: #5d6d63; background: #f2f6f3; border-bottom: 1px solid #dce5df; font-size: 10px; letter-spacing: .08em; text-align: left; text-transform: uppercase; }
+.sacarose-table th { padding: 11px 10px; font-size: 10px; letter-spacing: .08em; text-align: left; text-transform: uppercase; }
 
-.sacarose-table td { padding: 9px 10px; border-bottom: 1px solid #edf1ee; vertical-align: middle; }
+.sacarose-table td { padding: 9px 10px; vertical-align: middle; }
 
 .sacarose-table tr:last-child td { border-bottom: 0; }
 

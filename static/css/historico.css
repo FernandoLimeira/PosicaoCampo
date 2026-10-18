@@ -86,9 +86,10 @@ body[data-page="history"] .app-content { height: 100dvh; min-height: 0; }
   justify-content: space-between;
   gap: 18px;
   padding: 12px 14px;
-  border: 1px solid #e2eae5;
-  border-radius: 4px;
-  background: #fbfdfc;
+  border: 1px solid var(--data-border);
+  border-radius: var(--data-radius);
+  background: var(--data-surface);
+  transition: background-color .15s ease, border-color .15s ease;
   flex-wrap: wrap;
 }
 

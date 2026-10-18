@@ -142,10 +142,10 @@
 
 .dashboard-block {
   min-width: 0;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  box-shadow: 0 8px 24px rgba(25, 69, 44, .06);
+  background: var(--data-surface);
+  border: 1px solid var(--data-border);
+  border-radius: var(--data-radius);
+  box-shadow: var(--data-shadow);
 }
 
 .unit-main-block {
@@ -227,9 +227,6 @@
 .data-table th {
   padding: 8px 10px;
   text-align: left;
-  color: #6c7c73;
-  background: #f6f9f7;
-  border-bottom: 1px solid var(--line);
   font-size: 10px;
   letter-spacing: .7px;
   text-transform: uppercase;
@@ -237,8 +234,6 @@
 
 .data-table td {
   padding: 8px 10px;
-  color: #2c4338;
-  border-bottom: 1px solid #edf2ef;
   font-size: 12px;
   line-height: 1.25;
   vertical-align: middle;
@@ -385,9 +380,9 @@
 
 .editable-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 
-.editable-table th { padding: 7px; color: #7a8981; background: #f8faf9; border-bottom: 1px solid var(--line); font-size: 9px; text-align: left; text-transform: uppercase; }
+.editable-table th { padding: 7px; font-size: 9px; text-align: left; text-transform: uppercase; }
 
-.editable-table td { padding: 5px 7px; border-bottom: 1px solid #eef2ef; }
+.editable-table td { padding: 5px 7px; }
 
 .editable-table th:nth-child(1) { width: 20%; }
 

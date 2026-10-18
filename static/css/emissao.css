@@ -32,10 +32,10 @@
   flex-direction: column;
   justify-content: space-between;
   gap: 24px;
-  border: 1px solid #d9e3dc;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: var(--shadow);
+  border: 1px solid var(--data-border);
+  border-radius: var(--data-radius);
+  background: var(--data-surface);
+  box-shadow: var(--data-shadow);
 }
 
 .emission-card-kicker {

@@ -8,10 +8,10 @@
 .excel-page-header,
 .excel-upload-panel,
 .excel-browser-section {
-  border: 1px solid #dbe7df;
-  border-radius: 4px;
+  border: 1px solid var(--data-border);
+  border-radius: var(--data-radius);
   background: #fff;
-  box-shadow: 0 8px 24px rgba(23, 67, 43, .05);
+  box-shadow: var(--data-shadow);
 }
 
 .excel-page-header {
@@ -135,9 +135,9 @@
 .excel-report-meta > div {
   min-width: 0;
   padding: 10px 11px;
-  border: 1px solid #e1e9e4;
-  border-radius: 4px;
-  background: #fbfdfc;
+  border: 1px solid var(--data-border);
+  border-radius: 6px;
+  background: var(--data-surface);
 }
 
 .excel-report-meta span { display: block; color: #849189; font-size: 7px; text-transform: uppercase; letter-spacing: .08em; }
@@ -152,7 +152,7 @@
   border: 1px solid #e0e9e3;
   border-left: 4px solid #7a8b82;
   border-radius: 4px;
-  background: #fff;
+  background: var(--data-surface);
 }
 
 .excel-kpi small { display: block; color: #7f8d85; font-size: 7px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; }
