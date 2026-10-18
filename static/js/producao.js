@@ -20,7 +20,8 @@ let productionConfigStatuses = [];
 let productionEditingFrontUnits = [];
 let productionEditingFrontActive = true;
 let productionItems = [];
-let productionListScope = 'mine';
+let productionFilterGroup = '';
+let productionFilterFront = '';
 let sectorOptions = [];
 
 function localIsoDate(date = new Date()) {
@@ -130,9 +131,9 @@ async function loadProductionStatuses({ includeInactive = false } = {}) {
 
 async function loadProductionItems(unit) {
   const workDate = localIsoDate();
-  const scope = productionListScope === 'all' ? 'all' : 'mine';
-  const data = await apiRequest(`/api/production/my-items?unit=${encodeURIComponent(unit)}&date=${encodeURIComponent(workDate)}&scope=${encodeURIComponent(scope)}`);
+  const data = await apiRequest(`/api/production/my-items?unit=${encodeURIComponent(unit)}&date=${encodeURIComponent(workDate)}&scope=all`);
   productionItems = Array.isArray(data.items) ? data.items : [];
+  renderProductionFilters();
   renderProductionItems(data);
   return data;
 }
@@ -190,22 +191,6 @@ async function submitProductionDailySummary(event) {
   }
 }
 
-async function setProductionListScope(scope) {
-  const nextScope = scope === 'all' ? 'all' : 'mine';
-  if (productionListScope === nextScope) return;
-  productionListScope = nextScope;
-  syncProductionScopeButtons();
-  await loadProductionItems(currentProductionUnit());
-}
-
-function syncProductionScopeButtons() {
-  document.querySelectorAll('[data-production-scope]').forEach(button => {
-    const active = button.dataset.productionScope === productionListScope;
-    button.classList.toggle('is-active', active);
-    button.setAttribute('aria-pressed', active ? 'true' : 'false');
-  });
-}
-
 function statusMeta(code) {
   const statuses = [...productionStatuses, ...productionConfigStatuses];
   const status = statuses.find(item => item.code === code);
@@ -231,11 +216,46 @@ function renderStatusOptions(selectedCode = selectedStatus()) {
   }
 }
 
+function visibleProductionItems() {
+  return consolidateProductionItems(productionItems).filter(item =>
+    (!productionFilterGroup || String(item.group_id) === productionFilterGroup) &&
+    (!productionFilterFront || String(item.service_front_id) === productionFilterFront));
+}
+
+function renderProductionFilters() {
+  const container = document.querySelector('#production-filters');
+  const groupSelect = document.querySelector('#production-filter-group');
+  const frontSelect = document.querySelector('#production-filter-front');
+  if (!container || !groupSelect || !frontSelect) return;
+  container.hidden = false;
+  const groups = new Map();
+  for (const group of productionCatalog.groups || []) groups.set(String(group.id), group.name);
+  for (const item of productionItems) groups.set(String(item.group_id), item.group_name);
+  groupSelect.innerHTML = '<option value="">Todos os grupos</option>' +
+    [...groups].map(([id, name]) => `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`).join('');
+  if (!groups.has(productionFilterGroup)) productionFilterGroup = '';
+  groupSelect.value = productionFilterGroup;
+
+  const fronts = new Map();
+  for (const group of productionCatalog.groups || []) {
+    if (productionFilterGroup && String(group.id) !== productionFilterGroup) continue;
+    for (const front of group.fronts || []) fronts.set(String(front.id), front.name);
+  }
+  for (const item of productionItems) {
+    if (productionFilterGroup && String(item.group_id) !== productionFilterGroup) continue;
+    fronts.set(String(item.service_front_id), item.service_name);
+  }
+  frontSelect.innerHTML = '<option value="">Todas as frentes</option>' +
+    [...fronts].map(([id, name]) => `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`).join('');
+  if (!fronts.has(productionFilterFront)) productionFilterFront = '';
+  frontSelect.value = productionFilterFront;
+}
+
 function renderProductionSummary() {
   const summary = document.querySelector('#production-summary');
   if (!summary) return;
   const counts = Object.fromEntries(productionStatuses.map(status => [status.code, 0]));
-  productionItems.forEach(item => {
+  visibleProductionItems().forEach(item => {
     if (!item.is_current_day) return;
     const code = item.entry?.status;
     if (Object.hasOwn(counts, code)) counts[code] += 1;
@@ -258,7 +278,7 @@ function renderProductionItems(data) {
   const status = document.querySelector('#production-list-status');
   const ownerHeading = document.querySelector('#production-owner-heading');
   const actionsHeading = document.querySelector('#production-actions-heading');
-  const showingAll = productionListScope === 'all';
+  const visibleItems = visibleProductionItems();
   if (!body) return;
 
   if (data?.permissions && productionAccess) {
@@ -268,23 +288,22 @@ function renderProductionItems(data) {
     updateProductionAccessMessage();
   }
 
-  if (ownerHeading) ownerHeading.hidden = !showingAll;
-  if (actionsHeading) actionsHeading.hidden = showingAll;
-  syncProductionScopeButtons();
+  if (ownerHeading) ownerHeading.hidden = false;
+  if (actionsHeading) actionsHeading.hidden = !canFillProduction();
 
-  body.innerHTML = productionItems.map(item => {
+  body.innerHTML = visibleItems.map(item => {
     const entry = item.entry || {};
     const current = Boolean(item.is_current_day);
-    const updatedLabel = current ? 'Atualizado hoje' : (entry.work_date ? 'Atualizar hoje' : 'Sem atualização');
+    const updatedLabel = current ? 'Atualizado hoje' : (entry.work_date ? 'Último lançamento' : 'Sem atualização');
     const updatedDetail = entry.work_date ? `Último registro: ${formatProductionDate(entry.work_date)}` : 'Nenhum registro salvo';
     const styleLabel = item.display_style === 'front' ? 'Frente operacional' : 'Operação / serviço';
     const actions = canFillProduction() ? `
       <div class="production-row-actions">
-        <button class="production-row-action" type="button" data-production-action="edit" data-item-id="${item.id}">Editar</button>
-        <button class="production-row-action is-remove" type="button" data-production-action="remove" data-item-id="${item.id}">Remover</button>
+        <button class="production-row-action" type="button" data-production-action="edit" data-item-id="${item.id}">${item.is_own ? 'Editar' : 'Atualizar'}</button>
+        ${item.is_own ? `<button class="production-row-action is-remove" type="button" data-production-action="remove" data-item-id="${item.id}">Remover</button>` : ''}
       </div>` : '';
-    const actionCell = showingAll ? '' : `<td>${actions}</td>`;
-    const ownerCell = showingAll ? `<td><span class="production-owner-name">${escapeHtml(item.owner_name || '-')}</span></td>` : '';
+    const actionCell = canFillProduction() ? `<td>${actions}</td>` : '';
+    const ownerCell = `<td><span class="production-owner-name">${escapeHtml(item.owner_name || '-')}</span></td>`;
     return `<tr>
       <td>${escapeHtml(item.group_name || '-')}</td>
       <td><div class="production-item-name"><strong>${escapeHtml(item.service_name || '-')}</strong><small>${escapeHtml(styleLabel)}</small></div></td>
@@ -298,22 +317,18 @@ function renderProductionItems(data) {
   }).join('');
 
   if (empty) {
-    empty.hidden = productionItems.length > 0;
+    empty.hidden = visibleItems.length > 0;
     const emptyTitle = empty.querySelector('strong');
     const emptyText = empty.querySelector('span');
-    if (emptyTitle) emptyTitle.textContent = showingAll ? 'Nenhum lançamento nesta unidade.' : 'Nenhuma frente adicionada.';
-    if (emptyText) emptyText.textContent = showingAll
-      ? 'Ainda não há frentes ou serviços acompanhados pelos analistas desta unidade.'
-      : 'Use “Adicionar frente” para montar sua lista de trabalho desta unidade.';
+    if (emptyTitle) emptyTitle.textContent = 'Nenhum lançamento neste filtro.';
+    if (emptyText) emptyText.textContent = 'Selecione outro grupo ou frente para consultar os lançamentos da unidade.';
   }
   if (status) {
-    if (!productionItems.length) {
+    if (!visibleItems.length) {
       status.textContent = '';
-    } else if (showingAll) {
-      const analysts = new Set(productionItems.map(item => item.owner_user_id).filter(Boolean));
-      status.textContent = `${productionItems.length} ${productionItems.length === 1 ? 'lançamento' : 'lançamentos'} · ${analysts.size} ${analysts.size === 1 ? 'analista' : 'analistas'}`;
     } else {
-      status.textContent = `${productionItems.length} ${productionItems.length === 1 ? 'lançamento meu' : 'lançamentos meus'}`;
+      const analysts = new Set(visibleItems.map(item => item.owner_user_id).filter(Boolean));
+      status.textContent = `${visibleItems.length} ${visibleItems.length === 1 ? 'lançamento' : 'lançamentos'} · ${analysts.size} ${analysts.size === 1 ? 'analista' : 'analistas'}`;
     }
   }
 
@@ -523,20 +538,28 @@ function openEditProductionItem(itemId) {
   showEntryPane();
   clearEntryForm();
   const entry = item.entry || {};
-  document.querySelector('#production-item-id').value = String(item.id);
+  const ownItem = item.is_own ? item : productionItems.find(candidate =>
+    candidate.is_own && candidate.service_front_id === item.service_front_id &&
+    candidate.entry?.sector?.trim().toLocaleUpperCase('pt-BR') ===
+      entry.sector?.trim().toLocaleUpperCase('pt-BR'));
+  document.querySelector('#production-item-id').value = ownItem ? String(ownItem.id) : '';
   document.querySelector('#production-work-date').value = localIsoDate();
   setProductionEntryUnit(currentProductionUnit());
   renderEntryGroups(item.group_id, item.service_front_id, item);
   document.querySelector('#production-sector-input').value = entry.sector || '';
   document.querySelector('#production-farm-input').value = entry.farm || '';
-  document.querySelector('#production-observation-input').value = entry.observation || '';
-  document.querySelector('#production-changes-input').value = entry.changes || '';
+  document.querySelector('#production-observation-input').value = item.is_own ? entry.observation || '' : '';
+  document.querySelector('#production-changes-input').value = item.is_own ? entry.changes || '' : '';
   setSelectedStatus(entry.status || defaultStatusCode());
   resetSectorFields();
   const section = document.querySelector('#production-section-input');
   section.innerHTML = `<option value="${escapeHtml(entry.section || '')}">${escapeHtml(entry.section || 'Sem seção')}</option>`;
   section.value = entry.section || '';
   setProductionEntryEditMode(true);
+  if (!item.is_own) {
+    document.querySelector('#production-modal-title').textContent = 'Atualizar frente';
+    document.querySelector('#production-entry-submit').textContent = 'Salvar atualização';
+  }
   openModal('production-entry-modal');
   document.querySelector('#production-sector-input')?.focus();
 }
@@ -953,15 +976,15 @@ async function initializeProductionPage() {
 }
 
 document.querySelector('#production-add-button')?.addEventListener('click', openNewProductionItem);
-document.querySelector('.production-list-scope')?.addEventListener('click', async event => {
-  const button = event.target.closest('[data-production-scope]');
-  if (!button) return;
-  try {
-    await setProductionListScope(button.dataset.productionScope);
-  } catch (error) {
-    console.error(error);
-    showToast(error.message || 'Não foi possível trocar a visualização dos lançamentos.', true);
-  }
+document.querySelector('#production-filter-group')?.addEventListener('change', event => {
+  productionFilterGroup = event.target.value;
+  productionFilterFront = '';
+  renderProductionFilters();
+  renderProductionItems();
+});
+document.querySelector('#production-filter-front')?.addEventListener('change', event => {
+  productionFilterFront = event.target.value;
+  renderProductionItems();
 });
 document.querySelector('#production-entry-form')?.addEventListener('submit', submitProductionEntry);
 document.querySelector('#production-daily-form')?.addEventListener('submit', submitProductionDailySummary);

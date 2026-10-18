@@ -348,8 +348,8 @@ class PageTests(unittest.TestCase):
         expected = {
             "/": ["common.js", "export.js", "app.js"],
             "/sacarose": ["common.js", "export.js", "sacarose.js"],
-            "/producao": ["common.js", "producao.js"],
-            "/emitir-posicao-global": ["common.js", "export.js", "production-export.js", "emissao.js"],
+            "/producao": ["common.js", "production-consolidation.js", "producao.js"],
+            "/emitir-posicao-global": ["common.js", "export.js", "production-consolidation.js", "production-export.js", "emissao.js"],
             "/setores": ["common.js", "setores.js"],
             "/relatorios": ["common.js", "relatorios.js"],
             "/retornos": ["common.js", "return-analysis.js"],

@@ -73,7 +73,7 @@ const context = vm.createContext({
   }
 });
 
-for (const name of ['production-export.js', 'emissao.js']) {
+for (const name of ['production-consolidation.js', 'production-export.js', 'emissao.js']) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js', name), 'utf8'), context);
 }
 
@@ -97,6 +97,30 @@ for (const name of ['production-export.js', 'emissao.js']) {
   assert.equal(context.productionExportBorderState({ active: 1, wet: 0, waiting: 0, stopped: 2 }), 'stopped');
   assert.equal(context.productionExportBorderState({ active: 2, wet: 2, waiting: 0, stopped: 0 }), 'wet');
   assert.equal(context.productionExportBorderState({ active: 0, wet: 0, waiting: 0, stopped: 0 }), 'waiting');
+  const duplicateSector = [
+    { service_front_id: 7, group_name: 'Plantio', service_name: 'Preparo', owner_name: 'Titular',
+      is_current_day: true, entry: { id: 10, work_date: '2026-10-18', updated_at: 100,
+        sector: '42', status: 'ATIVO', observation: 'Antiga' } },
+    { service_front_id: 7, group_name: 'Plantio', service_name: 'Preparo', owner_name: 'Folguista',
+      is_current_day: true, entry: { id: 11, work_date: '2026-10-18', updated_at: 200,
+        sector: '42', status: 'UMIDO', observation: 'Atualizada' } },
+    { service_front_id: 7, group_name: 'Plantio', service_name: 'Preparo', owner_name: 'Outro',
+      is_current_day: true, entry: { id: 12, work_date: '2026-10-18', updated_at: 150,
+        sector: '43', status: 'ATIVO' } },
+    { service_front_id: 8, group_name: 'Plantio', service_name: 'Preparo', owner_name: 'Outro',
+      is_current_day: true, entry: { id: 13, work_date: '2026-10-18', updated_at: 150,
+        sector: '42', status: 'ATIVO' } }
+  ];
+  const consolidated = context.consolidateProductionItems(duplicateSector);
+  assert.equal(consolidated.length, 3);
+  assert.equal(consolidated[0].owner_name, 'Folguista');
+  const duplicatePages = context.prepareProductionExportPages(document.createElement('canvas').getContext('2d'),
+    [{ code: 'PPT', items: duplicateSector }],
+    new Map([['ATIVO', { style_key: 'active' }], ['UMIDO', { style_key: 'wet' }]]));
+  assert.equal(duplicatePages[0].plans[0].counts.wet, 1);
+  assert.equal(duplicatePages[0].plans[0].counts.active, 2);
+  assert.ok(duplicatePages[0].plans[0].noteLines.join(' ').includes('Folguista'));
+  assert.ok(!duplicatePages[0].plans[0].noteLines.join(' ').includes('Antiga'));
   const stale = { group_name: 'Teste', service_name: 'Frente 1', is_current_day: false,
     entry: { sector: '3392', status: 'CRITICO', work_date: '2026-10-15' } };
   const staleReport = { code: 'PPT', items: [stale] };

@@ -53,15 +53,19 @@
     <div class="production-table-heading">
       <div>
         <span>Lançamentos</span>
-        <h2 id="production-table-title">Frentes e serviços acompanhados</h2>
+        <h2 id="production-table-title">Lançamentos da unidade</h2>
       </div>
       <div class="production-table-heading-actions">
-        <div class="production-list-scope" role="group" aria-label="Visualização dos lançamentos">
-          <button class="production-list-scope-button is-active" type="button" data-production-scope="mine" aria-pressed="true">Meus lançamentos</button>
-          <button class="production-list-scope-button" type="button" data-production-scope="all" aria-pressed="false">Todos da unidade</button>
-        </div>
         <p id="production-list-status" aria-live="polite"></p>
       </div>
+    </div>
+    <div id="production-filters" class="production-filters" hidden>
+      <label for="production-filter-group">Grupo
+        <select id="production-filter-group"><option value="">Todos os grupos</option></select>
+      </label>
+      <label for="production-filter-front">Frente / serviço
+        <select id="production-filter-front"><option value="">Todas as frentes</option></select>
+      </label>
     </div>
     <div class="production-table-wrap">
       <table class="production-table">
@@ -69,7 +73,7 @@
           <tr>
             <th>Grupo</th>
             <th>Frente / serviço</th>
-            <th id="production-owner-heading" hidden>Analista</th>
+            <th id="production-owner-heading">Analista</th>
             <th>Setor</th>
             <th>Fazenda</th>
             <th>Status</th>
@@ -287,5 +291,6 @@
 {% endblock %}
 
 {% block scripts %}
+  <script src="/js/production-consolidation.js?v={{ asset_version }}"></script>
   <script src="/js/producao.js?v={{ asset_version }}-front-notes"></script>
 {% endblock %}

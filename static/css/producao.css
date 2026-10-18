@@ -292,29 +292,10 @@
   gap: 12px;
   flex-wrap: wrap;
 }
-.production-list-scope {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid #dce6e0;
-  border-radius: 4px;
-  background: #f7faf8;
-}
-.production-list-scope-button {
-  min-height: 30px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: #6a7c72;
-  cursor: pointer;
-  font-size: 9px;
-  font-weight: 800;
-  white-space: nowrap;
-}
-.production-list-scope-button:hover { background: #edf4ef; color: #345342; }
-.production-list-scope-button.is-active { background: #fff; color: var(--green); box-shadow: 0 0 0 1px #cfdcd4; }
+.production-filters { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #e5ece8; background: #f7faf8; }
+.production-filters[hidden] { display: none; }
+.production-filters label { display: flex; flex-direction: column; gap: 5px; min-width: 180px; color: #52695c; font-size: 10px; font-weight: 800; }
+.production-filters select { min-height: 34px; padding: 5px 9px; border: 1px solid #cfddd3; border-radius: 4px; background: #fff; color: #253f32; font: inherit; }
 .production-owner-name { color: #3f584b; font-size: 10px; font-weight: 800; white-space: nowrap; }
 
 @media (max-width: 760px) {

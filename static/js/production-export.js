@@ -562,7 +562,10 @@ function productionExportSplitTextPage(page, plans) {
 }
 
 function prepareProductionExportPages(ctx, reports, statusByCode) {
-  const pending = buildProductionExportPages(reports);
+  const consolidated = reports.map(report => ({
+    ...report, items: consolidateProductionItems(report.items || [])
+  }));
+  const pending = buildProductionExportPages(consolidated);
   const ready = [];
   while (pending.length) {
     const page = pending.shift();
