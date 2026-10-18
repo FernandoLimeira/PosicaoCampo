@@ -527,6 +527,26 @@ class ProductionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "status válido"):
             production.save_my_item(self.user["id"], {**base, "unit_code": "NRD", "status": "QUALQUER"})
 
+        linked = production.save_service_front(self.admin["id"], {
+            "name": "frente unit", "group_id": front["group_id"],
+            "display_style": "front", "position": 0, "units": ["PPT"],
+        })
+        self.assertEqual(linked["id"], front["id"])
+        self.assertTrue(linked["linked_existing"])
+        self.assertEqual(set(linked["units"]), {"NRD", "PPT"})
+        nrd = production.save_my_item(self.user["id"], {**base, "unit_code": "NRD"})
+        ppt = production.save_my_item(self.user["id"], {
+            **base, "unit_code": "PPT", "sector": "4200", "status": "SOLO ÚMIDO / TESTE",
+        })
+        self.assertNotEqual(nrd["id"], ppt["id"])
+        self.assertEqual(production.list_my_items(self.user["id"], "NRD", "2026-10-10")["items"][0]["entry"]["sector"], "3392")
+        self.assertEqual(production.list_my_items(self.user["id"], "PPT", "2026-10-10")["items"][0]["entry"]["sector"], "4200")
+        with self.assertRaisesRegex(ValueError, "já está disponível"):
+            production.save_service_front(self.admin["id"], {
+                "name": "FRENTE UNIT", "group_id": front["group_id"],
+                "display_style": "front", "units": ["PPT"],
+            })
+
 
 if __name__ == "__main__":
     unittest.main()

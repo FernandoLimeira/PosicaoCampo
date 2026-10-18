@@ -773,7 +773,7 @@ async function submitConfigFront(event) {
     units
   };
   try {
-    await apiRequest(id ? `/api/production/catalog/fronts/${id}` : '/api/production/catalog/fronts', {
+    const saved = await apiRequest(id ? `/api/production/catalog/fronts/${id}` : '/api/production/catalog/fronts', {
       method: id ? 'PUT' : 'POST', body: JSON.stringify(payload)
     });
     clearFrontConfigForm();
@@ -782,7 +782,9 @@ async function submitConfigFront(event) {
     await loadProductionConfigCatalog();
     await loadProductionCatalog(currentProductionUnit());
     renderEntryGroups();
-    showToast('Frente/serviço salva.');
+    showToast(saved.front?.linked_existing
+      ? 'Frente existente vinculada a esta unidade com o grupo e tipo originais. Os lançamentos permanecem separados.'
+      : 'Frente/serviço salva.');
   } catch (error) {
     console.error(error);
     showToast(error.message || 'Não foi possível salvar a frente/serviço.', true);

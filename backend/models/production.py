@@ -551,35 +551,59 @@ def save_service_front(user_id: int, payload: Any, *, front_id: int | None = Non
         validate_actor(conn, user_id)
         if not conn.execute("SELECT 1 FROM production_groups WHERE id=?", (group_id,)).fetchone():
             raise ValueError("Grupo não encontrado.")
-        try:
-            if front_id is None:
-                cursor = conn.execute(
-                    """INSERT INTO production_service_fronts(
-                           group_id,name,display_style,position,is_active,created_by,updated_by,created_at,updated_at
-                       ) VALUES (?,?,?,?,?,?,?,?,?)""",
-                    (group_id, name, display_style, position, int(is_active), user_id, user_id, now, now),
+        linked_existing = False
+        existing = conn.execute(
+            "SELECT id,is_active FROM production_service_fronts WHERE name=? COLLATE NOCASE",
+            (name,),
+        ).fetchone() if front_id is None else None
+        if existing:
+            if not existing["is_active"]:
+                raise ValueError("Esta frente está inativa. Reative o cadastro existente antes de vinculá-la.")
+            front_id = int(existing["id"])
+            current_units = {
+                row["unit_code"] for row in conn.execute(
+                    "SELECT unit_code FROM production_service_front_units WHERE service_front_id=?", (front_id,),
                 )
-                front_id = int(cursor.lastrowid)
-            else:
-                if not conn.execute("SELECT 1 FROM production_service_fronts WHERE id=?", (front_id,)).fetchone():
-                    raise ValueError("Frente/serviço não encontrada.")
-                conn.execute(
-                    """UPDATE production_service_fronts
-                       SET group_id=?,name=?,display_style=?,position=?,is_active=?,updated_by=?,updated_at=? WHERE id=?""",
-                    (group_id, name, display_style, position, int(is_active), user_id, now, front_id),
-                )
-        except sqlite3.IntegrityError as exc:
-            raise ValueError("Já existe uma frente/serviço com esse nome.") from exc
-        conn.execute("DELETE FROM production_service_front_units WHERE service_front_id=?", (front_id,))
-        conn.executemany(
-            "INSERT INTO production_service_front_units(service_front_id,unit_code) VALUES (?,?)",
-            [(front_id, unit) for unit in units],
-        )
+            }
+            new_units = [unit for unit in units if unit not in current_units]
+            if not new_units:
+                raise ValueError("Esta frente/serviço já está disponível nesta unidade.")
+            conn.executemany(
+                "INSERT INTO production_service_front_units(service_front_id,unit_code) VALUES (?,?)",
+                [(front_id, unit) for unit in new_units],
+            )
+            linked_existing = True
+        if not linked_existing:
+            try:
+                if front_id is None:
+                    cursor = conn.execute(
+                        """INSERT INTO production_service_fronts(
+                               group_id,name,display_style,position,is_active,created_by,updated_by,created_at,updated_at
+                           ) VALUES (?,?,?,?,?,?,?,?,?)""",
+                        (group_id, name, display_style, position, int(is_active), user_id, user_id, now, now),
+                    )
+                    front_id = int(cursor.lastrowid)
+                else:
+                    if not conn.execute("SELECT 1 FROM production_service_fronts WHERE id=?", (front_id,)).fetchone():
+                        raise ValueError("Frente/serviço não encontrada.")
+                    conn.execute(
+                        """UPDATE production_service_fronts
+                           SET group_id=?,name=?,display_style=?,position=?,is_active=?,updated_by=?,updated_at=? WHERE id=?""",
+                        (group_id, name, display_style, position, int(is_active), user_id, now, front_id),
+                    )
+            except sqlite3.IntegrityError as exc:
+                raise ValueError("Já existe uma frente/serviço com esse nome.") from exc
+            conn.execute("DELETE FROM production_service_front_units WHERE service_front_id=?", (front_id,))
+            conn.executemany(
+                "INSERT INTO production_service_front_units(service_front_id,unit_code) VALUES (?,?)",
+                [(front_id, unit) for unit in units],
+            )
     catalog = list_catalog(user_id, include_inactive=True)
-    return next(
+    result = next(
         front for group in catalog["groups"]
         for front in group["fronts"] if front["id"] == front_id
     )
+    return {**result, "linked_existing": True} if linked_existing else result
 
 
 def list_sector_options(user_id: int, unit_code: Any, sector: Any) -> list[dict[str, str]]:
