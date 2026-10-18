@@ -61,6 +61,7 @@ from ..models.production import (
     list_sector_options as list_production_sector_options,
     list_my_items as list_production_my_items,
     save_my_item as save_production_my_item,
+    save_my_items as save_production_my_items,
     remove_my_item as remove_production_my_item,
     get_daily_summary as get_production_daily_summary,
     save_daily_summary as save_production_daily_summary,
@@ -698,6 +699,17 @@ def application(environ, start_response):
             if method == "POST":
                 item = save_production_my_item(user["id"], _json_body(environ))
                 return _json(start_response, HTTPStatus.CREATED, {"ok": True, "item": item})
+        except PermissionError as exc:
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
+        except (ValueError, TypeError) as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path == "/api/production/my-items/batch" and method == "POST":
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            items = save_production_my_items(user["id"], _json_body(environ))
+            return _json(start_response, HTTPStatus.CREATED, {"ok": True, "items": items})
         except PermissionError as exc:
             return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
         except (ValueError, TypeError) as exc:

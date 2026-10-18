@@ -22,7 +22,8 @@ let productionEditingFrontActive = true;
 let productionItems = [];
 let productionFilterGroup = '';
 let productionFilterFront = '';
-let sectorOptions = [];
+const productionSectorOptions = new WeakMap();
+let productionSectorSequence = 0;
 
 function localIsoDate(date = new Date()) {
   const year = date.getFullYear();
@@ -217,8 +218,7 @@ function statusMeta(code) {
   };
 }
 
-function renderStatusOptions(selectedCode = selectedStatus()) {
-  const container = document.querySelector('#production-status-options');
+function renderStatusOptions(selectedCode = selectedStatus(), container = document.querySelector('#production-status-options')) {
   if (!container) return;
   container.innerHTML = productionStatuses.map(status => {
     const style = PRODUCTION_STATUS_STYLES[status.style_key] || PRODUCTION_STATUS_STYLES.waiting;
@@ -383,14 +383,14 @@ function renderEntryFronts(selectedFrontId = null, fallbackItem = null) {
     : '<option value="">Nenhuma frente/serviço cadastrada neste grupo</option>';
 }
 
-function setSelectedStatus(value) {
-  document.querySelectorAll('[data-production-status]').forEach(input => {
+function setSelectedStatus(value, root = document) {
+  root.querySelectorAll('[data-production-status]').forEach(input => {
     input.checked = input.value === value;
   });
 }
 
-function selectedStatus() {
-  return document.querySelector('[data-production-status]:checked')?.value || '';
+function selectedStatus(root = document) {
+  return root.querySelector('[data-production-status]:checked')?.value || '';
 }
 
 function defaultStatusCode() {
@@ -399,22 +399,64 @@ function defaultStatusCode() {
     || '';
 }
 
-function resetSectorFields() {
-  sectorOptions = [];
-  const section = document.querySelector('#production-section-input');
+function productionSectorField(row, field) {
+  return row === document ? document.querySelector(`#production-${field}-input`)
+    : row.querySelector(`[data-sector-field="${field}"]`);
+}
+
+function productionSectorRows() {
+  return [...document.querySelectorAll('[data-production-sector-row]')];
+}
+
+function updateProductionSectorRows() {
+  const rows = productionSectorRows();
+  rows.forEach((row, index) => {
+    row.querySelector('.production-sector-number').textContent = `Setor ${index + 1}`;
+    row.querySelector('[data-remove-sector]').hidden = index === 0;
+  });
+  const add = document.querySelector('#production-add-sector');
+  if (add) add.disabled = rows.length >= 100;
+}
+
+function addProductionSector() {
+  const rows = productionSectorRows();
+  if (!rows.length || rows.length >= 100) return;
+  const row = rows[0].cloneNode(true);
+  const suffix = `-${++productionSectorSequence}`;
+  row.querySelectorAll('[id]').forEach(element => { element.id += suffix; });
+  row.querySelectorAll('label[for]').forEach(label => { label.htmlFor += suffix; });
+  productionSectorField(row, 'sector').value = '';
+  productionSectorField(row, 'farm').value = '';
+  resetSectorFields(row);
+  renderStatusOptions(defaultStatusCode(), row.querySelector('.production-status-options'));
+  document.querySelector('#production-sector-rows').append(row);
+  updateProductionSectorRows();
+  productionSectorField(row, 'sector').focus();
+}
+
+function resetSectorFields(row = document) {
+  productionSectorOptions.set(row, []);
+  const section = productionSectorField(row, 'section');
   if (section) section.innerHTML = '<option value="">Sem seção</option>';
 }
 
-async function resolveSectorFromBase() {
+async function resolveSectorFromBase(row = document) {
   const unit = document.querySelector('#production-unit-input')?.value || currentProductionUnit();
-  const sector = document.querySelector('#production-sector-input')?.value.trim() || '';
-  const section = document.querySelector('#production-section-input');
-  const farm = document.querySelector('#production-farm-input');
-  resetSectorFields();
+  const input = productionSectorField(row, 'sector');
+  const sector = input?.value.trim() || '';
+  const section = productionSectorField(row, 'section');
+  const farm = productionSectorField(row, 'farm');
+  const request = {};
+  productionSectorOptions.set(row, request);
+  if (section) section.innerHTML = '<option value="">Sem seção</option>';
+  if (farm) farm.value = '';
   if (!sector) return;
   try {
     const data = await apiRequest(`/api/production/sector-options?unit=${encodeURIComponent(unit)}&sector=${encodeURIComponent(sector)}`);
-    sectorOptions = Array.isArray(data.items) ? data.items : [];
+    if (productionSectorOptions.get(row) !== request || input.value.trim() !== sector ||
+        document.querySelector('#production-unit-input')?.value !== unit) return;
+    const sectorOptions = Array.isArray(data.items) ? data.items : [];
+    productionSectorOptions.set(row, sectorOptions);
     if (!section) return;
     section.innerHTML = '<option value="">Sem seção</option>' + sectorOptions.map(item =>
       `<option value="${escapeHtml(item.section)}">${escapeHtml(item.section || 'Sem seção')}${item.farm ? ` — ${escapeHtml(item.farm)}` : ''}</option>`
@@ -432,10 +474,11 @@ async function resolveSectorFromBase() {
   }
 }
 
-function syncFarmFromSection() {
-  const sectionValue = document.querySelector('#production-section-input')?.value || '';
-  const selected = sectorOptions.find(item => item.section === sectionValue);
-  const farm = document.querySelector('#production-farm-input');
+function syncFarmFromSection(row = document) {
+  const sectionValue = productionSectorField(row, 'section')?.value || '';
+  const options = productionSectorOptions.get(row);
+  const selected = Array.isArray(options) ? options.find(item => item.section === sectionValue) : null;
+  const farm = productionSectorField(row, 'farm');
   if (farm && selected) farm.value = selected.farm || '';
 }
 
@@ -500,6 +543,8 @@ function setProductionEntryEditMode(isEditing) {
   if (serviceSection) serviceSection.hidden = Boolean(isEditing);
   const notesSection = document.querySelector('#production-entry-notes');
   if (notesSection) notesSection.hidden = !isEditing;
+  const addSector = document.querySelector('#production-add-sector');
+  if (addSector) addSector.hidden = Boolean(isEditing);
 
   const configButton = document.querySelector('#production-config-toggle');
   if (configButton) configButton.hidden = Boolean(isEditing) || !canConfigureProduction();
@@ -517,6 +562,9 @@ function setProductionEntryEditMode(isEditing) {
 }
 
 function clearEntryForm(defaultUnit = selectedNavbarProductionUnit()) {
+  productionSectorRows().forEach(row => productionSectorOptions.delete(row));
+  productionSectorRows().slice(1).forEach(row => row.remove());
+  updateProductionSectorRows();
   const form = document.querySelector('#production-entry-form');
   form?.reset();
   document.querySelector('#production-item-id').value = '';
@@ -584,42 +632,39 @@ async function submitProductionEntry(event) {
   event.preventDefault();
   if (!canFillProduction()) return;
   const submit = document.querySelector('#production-entry-submit');
+  if (submit?.disabled) return;
   const itemId = Number(document.querySelector('#production-item-id')?.value || 0);
   const unit = document.querySelector('#production-unit-input')?.value || currentProductionUnit();
   const frontId = Number(document.querySelector('#production-front-input')?.value || 0);
-  const status = selectedStatus();
   if (!frontId) {
     showToast('Selecione uma frente ou serviço.', true);
-    return;
-  }
-  if (!status) {
-    showToast('Selecione um status.', true);
     return;
   }
   const payload = {
     unit_code: unit,
     service_front_id: frontId,
-    work_date: localIsoDate(),
-    sector: document.querySelector('#production-sector-input')?.value.trim() || '',
-    section: document.querySelector('#production-section-input')?.value || '',
-    farm: document.querySelector('#production-farm-input')?.value.trim() || '',
-    status,
-    observation: document.querySelector('#production-observation-input')?.value.trim() || '',
-    changes: document.querySelector('#production-changes-input')?.value.trim() || ''
+    work_date: localIsoDate()
   };
-  if (!payload.sector) {
-    showToast('Informe o setor.', true);
-    document.querySelector('#production-sector-input')?.focus();
+  let sectors;
+  try {
+    sectors = collectProductionSectors();
+  } catch (error) {
+    showToast(error.message, true);
     return;
   }
+  if (itemId) Object.assign(payload, sectors[0], {
+    observation: document.querySelector('#production-observation-input')?.value.trim() || '',
+    changes: document.querySelector('#production-changes-input')?.value.trim() || ''
+  });
+  else payload.sectors = sectors;
   if (submit) submit.disabled = true;
   try {
-    await apiRequest(itemId ? `/api/production/my-items/${itemId}` : '/api/production/my-items', {
+    await apiRequest(itemId ? `/api/production/my-items/${itemId}` : '/api/production/my-items/batch', {
       method: itemId ? 'PUT' : 'POST',
       body: JSON.stringify(payload)
     });
     closeModal('production-entry-modal');
-    showToast(itemId ? 'Frente atualizada.' : 'Frente adicionada à sua lista.');
+    showToast(itemId ? 'Frente atualizada.' : `${sectors.length} ${sectors.length === 1 ? 'setor adicionado' : 'setores adicionados'} à frente.`);
     await refreshProductionPage(unit);
   } catch (error) {
     console.error(error);
@@ -627,6 +672,23 @@ async function submitProductionEntry(event) {
   } finally {
     if (submit) submit.disabled = false;
   }
+}
+
+function collectProductionSectors() {
+  const seen = new Set();
+  return productionSectorRows().map(row => {
+    const input = productionSectorField(row, 'sector');
+    const sector = input.value.trim();
+    const status = selectedStatus(row);
+    if (!sector || seen.has(sector.toLocaleUpperCase('pt-BR'))) {
+      input.focus();
+      throw new Error(sector ? `O setor ${sector} está repetido nesta frente.` : 'Informe o setor.');
+    }
+    if (!status) throw new Error(`Selecione o status do setor ${sector}.`);
+    seen.add(sector.toLocaleUpperCase('pt-BR'));
+    return { sector, section: productionSectorField(row, 'section').value,
+      farm: productionSectorField(row, 'farm').value.trim(), status };
+  });
 }
 
 async function removeProductionItem(itemId) {
@@ -948,7 +1010,7 @@ async function submitProductionStatus(event) {
     if (editor) editor.open = false;
     await loadProductionConfigStatuses();
     await loadProductionStatuses();
-    renderStatusOptions(defaultStatusCode());
+    refreshProductionSectorStatuses();
     renderProductionItems({ permissions: productionAccess?.permissions || {} });
     showToast('Status salvo.');
   } catch (error) {
@@ -965,7 +1027,7 @@ async function deleteProductionStatus(statusId, statusName = '') {
     clearStatusConfigForm();
     await loadProductionConfigStatuses();
     await loadProductionStatuses();
-    renderStatusOptions(defaultStatusCode());
+    refreshProductionSectorStatuses();
     renderProductionItems({ permissions: productionAccess?.permissions || {} });
     showToast('Status apagado.');
   } catch (error) {

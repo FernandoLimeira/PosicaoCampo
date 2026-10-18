@@ -145,41 +145,43 @@
           <div class="production-form-section-heading">
             <div>
               <span>Localização</span>
-              <strong>Onde a frente está trabalhando</strong>
+              <strong>Setores da frente</strong>
+            </div>
+            <div class="production-sector-actions">
+              <button id="production-status-config-toggle" class="production-inline-text-button" type="button" hidden>Configurar status</button>
+              <button id="production-add-sector" class="production-secondary-button" type="button">+ Adicionar setor</button>
             </div>
           </div>
+          <div id="production-sector-rows" class="production-sector-rows">
+          <div class="production-sector-row" data-production-sector-row>
+            <div class="production-sector-row-heading">
+              <strong class="production-sector-number">Setor 1</strong>
+              <button class="production-inline-text-button production-remove-sector" type="button" data-remove-sector hidden>Remover setor</button>
+            </div>
           <div class="production-form-grid production-location-grid">
             <label class="field" for="production-sector-input">
               <span>Setor</span>
-              <input id="production-sector-input" type="text" maxlength="32" autocomplete="off" required placeholder="Ex.: 3392" />
+              <input id="production-sector-input" data-sector-field="sector" type="text" maxlength="32" autocomplete="off" required placeholder="Ex.: 3392" />
             </label>
 
             <label class="field" for="production-section-input">
               <span>Seção</span>
-              <select id="production-section-input">
+              <select id="production-section-input" data-sector-field="section">
                 <option value="">Sem seção</option>
               </select>
             </label>
 
             <label class="field" for="production-farm-input">
               <span>Fazenda</span>
-              <input id="production-farm-input" type="text" maxlength="160" autocomplete="off" placeholder="Nome da fazenda" />
+              <input id="production-farm-input" data-sector-field="farm" type="text" maxlength="160" autocomplete="off" placeholder="Nome da fazenda" />
             </label>
           </div>
-        </section>
-
-        <section class="production-form-section">
-          <div class="production-form-section-heading">
-            <div>
-              <span>Situação atual</span>
-              <strong>Status da frente</strong>
-            </div>
-            <button id="production-status-config-toggle" class="production-inline-text-button" type="button" hidden>Configurar status</button>
-          </div>
           <fieldset class="production-status-field">
-            <legend class="sr-only">Status</legend>
+            <legend>Status do setor</legend>
             <div id="production-status-options" class="production-status-options"></div>
           </fieldset>
+          </div>
+          </div>
         </section>
 
         <section id="production-entry-notes" class="production-form-section production-form-section-compact" hidden>

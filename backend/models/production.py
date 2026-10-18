@@ -794,6 +794,20 @@ def _normalize_entry_data(payload: dict[str, Any]) -> dict[str, str]:
 
 
 def save_my_item(user_id: int, payload: Any, *, item_id: int | None = None) -> dict[str, Any]:
+    return _save_my_items(user_id, payload, [payload], item_id=item_id)[0]
+
+
+def save_my_items(user_id: int, payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        raise ValueError("Dados dos setores inválidos.")
+    sectors = payload.get("sectors")
+    if not isinstance(sectors, list) or not 1 <= len(sectors) <= 100:
+        raise ValueError("Informe entre 1 e 100 setores por lançamento.")
+    return _save_my_items(user_id, payload, sectors)
+
+
+def _save_my_items(user_id: int, payload: Any, sectors: list[Any], *, item_id: int | None = None) -> list[dict[str, Any]]:
+    """Grava um ou vários setores na mesma transação, preservando o histórico individual."""
     if not isinstance(payload, dict):
         raise ValueError("Dados do apontamento inválidos.")
     unit = _normalize_unit(payload.get("unit_code"))
@@ -801,62 +815,93 @@ def save_my_item(user_id: int, payload: Any, *, item_id: int | None = None) -> d
         front_id = int(payload.get("service_front_id"))
     except (TypeError, ValueError) as exc:
         raise ValueError("Selecione a frente/serviço.") from exc
-    entry = _normalize_entry_data(payload)
+    entries = []
+    seen = set()
+    for sector in sectors:
+        if not isinstance(sector, dict):
+            raise ValueError("Dados do setor inválidos.")
+        entry = _normalize_entry_data({**sector, "work_date": payload.get("work_date")})
+        key = entry["sector"].upper()
+        if key in seen:
+            raise ValueError(f"O setor {entry['sector']} está repetido nesta frente.")
+        seen.add(key)
+        entries.append(entry)
     now = int(time.time())
+    item_ids = []
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         _require_access(conn, user_id, permission="fill", unit=unit)
         validate_actor(conn, user_id)
-        entry["status"] = _validate_status_code(conn, entry["status"])
         front = _catalog_front_for_unit(conn, front_id, unit, allow_inactive=item_id is not None)
+        existing = conn.execute(
+            """SELECT ui.id,e.sector FROM production_user_items ui
+               JOIN production_daily_entries e ON e.id=(
+                 SELECT latest.id FROM production_daily_entries latest
+                 WHERE latest.user_item_id=ui.id AND latest.work_date<=?
+                 ORDER BY latest.work_date DESC,latest.id DESC LIMIT 1
+               )
+               WHERE ui.owner_user_id=? AND ui.unit_code=? AND ui.service_front_id=?
+                 AND ui.is_active=1 AND ui.id!=?""",
+            (entries[0]["work_date"], user_id, unit, front_id, item_id or 0),
+        ).fetchall()
+        existing_sectors = {row["sector"].strip().upper() for row in existing}
+        for entry in entries:
+            entry["status"] = _validate_status_code(conn, entry["status"])
+            if entry["sector"].upper() in existing_sectors:
+                raise ValueError(f"O setor {entry['sector']} já está cadastrado nesta frente. Edite o lançamento existente.")
+            item_ids.append(_save_my_item(conn, user_id, unit, front_id, front, entry, now, item_id=item_id))
+    result = list_my_items(user_id, unit, entries[0]["work_date"])
+    by_id = {item["id"]: item for item in result["items"]}
+    return [by_id[saved_id] for saved_id in item_ids]
 
-        if item_id is None:
-            position = conn.execute(
-                "SELECT COALESCE(MAX(position),-1)+1 FROM production_user_items WHERE owner_user_id=? AND unit_code=? AND is_active=1",
-                (user_id, unit),
-            ).fetchone()[0]
-            cursor = conn.execute(
-                """INSERT INTO production_user_items(owner_user_id,unit_code,service_front_id,position,is_active,created_at,updated_at)
-                   VALUES (?,?,?,?,1,?,?)""",
-                (user_id, unit, front_id, int(position or 0), now, now),
-            )
-            item_id = int(cursor.lastrowid)
-        else:
-            item = conn.execute(
-                "SELECT id,unit_code FROM production_user_items WHERE id=? AND owner_user_id=? AND is_active=1",
-                (item_id, user_id),
-            ).fetchone()
-            if not item:
-                raise ValueError("Frente da sua lista não encontrada.")
-            if item["unit_code"] != unit:
-                raise ValueError("A unidade de uma frente já salva não pode ser alterada. Remova e adicione novamente.")
-            conn.execute(
-                "UPDATE production_user_items SET service_front_id=?,updated_at=? WHERE id=?",
-                (front_id, now, item_id),
-            )
 
-        conn.execute(
-            """
-            INSERT INTO production_daily_entries(
-                work_date,user_item_id,owner_user_id,unit_code,service_front_id,service_name,group_name,display_style,
-                sector,section,farm,status,observation,changes,created_by,updated_by,created_at,updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            ON CONFLICT(work_date,user_item_id) DO UPDATE SET
-                owner_user_id=excluded.owner_user_id, unit_code=excluded.unit_code,
-                service_front_id=excluded.service_front_id, service_name=excluded.service_name,
-                group_name=excluded.group_name, display_style=excluded.display_style,
-                sector=excluded.sector, section=excluded.section, farm=excluded.farm,
-                status=excluded.status, observation=excluded.observation, changes=excluded.changes,
-                updated_by=excluded.updated_by, updated_at=excluded.updated_at
-            """,
-            (
-                entry["work_date"], item_id, user_id, unit, front_id, front["name"], front["group_name"], front["display_style"],
-                entry["sector"], entry["section"], entry["farm"], entry["status"], entry["observation"], entry["changes"],
-                user_id, user_id, now, now,
-            ),
+def _save_my_item(conn, user_id, unit, front_id, front, entry, now, *, item_id=None):
+    if item_id is None:
+        position = conn.execute(
+            "SELECT COALESCE(MAX(position),-1)+1 FROM production_user_items WHERE owner_user_id=? AND unit_code=? AND is_active=1",
+            (user_id, unit),
+        ).fetchone()[0]
+        cursor = conn.execute(
+            """INSERT INTO production_user_items(owner_user_id,unit_code,service_front_id,position,is_active,created_at,updated_at)
+               VALUES (?,?,?,?,1,?,?)""",
+            (user_id, unit, front_id, int(position or 0), now, now),
         )
-    result = list_my_items(user_id, unit, entry["work_date"])
-    return next(item for item in result["items"] if item["id"] == item_id)
+        item_id = int(cursor.lastrowid)
+    else:
+        item = conn.execute(
+            "SELECT id,unit_code FROM production_user_items WHERE id=? AND owner_user_id=? AND is_active=1",
+            (item_id, user_id),
+        ).fetchone()
+        if not item:
+            raise ValueError("Frente da sua lista não encontrada.")
+        if item["unit_code"] != unit:
+            raise ValueError("A unidade de uma frente já salva não pode ser alterada. Remova e adicione novamente.")
+        conn.execute(
+            "UPDATE production_user_items SET service_front_id=?,updated_at=? WHERE id=?",
+            (front_id, now, item_id),
+        )
+
+    conn.execute(
+        """
+        INSERT INTO production_daily_entries(
+            work_date,user_item_id,owner_user_id,unit_code,service_front_id,service_name,group_name,display_style,
+            sector,section,farm,status,observation,changes,created_by,updated_by,created_at,updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(work_date,user_item_id) DO UPDATE SET
+            owner_user_id=excluded.owner_user_id, unit_code=excluded.unit_code,
+            service_front_id=excluded.service_front_id, service_name=excluded.service_name,
+            group_name=excluded.group_name, display_style=excluded.display_style,
+            sector=excluded.sector, section=excluded.section, farm=excluded.farm,
+            status=excluded.status, observation=excluded.observation, changes=excluded.changes,
+            updated_by=excluded.updated_by, updated_at=excluded.updated_at
+        """,
+        (
+            entry["work_date"], item_id, user_id, unit, front_id, front["name"], front["group_name"], front["display_style"],
+            entry["sector"], entry["section"], entry["farm"], entry["status"], entry["observation"], entry["changes"],
+            user_id, user_id, now, now,
+        ),
+    )
+    return item_id
 
 
 def remove_my_item(user_id: int, item_id: int) -> None:
