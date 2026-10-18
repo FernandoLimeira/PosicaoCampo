@@ -8,14 +8,14 @@
   --muted: #65766d;
   --line: #dbe7df;
   --surface: #ffffff;
-  --page: #f4f7f5;
-  --data-surface: #e9efeb;
-  --data-alternate: #e2eae5;
-  --data-hover: #d8e8dd;
-  --data-border: #cddbd1;
+  --page: #edf2ef;
+  --data-surface: #ffffff;
+  --data-alternate: #f3f8f4;
+  --data-hover: #e7f2ea;
+  --data-border: #cfddd3;
   --data-header: #28563e;
   --data-radius: 10px;
-  --data-shadow: 0 4px 18px rgba(25, 69, 44, .05);
+  --data-shadow: 0 4px 18px rgba(25, 69, 44, .09);
   --control-radius: 6px;
   --control-border: #c6ddce;
   --control-surface: #f0f7f2;
@@ -331,6 +331,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 body.modal-open { overflow: hidden; }
 
 .modal-backdrop {
+  /* Os pop-ups mantêm a paleta anterior, independente das superfícies da página. */
+  --data-surface: #e9efeb;
+  --data-alternate: #e2eae5;
+  --data-hover: #d8e8dd;
+  --data-border: #cddbd1;
+  --data-shadow: 0 4px 18px rgba(25, 69, 44, .05);
   position: fixed;
   inset: 0;
   z-index: 100;
