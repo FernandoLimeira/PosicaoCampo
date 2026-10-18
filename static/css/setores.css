@@ -75,7 +75,7 @@
 }
 
 .sector-base-card-kicker {
-  color: var(--green);
+  color: var(--brand);
   font-size: 9px;
   font-weight: 850;
   letter-spacing: .9px;
@@ -135,12 +135,12 @@
   border: 0;
   border-bottom: 1px solid transparent;
   background: transparent;
-  color: var(--green);
+  color: var(--brand);
   font-size: 10px;
   font-weight: 800;
 }
 
-.sector-base-text-button:hover { border-bottom-color: var(--green); }
+.sector-base-text-button:hover { border-bottom-color: var(--brand); }
 
 .sector-base-manual-form {
   display: grid;

@@ -81,8 +81,8 @@
 
 .return-field input:focus,
 .return-field select:focus {
-  border-color: #0b7a36;
-  box-shadow: 0 0 0 3px rgba(11, 122, 54, .08);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(27, 74, 120, .1);
 }
 
 .return-field.compact { min-width: 190px; }
@@ -533,14 +533,14 @@
 }
 .return-presentation-footer > * { min-width: 0; max-width: 100%; }
 .return-presentation-footer > button { justify-self: end; white-space: normal; }
-.return-presentation-footer strong { color: #234f3d; font-size: 14px; }
+.return-presentation-footer strong { color: var(--brand-strong); font-size: 14px; }
 .return-presentation-footer p { margin: 6px 0 0; color: #5c7065; font-size: 12px; }
 .return-presentation-footer .excel-report-status { flex-basis: 100%; margin: 0; }
 .return-presentation-footer .excel-report-status:empty { display: none; }
 .return-presentation-footer button:disabled { opacity: .55; cursor: not-allowed; }
 .return-trace-options { min-width: 0; width: 100%; }
 .return-trace-options[hidden] { display: none; }
-.return-trace-options h4 { margin: 0 0 8px; color: #234f3d; }
+.return-trace-options h4 { margin: 0 0 8px; color: var(--brand-strong); }
 .return-trace-options p, .return-trace-options small { color: #5c7065; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
 .return-trace-options small { display: block; }
 .return-trace-list {
@@ -578,7 +578,7 @@
   min-height: 16px;
   padding: 0;
   margin: 1px 0 0;
-  accent-color: #234f3d;
+  accent-color: var(--brand-strong);
   cursor: pointer;
 }
 @media (max-width: 640px) { .return-trace-list { grid-template-columns: 1fr; } }

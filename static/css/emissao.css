@@ -41,7 +41,7 @@
 .emission-card-kicker {
   display: block;
   margin-bottom: 6px;
-  color: var(--green);
+  color: var(--brand);
   font-size: 10px;
   font-weight: 850;
   letter-spacing: .12em;

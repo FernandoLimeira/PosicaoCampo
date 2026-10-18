@@ -20,20 +20,20 @@
 .production-config-heading span {
   display: block;
   margin-bottom: 6px;
-  color: var(--green);
+  color: var(--brand);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 1.1px;
   text-transform: uppercase;
 }
 
-.production-page-header h1 { margin: 0; color: #183126; font-size: 28px; letter-spacing: -.6px; }
+.production-page-header h1 { margin: 0; color: var(--text); font-size: 28px; letter-spacing: -.6px; }
 .production-page-header p { max-width: 690px; margin: 8px 0 0; color: #6d7e75; font-size: 12px; line-height: 1.55; }
 
 .production-page-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 14px; }
 .production-current-context { min-width: 130px; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .production-current-context span { color: #73837a; font-size: 9px; font-weight: 800; letter-spacing: .7px; text-transform: uppercase; }
-.production-current-context strong { color: #1a442d; font-size: 18px; }
+.production-current-context strong { color: var(--brand-strong); font-size: 18px; }
 .production-current-context small { color: #718077; font-size: 10px; }
 
 .production-primary-button,
@@ -47,8 +47,8 @@
   font-weight: 800;
   white-space: nowrap;
 }
-.production-primary-button { border: 1px solid var(--green); background: var(--green); color: #fff; }
-.production-primary-button:hover { background: var(--green-strong); }
+.production-primary-button { border: 1px solid var(--brand); background: var(--brand); color: #fff; }
+.production-primary-button:hover { background: var(--brand-strong); }
 .production-secondary-button,
 .production-config-toggle,
 .production-row-action { border: 1px solid #cad7cf; background: #fff; color: #4c6457; }
@@ -86,7 +86,7 @@
   background: #fff;
 }
 .production-summary-item span { color: #607168; font-size: 10px; font-weight: 800; text-transform: uppercase; }
-.production-summary-item strong { color: #173c28; font-size: 24px; }
+.production-summary-item strong { color: var(--text); font-size: 24px; }
 .production-summary-item.is-active { border-left-color: #188a45; }
 .production-summary-item.is-wet { border-left-color: #d4a116; }
 .production-summary-item.is-waiting { border-left-color: #87948d; }
@@ -110,7 +110,7 @@
 
 .production-table-card { border: 1px solid #dfe8e2; border-radius: 4px; background: #fff; overflow: hidden; }
 .production-table-heading { min-height: 74px; padding: 17px 20px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid #e5ece8; }
-.production-table-heading h2 { margin: 0; color: #253f32; font-size: 16px; }
+.production-table-heading h2 { margin: 0; color: var(--text); font-size: 16px; }
 .production-table-heading p { margin: 0; color: #718077; font-size: 10px; }
 .production-table-wrap { overflow-x: auto; }
 .production-table { width: 100%; border-collapse: collapse; min-width: 920px; }
@@ -118,7 +118,7 @@
 .production-table td { padding: 11px 13px; border-bottom: 1px solid #edf1ef; color: #3d5147; font-size: 11px; vertical-align: middle; }
 .production-table tbody tr:last-child td { border-bottom: 0; }
 .production-item-name { display: flex; flex-direction: column; gap: 3px; }
-.production-item-name strong { color: #1f402f; font-size: 12px; }
+.production-item-name strong { color: var(--text); font-size: 12px; }
 .production-item-name small { color: #7a8981; font-size: 9px; }
 .production-status-badge { display: inline-flex; align-items: center; min-height: 24px; padding: 4px 8px; border-radius: 4px; font-size: 9px; font-weight: 800; }
 .production-status-badge.is-active { background: #e6f5eb; color: #18733b; }
@@ -147,7 +147,7 @@
 .production-form-section-compact { padding-bottom: 12px; }
 .production-form-section-heading { margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .production-form-section-heading > div:first-child { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.production-form-section-heading > div:first-child > span { color: var(--green); font-size: 9px; font-weight: 800; letter-spacing: .75px; text-transform: uppercase; }
+.production-form-section-heading > div:first-child > span { color: var(--brand); font-size: 9px; font-weight: 800; letter-spacing: .75px; text-transform: uppercase; }
 .production-form-section-heading > div:first-child > strong { color: #294538; font-size: 12px; }
 .production-entry-unit-context { min-width: 168px; padding: 7px 10px; display: flex; align-items: flex-end; flex-direction: column; gap: 1px; border: 1px solid #d9e5dd; border-radius: 4px; background: #fff; }
 .production-entry-unit-context span { color: #7a8981; font-size: 8px; font-weight: 800; letter-spacing: .55px; text-transform: uppercase; }
@@ -197,7 +197,7 @@
 .production-config-editor { margin-bottom: 12px; border: 1px solid #dce6e0; border-radius: 4px; background: #fff; overflow: hidden; }
 .production-config-editor-summary { min-height: 42px; padding: 0 11px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #294538; cursor: pointer; list-style: none; font-size: 10px; font-weight: 800; }
 .production-config-editor-summary::-webkit-details-marker { display: none; }
-.production-config-editor-summary::after { content: "+"; flex: 0 0 auto; color: var(--green); font-size: 16px; font-weight: 800; line-height: 1; }
+.production-config-editor-summary::after { content: "+"; flex: 0 0 auto; color: var(--brand); font-size: 16px; font-weight: 800; line-height: 1; }
 .production-config-editor[open] .production-config-editor-summary { border-bottom: 1px solid #e4ebe7; background: #f7faf8; }
 .production-config-editor[open] .production-config-editor-summary::after { content: "−"; }
 .production-config-editor-hint { margin-left: auto; color: #849087; font-size: 8px; font-weight: 700; }
@@ -252,14 +252,14 @@
   padding: 3px 0;
   border: 0;
   background: transparent;
-  color: var(--green);
+  color: var(--brand);
   cursor: pointer;
   font-size: 9px;
   font-weight: 800;
   line-height: 1.2;
   white-space: nowrap;
 }
-.production-inline-text-button:hover { color: var(--green-strong); text-decoration: underline; }
+.production-inline-text-button:hover { color: var(--brand-strong); text-decoration: underline; }
 .production-inline-text-button[hidden] { display: none; }
 
 .production-status-config-card { width: min(720px, 100%); margin: 0 auto; }

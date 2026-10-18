@@ -18,7 +18,7 @@
 
 .unit-tab:hover { border-color: #6e9a7e; }
 
-.unit-tab.is-active { color: #fff; border-color: var(--green); background: var(--green); box-shadow: 0 4px 12px #1d51352b; }
+.unit-tab.is-active { color: #fff; border-color: var(--brand); background: var(--brand); box-shadow: 0 4px 12px #1d51352b; }
 
 .sacarose-card { overflow: hidden; border: 1px solid #d9e3dc; border-radius: 10px; background: #fff; box-shadow: 0 10px 30px #1d38281a; }
 
@@ -52,13 +52,13 @@
 
 .sacarose-option-toggle { display: inline-flex; align-items: center; gap: 8px; color: #55665d; font-size: 12px; font-weight: 800; }
 
-.sacarose-option-toggle input { width: 18px; height: 18px; accent-color: var(--green); }
+.sacarose-option-toggle input { width: 18px; height: 18px; accent-color: var(--brand); }
 
 .primary-button, .secondary-button { min-height: 40px; padding: 10px 17px; border-radius: 7px; cursor: pointer; font-weight: 800; }
 
-.primary-button { border: 1px solid var(--green); color: #fff; background: var(--green); }
+.primary-button { border: 1px solid var(--brand); color: #fff; background: var(--brand); }
 
-.primary-button:hover { background: var(--green-strong); }
+.primary-button:hover { background: var(--brand-strong); }
 
 .primary-button:disabled { opacity: .6; cursor: wait; }
 
@@ -102,7 +102,7 @@
 
 .image-toggle { display: flex; align-items: center; justify-content: center; gap: 7px; color: #617068; font-size: 11px; font-weight: 700; }
 
-.image-toggle input { width: 18px; height: 18px; accent-color: var(--green); }
+.image-toggle input { width: 18px; height: 18px; accent-color: var(--brand); }
 
 .remove-row { width: 34px; height: 34px; border: 1px solid #e3c7cb; border-radius: 6px; color: #a23441; background: #fff; cursor: pointer; font-size: 20px; }
 
