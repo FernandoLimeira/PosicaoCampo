@@ -26,7 +26,7 @@
   display: block;
   margin-bottom: 4px;
   color: #72847a;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -41,7 +41,7 @@
 .return-section-heading p {
   margin: 6px 0 0;
   color: #718078;
-  font-size: 8px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -61,7 +61,7 @@
 
 .return-field > span {
   color: #51675b;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -75,14 +75,14 @@
   background: #fff;
   color: #29483a;
   font: inherit;
-  font-size: 9px;
+  font-size: 12px;
   outline: none;
 }
 
 .return-field input:focus,
 .return-field select:focus {
-  border-color: var(--brand);
-  box-shadow: 0 0 0 3px rgba(27, 74, 120, .1);
+  border-color: #0b7a36;
+  box-shadow: 0 0 0 3px rgba(11, 122, 54, .08);
 }
 
 .return-field.compact { min-width: 190px; }
@@ -112,7 +112,7 @@
   background: #fff7f8;
   color: #a64049;
   font: inherit;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -123,7 +123,7 @@
   border: 1px dashed #cfded4;
   border-radius: 4px;
   color: #78877f;
-  font-size: 8px;
+  font-size: 12px;
   text-align: center;
   background: #fbfdfc;
 }
@@ -162,7 +162,7 @@
   background: #f8fbf9;
   color: #2b4739;
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.65;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -185,11 +185,11 @@
 }
 
 .return-table th {
-  padding: 8px 9px;
+  padding: 11px 12px;
   border-bottom: 1px solid #dfe9e2;
   background: #f4f8f5;
   color: #536b5e;
-  font-size: 7px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: .04em;
   text-align: left;
@@ -198,10 +198,10 @@
 }
 
 .return-table td {
-  padding: 9px;
+  padding: 12px;
   border-bottom: 1px solid #edf2ef;
   color: #40574b;
-  font-size: 8px;
+  font-size: 14px;
   line-height: 1.45;
   vertical-align: top;
 }
@@ -281,7 +281,7 @@
 .return-layout-modal-header p {
   margin: 6px 0 0;
   color: #718078;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -324,26 +324,26 @@
   flex: 0 0 auto;
 }
 
-.return-layout-modal .modal-kicker { font-size: 10px; }
+.return-layout-modal .modal-kicker { font-size: 12px; }
 
 .return-layout-modal .modal-header h2 { font-size: 24px; }
 
-.return-layout-modal .return-field > span { font-size: 10px; }
+.return-layout-modal .return-field > span { font-size: 12px; }
 
 .return-layout-modal .return-field input,
-.return-layout-modal .return-field select { font-size: 11px; }
+.return-layout-modal .return-field select { font-size: 12px; }
 
 .return-layout-modal .return-remove-front,
-.return-layout-modal .return-layout-empty { font-size: 10px; }
+.return-layout-modal .return-layout-empty { font-size: 12px; }
 
 .return-layout-modal .section-action,
 .return-layout-modal .modal-button { font-size: 13px; }
 
-.return-layout-modal .excel-report-status { font-size: 10px; }
+.return-layout-modal .excel-report-status { font-size: 12px; }
 
-.return-layout-modal .wizard-footer-info strong { font-size: 11px; }
+.return-layout-modal .wizard-footer-info strong { font-size: 12px; }
 
-.return-layout-modal .wizard-footer-info p { font-size: 10px; }
+.return-layout-modal .wizard-footer-info p { font-size: 12px; }
 
 @media (max-width: 760px) {
 .return-page-actions { width: 100%; justify-content: stretch; }
@@ -363,7 +363,7 @@
 
 .return-analysis-page .excel-page-kicker,
 .return-analysis-page .excel-section-heading span {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .return-analysis-page .excel-page-header h1 {
@@ -372,12 +372,12 @@
 
 .return-analysis-page .excel-page-header p,
 .return-analysis-page .excel-section-heading p {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .return-analysis-page .excel-page-back,
 .return-analysis-page .excel-filter-reset {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .return-analysis-page .excel-upload-copy > strong {
@@ -386,32 +386,32 @@
 
 .return-analysis-page .excel-upload-copy > p,
 .return-analysis-page .excel-shift-rules span {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .return-analysis-page .excel-file-field > span {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .return-analysis-page .excel-file-field input {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .return-analysis-page .excel-file-field small,
 .return-analysis-page .excel-report-status {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .return-analysis-page .excel-report-meta span {
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .return-analysis-page .excel-report-meta strong {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .return-analysis-page .excel-kpi small {
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .return-analysis-page .excel-kpi strong {
@@ -419,7 +419,7 @@
 }
 
 .return-analysis-page .excel-kpi span {
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .return-analysis-page .excel-section-heading h3 {
@@ -432,7 +432,7 @@
 }
 
 .return-analysis-page .return-section-heading span {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .return-analysis-page .return-section-heading h3 {
@@ -440,33 +440,33 @@
 }
 
 .return-analysis-page .return-section-heading p {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .return-analysis-page .return-field > span {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .return-analysis-page .return-field input,
 .return-analysis-page .return-field select {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .return-analysis-page .return-remove-front,
 .return-analysis-page .return-layout-empty {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .return-analysis-page .return-report-text {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .return-analysis-page .return-table th {
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .return-analysis-page .return-table td {
-  font-size: 10px;
+  font-size: 14px;
 }
 
 .return-process-actions {
@@ -484,7 +484,7 @@
   border-radius: 4px;
   background: #f8fbf9;
   color: #617269;
-  font-size: 8px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -533,15 +533,15 @@
 }
 .return-presentation-footer > * { min-width: 0; max-width: 100%; }
 .return-presentation-footer > button { justify-self: end; white-space: normal; }
-.return-presentation-footer strong { color: var(--brand-strong); font-size: 14px; }
+.return-presentation-footer strong { color: #234f3d; font-size: 14px; }
 .return-presentation-footer p { margin: 6px 0 0; color: #5c7065; font-size: 12px; }
 .return-presentation-footer .excel-report-status { flex-basis: 100%; margin: 0; }
 .return-presentation-footer .excel-report-status:empty { display: none; }
 .return-presentation-footer button:disabled { opacity: .55; cursor: not-allowed; }
 .return-trace-options { min-width: 0; width: 100%; }
 .return-trace-options[hidden] { display: none; }
-.return-trace-options h4 { margin: 0 0 8px; color: var(--brand-strong); }
-.return-trace-options p, .return-trace-options small { color: #5c7065; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.return-trace-options h4 { margin: 0 0 8px; color: #234f3d; }
+.return-trace-options p, .return-trace-options small { color: #5c7065; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .return-trace-options small { display: block; }
 .return-trace-list {
   display: grid;
@@ -564,7 +564,7 @@
   gap: 8px;
   padding: 4px 0;
   color: #30515f;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   cursor: pointer;
 }
@@ -578,7 +578,7 @@
   min-height: 16px;
   padding: 0;
   margin: 1px 0 0;
-  accent-color: var(--brand-strong);
+  accent-color: #234f3d;
   cursor: pointer;
 }
 @media (max-width: 640px) { .return-trace-list { grid-template-columns: 1fr; } }

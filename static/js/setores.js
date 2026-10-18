@@ -7,14 +7,14 @@ function getSectorBasePageSize() {
   const height = Math.max(480, window.innerHeight || document.documentElement.clientHeight || 768);
 
   let reservedHeight = 390;
-  let rowHeight = 38;
+  let rowHeight = 64;
 
   if (width <= 680) {
     reservedHeight = 505;
-    rowHeight = 43;
+    rowHeight = 70;
   } else if (width <= 980) {
     reservedHeight = 455;
-    rowHeight = 40;
+    rowHeight = 66;
   }
 
   const fittedRows = Math.floor((height - reservedHeight) / rowHeight);

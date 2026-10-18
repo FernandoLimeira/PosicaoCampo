@@ -11,7 +11,7 @@
   display: block;
   margin-bottom: 4px;
   color: #72847a;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -20,7 +20,7 @@
 .excel-detail-header p {
   margin: 7px 0 0;
   color: #718078;
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -38,7 +38,7 @@
 
 .excel-filter-grid label > span {
   color: #51675b;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -51,17 +51,17 @@
   background: #fff;
   color: #29483a;
   font: inherit;
-  font-size: 9px;
+  font-size: 12px;
   outline: none;
 }
 
-.excel-filter-grid select:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(27, 74, 120, .1); }
+.excel-filter-grid select:focus { border-color: #0b7a36; box-shadow: 0 0 0 3px rgba(11, 122, 54, .08); }
 
 .excel-filter-panel { padding: 12px 13px; }
 
 .excel-filter-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 9px; }
 
-.excel-filter-heading strong { display: block; color: #284638; font-size: 10px; }
+.excel-filter-heading strong { display: block; color: #284638; font-size: 12px; }
 
 .excel-filter-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
 
@@ -81,9 +81,9 @@
 
 .excel-browser-title { display: flex; align-items: center; justify-content: space-between; padding: 9px 10px; border-bottom: 1px solid #e6ece8; background: #f4f8f5; }
 
-.excel-browser-title strong { color: #2d4b3c; font-size: 10px; }
+.excel-browser-title strong { color: #2d4b3c; font-size: 12px; }
 
-.excel-browser-title span { min-width: 22px; padding: 2px 6px; border-radius: 4px; background: #e4eee8; color: #496357; font-size: 8px; font-weight: 900; text-align: center; }
+.excel-browser-title span { min-width: 22px; padding: 2px 6px; border-radius: 4px; background: #e4eee8; color: #496357; font-size: 12px; font-weight: 900; text-align: center; }
 
 .excel-entity-list { max-height: 430px; overflow-y: auto; }
 
@@ -110,15 +110,15 @@
 
 .excel-entity-copy { min-width: 0; }
 
-.excel-entity-copy strong { display: block; color: #29483a; font-size: 9px; overflow-wrap: anywhere; }
+.excel-entity-copy strong { display: block; color: #29483a; font-size: 12px; overflow-wrap: anywhere; }
 
-.excel-entity-copy small { display: block; margin-top: 3px; color: #7f8d85; font-size: 7px; }
+.excel-entity-copy small { display: block; margin-top: 3px; color: #7f8d85; font-size: 12px; }
 
 .excel-entity-metric { text-align: right; }
 
-.excel-entity-metric strong { display: block; color: #246b42; font-size: 10px; }
+.excel-entity-metric strong { display: block; color: #246b42; font-size: 12px; }
 
-.excel-entity-metric small { display: block; color: #87938d; font-size: 7px; }
+.excel-entity-metric small { display: block; color: #87938d; font-size: 12px; }
 
 .excel-entity-chevron { color: #819087; font-size: 17px; }
 
@@ -148,23 +148,23 @@
 
 .excel-comparison-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 
-.excel-comparison-card-head span { color: #577063; font-size: 8px; font-weight: 900; text-transform: uppercase; }
+.excel-comparison-card-head span { color: #577063; font-size: 12px; font-weight: 900; text-transform: uppercase; }
 
-.excel-comparison-card-head b { color: #2c7549; font-size: 7px; }
+.excel-comparison-card-head b { color: #2c7549; font-size: 12px; }
 
 .excel-comparison-card.is-low .excel-comparison-card-head b { color: #a3444d; }
 
-.excel-comparison-card h4 { margin: 8px 0 0; color: #254536; font-size: 11px; }
+.excel-comparison-card h4 { margin: 8px 0 0; color: #254536; font-size: 12px; }
 
-.excel-comparison-card p { margin: 3px 0 0; color: #7b8a82; font-size: 8px; }
+.excel-comparison-card p { margin: 3px 0 0; color: #7b8a82; font-size: 12px; }
 
 .excel-comparison-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
 
 .excel-comparison-metrics span { padding: 7px; border-radius: 4px; background: #fff; border: 1px solid #e8eeea; }
 
-.excel-comparison-metrics small { display: block; color: #849188; font-size: 7px; }
+.excel-comparison-metrics small { display: block; color: #849188; font-size: 12px; }
 
-.excel-comparison-metrics strong { display: block; margin-top: 2px; color: #345443; font-size: 9px; }
+.excel-comparison-metrics strong { display: block; margin-top: 2px; color: #345443; font-size: 12px; }
 
 .excel-occurrence-list { display: grid; gap: 7px; }
 
@@ -185,13 +185,13 @@
 
 .excel-occurrence-icon { font-size: 15px; line-height: 1.2; }
 
-.excel-occurrence-item p { margin: 0; color: #304e3f; font-size: 9px; line-height: 1.45; }
+.excel-occurrence-item p { margin: 0; color: #304e3f; font-size: 12px; line-height: 1.45; }
 
-.excel-occurrence-item small { display: block; margin-top: 3px; color: #7f8d85; font-size: 7px; line-height: 1.35; }
+.excel-occurrence-item small { display: block; margin-top: 3px; color: #7f8d85; font-size: 12px; line-height: 1.35; }
 
-.excel-empty-state { padding: 16px; color: #819087; font-size: 8px; text-align: center; }
+.excel-empty-state { padding: 16px; color: #819087; font-size: 12px; text-align: center; }
 
-.excel-unclassified { padding: 10px 11px; border: 1px solid #eedda8; border-radius: 4px; background: #fffaf0; color: #7e6428; font-size: 8px; line-height: 1.45; }
+.excel-unclassified { padding: 10px 11px; border: 1px solid #eedda8; border-radius: 4px; background: #fffaf0; color: #7e6428; font-size: 12px; line-height: 1.45; }
 
 .excel-unclassified[hidden] { display: none !important; }
 
@@ -232,7 +232,7 @@
 .excel-productivity-modal-header p {
   margin: 7px 0 0;
   color: #718078;
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.45;
 }
 

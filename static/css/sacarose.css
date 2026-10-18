@@ -18,7 +18,7 @@
 
 .unit-tab:hover { border-color: #6e9a7e; }
 
-.unit-tab.is-active { color: #fff; border-color: var(--brand); background: var(--brand); box-shadow: 0 4px 12px #1d51352b; }
+.unit-tab.is-active { color: #fff; border-color: var(--green); background: var(--green); box-shadow: 0 4px 12px #1d51352b; }
 
 .sacarose-card { overflow: hidden; border: 1px solid #d9e3dc; border-radius: 10px; background: #fff; box-shadow: 0 10px 30px #1d38281a; }
 
@@ -52,13 +52,13 @@
 
 .sacarose-option-toggle { display: inline-flex; align-items: center; gap: 8px; color: #55665d; font-size: 12px; font-weight: 800; }
 
-.sacarose-option-toggle input { width: 18px; height: 18px; accent-color: var(--brand); }
+.sacarose-option-toggle input { width: 18px; height: 18px; accent-color: var(--green); }
 
 .primary-button, .secondary-button { min-height: 40px; padding: 10px 17px; border-radius: 7px; cursor: pointer; font-weight: 800; }
 
-.primary-button { border: 1px solid var(--brand); color: #fff; background: var(--brand); }
+.primary-button { border: 1px solid var(--green); color: #fff; background: var(--green); }
 
-.primary-button:hover { background: var(--brand-strong); }
+.primary-button:hover { background: var(--green-strong); }
 
 .primary-button:disabled { opacity: .6; cursor: wait; }
 
@@ -70,7 +70,7 @@
 
 .sacarose-table { width: 100%; min-width: 880px; border-collapse: collapse; table-layout: fixed; }
 
-.sacarose-table th { padding: 11px 10px; color: #5d6d63; background: #f2f6f3; border-bottom: 1px solid #dce5df; font-size: 10px; letter-spacing: .08em; text-align: left; text-transform: uppercase; }
+.sacarose-table th { padding: 12px 10px; color: #5d6d63; background: #f2f6f3; border-bottom: 1px solid #dce5df; font-size: 12px; letter-spacing: .04em; text-align: left; text-transform: uppercase; }
 
 .sacarose-table td { padding: 9px 10px; border-bottom: 1px solid #edf1ee; vertical-align: middle; }
 
@@ -92,7 +92,7 @@
 
 .sacarose-table input:focus, .sacarose-table select:focus { outline: 2px solid #70a88455; border-color: #548768; }
 
-.lookup { display: block; color: #274837; font-size: 11px; font-weight: 750; line-height: 1.35; }
+.lookup { display: block; color: #274837; font-size: 14px; font-weight: 750; line-height: 1.45; }
 
 .lookup.is-muted { color: #89958e; }
 
@@ -102,7 +102,7 @@
 
 .image-toggle { display: flex; align-items: center; justify-content: center; gap: 7px; color: #617068; font-size: 11px; font-weight: 700; }
 
-.image-toggle input { width: 18px; height: 18px; accent-color: var(--brand); }
+.image-toggle input { width: 18px; height: 18px; accent-color: var(--green); }
 
 .remove-row { width: 34px; height: 34px; border: 1px solid #e3c7cb; border-radius: 6px; color: #a23441; background: #fff; cursor: pointer; font-size: 20px; }
 
@@ -135,7 +135,7 @@
 
 .sacarose-table td { display: block; padding: 0; border: 0; }
 
-.sacarose-table td::before { display: block; margin-bottom: 5px; color: #6b796f; font-size: 9px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.sacarose-table td::before { display: block; margin-bottom: 5px; color: #6b796f; font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
 
 .sacarose-table td:nth-child(1)::before { content: "Frente"; }
 

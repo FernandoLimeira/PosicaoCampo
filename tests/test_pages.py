@@ -266,7 +266,7 @@ class PageTests(unittest.TestCase):
     def test_sidebar_and_unit_selector_have_no_gradients(self):
         base = (config.STATIC_DIR / "css/base.css").read_text(encoding="utf-8")
         dashboard = (config.STATIC_DIR / "css/dashboard.css").read_text(encoding="utf-8")
-        self.assertIn("--nav-background: #102a45;", base)
+        self.assertIn("--nav-background: #234f3d;", base)
         self.assertRegex(base, r"\.app-navbar\s*\{[^}]*background:\s*var\(--nav-background\)")
         for selector, declarations in re.findall(r"([^{}]+)\{([^{}]*)\}", base + dashboard):
             if any(name in selector for name in (".app-navbar", ".nav-", ".unit-selector")):
