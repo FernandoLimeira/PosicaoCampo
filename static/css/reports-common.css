@@ -31,7 +31,7 @@
   display: block;
   margin-bottom: 4px;
   color: #72847a;
-  font-size: 12px;
+  font-size: 8px;
   font-weight: 900;
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -48,7 +48,7 @@
 .excel-section-heading p {
   margin: 7px 0 0;
   color: #718078;
-  font-size: 12px;
+  font-size: 9px;
   line-height: 1.45;
 }
 
@@ -61,7 +61,7 @@
   background: #fff;
   color: #365344;
   font: inherit;
-  font-size: 12px;
+  font-size: 9px;
   font-weight: 800;
   cursor: pointer;
 }
@@ -78,9 +78,9 @@
 
 .excel-upload-copy { min-width: 0; }
 
-.excel-upload-copy > strong { color: #28483a; font-size: 12px; }
+.excel-upload-copy > strong { color: #28483a; font-size: 11px; }
 
-.excel-upload-copy > p { margin: 5px 0 0; color: #74837b; font-size: 12px; line-height: 1.45; }
+.excel-upload-copy > p { margin: 5px 0 0; color: #74837b; font-size: 8px; line-height: 1.45; }
 
 .excel-shift-rules { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
 
@@ -90,7 +90,7 @@
   border-radius: 4px;
   background: #f8fbf9;
   color: #63746a;
-  font-size: 12px;
+  font-size: 8px;
 }
 
 .excel-shift-rules b { color: var(--green-strong); }
@@ -99,7 +99,7 @@
 
 .excel-file-field > span {
   color: #51675b;
-  font-size: 12px;
+  font-size: 8px;
   font-weight: 800;
 }
 
@@ -112,15 +112,15 @@
   background: #fff;
   color: #29483a;
   font: inherit;
-  font-size: 12px;
+  font-size: 9px;
   outline: none;
 }
 
 .excel-file-field input:focus { border-color: #0b7a36; box-shadow: 0 0 0 3px rgba(11, 122, 54, .08); }
 
-.excel-file-field small { color: #7e8b84; font-size: 12px; line-height: 1.35; }
+.excel-file-field small { color: #7e8b84; font-size: 8px; line-height: 1.35; }
 
-.excel-report-status { min-height: 18px; padding: 8px 2px 0; color: #6f7e76; font-size: 12px; }
+.excel-report-status { min-height: 18px; padding: 8px 2px 0; color: #6f7e76; font-size: 8px; }
 
 .excel-report-status.is-error { color: #b43a44; }
 
@@ -140,9 +140,9 @@
   background: #fbfdfc;
 }
 
-.excel-report-meta span { display: block; color: #849189; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+.excel-report-meta span { display: block; color: #849189; font-size: 7px; text-transform: uppercase; letter-spacing: .08em; }
 
-.excel-report-meta strong { display: block; margin-top: 3px; color: #2f4c3e; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.excel-report-meta strong { display: block; margin-top: 3px; color: #2f4c3e; font-size: 9px; line-height: 1.35; overflow-wrap: anywhere; }
 
 .excel-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
 
@@ -155,11 +155,11 @@
   background: #fff;
 }
 
-.excel-kpi small { display: block; color: #7f8d85; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; }
+.excel-kpi small { display: block; color: #7f8d85; font-size: 7px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; }
 
 .excel-kpi strong { display: block; margin-top: 4px; color: #183c29; font-size: 16px; line-height: 1; }
 
-.excel-kpi span { display: block; margin-top: 4px; color: #829088; font-size: 12px; line-height: 1.35; }
+.excel-kpi span { display: block; margin-top: 4px; color: #829088; font-size: 7px; line-height: 1.35; }
 
 .excel-kpi.is-positive { border-left-color: #2f9b58; }
 

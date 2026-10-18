@@ -225,22 +225,22 @@
 .data-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 
 .data-table th {
-  padding: 11px 10px;
+  padding: 8px 10px;
   text-align: left;
   color: #6c7c73;
   background: #f6f9f7;
   border-bottom: 1px solid var(--line);
-  font-size: 12px;
+  font-size: 10px;
   letter-spacing: .7px;
   text-transform: uppercase;
 }
 
 .data-table td {
-  padding: 12px 10px;
+  padding: 8px 10px;
   color: #2c4338;
   border-bottom: 1px solid #edf2ef;
-  font-size: 14px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 1.25;
   vertical-align: middle;
 }
 
@@ -385,7 +385,7 @@
 
 .editable-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 
-.editable-table th { padding: 10px 7px; color: #627469; background: #f8faf9; border-bottom: 1px solid var(--line); font-size: 12px; text-align: left; text-transform: uppercase; }
+.editable-table th { padding: 7px; color: #7a8981; background: #f8faf9; border-bottom: 1px solid var(--line); font-size: 9px; text-align: left; text-transform: uppercase; }
 
 .editable-table td { padding: 5px 7px; border-bottom: 1px solid #eef2ef; }
 
@@ -499,7 +499,7 @@
 
 .data-table th, .data-table td { padding-left: 7px; padding-right: 7px; }
 
-.data-table td { font-size: 14px; }
+.data-table td { font-size: 11px; }
 
 .front-cell, .status-cell { gap: 6px; }
 
@@ -529,7 +529,7 @@
 @media (max-width: 520px) {
 .metrics-grid { grid-template-columns: 1fr; }
 
-.data-table th, .data-table td { padding: 10px 8px; }
+.data-table th, .data-table td { padding: 7px 8px; font-size: 11px; }
 }
 
 @media (max-width: 480px) {
@@ -555,9 +555,9 @@
 
 .unit-state { font-size: 9px; }
 
-.data-table th { font-size: 12px; }
+.data-table th { font-size: 9px; }
 
-.data-table td { font-size: 14px; }
+.data-table td { font-size: 10px; }
 
 .data-table th:nth-child(1), .data-table td:nth-child(1) { width: 24%; }
 
@@ -602,7 +602,7 @@
 
 .editable-table .front-edit-row td::before {
     color: #697970;
-    font-size: 12px;
+    font-size: 8px;
     font-weight: 800;
     letter-spacing: .55px;
     text-transform: uppercase;
