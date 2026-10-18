@@ -4,18 +4,6 @@
   padding: 18px clamp(14px, 2vw, 26px) 28px;
 }
 
-.production-page-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 28px;
-  padding: 22px 24px;
-  border: 1px solid var(--data-border);
-  border-radius: var(--data-radius);
-  background: #fff;
-  box-shadow: var(--data-shadow);
-}
-
 .production-kicker,
 .production-table-heading > div > span,
 .production-config-heading span {
@@ -27,9 +15,6 @@
   letter-spacing: 1.1px;
   text-transform: uppercase;
 }
-
-.production-page-header h1 { margin: 0; color: #183126; font-size: 28px; letter-spacing: -.6px; }
-.production-page-header p { max-width: 690px; margin: 8px 0 0; color: #6d7e75; font-size: 12px; line-height: 1.55; }
 
 .production-page-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 14px; }
 .production-current-context { min-width: 130px; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }

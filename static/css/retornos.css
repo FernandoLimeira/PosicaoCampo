@@ -360,11 +360,6 @@
   font-size: 10px;
 }
 
-.return-analysis-page .excel-page-header h1 {
-  font-size: clamp(20px, 2vw, 30px);
-}
-
-.return-analysis-page .excel-page-header p,
 .return-analysis-page .excel-section-heading p {
   font-size: 11px;
 }
@@ -422,7 +417,7 @@
 
 .return-analysis-page .section-action,
 .return-analysis-page .modal-button {
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .return-analysis-page .return-section-heading span {
@@ -460,7 +455,7 @@
 }
 
 .return-analysis-page .return-table td {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .return-process-actions {
@@ -522,8 +517,9 @@
   margin-top: 14px;
   padding: 14px 16px;
   background: #fff;
-  border: 1px solid #dce5df;
-  border-radius: var(--control-radius);
+  border: 1px solid var(--data-border);
+  border-radius: var(--data-radius);
+  box-shadow: var(--data-shadow);
 }
 .return-presentation-footer > * { min-width: 0; max-width: 100%; }
 .return-presentation-footer > button { justify-self: end; white-space: normal; }

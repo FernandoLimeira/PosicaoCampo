@@ -145,7 +145,10 @@
 
 .excel-comparison-card.is-low { border-color: #e4b4b9; background: #fff7f7; }
 
-.excel-comparison-card.is-empty { opacity: .72; }
+.excel-comparison-card.is-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; color: var(--muted); }
+.excel-comparison-card.is-empty > span { font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.excel-comparison-card.is-empty > strong { color: #345443; font-size: 11px; }
+.excel-comparison-card.is-empty > small { font-size: 9px; line-height: 1.45; }
 
 .excel-comparison-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 

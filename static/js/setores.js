@@ -3,11 +3,17 @@ let sectorBaseMap = new Map();
 let sectorBasePage = 1;
 
 function getSectorBasePageSize() {
+  const tableWrap = document.querySelector('.sector-base-table-wrap');
+  const tableHead = document.querySelector('.sector-base-table thead');
+  if (tableWrap && tableHead) {
+    const available = tableWrap.clientHeight - tableHead.getBoundingClientRect().height - 2;
+    if (available > 0) return Math.max(1, Math.min(10, Math.floor(available / 43)));
+  }
   const width = Math.max(320, window.innerWidth || document.documentElement.clientWidth || 1024);
   const height = Math.max(480, window.innerHeight || document.documentElement.clientHeight || 768);
 
   let reservedHeight = 390;
-  let rowHeight = 38;
+  let rowHeight = 43;
 
   if (width <= 680) {
     reservedHeight = 505;

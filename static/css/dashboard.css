@@ -1,12 +1,7 @@
 /* Estilos dashboard: carregados pelo layout ou pela página correspondente. */
 .dashboard-preview-heading {
-  width: var(--content-max);
+  width: min(calc(100% - 52px), 1308px);
   margin: 18px auto 0;
-  padding: 0 clamp(18px, 2vw, 32px);
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
 }
 
 .dashboard-heading-copy { min-width: 0; }
@@ -18,13 +13,6 @@
   font-weight: 850;
   letter-spacing: 1.3px;
   text-transform: uppercase;
-}
-
-.dashboard-preview-heading h2 {
-  margin: 0;
-  color: #203a2e;
-  font-size: 22px;
-  letter-spacing: -.35px;
 }
 
 .unit-selector {
@@ -114,7 +102,7 @@
 .units-grid {
   width: var(--content-max);
   margin: 0 auto;
-  padding: 16px clamp(18px, 2vw, 32px) 34px;
+  padding: 16px clamp(14px, 2vw, 26px) 28px;
 }
 
 .unit-card {
@@ -267,8 +255,9 @@
   padding: 0;
   overflow: hidden;
 }
+.rain-turn-block .compact-block-title { background: var(--data-header); color: #f4faf6; border-bottom-color: #1c4430; }
 
-.rain-box { min-width: 0; background: #fff; }
+.rain-box { min-width: 0; background: var(--data-surface); }
 
 .rain-row {
   display: grid;
@@ -295,7 +284,7 @@
 .notes-changes-grid {
   display: grid;
   grid-template-columns: 1fr;
-  background: #fbfdfb;
+  background: var(--data-surface);
 }
 
 .text-panel {
@@ -532,7 +521,7 @@
 
 .unit-selector-button { min-height: 40px; font-size: 12px; }
 
-.dashboard-preview-heading h2 { font-size: 19px; }
+.dashboard-preview-heading { width: calc(100% - 28px); }
 
 .dashboard-preview-heading { padding-inline: 10px; }
 
@@ -793,7 +782,7 @@
 .operation-editor-modal {
   width: min(920px, calc(100vw - 40px));
   max-height: min(760px, calc(100dvh - 32px));
-  border-radius: 4px;
+  border-radius: var(--data-radius);
 }
 
 .operation-modal-heading { min-width: 0; }

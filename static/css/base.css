@@ -59,6 +59,21 @@ body {
 }
 
 button, input, select, textarea { font: inherit; }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--green); }
+
+input[type="file"] { padding: 4px; font-size: 11px; color: var(--muted); }
+input[type="file"]::file-selector-button {
+  margin-right: 9px;
+  padding: 6px 9px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  background: var(--control-surface);
+  color: var(--control-text);
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+input[type="file"]::file-selector-button:hover { background: var(--control-hover); }
 
 button { cursor: pointer; }
 
@@ -539,7 +554,7 @@ input:focus, select:focus, textarea:focus { border-color: #4ba36b; box-shadow: 0
 
 .footer { flex-direction: column; align-items: flex-start; padding: 16px 18px; }
 
-.modal-backdrop { padding: 10px; align-items: stretch; }
+.modal-backdrop { padding: 10px; align-items: center; }
 
 .editor-modal { width: 100%; max-height: calc(100dvh - 20px); border-radius: var(--data-radius); }
 

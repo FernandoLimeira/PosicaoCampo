@@ -62,6 +62,7 @@
   flex-direction: column;
   gap: 5px;
 }
+.sector-base-import-card > .sector-base-compact-heading { align-items: flex-start; }
 
 .sector-base-import-card strong,
 .sector-base-manual-card strong {
@@ -87,7 +88,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 10px;
-  align-items: end;
+  align-items: center;
 }
 
 .sector-base-import-form .modal-button { width: 100%; }
