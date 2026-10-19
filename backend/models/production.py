@@ -795,6 +795,29 @@ def _normalize_entry_data(payload: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _active_front_entries(conn: sqlite3.Connection, unit: str, front_id: int, work_date: str | None = None):
+    return conn.execute(
+        """SELECT ui.id,e.sector FROM production_user_items ui
+           JOIN production_daily_entries e ON e.id=(
+             SELECT latest.id FROM production_daily_entries latest
+             WHERE latest.user_item_id=ui.id AND (? IS NULL OR latest.work_date<=?)
+             ORDER BY latest.work_date DESC,latest.id DESC LIMIT 1
+           )
+           WHERE ui.unit_code=? AND ui.service_front_id=? AND ui.is_active=1
+           ORDER BY e.work_date DESC,e.updated_at DESC,e.id DESC""",
+        (work_date, work_date, unit, front_id),
+    ).fetchall()
+
+
+def _deactivate_items(conn: sqlite3.Connection, item_ids: list[int], now: int, work_date: str | None = None) -> None:
+    conn.executemany(
+        """UPDATE production_user_items SET is_active=0,updated_at=? WHERE id=?
+           AND (? IS NULL OR NOT EXISTS (SELECT 1 FROM production_daily_entries
+                                        WHERE user_item_id=? AND work_date>?))""",
+        [(now, item_id, work_date, item_id, work_date) for item_id in item_ids],
+    )
+
+
 def save_my_item(user_id: int, payload: Any, *, item_id: int | None = None) -> dict[str, Any]:
     return _save_my_items(user_id, payload, [payload], item_id=item_id)[0]
 
@@ -835,26 +858,16 @@ def _save_my_items(user_id: int, payload: Any, sectors: list[Any], *, item_id: i
         _require_access(conn, user_id, permission="fill", unit=unit)
         validate_actor(conn, user_id)
         front = _catalog_front_for_unit(conn, front_id, unit, allow_inactive=item_id is not None)
-        existing = conn.execute(
-            """SELECT ui.id,e.sector FROM production_user_items ui
-               JOIN production_daily_entries e ON e.id=(
-                 SELECT latest.id FROM production_daily_entries latest
-                 WHERE latest.user_item_id=ui.id AND latest.work_date<=?
-                 ORDER BY latest.work_date DESC,latest.id DESC LIMIT 1
-               )
-               WHERE ui.unit_code=? AND ui.service_front_id=? AND ui.is_active=1
-               ORDER BY e.work_date DESC,e.updated_at DESC,e.id DESC""",
-            (entries[0]["work_date"], unit, front_id),
-        ).fetchall()
+        existing = _active_front_entries(conn, unit, front_id, entries[0]["work_date"])
         existing_sectors = {}
         for row in existing:
-            existing_sectors.setdefault(row["sector"].strip().upper(), row["id"])
+            existing_sectors.setdefault(row["sector"].strip().upper(), []).append(row["id"])
         for entry, source in zip(entries, sectors):
             entry["status"] = _validate_status_code(conn, entry["status"])
-            existing_id = existing_sectors.get(entry["sector"].upper())
-            if item_id is not None and existing_id is not None and existing_id != item_id:
+            matching_ids = existing_sectors.get(entry["sector"].upper(), [])
+            if item_id is not None and matching_ids and item_id not in matching_ids:
                 raise ValueError(f"O setor {entry['sector']} já está cadastrado nesta frente. Edite o lançamento existente.")
-            target_id = item_id if item_id is not None else existing_id
+            target_id = item_id if item_id is not None else next(iter(matching_ids), None)
             if target_id is not None and any(field not in source for field in ("observation", "changes")):
                 previous = conn.execute(
                     """SELECT observation,changes FROM production_daily_entries
@@ -865,7 +878,12 @@ def _save_my_items(user_id: int, payload: Any, sectors: list[Any], *, item_id: i
                     for field in ("observation", "changes"):
                         if field not in source:
                             entry[field] = previous[field] or ""
-            item_ids.append(_save_my_item(conn, user_id, unit, front_id, front, entry, now, item_id=target_id))
+            saved_id = _save_my_item(conn, user_id, unit, front_id, front, entry, now, item_id=target_id)
+            item_ids.append(saved_id)
+            # Personal copies left by older releases must not remain as active positions.
+            # Keep all entries, and never retire a copy with a later work date.
+            duplicate_ids = [candidate for candidate in matching_ids if candidate != saved_id]
+            _deactivate_items(conn, duplicate_ids, now, entry["work_date"])
     result = list_my_items(user_id, unit, entries[0]["work_date"], scope="all")
     by_id = {item["id"]: item for item in result["items"]}
     return [by_id[saved_id] for saved_id in item_ids]
@@ -931,13 +949,16 @@ def remove_my_item(user_id: int, item_id: int) -> None:
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         item = conn.execute(
-            "SELECT id,unit_code FROM production_user_items WHERE id=? AND owner_user_id=? AND is_active=1",
-            (item_id, user_id),
+            "SELECT id,unit_code,service_front_id FROM production_user_items WHERE id=? AND is_active=1",
+            (item_id,),
         ).fetchone()
         if not item:
-            raise ValueError("Frente da sua lista não encontrada.")
+            raise ValueError("Lançamento da frente não encontrado.")
         _require_access(conn, user_id, permission="fill", unit=item["unit_code"])
-        conn.execute("UPDATE production_user_items SET is_active=0,updated_at=? WHERE id=?", (now, item_id))
+        entries = _active_front_entries(conn, item["unit_code"], item["service_front_id"])
+        target = next((entry for entry in entries if entry["id"] == item_id), None)
+        item_ids = [entry["id"] for entry in entries if target and entry["sector"].strip().upper() == target["sector"].strip().upper()]
+        _deactivate_items(conn, item_ids or [item_id], now)
 
 
 def detach_user_data_before_delete(conn: sqlite3.Connection, user_id: int) -> None:

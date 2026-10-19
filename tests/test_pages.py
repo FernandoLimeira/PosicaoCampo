@@ -859,6 +859,11 @@ class PageTests(unittest.TestCase):
                 body={**base, 'unit_code': unit, 'sectors': [{'sector': 'HTTP3', 'status': 'EM ATIVIDADE'}]})['status'], 403)
         invalid = self.request('/api/production/my-items/batch', cookie=cookie, method='POST', body={**base, 'sectors': []})
         self.assertEqual(invalid['status'], 400)
+        self.assertEqual(self.request(f"/api/production/my-items/{original['id']}", cookie=cookie, method='DELETE')['status'], 200)
+        remaining = production.list_my_items(self.admin['id'], 'NRD', '2026-10-19', scope='all')['items']
+        self.assertEqual([item['entry']['sector'] for item in remaining], ['HTTP2'])
+        blocked = production.save_my_item(self.admin['id'], {**base, 'unit_code': 'PPT', 'sector': 'HTTP1', 'status': 'EM ATIVIDADE'})
+        self.assertEqual(self.request(f"/api/production/my-items/{blocked['id']}", cookie=cookie, method='DELETE')['status'], 403)
 
     def test_ctt_report_independent_permissions_and_seven_access_sections(self):
         from backend.models.module_access import MODULES

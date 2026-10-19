@@ -8,6 +8,7 @@ const modalEvents = [];
 const requests = [];
 const sectorRows = [];
 const toasts = [];
+const confirmations = [];
 function element(selector) {
   if (!elements.has(selector)) elements.set(selector, {
     innerHTML: '', textContent: '', value: '', hidden: false,
@@ -23,6 +24,7 @@ const document = {
 };
 const context = vm.createContext({
   document, console,
+  window: { confirm(message) { confirmations.push(message); return true; } },
   getReportUnit: () => 'NRD',
   escapeHtml: value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;'),
   openModal(id) { modalEvents.push(`open:${id}`); },
@@ -69,10 +71,11 @@ context.renderProductionItems();
 assert.match(element('#production-items-body').innerHTML, /Folguista/);
 assert.doesNotMatch(element('#production-items-body').innerHTML, /Titular.*Preparo/s);
 assert.match(element('#production-items-body').innerHTML, /Atualizar/);
+assert.match(element('#production-items-body').innerHTML, /data-production-action="remove" data-item-id="2"/);
 assert.match(element('#production-items-body').innerHTML, /Último registro: 17\/10\/2026/);
 assert.equal(element('#production-list-status').textContent, '2 lançamentos · 2 analistas');
 context.openEditProductionItem(2);
-assert.equal(element('#production-item-id').value, '2');
+assert.equal(vm.runInContext('productionEditingItemId', context), 2);
 assert.equal(element('#production-modal-title').textContent, 'Atualizar frente');
 assert.equal(element('#production-observation-input').value, 'Observação anterior');
 assert.equal(element('#production-changes-input').value, 'Mudança anterior');
@@ -119,8 +122,12 @@ function sectorRow(sector, status = 'ATIVO') {
   assert.equal(update.url, '/api/production/my-items/2');
   assert.equal(update.options.method, 'PUT');
   assert.equal(JSON.parse(update.options.body).observation, 'Observação anterior');
+  await context.removeProductionItem(2);
+  assert.equal(requests.at(-1).url, '/api/production/my-items/2');
+  assert.equal(requests.at(-1).options.method, 'DELETE');
+  assert.match(confirmations.at(-1), /setor 42.*NRD/);
 
-  element('#production-item-id').value = '';
+  vm.runInContext('productionEditingItemId = null', context);
   sectorRows.push(sectorRow('43'));
   await context.submitProductionEntry({ preventDefault() {} });
   const batch = requests.at(-1);

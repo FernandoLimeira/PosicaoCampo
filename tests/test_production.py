@@ -442,6 +442,57 @@ class ProductionTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             production.save_my_item(self.viewer["id"], {**base, "sector": "3392", "status": "EM ATIVIDADE"}, item_id=original["id"])
 
+    def test_status_update_reconciles_legacy_duplicates_without_losing_other_sectors(self):
+        front = self._front(name="Sulcação", display_style="operation")
+        base = {"unit_code": "NRD", "service_front_id": front["id"], "work_date": "2026-10-19"}
+        original = production.save_my_item(self.admin["id"], {**base, "sector": "3392", "status": "EM ATIVIDADE"})
+        other_sector = production.save_my_item(self.admin["id"], {**base, "sector": "3400", "status": "EM ATIVIDADE"})
+        # Earlier releases created a personal copy when another analyst updated the same sector.
+        with storage.connection() as conn:
+            duplicate_id = conn.execute(
+                """INSERT INTO production_user_items(owner_user_id,unit_code,service_front_id,position,is_active,created_at,updated_at)
+                   VALUES (?,?,?,2,1,1,1)""", (self.user["id"], "NRD", front["id"]),
+            ).lastrowid
+            conn.execute(
+                """INSERT INTO production_daily_entries(work_date,user_item_id,owner_user_id,unit_code,service_front_id,
+                   service_name,group_name,display_style,sector,status,created_by,updated_by,created_at,updated_at)
+                   SELECT work_date,?,?,unit_code,service_front_id,service_name,group_name,display_style,sector,
+                          'SOLO ÚMIDO / TESTE',?,?,created_at,updated_at+1
+                   FROM production_daily_entries WHERE user_item_id=?""",
+                (duplicate_id, self.user["id"], self.user["id"], self.user["id"], original["id"]),
+            )
+        # A tab opened before the other analyst's save still edits the original item ID.
+        for actor in (self.user, self.admin, self.user):
+            updated = production.save_my_item(actor["id"], {**base, "sector": "3392", "status": "PARADO / CRÍTICO"}, item_id=original["id"])
+            self.assertEqual(updated["id"], original["id"])
+        items = production.list_my_items(self.user["id"], "NRD", base["work_date"], scope="all")["items"]
+        self.assertEqual({item["id"] for item in items}, {original["id"], other_sector["id"]})
+        self.assertEqual(next(item for item in items if item["id"] == original["id"])["entry"]["status"], "PARADO / CRÍTICO")
+        with storage.connection() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM production_user_items").fetchone()[0], 3)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM production_daily_entries WHERE user_item_id=?", (duplicate_id,)).fetchone()[0], 1)
+            conn.execute("UPDATE production_user_items SET is_active=1 WHERE id=?", (duplicate_id,))
+        production.remove_my_item(self.user["id"], original["id"])
+        remaining = production.list_my_items(self.user["id"], "NRD", base["work_date"], scope="all")["items"]
+        self.assertEqual([item["id"] for item in remaining], [other_sector["id"]])
+        with storage.connection() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM production_daily_entries").fetchone()[0], 3)
+
+    def test_remove_other_analysts_item_requires_fill_access_to_its_unit(self):
+        front = self._front(units=["NRD", "RBR"])
+        base = {"service_front_id": front["id"], "work_date": "2026-10-19", "sector": "3392", "status": "EM ATIVIDADE"}
+        nrd = production.save_my_item(self.admin["id"], {**base, "unit_code": "NRD"})
+        rbr = production.save_my_item(self.admin["id"], {**base, "unit_code": "RBR"})
+        with self.assertRaises(PermissionError):
+            production.remove_my_item(self.viewer["id"], nrd["id"])
+        with self.assertRaises(PermissionError):
+            production.remove_my_item(self.user["id"], rbr["id"])
+        production.remove_my_item(self.user["id"], nrd["id"])
+        self.assertEqual(production.list_my_items(self.user["id"], "NRD", base["work_date"], scope="all")["items"], [])
+        self.assertEqual(len(production.list_my_items(self.admin["id"], "RBR", base["work_date"], scope="all")["items"]), 1)
+        with storage.connection() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM production_daily_entries").fetchone()[0], 2)
+
     def test_edit_cannot_merge_two_sectors_or_change_another_units_item(self):
         front = self._front(units=["NRD", "PPT"])
         base = {"unit_code": "NRD", "service_front_id": front["id"], "work_date": "2026-10-19"}

@@ -20,6 +20,7 @@ let productionConfigStatuses = [];
 let productionEditingFrontUnits = [];
 let productionEditingFrontActive = true;
 let productionItems = [];
+let productionEditingItemId = null;
 let productionFilterGroup = '';
 let productionFilterFront = '';
 const productionSectorOptions = new WeakMap();
@@ -324,7 +325,7 @@ function renderProductionItems(data) {
     const actions = canFillProduction() ? `
       <div class="production-row-actions">
         <button class="production-row-action" type="button" data-production-action="edit" data-item-id="${item.id}">${item.is_own ? 'Editar' : 'Atualizar'}</button>
-        ${item.is_own ? `<button class="production-row-action is-remove" type="button" data-production-action="remove" data-item-id="${item.id}">Remover</button>` : ''}
+        <button class="production-row-action is-remove" type="button" data-production-action="remove" data-item-id="${item.id}">Remover</button>
       </div>` : '';
     const actionCell = canFillProduction() ? `<td>${actions}</td>` : '';
     const ownerCell = `<td><span class="production-owner-name">${escapeHtml(entry.updated_by_name || item.owner_name || '-')}</span></td>`;
@@ -497,7 +498,7 @@ function showEntryPane() {
   document.querySelector('#production-status-config-pane').hidden = true;
   document.querySelector('#production-entry-footer').hidden = false;
 
-  const editingItemId = document.querySelector('#production-item-id')?.value;
+  const editingItemId = productionEditingItemId;
   const configButton = document.querySelector('#production-config-toggle');
   if (configButton) configButton.hidden = Boolean(editingItemId) || !canConfigureProduction();
   const statusConfigButton = document.querySelector('#production-status-config-toggle');
@@ -576,7 +577,7 @@ function clearEntryForm(defaultUnit = selectedNavbarProductionUnit()) {
   updateProductionSectorRows();
   const form = document.querySelector('#production-entry-form');
   form?.reset();
-  document.querySelector('#production-item-id').value = '';
+  productionEditingItemId = null;
   document.querySelector('#production-work-date').value = localIsoDate();
   setProductionEntryUnit(defaultUnit);
   renderEntryGroups();
@@ -611,7 +612,7 @@ function openEditProductionItem(itemId) {
   showEntryPane();
   clearEntryForm();
   const entry = item.entry || {};
-  document.querySelector('#production-item-id').value = String(item.id);
+  productionEditingItemId = Number(item.id);
   document.querySelector('#production-work-date').value = localIsoDate();
   setProductionEntryUnit(currentProductionUnit());
   renderEntryGroups(item.group_id, item.service_front_id, item);
@@ -638,7 +639,11 @@ async function submitProductionEntry(event) {
   if (!canFillProduction()) return;
   const submit = document.querySelector('#production-entry-submit');
   if (submit?.disabled) return;
-  const itemId = Number(document.querySelector('#production-item-id')?.value || 0);
+  const itemId = productionEditingItemId;
+  if (itemId !== null && (!Number.isInteger(itemId) || itemId <= 0)) {
+    showToast('Não foi possível identificar o lançamento. Feche e abra a edição novamente.', true);
+    return;
+  }
   const unit = document.querySelector('#production-unit-input')?.value || currentProductionUnit();
   const frontId = Number(document.querySelector('#production-front-input')?.value || 0);
   if (!frontId) {
@@ -701,10 +706,10 @@ function collectProductionSectors() {
 async function removeProductionItem(itemId) {
   const item = findProductionItem(itemId);
   if (!item || !canFillProduction()) return;
-  if (!window.confirm(`Remover ${item.service_name} da sua lista? O histórico dos dias anteriores será preservado.`)) return;
+  if (!window.confirm(`Remover o lançamento de ${item.service_name}, setor ${item.entry?.sector || '-'}, da unidade ${currentProductionUnit()}? O histórico será preservado.`)) return;
   try {
     await apiRequest(`/api/production/my-items/${itemId}`, { method: 'DELETE' });
-    showToast('Frente removida da sua lista.');
+    showToast('Lançamento removido da unidade.');
     await refreshProductionPage(currentProductionUnit());
   } catch (error) {
     console.error(error);
