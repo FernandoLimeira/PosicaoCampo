@@ -230,6 +230,14 @@ function renderStatusOptions(selectedCode = selectedStatus(), container = docume
   }
 }
 
+function refreshProductionSectorStatuses() {
+  productionSectorRows().forEach(row => {
+    const code = selectedStatus(row);
+    renderStatusOptions(productionStatuses.some(status => status.code === code) ? code : defaultStatusCode(),
+      row.querySelector('.production-status-options'));
+  });
+}
+
 function visibleProductionItems() {
   return consolidateProductionItems(productionItems).filter(item =>
     (!productionFilterGroup || String(item.group_id) === productionFilterGroup) &&
@@ -319,7 +327,7 @@ function renderProductionItems(data) {
         ${item.is_own ? `<button class="production-row-action is-remove" type="button" data-production-action="remove" data-item-id="${item.id}">Remover</button>` : ''}
       </div>` : '';
     const actionCell = canFillProduction() ? `<td>${actions}</td>` : '';
-    const ownerCell = `<td><span class="production-owner-name">${escapeHtml(item.owner_name || '-')}</span></td>`;
+    const ownerCell = `<td><span class="production-owner-name">${escapeHtml(entry.updated_by_name || item.owner_name || '-')}</span></td>`;
     return `<tr>
       <td>${escapeHtml(item.group_name || '-')}</td>
       <td><div class="production-item-name"><strong>${escapeHtml(item.service_name || '-')}</strong><small>${escapeHtml(styleLabel)}</small></div></td>
@@ -343,7 +351,7 @@ function renderProductionItems(data) {
     if (!visibleItems.length) {
       status.textContent = '';
     } else {
-      const analysts = new Set(visibleItems.map(item => item.owner_user_id).filter(Boolean));
+      const analysts = new Set(visibleItems.map(item => item.entry?.updated_by || item.owner_user_id).filter(Boolean));
       status.textContent = `${visibleItems.length} ${visibleItems.length === 1 ? 'lançamento' : 'lançamentos'} · ${analysts.size} ${analysts.size === 1 ? 'analista' : 'analistas'}`;
     }
   }
@@ -452,7 +460,8 @@ async function resolveSectorFromBase(row = document) {
   if (farm) farm.value = '';
   if (!sector) return;
   try {
-    const data = await apiRequest(`/api/production/sector-options?unit=${encodeURIComponent(unit)}&sector=${encodeURIComponent(sector)}`);
+    request.promise = apiRequest(`/api/production/sector-options?unit=${encodeURIComponent(unit)}&sector=${encodeURIComponent(sector)}`);
+    const data = await request.promise;
     if (productionSectorOptions.get(row) !== request || input.value.trim() !== sector ||
         document.querySelector('#production-unit-input')?.value !== unit) return;
     const sectorOptions = Array.isArray(data.items) ? data.items : [];
@@ -602,18 +611,14 @@ function openEditProductionItem(itemId) {
   showEntryPane();
   clearEntryForm();
   const entry = item.entry || {};
-  const ownItem = item.is_own ? item : productionItems.find(candidate =>
-    candidate.is_own && candidate.service_front_id === item.service_front_id &&
-    candidate.entry?.sector?.trim().toLocaleUpperCase('pt-BR') ===
-      entry.sector?.trim().toLocaleUpperCase('pt-BR'));
-  document.querySelector('#production-item-id').value = ownItem ? String(ownItem.id) : '';
+  document.querySelector('#production-item-id').value = String(item.id);
   document.querySelector('#production-work-date').value = localIsoDate();
   setProductionEntryUnit(currentProductionUnit());
   renderEntryGroups(item.group_id, item.service_front_id, item);
   document.querySelector('#production-sector-input').value = entry.sector || '';
   document.querySelector('#production-farm-input').value = entry.farm || '';
-  document.querySelector('#production-observation-input').value = item.is_own ? entry.observation || '' : '';
-  document.querySelector('#production-changes-input').value = item.is_own ? entry.changes || '' : '';
+  document.querySelector('#production-observation-input').value = entry.observation || '';
+  document.querySelector('#production-changes-input').value = entry.changes || '';
   setSelectedStatus(entry.status || defaultStatusCode());
   resetSectorFields();
   const section = document.querySelector('#production-section-input');
@@ -646,9 +651,12 @@ async function submitProductionEntry(event) {
     work_date: localIsoDate()
   };
   let sectors;
+  if (submit) submit.disabled = true;
   try {
+    await Promise.allSettled(productionSectorRows().map(row => productionSectorOptions.get(row)?.promise));
     sectors = collectProductionSectors();
   } catch (error) {
+    if (submit) submit.disabled = false;
     showToast(error.message, true);
     return;
   }
@@ -657,14 +665,13 @@ async function submitProductionEntry(event) {
     changes: document.querySelector('#production-changes-input')?.value.trim() || ''
   });
   else payload.sectors = sectors;
-  if (submit) submit.disabled = true;
   try {
     await apiRequest(itemId ? `/api/production/my-items/${itemId}` : '/api/production/my-items/batch', {
       method: itemId ? 'PUT' : 'POST',
       body: JSON.stringify(payload)
     });
     closeModal('production-entry-modal');
-    showToast(itemId ? 'Frente atualizada.' : `${sectors.length} ${sectors.length === 1 ? 'setor adicionado' : 'setores adicionados'} à frente.`);
+    showToast(itemId ? 'Frente atualizada.' : `${sectors.length} ${sectors.length === 1 ? 'setor salvo' : 'setores salvos'} na frente.`);
     await refreshProductionPage(unit);
   } catch (error) {
     console.error(error);
@@ -1077,21 +1084,30 @@ document.querySelector('#production-filter-front')?.addEventListener('change', e
 document.querySelector('#production-entry-form')?.addEventListener('submit', submitProductionEntry);
 document.querySelector('#production-daily-form')?.addEventListener('submit', submitProductionDailySummary);
 document.querySelector('#production-group-input')?.addEventListener('change', () => renderEntryFronts());
-document.querySelector('#production-sector-input')?.addEventListener('change', resolveSectorFromBase);
-document.querySelector('#production-sector-input')?.addEventListener('blur', resolveSectorFromBase);
-document.querySelector('#production-section-input')?.addEventListener('change', syncFarmFromSection);
-
-document.querySelector('#production-status-options')?.addEventListener('change', event => {
-  const input = event.target.closest('[data-production-status]');
-  if (!input || !input.checked) return;
-  document.querySelectorAll('[data-production-status]').forEach(other => {
-    if (other !== input) other.checked = false;
-  });
+document.querySelector('#production-add-sector')?.addEventListener('click', addProductionSector);
+document.querySelector('#production-sector-rows')?.addEventListener('click', event => {
+  const button = event.target.closest('[data-remove-sector]');
+  if (!button) return;
+  const row = button.closest('[data-production-sector-row]');
+  if (row === productionSectorRows()[0]) return;
+  productionSectorOptions.delete(row);
+  row.remove();
+  updateProductionSectorRows();
+});
+document.querySelector('#production-sector-rows')?.addEventListener('change', event => {
+  const row = event.target.closest('[data-production-sector-row]');
+  if (!row) return;
+  if (event.target.matches('[data-sector-field="sector"]')) resolveSectorFromBase(row);
+  if (event.target.matches('[data-sector-field="section"]')) syncFarmFromSection(row);
+  if (event.target.matches('[data-production-status]') && event.target.checked) {
+    setSelectedStatus(event.target.value, row);
+  }
 });
 
 document.querySelector('#production-entry-form')?.addEventListener('keydown', event => {
   if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
   if (event.target instanceof HTMLTextAreaElement) return;
+  if (event.target.closest('button')) return;
   event.preventDefault();
   event.currentTarget.requestSubmit();
 });

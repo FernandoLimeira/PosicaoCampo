@@ -831,6 +831,35 @@ class PageTests(unittest.TestCase):
         update['unit_code'] = 'PST'
         self.assertEqual(self.request(summary_path, cookie=cookie, method="PUT", body=update)['status'], 403)
 
+    def test_production_batch_and_shared_update_use_existing_item_and_enforce_unit_access(self):
+        from backend.models import production
+        group = production.list_catalog(self.admin["id"])["groups"][0]
+        front = production.save_service_front(self.admin["id"], {"group_id": group["id"], "name": "MULTI HTTP",
+            "units": ["NRD", "PPT"], "display_style": "operation"})
+        actor = self.db.create_user("BatchAnalyst", "Test-password-42", role="analyst", base_unit="NRD",
+            production_access={"enabled": True, "unit_permissions": {
+                "NRD": {"view": True, "fill": True, "summary": False},
+                "PPT": {"view": True, "fill": False, "summary": False}}})
+        cookie = f"{config.SESSION_COOKIE}={self.db.create_session(actor['id'])}"
+        base = {"unit_code": "NRD", "work_date": "2026-10-19", "service_front_id": front["id"]}
+        original = production.save_my_item(self.admin["id"], {**base, "sector": "HTTP1", "status": "EM ATIVIDADE"})
+        response = self.request('/api/production/my-items/batch', cookie=cookie, method='POST', body={**base, "sectors": [
+            {"sector": "HTTP1", "status": "SOLO ÚMIDO / TESTE"}, {"sector": "HTTP2", "status": "EM ATIVIDADE"}]})
+        self.assertEqual(response['status'], 201, response['body'])
+        saved = json.loads(response['body'])['items']
+        self.assertEqual(saved[0]['id'], original['id'])
+        self.assertEqual(saved[0]['entry']['updated_by'], actor['id'])
+        response = self.request(f"/api/production/my-items/{original['id']}", cookie=cookie, method='PUT',
+            body={**base, "sector": "HTTP1", "status": "EM ATIVIDADE"})
+        self.assertEqual(response['status'], 200, response['body'])
+        self.assertEqual(len(production.list_my_items(self.admin['id'], 'NRD', '2026-10-19', scope='all')['items']), 2)
+        self.assertEqual(self.request('/api/production/my-items/batch', method='POST', body=base)['status'], 401)
+        for unit in ('PPT', 'PST'):
+            self.assertEqual(self.request('/api/production/my-items/batch', cookie=cookie, method='POST',
+                body={**base, 'unit_code': unit, 'sectors': [{'sector': 'HTTP3', 'status': 'EM ATIVIDADE'}]})['status'], 403)
+        invalid = self.request('/api/production/my-items/batch', cookie=cookie, method='POST', body={**base, 'sectors': []})
+        self.assertEqual(invalid['status'], 400)
+
     def test_ctt_report_independent_permissions_and_seven_access_sections(self):
         from backend.models.module_access import MODULES
         modules = {spec["key"]: {"view": False, "edit": False} for spec in MODULES}

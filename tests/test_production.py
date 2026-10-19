@@ -381,6 +381,77 @@ class ProductionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Visualização"):
             production.list_my_items(self.user["id"], "NRD", "2026-10-13", scope="other")
 
+    def test_multiple_sectors_are_saved_together_with_individual_statuses_and_retries(self):
+        front = self._front(units=["NRD", "PPT"])
+        payload = {"unit_code": "NRD", "service_front_id": front["id"], "work_date": "2026-10-19",
+                   "sectors": [{"sector": "3392", "section": "10", "farm": "FAZENDA A", "status": "EM ATIVIDADE"},
+                               {"sector": "3400", "section": "20", "farm": "FAZENDA B", "status": "SOLO ÚMIDO / TESTE"}]}
+        items = production.save_my_items(self.user["id"], payload)
+        self.assertEqual([item["entry"]["sector"] for item in items], ["3392", "3400"])
+        self.assertEqual([item["entry"]["status"] for item in items], ["EM ATIVIDADE", "SOLO ÚMIDO / TESTE"])
+        retried = production.save_my_items(self.user["id"], payload)
+        self.assertEqual([item["id"] for item in retried], [item["id"] for item in items])
+        ppt = production.save_my_items(self.user["id"], {**payload, "unit_code": "PPT"})
+        self.assertTrue(set(item["id"] for item in ppt).isdisjoint(item["id"] for item in items))
+        self.assertEqual(len(production.list_my_items(self.user["id"], "NRD", "2026-10-19", scope="all")["items"]), 2)
+
+    def test_multiple_sectors_roll_back_existing_update_and_new_insert_on_invalid_status(self):
+        front = self._front()
+        base = {"unit_code": "NRD", "service_front_id": front["id"], "work_date": "2026-10-19"}
+        original = production.save_my_item(self.user["id"], {**base, "sector": "3392", "status": "EM ATIVIDADE"})
+        with self.assertRaises(ValueError):
+            production.save_my_items(self.user["id"], {**base, "sectors": [
+                {"sector": "3392", "status": "SOLO ÚMIDO / TESTE"},
+                {"sector": "3400", "status": "EM ATIVIDADE"},
+                {"sector": "3500", "status": "STATUS INVÁLIDO"}]})
+        items = production.list_my_items(self.user["id"], "NRD", "2026-10-19")["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["id"], original["id"])
+        self.assertEqual(items[0]["entry"]["status"], "EM ATIVIDADE")
+
+    def test_multiple_sectors_reject_duplicates_and_invalid_batches(self):
+        front = self._front()
+        base = {"unit_code": "NRD", "service_front_id": front["id"], "work_date": "2026-10-19"}
+        for sectors in ([], None, {}, [None], [{"sector": "A1", "status": "EM ATIVIDADE"},
+                                                {"sector": " a1 ", "status": "SOLO ÚMIDO / TESTE"}],
+                        [{"sector": str(index), "status": "EM ATIVIDADE"} for index in range(101)]):
+            with self.subTest(sectors=sectors), self.assertRaises(ValueError):
+                production.save_my_items(self.user["id"], {**base, "sectors": sectors})
+        self.assertEqual(production.list_my_items(self.user["id"], "NRD", "2026-10-19")["items"], [])
+
+    def test_other_analyst_updates_existing_item_preserving_authorship_notes_and_history(self):
+        front = self._front()
+        base = {"unit_code": "NRD", "service_front_id": front["id"], "work_date": "2026-10-18"}
+        original = production.save_my_item(self.admin["id"], {**base, "sector": "3392", "status": "EM ATIVIDADE",
+            "observation": "Observação existente", "changes": "Mudança existente"})
+        updated = production.save_my_item(self.user["id"], {**base, "sector": "3392", "status": "SOLO ÚMIDO / TESTE"}, item_id=original["id"])
+        self.assertEqual(updated["id"], original["id"])
+        self.assertEqual(updated["owner_user_id"], self.admin["id"])
+        self.assertEqual(updated["entry"]["updated_by"], self.user["id"])
+        self.assertEqual(updated["entry"]["updated_by_name"], "Analista")
+        self.assertEqual(updated["entry"]["observation"], "Observação existente")
+        next_day = production.save_my_items(self.user["id"], {**base, "work_date": "2026-10-19", "sectors": [
+            {"sector": "3392", "status": "EM ATIVIDADE"}]})[0]
+        self.assertEqual(next_day["id"], original["id"])
+        self.assertEqual(next_day["entry"]["changes"], "Mudança existente")
+        with storage.connection() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM production_user_items").fetchone()[0], 1)
+            rows = conn.execute("SELECT work_date,created_by,updated_by FROM production_daily_entries ORDER BY work_date").fetchall()
+        self.assertEqual([tuple(row) for row in rows], [("2026-10-18", self.admin["id"], self.user["id"]),
+                                                     ("2026-10-19", self.user["id"], self.user["id"])])
+        with self.assertRaises(PermissionError):
+            production.save_my_item(self.viewer["id"], {**base, "sector": "3392", "status": "EM ATIVIDADE"}, item_id=original["id"])
+
+    def test_edit_cannot_merge_two_sectors_or_change_another_units_item(self):
+        front = self._front(units=["NRD", "PPT"])
+        base = {"unit_code": "NRD", "service_front_id": front["id"], "work_date": "2026-10-19"}
+        items = production.save_my_items(self.user["id"], {**base, "sectors": [
+            {"sector": "3392", "status": "EM ATIVIDADE"}, {"sector": "3400", "status": "EM ATIVIDADE"}]})
+        with self.assertRaisesRegex(ValueError, "já está cadastrado"):
+            production.save_my_item(self.user["id"], {**base, "sector": "3400", "status": "EM ATIVIDADE"}, item_id=items[0]["id"])
+        with self.assertRaisesRegex(ValueError, "unidade"):
+            production.save_my_item(self.user["id"], {**base, "unit_code": "PPT", "sector": "3392", "status": "EM ATIVIDADE"}, item_id=items[0]["id"])
+
     def test_sector_base_is_read_only_and_fill_permission_is_enforced(self):
         before = None
         with storage.connection() as conn:

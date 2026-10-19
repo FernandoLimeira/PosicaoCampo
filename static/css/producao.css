@@ -152,6 +152,16 @@
 .production-entry-unit-context strong { color: #1b4a31; font-size: 12px; }
 .production-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px 12px; }
 .production-location-grid { grid-template-columns: minmax(110px, .72fr) minmax(120px, .72fr) minmax(220px, 1.56fr); }
+.production-sector-rows { display: grid; gap: 16px; }
+.production-sector-row { min-width: 0; }
+.production-sector-row + .production-sector-row { padding-top: 16px; border-top: 1px solid #dce5df; }
+.production-sector-row-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.production-sector-number { color: #43594c; font-size: 11px; }
+.production-sector-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.production-sector-actions .production-secondary-button { min-height: 32px; padding: 0 10px; }
+.production-sector-row .production-status-field { margin-top: 14px; }
+.production-remove-sector { color: #a12d35; }
+.production-remove-sector:hover { color: #81242c; }
 .production-form-grid-full { grid-column: 1 / -1; }
 .production-status-field { margin: 0; padding: 0; border: 0; }
 .production-status-field legend { margin-bottom: 7px; color: #697970; font-size: 9px; font-weight: 800; letter-spacing: .55px; text-transform: uppercase; }

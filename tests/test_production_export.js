@@ -103,7 +103,7 @@ for (const name of ['production-consolidation.js', 'production-export.js', 'emis
         sector: '42', status: 'ATIVO', observation: 'Antiga' } },
     { service_front_id: 7, group_name: 'Plantio', service_name: 'Preparo', owner_name: 'Folguista',
       is_current_day: true, entry: { id: 11, work_date: '2026-10-18', updated_at: 200,
-        sector: '42', status: 'UMIDO', observation: 'Atualizada' } },
+        sector: '42', status: 'UMIDO', observation: 'Atualizada', updated_by_name: 'Revisor' } },
     { service_front_id: 7, group_name: 'Plantio', service_name: 'Preparo', owner_name: 'Outro',
       is_current_day: true, entry: { id: 12, work_date: '2026-10-18', updated_at: 150,
         sector: '43', status: 'ATIVO' } },
@@ -119,7 +119,7 @@ for (const name of ['production-consolidation.js', 'production-export.js', 'emis
     new Map([['ATIVO', { style_key: 'active' }], ['UMIDO', { style_key: 'wet' }]]));
   assert.equal(duplicatePages[0].plans[0].counts.wet, 1);
   assert.equal(duplicatePages[0].plans[0].counts.active, 2);
-  assert.ok(duplicatePages[0].plans[0].noteLines.join(' ').includes('Folguista'));
+  assert.ok(duplicatePages[0].plans[0].noteLines.join(' ').includes('Revisor'));
   assert.ok(!duplicatePages[0].plans[0].noteLines.join(' ').includes('Antiga'));
   const stale = { group_name: 'Teste', service_name: 'Frente 1', is_current_day: false,
     entry: { sector: '3392', status: 'CRITICO', work_date: '2026-10-15' } };
