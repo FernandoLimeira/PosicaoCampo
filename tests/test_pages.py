@@ -248,7 +248,7 @@ class PageTests(unittest.TestCase):
             self.assertIn(f'id="{identifier}"', page)
 
     def test_pages_share_layout_and_assets_exist(self):
-        for path in ("/", "/sacarose", "/setores", "/relatorios", "/retornos", "/historico", "/usuarios", "/emitir-posicao-global"):
+        for path in ("/", "/sacarose", "/producao", "/setores", "/relatorios", "/retornos", "/historico", "/usuarios", "/emitir-posicao-global"):
             with self.subTest(path=path):
                 response = self.request(path, role="admin")
                 self.assertEqual(response["status"], 200)
@@ -262,6 +262,27 @@ class PageTests(unittest.TestCase):
                 for asset in parser.assets:
                     self.assertTrue((config.STATIC_DIR / asset.lstrip("/")).is_file(), asset)
                     self.assertEqual(self.request(asset, role="admin")["status"], 200)
+
+    def test_asset_versions_change_with_scripts_and_templates_without_restarting(self):
+        from backend.views import templates as views
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            static = root / "static"
+            templates = root / "templates"
+            static.mkdir()
+            templates.mkdir()
+            script = static / "producao.js"
+            template = templates / "producao.html"
+            script.write_text("console.log(1)", encoding="utf-8")
+            template.write_text('<input id="production-item-id">', encoding="utf-8")
+            with patch.object(views, "STATIC_DIR", static), patch.object(views, "TEMPLATE_DIR", templates):
+                original = views.get_asset_version()
+                self.assertEqual(original, views.get_asset_version())
+                script.write_text("console.log(22)", encoding="utf-8")
+                script_version = views.get_asset_version()
+                self.assertNotEqual(original, script_version)
+                template.write_text('<input id="production-item-id" type="hidden">', encoding="utf-8")
+                self.assertNotEqual(script_version, views.get_asset_version())
 
     def test_sidebar_and_unit_selector_have_no_gradients(self):
         base = (config.STATIC_DIR / "css/base.css").read_text(encoding="utf-8")
@@ -381,7 +402,7 @@ class PageTests(unittest.TestCase):
         page = self.request("/producao", cookie=cookie)
         self.assertEqual(page["status"], 200)
         for marker in (
-            'id="production-entry-modal"', 'id="production-entry-form"',
+            'id="production-entry-modal"', 'id="production-entry-form"', 'id="production-item-id"',
             'id="production-status-options"', 'id="production-status-config-toggle"',
             'id="production-status-config-pane"', 'id="production-config-pane"',
             'id="production-front-form"', 'id="production-items-body"',

@@ -578,6 +578,9 @@ function clearEntryForm(defaultUnit = selectedNavbarProductionUnit()) {
   const form = document.querySelector('#production-entry-form');
   form?.reset();
   productionEditingItemId = null;
+  // Mantém compatibilidade com abas que ainda usam o campo de identificação.
+  const itemInput = document.querySelector('#production-item-id');
+  if (itemInput) itemInput.value = '';
   document.querySelector('#production-work-date').value = localIsoDate();
   setProductionEntryUnit(defaultUnit);
   renderEntryGroups();
@@ -613,6 +616,8 @@ function openEditProductionItem(itemId) {
   clearEntryForm();
   const entry = item.entry || {};
   productionEditingItemId = Number(item.id);
+  const itemInput = document.querySelector('#production-item-id');
+  if (itemInput) itemInput.value = String(item.id);
   document.querySelector('#production-work-date').value = localIsoDate();
   setProductionEntryUnit(currentProductionUnit());
   renderEntryGroups(item.group_id, item.service_front_id, item);
