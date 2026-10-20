@@ -119,7 +119,8 @@ for (const name of ['production-consolidation.js', 'production-export.js', 'emis
     new Map([['ATIVO', { style_key: 'active' }], ['UMIDO', { style_key: 'wet' }]]));
   assert.equal(duplicatePages[0].plans[0].counts.wet, 1);
   assert.equal(duplicatePages[0].plans[0].counts.active, 2);
-  assert.ok(duplicatePages[0].plans[0].noteLines.join(' ').includes('Revisor'));
+  assert.ok(duplicatePages[0].plans[0].noteLines.join(' ').includes('setor 42: Atualizada'));
+  assert.ok(!duplicatePages[0].plans[0].noteLines.join(' ').includes('Revisor'));
   assert.ok(!duplicatePages[0].plans[0].noteLines.join(' ').includes('Antiga'));
   const stale = { group_name: 'Teste', service_name: 'Frente 1', is_current_day: false,
     entry: { sector: '3392', status: 'CRITICO', work_date: '2026-10-15' } };
@@ -150,12 +151,15 @@ for (const name of ['production-consolidation.js', 'production-export.js', 'emis
   'active,wet,waiting,stopped');
   const sharedObservation = context.productionExportCardPlan(paint, { code: 'PPT', items: [
     { group_name: 'Preparo e Plantio', service_name: 'Preparo de solo', owner_name: 'Ana',
-      is_current_day: true, entry: { sector: '100', status: 'ATIVO', observation: 'Texto igual', changes: 'Mudança A' } },
+      is_current_day: true, entry: { sector: '100', status: 'ATIVO', observation: 'Texto igual', changes: 'Mudança A', updated_by_name: 'Revisor A' } },
     { group_name: 'Preparo e Plantio', service_name: 'Preparo de solo', owner_name: 'Beto',
-      is_current_day: true, entry: { sector: '200', status: 'UMIDO', observation: 'Texto igual', changes: 'Mudança B' } }
+      is_current_day: true, entry: { sector: '200', status: 'UMIDO', observation: 'Texto igual', changes: 'Mudança B', updated_by_name: 'Revisor B' } }
   ] }, mixedStatuses, 0);
-  assert.ok(sharedObservation.noteLines.join(' ').includes('setor 100 · Ana'));
-  assert.ok(sharedObservation.noteLines.join(' ').includes('setor 200 · Beto'));
+  assert.ok(sharedObservation.noteLines.join(' ').includes('setor 100: Texto igual'));
+  assert.ok(sharedObservation.noteLines.join(' ').includes('setor 200: Texto igual'));
+  assert.ok(sharedObservation.changeLines.join(' ').includes('setor 100: Mudança A'));
+  assert.ok(sharedObservation.changeLines.join(' ').includes('setor 200: Mudança B'));
+  assert.ok(![...sharedObservation.noteLines, ...sharedObservation.changeLines].join(' ').match(/Ana|Beto|Revisor/));
   assert.ok(sharedObservation.changeLines.join(' ').includes('Mudança A'));
   assert.ok(sharedObservation.changeLines.join(' ').includes('Mudança B'));
   context.drawProductionExportCard(paint, mixedReport, mixedPlan, 26, 370);
