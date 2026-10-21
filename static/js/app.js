@@ -180,9 +180,9 @@ function normalizeFrontRows(rows = []) {
   return Array.isArray(rows)
     ? rows.map(row => {
         if (!Array.isArray(row)) return row;
-        const [front = '', sector = '', , status = 'EM ATIVIDADE'] = row;
+        const [front = '', sector = '', , status = 'EM ATIVIDADE', atr = ''] = row;
         const normalizedStatus = normalizeStatus(status);
-        return [front, sector, getStatusColor(normalizedStatus), normalizedStatus];
+        return [front, sector, getStatusColor(normalizedStatus), normalizedStatus, String(atr ?? '').trim()];
       })
     : [];
 }
@@ -236,14 +236,15 @@ function unitCard(unit) {
     : 'Aguardando primeira atualização no servidor';
 
   const rows = unit.rows.length
-    ? unit.rows.map(([front, sector, color, status]) => `
+    ? unit.rows.map(([front, sector, color, status, atr = '']) => `
       <tr>
         <td><span class="front-cell"><i class="status-dot ${escapeHtml(color)}"></i>${escapeHtml(front)}</span></td>
         <td>${escapeHtml(sector)}</td>
         <td><span class="status-cell ${color === 'green' ? 'active-text' : ''}">${escapeHtml(status)}</span></td>
+        <td>${escapeHtml(atr || '—')}</td>
       </tr>
     `).join('')
-    : '<tr class="empty-table-row"><td colspan="3">Aguardando preenchimento do turno</td></tr>';
+    : '<tr class="empty-table-row"><td colspan="4">Aguardando preenchimento do turno</td></tr>';
 
   const metrics = unit.metrics.map(([, label, value, extra = '']) => `
     <div class="metric ${escapeHtml(extra)}">
@@ -277,7 +278,7 @@ function unitCard(unit) {
 
           <div class="table-wrap status-table-wrap">
             <table class="data-table">
-              <thead><tr><th>Frente</th><th>Setor</th><th>Status</th></tr></thead>
+              <thead><tr><th>Frente</th><th>Setor</th><th>Status</th><th>ATR</th></tr></thead>
               <tbody>${rows}</tbody>
             </table>
           </div>
@@ -421,7 +422,7 @@ function getSectorBaseItem(value, section = '') {
   return items[0] || null;
 }
 
-function frontRowHtml(front = '', sector = '', status = 'EM ATIVIDADE') {
+function frontRowHtml(front = '', sector = '', status = 'EM ATIVIDADE', atr = '') {
   return `
     <tr class="front-edit-row">
       <td><input class="front-input" type="text" maxlength="12" value="${escapeHtml(front)}" placeholder="Ex.: 402" /></td>
@@ -429,6 +430,7 @@ function frontRowHtml(front = '', sector = '', status = 'EM ATIVIDADE') {
         <input class="sector-input" type="text" maxlength="16" value="${escapeHtml(sector)}" placeholder="Ex.: 67620" />
       </td>
       <td><select class="status-input">${statusOptionsHtml(status)}</select></td>
+      <td><input class="atr-input" type="text" inputmode="decimal" maxlength="12" value="${escapeHtml(atr)}" placeholder="Ex.: 135,5" aria-label="ATR da frente" /></td>
       <td><button class="row-remove remove-front-row" type="button" aria-label="Remover frente">×</button></td>
     </tr>
   `;
@@ -444,7 +446,7 @@ function renderFrontRows(rows) {
   const tbody = document.querySelector('#front-rows');
   const sortedRows = sortFrontRows(rows);
   tbody.innerHTML = sortedRows.length
-    ? sortedRows.map(([front, sector, , status]) => frontRowHtml(front, sector, status)).join('')
+    ? sortedRows.map(([front, sector, , status, atr]) => frontRowHtml(front, sector, status, atr)).join('')
     : frontRowHtml();
 }
 
@@ -551,7 +553,8 @@ function collectFrontRows() {
       const front = row.querySelector('.front-input').value.trim();
       const sector = row.querySelector('.sector-input').value.trim();
       const status = normalizeStatus(row.querySelector('.status-input').value);
-      return [front, sector, getStatusColor(status), status];
+      const atr = row.querySelector('.atr-input').value.trim();
+      return [front, sector, getStatusColor(status), status, atr];
     })
     .filter(([front, sector]) => front || sector);
 

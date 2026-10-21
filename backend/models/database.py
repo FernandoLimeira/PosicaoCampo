@@ -102,7 +102,10 @@ def _normalize_unit_payload(unit: dict[str, Any], position: int) -> dict[str, An
             continue
         status = _normalize_status(raw_row[3])
         color = "green" if status == "EM ATIVIDADE" else "yellow"
-        rows.append([front, sector, color, status])
+        atr = str(raw_row[4] if len(raw_row) > 4 and raw_row[4] is not None else "").strip()
+        if len(atr) > 12:
+            raise ValueError("ATR excede o tamanho permitido.")
+        rows.append([front, sector, color, status, atr])
 
     statuses = [row[3] for row in rows]
     if not statuses or all(status == "EM ATIVIDADE" for status in statuses):
@@ -1479,7 +1482,8 @@ def save_sacarose_positions(
                     display_front = item["front"]
                     status = "EM ATIVIDADE"
                 color = "green" if status == "EM ATIVIDADE" else "yellow"
-                synced_rows.append([display_front, item["sector"], color, status])
+                atr = str(match[4] or "").strip() if match and len(match) > 4 else ""
+                synced_rows.append([display_front, item["sector"], color, status, atr])
 
             synced_rows.sort(key=lambda row: _sacarose_front_key(row[0]))
             current_unit["code"] = code

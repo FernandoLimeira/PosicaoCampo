@@ -528,14 +528,15 @@ function drawRows(ctx, unit, layout, geometry) {
 
   drawFittedText(ctx, 'FRENTE', layout.x + 20, layout.y + 93, 86, 'bold 14.2px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
   drawFittedText(ctx, 'SETOR', layout.x + 153, layout.y + 93, 90, 'bold 14.2px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
-  drawFittedText(ctx, 'STATUS', layout.x + 323, layout.y + 93, 135, 'bold 14.2px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+  drawFittedText(ctx, 'STATUS', layout.x + 285, layout.y + 93, 115, 'bold 14.2px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+  drawFittedText(ctx, 'ATR', layout.x + 418, layout.y + 93, 48, 'bold 14.2px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
 
   ctx.beginPath();
   ctx.moveTo(left, layout.y + 104);
   ctx.lineTo(right, layout.y + 104);
   ctx.stroke();
 
-  rows.forEach(([front = '', sector = '', color = 'yellow', status = ''], index) => {
+  rows.forEach(([front = '', sector = '', color = 'yellow', status = '', atr = ''], index) => {
     const cy = geometry.tableTop + index * rowHeight;
 
     ctx.beginPath();
@@ -545,7 +546,9 @@ function drawRows(ctx, unit, layout, geometry) {
 
     drawFittedText(ctx, front, layout.x + 55, cy + 0.5, 72, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
     drawFittedText(ctx, sector, layout.x + 155, cy + 0.5, 112, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
-    drawFittedText(ctx, status, layout.x + 305, cy + 0.5, right - (layout.x + 305) - 8, `${statusFontSize}px "Arial Narrow", Arial, sans-serif`, statusTextColor(color), 'middle');
+    drawFittedText(ctx, status, layout.x + 285, cy + 0.5, 115, `${statusFontSize}px "Arial Narrow", Arial, sans-serif`, statusTextColor(color), 'middle');
+    // O ATR é opcional: não alterar a estrutura dos registros já salvos.
+    drawFittedText(ctx, String(atr ?? '').trim() || '—', layout.x + 418, cy + 0.5, 48, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
 
     ctx.beginPath();
     ctx.moveTo(left, Math.min(geometry.tableBottom, cy + lineOffset));

@@ -377,9 +377,11 @@
 
 .editable-table th:nth-child(2) { width: 23%; }
 
-.editable-table th:nth-child(3) { width: 49%; }
+.editable-table th:nth-child(3) { width: 33%; }
 
-.editable-table th:nth-child(4) { width: 8%; }
+.editable-table th:nth-child(4) { width: 16%; }
+
+.editable-table th:nth-child(5) { width: 8%; }
 
 .editable-table input, .editable-table select { height: 35px; }
 
@@ -600,14 +602,18 @@
 
 .editable-table .front-edit-row td:nth-child(3)::before { content: 'Status'; }
 
-.editable-table .front-edit-row td:nth-child(4) {
+.editable-table .front-edit-row td:nth-child(4) { grid-column: 1 / 3; }
+
+.editable-table .front-edit-row td:nth-child(4)::before { content: 'ATR'; }
+
+.editable-table .front-edit-row td:nth-child(5) {
     grid-column: 3;
     grid-row: 1 / 3;
     align-self: end;
     justify-self: end;
   }
 
-.editable-table .front-edit-row td:nth-child(4)::before { content: none; }
+.editable-table .front-edit-row td:nth-child(5)::before { content: none; }
 
 .editable-table input, .editable-table select { min-width: 0; width: 100%; }
 
