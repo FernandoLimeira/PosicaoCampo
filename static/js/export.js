@@ -6,9 +6,9 @@ const SACAROSE_REPORT_EXPORT_SCALE = 0.65;
 const REPORT_EXPORT_MIME_TYPE = 'image/png';
 const REPORT_EXPORT_EXTENSION = REPORT_EXPORT_MIME_TYPE === 'image/png' ? 'png' : 'jpg';
 const REPORT_METRICS = [
-  ['🏭', 'INDÚSTRIA', 'TN/H'], ['⚙️', 'MOAGEM TURNO', 'TN/H'],
+  ['🏭', 'INDÚSTRIA PARADA', 'TN/H'], ['⚙️', 'MOAGEM TURNO', 'TN/H'],
   ['🚚', 'ENTREGA TURNO', 'TN/H'], ['⬡', 'ESTOQUE', 'CARGAS', 'stock'],
-  ['⚙️', 'MOAGEM ÚLTIMAS 3H', 'TN/H'], ['🚚', 'ENTREGA ÚLTIMAS 3H', 'TN/H']
+  ['⚙️', 'MOAGEM ÚLT. 3 H', 'TN/H'], ['🚚', 'ENTREGA ÚLT. 3 H', 'TN/H']
 ];
 
 function getHeaderDataForExport(generatedAt = new Date()) {
@@ -76,13 +76,35 @@ function loadSacaroseHeaderIconImage() {
   return loadImageAsset('/assets/sacarose-icon.png', 'Não foi possível carregar o ícone da posição de colheita.');
 }
 
-async function loadReportUnitIconImage() {
-  try {
-    return await loadImageAsset('/assets/report-unit-icon.png?v=20260930-icon-v35', 'Não foi possível carregar o ícone das unidades do relatório.');
-  } catch (error) {
-    console.warn('Ícone das unidades indisponível; usando desenho de segurança no relatório.', error);
-    return null;
-  }
+// O símbolo é incorporado ao código para não depender de um arquivo de imagem
+// separado no servidor. Isso mantém o desenho aprovado e evita o 404 do ícone.
+const REPORT_UNIT_SYMBOL_PNG_BASE64 = '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';
+
+async function loadEmbeddedReportUnitSymbol() {
+  const binary = atob(REPORT_UNIT_SYMBOL_PNG_BASE64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: 'image/png' });
+
+  if (typeof createImageBitmap === 'function') return createImageBitmap(blob);
+
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(blob);
+    const icon = new Image();
+    icon.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(icon);
+    };
+    icon.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Não foi possível carregar o símbolo de cana incorporado.'));
+    };
+    icon.src = objectUrl;
+  });
+}
+
+function loadReportUnitIconImage() {
+  return loadEmbeddedReportUnitSymbol();
 }
 
 function roundedRectPath(ctx, x, y, width, height, radius) {
@@ -118,22 +140,22 @@ function prepareCardBody(ctx, layout, unit, borderColor, unitIconImage = null) {
   fillRoundedRect(ctx, layout.x - 4, layout.y - 4, layout.w + 8, layout.h + 8, 20, '#012d36');
 
   const background = ctx.createLinearGradient(layout.x, layout.y, layout.x + layout.w, layout.y + layout.h);
-  background.addColorStop(0, '#003842');
-  background.addColorStop(0.52, '#00323b');
-  background.addColorStop(1, '#002a33');
+  background.addColorStop(0, '#083844');
+  background.addColorStop(0.52, '#072f39');
+  background.addColorStop(1, '#052832');
   fillRoundedRect(ctx, layout.x, layout.y, layout.w, layout.h, 16, background);
 
   ctx.save();
   roundedRectPath(ctx, layout.x, layout.y, layout.w, layout.h, 16);
   ctx.clip();
   const headerGlow = ctx.createLinearGradient(layout.x, layout.y, layout.x, layout.y + 90);
-  headerGlow.addColorStop(0, 'rgba(0, 92, 97, 0.26)');
+  headerGlow.addColorStop(0, 'rgba(22, 116, 115, 0.18)');
   headerGlow.addColorStop(1, 'rgba(0, 46, 58, 0)');
   ctx.fillStyle = headerGlow;
   ctx.fillRect(layout.x, layout.y, layout.w, 90);
   ctx.restore();
 
-  strokeRoundedRect(ctx, layout.x + 1.5, layout.y + 1.5, layout.w - 3, layout.h - 3, 15, borderColor, 6);
+  strokeRoundedRect(ctx, layout.x + 1.5, layout.y + 1.5, layout.w - 3, layout.h - 3, 15, borderColor, 5);
 
   if (unitIconImage) {
     const iconH = 44;
@@ -164,19 +186,19 @@ function drawFittedText(ctx, text, x, y, maxWidth, font, color = '#ffffff', base
 }
 
 function borderColorForState(border) {
-  if (border === 'critical') return '#ff3a45';
-  if (border === 'attention') return '#ffe11a';
-  return '#56ef3b';
+  if (border === 'critical') return '#ff6b57';
+  if (border === 'attention') return '#ff8a3d';
+  return '#ff6b57';
 }
 
 function statusColorValue(color) {
-  if (color === 'green') return '#7dff4c';
-  if (color === 'red') return '#ff4758';
-  return '#ffe11a';
+  if (color === 'green') return '#7ae44f';
+  if (color === 'red') return '#ff6b57';
+  return '#f3d21c';
 }
 
 function statusTextColor(color) {
-  return color === 'green' ? '#73ff48' : '#ffffff';
+  return color === 'green' ? '#8af45b' : '#ffffff';
 }
 
 function drawReportUnitIcon(ctx, x, y, width = 40, height = 46) {
@@ -364,6 +386,68 @@ function drawWrappedTextFit(ctx, text, x, y, maxWidth, maxHeight, options = {}) 
   return fitted.lines.length * fitted.lineHeight;
 }
 
+function canonicalFrontKey(value) {
+  const source = String(value ?? '').trim();
+  if (!source) return '';
+  const numeric = source.match(/\d+/g)?.join('') || '';
+  return numeric ? String(Number(numeric)) : source.toUpperCase();
+}
+
+function parseRainValue(value) {
+  const match = String(value ?? '').replace(',', '.').match(/-?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : 0;
+}
+
+function buildRainLookup(unit) {
+  const lookup = new Map();
+  (Array.isArray(unit?.rain) ? unit.rain : []).forEach(entry => {
+    if (!Array.isArray(entry)) return;
+    const [front = '', turn = 0, accum = 0] = entry;
+    const key = canonicalFrontKey(front);
+    if (!key) return;
+    lookup.set(key, { turn: parseRainValue(turn), accum: parseRainValue(accum) });
+  });
+  return lookup;
+}
+
+function computeRainSummary(unit) {
+  const rows = Array.isArray(unit?.rain) ? unit.rain.filter(item => Array.isArray(item)) : [];
+  if (!rows.length) return { turn: 0, accum: 0 };
+  const totals = rows.reduce((acc, item) => {
+    acc.turn += parseRainValue(item[1]);
+    acc.accum += parseRainValue(item[2]);
+    return acc;
+  }, { turn: 0, accum: 0 });
+  return {
+    turn: Math.round(totals.turn / rows.length),
+    accum: Math.round(totals.accum / rows.length)
+  };
+}
+
+function formatAccumSinceDate() {
+  const date = new Date();
+  return date.toLocaleDateString('pt-BR');
+}
+
+function metricVisualStyle(type) {
+  if (type === 'industry') return { icon: '#ff7e63', label: '#ff8c70' };
+  return { icon: '#84e63d', label: '#ff8c70' };
+}
+
+function formatMetricLabel(label) {
+  const normalized = String(label || '').toUpperCase().replace(/\s+/g, ' ').trim();
+  if (normalized === 'INDÚSTRIA') return 'INDÚSTRIA';
+  if (normalized === 'MOAGEM ÚLTIMAS 3H') return 'MOAGEM ÚLT. 3 H';
+  if (normalized === 'ENTREGA ÚLTIMAS 3H') return 'ENTREGA ÚLT. 3 H';
+  return normalized;
+}
+
+function formatMetricBadge(label, value = '') {
+  const normalized = String(label || '').toUpperCase().replace(/\s+/g, ' ').trim();
+  if ((normalized === 'INDÚSTRIA' || normalized === 'INDÚSTRIA PARADA') && !globalMetricHasPositiveValue(value)) return 'PARADA';
+  return '';
+}
+
 function drawMetricIcon(ctx, type, x, y, size, color) {
   ctx.save();
   ctx.strokeStyle = color;
@@ -426,31 +510,16 @@ function clampValue(value, min, max) {
 }
 
 function getReportGeometry(ctx, layout, unit) {
-  const metricHeight = layout.lower ? 48 : 55;
+  const metricHeight = layout.lower ? 46 : 50;
   const metricGapY = layout.lower ? 8 : 9;
-  const extraRowsHeight = layout.fullRows ? Math.max(0, unit.rows.length - 11) * 18 : 0;
-  const metricY = layout.y + (layout.lower ? 246 : 295) + extraRowsHeight;
+  const extraRowsHeight = layout.fullRows ? Math.max(0, unit.rows.length - (layout.lower ? 7 : 11)) * 18 : 0;
+  const metricY = layout.y + (layout.lower ? 274 : 372) + extraRowsHeight;
   const metricsBottom = metricY + metricHeight * 2 + metricGapY;
-  const contentTop = metricsBottom + 8;
+  const contentTop = metricsBottom + 12;
   const cardBottom = layout.y + layout.h;
   const innerLeft = layout.x + 18;
   const innerRight = layout.x + layout.w - 18;
-  const notesGap = layout.lower ? 10 : 12;
-  const defaultNotesW = layout.lower ? 245 : 214;
-  const minRainW = layout.lower ? 150 : 170;
-  const maxNotesW = layout.lower ? 286 : 272;
-  const maxBodyFont = layout.lower ? 11.5 : 13;
-  const observationLines = getWrappedTextLineCount(ctx, unit?.observation || '-', defaultNotesW, maxBodyFont);
-  const changesLines = getWrappedTextLineCount(ctx, unit?.changes || '-', defaultNotesW, maxBodyFont);
-  const extraWidthDemand = Math.max(0, observationLines - 3) * 10 + Math.max(0, changesLines - 2) * 6;
-  let notesW = clampValue(defaultNotesW + extraWidthDemand, defaultNotesW, maxNotesW);
-  let rainW = innerRight - innerLeft - notesGap - notesW;
-  if (rainW < minRainW) {
-    rainW = minRainW;
-    notesW = innerRight - innerLeft - notesGap - rainW;
-  }
-
-  const fixedRainH = layout.lower ? 125 : 174;
+  const summaryY = metricY - 34;
 
   return {
     metricY,
@@ -462,35 +531,50 @@ function getReportGeometry(ctx, layout, unit) {
     innerLeft,
     innerRight,
     fullNotesW: innerRight - innerLeft,
-    tableTop: layout.y + (layout.lower ? 112 : 114),
-    tableBottom: metricY - (layout.lower ? 12 : 14),
-    rainX: innerRight - rainW,
-    rainY: contentTop,
-    rainW,
-    rainH: fixedRainH,
-    rainBottom: contentTop + fixedRainH,
+    tableTop: layout.y + 130,
+    tableBottom: summaryY - 10,
+    summaryY,
+    summaryH: 24,
+    rainX: 0,
+    rainY: 0,
+    rainW: 0,
+    rainH: 0,
+    rainBottom: 0,
     notesX: innerLeft,
     notesY: contentTop + 2,
-    notesW,
-    notesGap
+    notesW: innerRight - innerLeft,
+    notesGap: 0
   };
 }
 
 function drawMetricBox(ctx, x, y, width, height, metric, type) {
-  const borderColor = '#ff3a45';
-  fillRoundedRect(ctx, x, y, width, height, 8, '#002b33');
-  strokeRoundedRect(ctx, x, y, width, height, 8, borderColor, 3);
+  const borderColor = '#ff6b57';
+  fillRoundedRect(ctx, x, y, width, height, 8, '#042a34');
+  strokeRoundedRect(ctx, x, y, width, height, 8, borderColor, 2.5);
 
   const compact = height < 52;
-  const iconSize = compact ? 20 : 22;
-  const iconY = y + (compact ? 12 : 13);
-  drawMetricIcon(ctx, type, x + 9, iconY, iconSize, '#ffffff');
+  const iconSize = compact ? 19 : 21;
+  const iconY = y + (compact ? 10 : 11);
+  const visual = metricVisualStyle(type);
+  drawMetricIcon(ctx, type, x + 8, iconY, iconSize, visual.icon);
 
-  const labelX = x + 42;
-  const labelY = y + (compact ? 14 : 16);
-  const valueY = y + (compact ? 35 : 40);
-  drawFittedText(ctx, metric?.[1] || '', labelX, labelY, width - 50, compact ? '10px "Arial Narrow", Arial, sans-serif' : '11px "Arial Narrow", Arial, sans-serif', '#ffffff');
-  drawFittedText(ctx, metric?.[2] || '0', labelX, valueY, width - 50, compact ? 'bold 16px "Arial Narrow", Arial, sans-serif' : 'bold 18px "Arial Narrow", Arial, sans-serif', '#ffffff');
+  const rawLabel = metric?.[1] || '';
+  const label = formatMetricLabel(rawLabel);
+  const badge = formatMetricBadge(rawLabel, metric?.[2]);
+  const labelX = x + 35;
+  const labelY = y + (compact ? 11 : 12);
+  const valueY = y + (compact ? 28 : 30);
+
+  const metricValuePositive = globalMetricHasPositiveValue(metric?.[2]);
+  drawFittedText(ctx, label, labelX, labelY, width - 42 - (badge ? 42 : 0), compact ? '9.5px "Arial Narrow", Arial, sans-serif' : '10.4px "Arial Narrow", Arial, sans-serif', metricValuePositive ? '#ffffff' : visual.label);
+
+  if (badge) {
+    fillRoundedRect(ctx, x + width - 44, y + 8, 34, 12, 5, '#ff6b57');
+    drawFittedText(ctx, badge, x + width - 41, y + 17, 28, 'bold 8.4px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+  }
+
+  if (metricValuePositive) strokeRoundedRect(ctx, x, y, width, height, 8, '#8af45b', 2.5);
+  drawFittedText(ctx, metric?.[2] || '0', labelX, valueY + 10, width - 44, compact ? 'bold 14px "Arial Narrow", Arial, sans-serif' : 'bold 16px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
 }
 
 function drawRows(ctx, unit, layout, geometry) {
@@ -502,59 +586,83 @@ function drawRows(ctx, unit, layout, geometry) {
   const requestedRows = unit.rows.slice(0, Math.min(layout.maxRows || maxVisibleRows, maxVisibleRows));
   const hiddenCount = Math.max(0, unit.rows.length - requestedRows.length);
   const rows = requestedRows.slice();
+  const rainLookup = buildRainLookup(unit);
+  const rainSummary = computeRainSummary(unit);
 
   if (hiddenCount > 0 && rows.length) {
-    rows[rows.length - 1] = ['…', '…', 'yellow', `+${hiddenCount + 1} FRENTES`];
+    rows[rows.length - 1] = ['…', '…', 'yellow', `+${hiddenCount + 1} FRENTES`, ''];
   }
 
   const rowCount = rows.length;
-  const lastCenterLimit = geometry.tableBottom - 8;
+  const lastCenterLimit = geometry.tableBottom - 6;
   const rowHeight = rowCount > 1
-    ? Math.min(layout.lower ? 18 : 18, Math.max(preferredMinRowHeight, (lastCenterLimit - geometry.tableTop) / (rowCount - 1)))
+    ? Math.min(layout.lower ? 20 : 19, Math.max(preferredMinRowHeight, (lastCenterLimit - geometry.tableTop) / (rowCount - 1)))
     : 18;
-  const fontSize = Math.max(12.4, Math.min(15.4, rowHeight - 1.2));
-  const statusFontSize = Math.max(11.8, fontSize - 0.2);
-  const dotRadius = Math.max(5.5, Math.min(7.25, rowHeight * 0.36));
+  const fontSize = Math.max(11.8, Math.min(15, rowHeight - 1.2));
+  const statusFontSize = Math.max(11.0, fontSize - 0.4);
+  const dotRadius = Math.max(5.2, Math.min(7.1, rowHeight * 0.34));
   const lineOffset = Math.min(8, rowHeight * 0.44);
+  const frontX = layout.x + 20;
+  const sectorX = layout.x + 102;
+  const statusX = layout.x + 176;
+  const atrX = layout.x + 290;
+  const turnX = layout.x + 374;
+  const accumX = layout.x + 437;
 
   ctx.save();
-  ctx.strokeStyle = 'rgba(125, 177, 185, 0.42)';
+  ctx.strokeStyle = 'rgba(148, 196, 204, 0.28)';
   ctx.lineWidth = 1;
 
+  drawFittedText(ctx, 'CHUVA', layout.x + layout.w - 102, layout.y + 74, 88, 'bold 13px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+  drawFittedText(ctx, '☁', layout.x + layout.w - 123, layout.y + 74, 14, 'bold 14px Arial, sans-serif', '#ffffff', 'middle');
+
   ctx.beginPath();
-  ctx.moveTo(left, layout.y + 73);
-  ctx.lineTo(right, layout.y + 73);
+  ctx.moveTo(left, layout.y + 83);
+  ctx.lineTo(right, layout.y + 83);
   ctx.stroke();
 
-  drawFittedText(ctx, 'FRENTE', layout.x + 20, layout.y + 93, 86, 'bold 14.2px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
-  drawFittedText(ctx, 'SETOR', layout.x + 153, layout.y + 93, 90, 'bold 14.2px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
-  drawFittedText(ctx, 'STATUS', layout.x + 285, layout.y + 93, 115, 'bold 14.2px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
-  drawFittedText(ctx, 'ATR', layout.x + 418, layout.y + 93, 48, 'bold 14.2px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+  drawFittedText(ctx, 'FRENTE', frontX, layout.y + 102, 70, 'bold 14px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+  drawFittedText(ctx, 'SETOR', sectorX, layout.y + 102, 60, 'bold 14px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+  drawFittedText(ctx, 'STATUS', statusX, layout.y + 102, 100, 'bold 14px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+  drawFittedText(ctx, 'ATR', atrX, layout.y + 102, 34, 'bold 14px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+  drawFittedText(ctx, 'TURNO', turnX, layout.y + 91, 52, 'bold 13px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+  drawFittedText(ctx, 'mm', turnX + 8, layout.y + 106, 18, '10px "Arial Narrow", Arial, sans-serif', 'rgba(255,255,255,0.8)', 'middle');
+  drawFittedText(ctx, 'ACUM.', accumX, layout.y + 91, 52, 'bold 13px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+  drawFittedText(ctx, 'mm', accumX + 8, layout.y + 106, 18, '10px "Arial Narrow", Arial, sans-serif', 'rgba(255,255,255,0.8)', 'middle');
 
   ctx.beginPath();
-  ctx.moveTo(left, layout.y + 104);
-  ctx.lineTo(right, layout.y + 104);
+  ctx.moveTo(left, layout.y + 119);
+  ctx.lineTo(right, layout.y + 119);
   ctx.stroke();
 
   rows.forEach(([front = '', sector = '', color = 'yellow', status = '', atr = ''], index) => {
     const cy = geometry.tableTop + index * rowHeight;
+    const rain = rainLookup.get(canonicalFrontKey(front)) || { turn: 0, accum: 0 };
 
     ctx.beginPath();
-    ctx.arc(layout.x + 35, cy, dotRadius, 0, Math.PI * 2);
+    ctx.arc(layout.x + 31, cy, dotRadius, 0, Math.PI * 2);
     ctx.fillStyle = statusColorValue(color);
     ctx.fill();
 
-    drawFittedText(ctx, front, layout.x + 55, cy + 0.5, 72, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
-    drawFittedText(ctx, sector, layout.x + 155, cy + 0.5, 112, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
-    drawFittedText(ctx, status, layout.x + 285, cy + 0.5, 115, `${statusFontSize}px "Arial Narrow", Arial, sans-serif`, statusTextColor(color), 'middle');
-    // O ATR é opcional: não alterar a estrutura dos registros já salvos.
-    drawFittedText(ctx, String(atr ?? '').trim() || '—', layout.x + 418, cy + 0.5, 48, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
+    drawFittedText(ctx, front, frontX + 22, cy + 0.5, 44, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
+    drawFittedText(ctx, sector, sectorX, cy + 0.5, 60, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
+    drawFittedText(ctx, status, statusX, cy + 0.5, 103, `${statusFontSize}px "Arial Narrow", Arial, sans-serif`, status === 'SOLO ÚMIDO' ? '#ffd325' : statusTextColor(color), 'middle');
+    drawFittedText(ctx, String(atr ?? '').trim() || '—', atrX, cy + 0.5, 34, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
+    drawFittedText(ctx, String(parseRainValue(rain.turn)), turnX + 8, cy + 0.5, 24, `${fontSize}px "Arial Narrow", Arial, sans-serif`, parseRainValue(rain.turn) > 0 ? '#8af45b' : '#ffffff', 'middle');
+    drawFittedText(ctx, String(parseRainValue(rain.accum)), accumX + 8, cy + 0.5, 28, `${fontSize}px "Arial Narrow", Arial, sans-serif`, parseRainValue(rain.accum) > 0 ? '#8af45b' : '#ffffff', 'middle');
 
     ctx.beginPath();
     ctx.moveTo(left, Math.min(geometry.tableBottom, cy + lineOffset));
     ctx.lineTo(right, Math.min(geometry.tableBottom, cy + lineOffset));
     ctx.stroke();
   });
+
+  fillRoundedRect(ctx, left, geometry.summaryY, right - left, geometry.summaryH, 10, 'rgba(93, 146, 174, 0.18)');
+  strokeRoundedRect(ctx, left, geometry.summaryY, right - left, geometry.summaryH, 10, 'rgba(150, 219, 230, 0.32)', 1);
+  drawFittedText(ctx, '☁', left + 10, geometry.summaryY + 15, 16, 'bold 13px Arial, sans-serif', '#bfe7ff', 'middle');
+  drawFittedText(ctx, `Média: Turno ${rainSummary.turn} mm | Acum ${rainSummary.accum} mm`, left + 29, geometry.summaryY + 15, 248, 'bold 13px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+  drawFittedText(ctx, `acum.: desde ${formatAccumSinceDate()}`, right - 88, geometry.summaryY + 15, 80, '10px "Arial Narrow", Arial, sans-serif', 'rgba(255,255,255,0.75)', 'middle');
+
   ctx.restore();
 }
 
@@ -813,7 +921,7 @@ function drawUnitOnCanvas(ctx, unit, layout, unitIconImage = null) {
   const notesLayout = computeSequentialNotesLayout(ctx, unit, geometry, layout.lower);
 
   ctx.save();
-  ctx.fillStyle = '#ffe11a';
+  ctx.fillStyle = '#f3d21c';
   ctx.font = `bold ${notesLayout.titleFontSize}px "Arial Narrow", Arial, sans-serif`;
   ctx.textBaseline = 'top';
   ctx.fillText('OBSERVAÇÃO', geometry.notesX, notesLayout.observationTitleY);
@@ -844,147 +952,353 @@ function drawUnitOnCanvas(ctx, unit, layout, unitIconImage = null) {
     );
   });
 
-  drawRainBox(ctx, unit, layout, geometry);
 }
 
-function removeReportHeaderLogo(ctx, template) {
-  // Reaproveita uma faixa limpa do próprio cabeçalho para cobrir somente o logo Cocal.
-  // A transição da borda esquerda é suavizada para não criar uma emenda visível.
-  ctx.drawImage(template, 520, 0, 244, 64, 780, 0, 244, 64);
+// Emissão global fiel ao modelo aprovado (900 × 1600). A Sacarose e a emissão
+// individual permanecem nas rotinas existentes, sem alterar seu comportamento.
+const GLOBAL_REPORT_SCALE = 2;
+const GLOBAL_REFERENCE_WIDTH = 900;
+const GLOBAL_REFERENCE_HEIGHT = 1600;
+const GLOBAL_REFERENCE_HEADER_END = 290;
+const GLOBAL_REFERENCE_FOOTER_Y = 1508;
+const GLOBAL_REFERENCE_ART = '/assets/posicao-campo-modelo-aprovado.png';
 
+const GLOBAL_COLORS = Object.freeze({
+  background: '#102930',
+  cardTop: '#112a31',
+  cardBottom: '#0b232b',
+  border: '#ee6955',
+  rule: 'rgba(159, 194, 194, 0.37)',
+  yellow: '#f4d32c',
+  green: '#80b82e',
+  red: '#ed6855',
+  white: '#f8f8f5',
+  secondary: '#b7c1c4',
+  metricBorder: '#c05d50',
+  metricBackground: '#0e2530',
+  rainBorder: '#79aec2'
+});
+
+function globalDrawText(ctx, value, x, y, maxWidth, font, color = GLOBAL_COLORS.white, align = 'left') {
   ctx.save();
-  for (let offset = 0; offset < 30; offset += 1) {
-    ctx.globalAlpha = (offset + 1) / 30;
-    ctx.drawImage(template, 490 + offset, 0, 1, 64, 750 + offset, 0, 1, 64);
-  }
+  ctx.fillStyle = color;
+  ctx.font = font;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = align;
+  // fillText com largura máxima: não desloca a posição das colunas adjacentes.
+  ctx.fillText(String(value ?? ''), x, y, maxWidth);
   ctx.restore();
 }
 
-function paintReportGapBackground(ctx, y, height) {
-  if (height <= 0) return;
+function globalDrawReportHeader(ctx, art) {
+  ctx.drawImage(art, 0, 0, GLOBAL_REFERENCE_WIDTH, GLOBAL_REFERENCE_HEADER_END,
+    0, 0, GLOBAL_REFERENCE_WIDTH, GLOBAL_REFERENCE_HEADER_END);
 
-  const background = ctx.createLinearGradient(0, y, 0, y + height);
-  background.addColorStop(0, '#032a34');
-  background.addColorStop(0.5, '#032f39');
-  background.addColorStop(1, '#02242d');
-  ctx.fillStyle = background;
-  ctx.fillRect(0, y, REPORT_BASE_WIDTH, height);
-
-  ctx.save();
-  ctx.globalAlpha = 0.28;
-  const glow = ctx.createRadialGradient(REPORT_BASE_WIDTH * 0.18, y + height * 0.2, 0, REPORT_BASE_WIDTH * 0.18, y + height * 0.2, REPORT_BASE_WIDTH * 0.3);
-  glow.addColorStop(0, 'rgba(70, 161, 72, 0.45)');
-  glow.addColorStop(1, 'rgba(70, 161, 72, 0)');
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, y, REPORT_BASE_WIDTH, height);
-  ctx.restore();
-
-  ctx.save();
-  ctx.strokeStyle = 'rgba(124, 230, 55, 0.55)';
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.moveTo(-20, y + height - 24);
-  ctx.bezierCurveTo(REPORT_BASE_WIDTH * 0.18, y + height - 42, REPORT_BASE_WIDTH * 0.42, y + height + 18, REPORT_BASE_WIDTH * 0.7, y + height - 14);
-  ctx.bezierCurveTo(REPORT_BASE_WIDTH * 0.85, y + height - 30, REPORT_BASE_WIDTH * 0.95, y + height - 22, REPORT_BASE_WIDTH + 20, y + height - 34);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawReportFooter(ctx, template, dynamicReport) {
-  const { originalFooterY, footerY, footerHeight } = dynamicReport;
-  if (footerHeight <= 0) return;
-
-  // Redesenha o rodapé original intacto logo após o fim dos cards inferiores.
-  ctx.drawImage(
-    template,
-    0,
-    originalFooterY,
-    REPORT_BASE_WIDTH,
-    footerHeight,
-    0,
-    footerY,
-    REPORT_BASE_WIDTH,
-    footerHeight
-  );
-}
-
-async function generateReportImageBlob(sourceUnits) {
-  if (!Array.isArray(sourceUnits) || sourceUnits.length !== 4) throw new Error('A posição global precisa das quatro unidades.');
-  const normalizedUnits = sourceUnits.map((unit, index) => normalizeReportUnit(unit, index));
-
-  const measureCanvas = document.createElement('canvas');
-  measureCanvas.width = REPORT_BASE_WIDTH;
-  measureCanvas.height = REPORT_BASE_HEIGHT;
-  const measureCtx = measureCanvas.getContext('2d');
-  if (!measureCtx) throw new Error('Canvas não suportado neste navegador.');
-
-  const dynamicReport = buildDynamicReportLayouts(measureCtx, normalizedUnits);
-  const canvas = document.createElement('canvas');
-  canvas.width = REPORT_BASE_WIDTH * REPORT_EXPORT_SCALE;
-  canvas.height = dynamicReport.canvasHeight * REPORT_EXPORT_SCALE;
-  const ctx = canvas.getContext('2d', { alpha: false });
-  if (!ctx) throw new Error('Canvas não suportado neste navegador.');
-
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.scale(REPORT_EXPORT_SCALE, REPORT_EXPORT_SCALE);
-
-  const template = await loadReportTemplateImage();
-  const reportUnitIcon = await loadReportUnitIconImage();
-  ctx.drawImage(template, 0, 0, REPORT_BASE_WIDTH, REPORT_BASE_HEIGHT);
-
-  // Quando os cards precisam crescer, cobrimos as áreas antigas do template
-  // para evitar “fantasmas” das unidades originais aparecendo entre os blocos.
-  if (dynamicReport.lowerY > 886) {
-    paintReportGapBackground(ctx, 886, dynamicReport.lowerY - 886);
-  }
-  if (dynamicReport.canvasHeight > REPORT_BASE_HEIGHT) {
-    paintReportGapBackground(ctx, REPORT_BASE_HEIGHT, dynamicReport.canvasHeight - REPORT_BASE_HEIGHT);
-  }
-
-  // Mantém o rodapé sempre abaixo dos cards, mesmo quando observações/mudanças aumentam a altura.
-  if (dynamicReport.footerY > dynamicReport.originalFooterY) {
-    paintReportGapBackground(
-      ctx,
-      dynamicReport.originalFooterY,
-      dynamicReport.footerY - dynamicReport.originalFooterY
-    );
-  }
-
-  removeReportHeaderLogo(ctx, template);
+  // Somente a saudação/data/turno são dinâmicos; toda a arte original fica intacta.
+  const headerClear = ctx.createLinearGradient(0, 0, 0, 78);
+  headerClear.addColorStop(0, '#0d242c');
+  headerClear.addColorStop(1, '#112a32');
+  ctx.fillStyle = headerClear;
+  ctx.fillRect(0, 0, 442, 78);
+  const seamFade = ctx.createLinearGradient(442, 0, 525, 0);
+  seamFade.addColorStop(0, '#112a32');
+  seamFade.addColorStop(1, 'rgba(17,42,50,0)');
+  ctx.fillStyle = seamFade;
+  ctx.fillRect(442, 0, 83, 78);
 
   const { greeting, date } = getHeaderDataForExport(new Date());
-  ctx.fillStyle = 'rgba(2, 33, 40, 0.98)';
-  ctx.fillRect(26, 20, 175, 36);
-  ctx.fillRect(262, 20, 205, 36);
-  drawFittedText(ctx, greeting, 28, 38, 165, 'bold 31px Arial, sans-serif', '#ffffff', 'middle');
-  drawFittedText(ctx, `${date} - TC`, 260, 38, 195, 'bold 28px Arial, sans-serif', '#ffffff', 'middle');
+  globalDrawText(ctx, greeting, 29, 48, 101, '900 27px "Arial Narrow", Arial, sans-serif');
+  ctx.strokeStyle = '#a0a8a6';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(143, 29); ctx.lineTo(143, 60); ctx.stroke();
 
-  dynamicReport.layouts.forEach((layout, index) => drawUnitOnCanvas(ctx, normalizedUnits[index], layout, reportUnitIcon));
+  // Ícone calendário equivalente ao do modelo, sem dependência de fontes externas.
+  ctx.save();
+  ctx.strokeStyle = '#73a92a'; ctx.fillStyle = '#73a92a'; ctx.lineWidth = 2;
+  roundedRectPath(ctx, 163, 38, 20, 19, 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(163, 43); ctx.lineTo(183, 43); ctx.stroke();
+  ctx.fillRect(168, 33, 2, 8); ctx.fillRect(177, 33, 2, 8);
+  for (const dx of [168, 175]) for (const dy of [47, 52]) ctx.fillRect(dx, dy, 2.1, 2.1);
+  ctx.restore();
 
-  // O rodapé é desenhado por último para nunca ficar atrás de um card expandido.
-  drawReportFooter(ctx, template, dynamicReport);
+  globalDrawText(ctx, date, 193, 48, 126, '900 27px "Arial Narrow", Arial, sans-serif');
+  ctx.strokeStyle = '#a0a8a6'; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(330, 29); ctx.lineTo(330, 60); ctx.stroke();
+  // Antes, a emissão mostrava - TC (turno C). Agora usa a apresentação do modelo.
+  globalDrawText(ctx, 'TURNO C', 348, 48, 105, '900 26px "Arial Narrow", Arial, sans-serif');
+}
 
-  if (typeof reportUnitIcon?.close === 'function') reportUnitIcon.close();
-  if (typeof template.close === 'function') template.close();
+function globalFrontRainMap(unit) {
+  const lookup = new Map();
+  for (const item of Array.isArray(unit.rain) ? unit.rain : []) {
+    if (!Array.isArray(item)) continue;
+    const key = canonicalFrontKey(item[0]);
+    if (key) lookup.set(key, { turn: item[1], accum: item[2] });
+  }
+  return lookup;
+}
 
-  return new Promise((resolve, reject) => {
-    if (REPORT_EXPORT_MIME_TYPE === 'image/png') {
-      canvas.toBlob(blob => {
-        if (blob) resolve(blob);
-        else reject(new Error('Não foi possível converter o relatório para PNG.'));
-      }, 'image/png');
-      return;
-    }
+function globalRainCell(value) {
+  if (value === '' || value == null) return '—';
+  const normalized = String(value).trim();
+  if (!normalized || normalized === '-') return '—';
+  const parsed = Number(normalized.replace(',', '.'));
+  return Number.isFinite(parsed) ? normalized : normalized;
+}
 
-    canvas.toBlob(blob => {
-      if (blob) resolve(blob);
-      else reject(new Error('Não foi possível converter o relatório para JPG.'));
-    }, 'image/jpeg', 0.98);
+function globalRainMean(unit) {
+  const rain = (Array.isArray(unit.rain) ? unit.rain : []).filter(row => Array.isArray(row));
+  if (!rain.length) return {turn:'—', accum:'—'};
+  const numbers = (index) => rain.map(row => Number(String(row[index] ?? '').replace(',', '.')))
+    .filter(value => Number.isFinite(value));
+  const average = (index) => {
+    // Acumulado zero não compõe a média quando não houve chuva acumulada na frente.
+    const vals = index === 2 ? numbers(index).filter(n=>n!==0) : numbers(index);
+    return vals.length ? String(Math.round(vals.reduce((sum, n) => sum + n, 0) / vals.length)) : '—';
+  };
+  return { turn: average(1), accum: average(2) };
+}
+
+function globalHasNumericValue(value) {
+  if (value === '' || value === null || value === undefined) return false;
+  const parsed = Number(String(value).replace(',', '.'));
+  return Number.isFinite(parsed) && parsed > 0;
+}
+
+function globalHighlightValueColor(value) {
+  return globalHasNumericValue(value) ? '#8af45b' : GLOBAL_COLORS.white;
+}
+
+function globalMeasureText(ctx, text, width, font) {
+  ctx.save(); ctx.font = font;
+  const lines = wrapTextLines(ctx, text, width);
+  ctx.restore();
+  return lines;
+}
+
+function globalNoteLines(unit, key, ctx, width = 383) {
+  const value = String(unit?.[key] ?? '').trim();
+  if (!value || value === '-') return [];
+  const paragraphs = value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  return paragraphs.flatMap(paragraph => {
+    const content = /^[•\-*]/.test(paragraph) ? paragraph : `• ${paragraph}`;
+    return globalMeasureText(ctx, content, width - 10, '13px "Arial Narrow", Arial, sans-serif');
   });
 }
 
+// A faixa de cabeçalho precisa acomodar título, unidade "mm" e divisor sem contato.
+// A primeira linha começa somente depois do divisor, sem sobreposição.
+const GLOBAL_TABLE_LAYOUT = Object.freeze({
+  headerY: 91,
+  rainLabelY: 82,
+  rainUnitY: 99,
+  ruleY: 110,
+  firstRow: 127,
+  rowStep: 21
+});
 
+function globalUnitPlacement(ctx, unit, minHeight, isLower) {
+  const lineCount = (unit.rows || []).length;
+  // A quantidade real de frentes determina a barra de chuva e os cards de produção.
+  const visibleRows = lineCount || 1;
+  const rowsEnd = GLOBAL_TABLE_LAYOUT.firstRow + (visibleRows - 1) * GLOBAL_TABLE_LAYOUT.rowStep;
+  const summary = rowsEnd + 19;
+  const metrics = summary + 38;
+  const notes = metrics + 2 * 46 + 6 + 12;
+  const obsLines = globalNoteLines(unit, 'observation', ctx);
+  const changeLines = globalNoteLines(unit, 'changes', ctx);
+  const obsH = obsLines.length ? 22 + obsLines.length * 16 : 0;
+  const changesH = changeLines.length ? 8 + 22 + changeLines.length * 16 : 0;
+  const required = Math.ceil(notes + obsH + changesH + 18);
+  return { height: Math.max(minHeight, required), rowsEnd, summary, metrics, notes,
+    obsLines, changeLines, isLower };
+}
+
+function globalDrawCardBase(ctx, layout, unit, leaf) {
+  const { x, y, w, h } = layout;
+  ctx.save(); ctx.shadowColor = 'rgba(240,94,65,0.34)'; ctx.shadowBlur = 8;
+  strokeRoundedRect(ctx, x + 1.5, y + 1.5, w - 3, h - 3, 12, '#cc5d4a', 3);
+  ctx.restore();
+  const grad = ctx.createLinearGradient(0, y, 0, y + h);
+  grad.addColorStop(0, GLOBAL_COLORS.cardTop);
+  grad.addColorStop(1, GLOBAL_COLORS.cardBottom);
+  fillRoundedRect(ctx, x + 2.8, y + 2.8, w - 5.6, h - 5.6, 11, grad);
+  const borderColor = unit.border === 'active' ? '#7fae3b' : unit.border === 'attention' ? '#edbc42' : GLOBAL_COLORS.border;
+  strokeRoundedRect(ctx, x + 1.5, y + 1.5, w - 3, h - 3, 12, borderColor, 2.4);
+
+  fillRoundedRect(ctx, x + 17, y + 15, 5, 36, 2, GLOBAL_COLORS.border);
+  // Retém o símbolo de cana, com peso visual compatível com o original.
+  ctx.drawImage(leaf, x + 32, y + 13, 35, 42);
+  globalDrawText(ctx, unit.code, x + 71, y + 30, 119, '900 28px "Arial Narrow", Arial, sans-serif');
+  globalDrawText(ctx, unit.name, x + 71, y + 53, 236, '11.5px "Arial Narrow", Arial, sans-serif', GLOBAL_COLORS.white);
+}
+
+function globalDrawCardTable(ctx, layout, unit, placing) {
+  const {x,y,w} = layout;
+  const col = {front:x+17, sector:x+94, status:x+164, atr:x+270, turn:x+305, accum:x+367};
+  const rain = globalFrontRainMap(unit);
+
+  globalDrawText(ctx, '☁', x + 318, y + 57, 22, 'bold 15px Arial, sans-serif', '#a8cfdd');
+  globalDrawText(ctx, 'CHUVA', x + 340, y + 56, 64, 'bold 12.7px "Arial Narrow", Arial, sans-serif');
+  ctx.save();ctx.strokeStyle = GLOBAL_COLORS.rule;ctx.lineWidth = 0.9;
+  ctx.beginPath();ctx.moveTo(x+308,y+65);ctx.lineTo(x+w-17,y+65);ctx.stroke();ctx.restore();
+
+  const yHeader=y+GLOBAL_TABLE_LAYOUT.headerY;
+  const titleFont='bold 13.2px "Arial Narrow", Arial, sans-serif';
+  globalDrawText(ctx,'FRENTE',col.front,yHeader,67,titleFont);
+  globalDrawText(ctx,'SETOR',col.sector,yHeader,60,titleFont);
+  globalDrawText(ctx,'STATUS',col.status,yHeader,93,titleFont);
+  globalDrawText(ctx,'ATR',col.atr,yHeader,34,titleFont);
+  globalDrawText(ctx,'TURNO',col.turn,y+GLOBAL_TABLE_LAYOUT.rainLabelY,45,'bold 12.5px "Arial Narrow", Arial, sans-serif');
+  globalDrawText(ctx,'mm',col.turn+11,y+GLOBAL_TABLE_LAYOUT.rainUnitY,23,'9.6px "Arial Narrow", Arial, sans-serif',GLOBAL_COLORS.secondary);
+  globalDrawText(ctx,'ACUM.',col.accum,y+GLOBAL_TABLE_LAYOUT.rainLabelY,40,'bold 12.5px "Arial Narrow", Arial, sans-serif');
+  globalDrawText(ctx,'mm',col.accum+11,y+GLOBAL_TABLE_LAYOUT.rainUnitY,23,'9.6px "Arial Narrow", Arial, sans-serif',GLOBAL_COLORS.secondary);
+  ctx.save();ctx.strokeStyle = GLOBAL_COLORS.rule;ctx.lineWidth=.8;
+  ctx.beginPath();ctx.moveTo(x+16,y+GLOBAL_TABLE_LAYOUT.ruleY);ctx.lineTo(x+w-16,y+GLOBAL_TABLE_LAYOUT.ruleY);ctx.stroke();ctx.restore();
+
+  const rows = Array.isArray(unit.rows) ? unit.rows : [];
+  rows.forEach((row, index) => {
+    const [front='',sector='',color='yellow',status='',atr=''] = row || [];
+    const cy=y+GLOBAL_TABLE_LAYOUT.firstRow + GLOBAL_TABLE_LAYOUT.rowStep*index;
+    ctx.save(); ctx.fillStyle = statusColorValue(color);
+    ctx.beginPath();ctx.arc(x+25,cy,6,0,2*Math.PI);ctx.fill();ctx.restore();
+    const font='bold 15.5px "Arial Narrow", Arial, sans-serif';
+    globalDrawText(ctx, front, x+38, cy, 42, font);
+    globalDrawText(ctx, sector, col.sector, cy, 61, font);
+    const displayedStatus=String(status).toLowerCase().replace(/(^|\s)\p{L}/gu, char => char.toUpperCase());
+    const softenedStatus=displayedStatus.replace('Úmido','úmido').replace('Atividade','atividade');
+    globalDrawText(ctx, softenedStatus, col.status, cy, 96, 'bold 14.3px "Arial Narrow", Arial, sans-serif', color === 'yellow' ? GLOBAL_COLORS.yellow : statusColorValue(color));
+    globalDrawText(ctx, String(atr ?? '').trim() || '—', col.atr+6, cy, 29, font);
+    const rainfall=rain.get(canonicalFrontKey(front));
+    globalDrawText(ctx, rainfall ? globalRainCell(rainfall.turn) : '—', col.turn+25, cy, 25, font, globalHighlightValueColor(rainfall ? rainfall.turn : ''), 'center');
+    globalDrawText(ctx, rainfall ? globalRainCell(rainfall.accum) : '—', col.accum+27, cy, 28, font, globalHighlightValueColor(rainfall ? rainfall.accum : ''), 'center');
+  });
+
+  const barY=y+placing.summary;
+  fillRoundedRect(ctx,x+16,barY,w-32,29,9,'rgba(53,98,116,0.23)');
+  strokeRoundedRect(ctx,x+16,barY,w-32,29,9,GLOBAL_COLORS.rainBorder,1.2);
+  globalDrawText(ctx,'☁',x+26,barY+14.5,17,'bold 14px Arial, sans-serif','#abd9ea');
+  const mean=globalRainMean(unit);
+  globalDrawText(ctx,`Média: Turno ${mean.turn} mm | Acum ${mean.accum} mm`,x+51,barY+15,258,'bold 13.6px "Arial Narrow", Arial, sans-serif', (globalHasNumericValue(mean.turn) || globalHasNumericValue(mean.accum)) ? '#d7f7ff' : GLOBAL_COLORS.white);
+  const startDate = unit.rainStartDate || unit.rain_start_date || unit.rainStart || '';
+  if (startDate) globalDrawText(ctx,`acum.: desde ${startDate}`,x+w-99,barY+15,78,'9px "Arial Narrow", Arial, sans-serif','#abbac2');
+}
+
+// Os valores informados de produção ficam verdes apenas quando há quantidade positiva.
+// Aceita números com vírgula decimal e valores acompanhados de t/h ou cargas.
+function globalMetricHasPositiveValue(value) {
+  const raw = String(value ?? '').trim();
+  const found = raw.match(/^([+-]?\d+(?:[.,]\d+)?)/);
+  if (!found) return false;
+  const quantity = Number(found[1].replace(',', '.'));
+  return Number.isFinite(quantity) && quantity > 0;
+}
+
+function globalMetricValue(value, stock) {
+  const raw=String(value ?? '').trim();
+  if (!raw) return '—';
+  const stripped=raw.replace(/\bTN\s*\/\s*H\b/ig,'t/h').replace(/\bCARGAS\b/ig,'cargas');
+  if (stock) return /cargas/i.test(stripped) ? stripped : `${stripped} cargas`;
+  return /t\/h/i.test(stripped) ? stripped : `${stripped} t/h`;
+}
+
+function globalDrawCardMetrics(ctx, layout, unit, placing) {
+  const {x,y,w}=layout;
+  const types=['industry','gear','delivery','stock','gear','delivery'];
+  const names=['INDÚSTRIA','MOAGEM TURNO','ENTREGA TURNO','ESTOQUE','MOAGEM ÚLT. 3 H','ENTREGA ÚLT. 3 H'];
+  const boxW=(w-32-12)/3;
+  for (let i=0;i<6;i++) {
+    const mx=x+16+(i%3)*(boxW+6);
+    const my=y+placing.metrics+Math.floor(i/3)*52;
+    fillRoundedRect(ctx,mx,my,boxW,46,7,GLOBAL_COLORS.metricBackground);
+    const data=(unit.metrics || [])[i];
+    const metricPositive = globalMetricHasPositiveValue(data?.[2]);
+    strokeRoundedRect(ctx,mx,my,boxW,46,7,metricPositive ? '#8af45b' : GLOBAL_COLORS.metricBorder,1.6);
+    const c=i===0?'#d66b53':'#76b633';
+    drawMetricIcon(ctx,types[i],mx+8,my+14,19,c);
+    const isIndustry=i===0;
+    globalDrawText(ctx,names[i],mx+35,my+13,isIndustry?63:boxW-41,'bold 9px "Arial Narrow", Arial, sans-serif', metricPositive ? GLOBAL_COLORS.white : '#d97a5b');
+    if (isIndustry && !metricPositive) {
+      fillRoundedRect(ctx,mx+boxW-45,my+7,36,12,3,'#e86655');
+      globalDrawText(ctx,'PARADA',mx+boxW-42,my+13,29,'bold 8px "Arial Narrow", Arial, sans-serif');
+    }
+    globalDrawText(ctx,globalMetricValue(data?.[2] ?? '',i===3),mx+35,my+32,boxW-40,'bold 15px "Arial Narrow", Arial, sans-serif',GLOBAL_COLORS.white);
+  }
+}
+
+function globalDrawCardNotes(ctx, layout, placing) {
+  const {x,y}=layout;
+  const left=x+17;
+  let noteY=y+placing.notes;
+  const drawBlock=(title,lines) => {
+    if (!lines.length) return;
+    globalDrawText(ctx,title,left,noteY+8,310,'bold 15.5px "Arial Narrow", Arial, sans-serif',GLOBAL_COLORS.yellow);
+    noteY += 25;
+    for (const line of lines) {
+      globalDrawText(ctx,line,left,noteY+6,layout.w-34,'13px "Arial Narrow", Arial, sans-serif');
+      noteY +=16;
+    }
+  };
+  drawBlock('OBSERVAÇÃO', placing.obsLines);
+  if (placing.changeLines.length && placing.obsLines.length) noteY +=8;
+  drawBlock('MUDANÇAS', placing.changeLines);
+}
+
+function globalDrawCard(ctx, layout, unit, placing, leaf) {
+  globalDrawCardBase(ctx,layout,unit,leaf);
+  globalDrawCardTable(ctx,layout,unit,placing);
+  globalDrawCardMetrics(ctx,layout,unit,placing);
+  globalDrawCardNotes(ctx,layout,placing);
+}
+
+async function globalGenerateApprovedImage(sourceUnits) {
+  if (!Array.isArray(sourceUnits) || sourceUnits.length !== 4) {
+    throw new Error('A posição global precisa das quatro unidades.');
+  }
+  const normalized=sourceUnits.map((u,i)=>normalizeReportUnit(u,i));
+  const unitByCode=new Map(normalized.map(unit=>[unit.code,unit]));
+  const desired=['PPT','NRD','RBR','PST'];
+  const ordered=desired.map((code,i)=>unitByCode.get(code)||normalized[i]);
+
+  const measure=document.createElement('canvas').getContext('2d');
+  const topPlacement=ordered.slice(0,2).map(u=>globalUnitPlacement(measure,u,632,false));
+  const bottomPlacement=ordered.slice(2).map(u=>globalUnitPlacement(measure,u,569,true));
+  const topH=Math.max(632,...topPlacement.map(p=>p.height));
+  const bottomH=Math.max(569,...bottomPlacement.map(p=>p.height));
+  const bottomY=292+topH+12;
+  const footerY=bottomY+bottomH+3;
+  const height=footerY+(GLOBAL_REFERENCE_HEIGHT-GLOBAL_REFERENCE_FOOTER_Y);
+  const c=document.createElement('canvas');
+  c.width=GLOBAL_REFERENCE_WIDTH*GLOBAL_REPORT_SCALE;
+  c.height=height*GLOBAL_REPORT_SCALE;
+  const ctx=c.getContext('2d',{alpha:false});
+  if (!ctx) throw new Error('Canvas não suportado neste navegador.');
+  ctx.scale(GLOBAL_REPORT_SCALE,GLOBAL_REPORT_SCALE);
+  ctx.imageSmoothingEnabled=true;
+  ctx.imageSmoothingQuality='high';
+  const [art,leaf]=await Promise.all([
+    loadImageAsset(GLOBAL_REFERENCE_ART, 'Não foi possível carregar a imagem de referência da Posição de Campo.'),
+    loadEmbeddedReportUnitSymbol()
+  ]);
+  globalDrawReportHeader(ctx,art);
+  ctx.fillStyle=GLOBAL_COLORS.background;
+  ctx.fillRect(0,GLOBAL_REFERENCE_HEADER_END,GLOBAL_REFERENCE_WIDTH,footerY-GLOBAL_REFERENCE_HEADER_END);
+  const layouts=[
+    {x:22,y:292,w:423,h:topH}, {x:455,y:292,w:423,h:topH},
+    {x:22,y:bottomY,w:423,h:bottomH}, {x:455,y:bottomY,w:423,h:bottomH}
+  ];
+  layouts.forEach((layout,i)=>globalDrawCard(ctx,layout,ordered[i],i<2?topPlacement[i]:bottomPlacement[i-2],leaf));
+  ctx.drawImage(art,0,GLOBAL_REFERENCE_FOOTER_Y,GLOBAL_REFERENCE_WIDTH,
+    GLOBAL_REFERENCE_HEIGHT-GLOBAL_REFERENCE_FOOTER_Y,0,footerY,
+    GLOBAL_REFERENCE_WIDTH,GLOBAL_REFERENCE_HEIGHT-GLOBAL_REFERENCE_FOOTER_Y);
+  if (typeof art?.close==='function') art.close();
+  if (typeof leaf?.close==='function') leaf.close();
+  return new Promise((resolve,reject)=>c.toBlob(blob=>blob?resolve(blob):reject(new Error('Não foi possível gerar a imagem da Posição de Campo.')),'image/png'));
+}
+
+async function generateReportImageBlob(sourceUnits) {
+  return globalGenerateApprovedImage(sourceUnits);
+}
 
 async function generateUnitReportImageBlob(sourceUnit) {
   if (!sourceUnit?.code) throw new Error('Unidade inválida para emissão.');
