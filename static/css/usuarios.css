@@ -149,7 +149,7 @@
   .user-list-item { align-items: flex-start; flex-direction: column; }
   .user-actions { width: 100%; justify-content: flex-start; }
   .user-password-form { width: 100%; grid-template-columns: 1fr; }
-  .user-create-modal, .user-access-modal { width: 100%; max-height: calc(100dvh - 20px); border-radius: 8px; }
+  .user-create-modal, .user-access-modal { width: 100%; max-height: calc(100dvh - 20px); border-radius: 16px; }
   .user-create-modal .modal-header, .user-access-modal .modal-header { padding: 15px; }
   .user-create-modal .modal-footer, .user-access-modal .modal-footer { padding: 12px 15px; }
   .user-create-modal-body, .user-access-modal-body { padding: 16px 15px; }
