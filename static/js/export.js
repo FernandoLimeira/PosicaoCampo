@@ -398,6 +398,15 @@ function parseRainValue(value) {
   return match ? Number(match[0]) : 0;
 }
 
+// Uma unidade só exibe CHUVA quando algum turno ou acumulado possui
+// precipitação maior que zero. Campos vazios, traços e zeros não criam
+// cabeçalhos nem barras de chuva na imagem exportada.
+function reportHasRainData(unit) {
+  return Array.isArray(unit?.rain) && unit.rain.some(entry =>
+    Array.isArray(entry) && (parseRainValue(entry[1]) > 0 || parseRainValue(entry[2]) > 0)
+  );
+}
+
 function buildRainLookup(unit) {
   const lookup = new Map();
   (Array.isArray(unit?.rain) ? unit.rain : []).forEach(entry => {
@@ -513,7 +522,8 @@ function getReportGeometry(ctx, layout, unit) {
   const metricHeight = layout.lower ? 46 : 50;
   const metricGapY = layout.lower ? 8 : 9;
   const extraRowsHeight = layout.fullRows ? Math.max(0, unit.rows.length - (layout.lower ? 7 : 11)) * 18 : 0;
-  const metricY = layout.y + (layout.lower ? 274 : 372) + extraRowsHeight;
+  const hasRain = reportHasRainData(unit);
+  const metricY = layout.y + (layout.lower ? 274 : 372) + extraRowsHeight - (hasRain ? 0 : 34);
   const metricsBottom = metricY + metricHeight * 2 + metricGapY;
   const contentTop = metricsBottom + 12;
   const cardBottom = layout.y + layout.h;
@@ -522,6 +532,7 @@ function getReportGeometry(ctx, layout, unit) {
   const summaryY = metricY - 34;
 
   return {
+    hasRain,
     metricY,
     metricHeight,
     metricGapY,
@@ -532,7 +543,7 @@ function getReportGeometry(ctx, layout, unit) {
     innerRight,
     fullNotesW: innerRight - innerLeft,
     tableTop: layout.y + 130,
-    tableBottom: summaryY - 10,
+    tableBottom: (hasRain ? summaryY : metricY) - 10,
     summaryY,
     summaryH: 24,
     rainX: 0,
@@ -586,8 +597,9 @@ function drawRows(ctx, unit, layout, geometry) {
   const requestedRows = unit.rows.slice(0, Math.min(layout.maxRows || maxVisibleRows, maxVisibleRows));
   const hiddenCount = Math.max(0, unit.rows.length - requestedRows.length);
   const rows = requestedRows.slice();
-  const rainLookup = buildRainLookup(unit);
-  const rainSummary = computeRainSummary(unit);
+  const hasRain = geometry.hasRain;
+  const rainLookup = hasRain ? buildRainLookup(unit) : new Map();
+  const rainSummary = hasRain ? computeRainSummary(unit) : null;
 
   if (hiddenCount > 0 && rows.length) {
     rows[rows.length - 1] = ['…', '…', 'yellow', `+${hiddenCount + 1} FRENTES`, ''];
@@ -603,9 +615,9 @@ function drawRows(ctx, unit, layout, geometry) {
   const dotRadius = Math.max(5.2, Math.min(7.1, rowHeight * 0.34));
   const lineOffset = Math.min(8, rowHeight * 0.44);
   const frontX = layout.x + 20;
-  const sectorX = layout.x + 102;
-  const statusX = layout.x + 176;
-  const atrX = layout.x + 290;
+  const sectorX = layout.x + (hasRain ? 102 : 132);
+  const statusX = layout.x + (hasRain ? 176 : 240);
+  const atrX = layout.x + (hasRain ? 290 : 408);
   const turnX = layout.x + 374;
   const accumX = layout.x + 437;
 
@@ -613,8 +625,10 @@ function drawRows(ctx, unit, layout, geometry) {
   ctx.strokeStyle = 'rgba(148, 196, 204, 0.28)';
   ctx.lineWidth = 1;
 
-  drawFittedText(ctx, 'CHUVA', layout.x + layout.w - 102, layout.y + 74, 88, 'bold 13px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
-  drawFittedText(ctx, '☁', layout.x + layout.w - 123, layout.y + 74, 14, 'bold 14px Arial, sans-serif', '#ffffff', 'middle');
+  if (hasRain) {
+    drawFittedText(ctx, 'CHUVA', layout.x + layout.w - 102, layout.y + 74, 88, 'bold 13px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+    drawFittedText(ctx, '☁', layout.x + layout.w - 123, layout.y + 74, 14, 'bold 14px Arial, sans-serif', '#ffffff', 'middle');
+  }
 
   ctx.beginPath();
   ctx.moveTo(left, layout.y + 83);
@@ -623,12 +637,14 @@ function drawRows(ctx, unit, layout, geometry) {
 
   drawFittedText(ctx, 'FRENTE', frontX, layout.y + 102, 70, 'bold 14px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
   drawFittedText(ctx, 'SETOR', sectorX, layout.y + 102, 60, 'bold 14px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
-  drawFittedText(ctx, 'STATUS', statusX, layout.y + 102, 100, 'bold 14px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+  drawFittedText(ctx, 'STATUS', statusX, layout.y + 102, hasRain ? 100 : 150, 'bold 14px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
   drawFittedText(ctx, 'ATR', atrX, layout.y + 102, 34, 'bold 14px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
-  drawFittedText(ctx, 'TURNO', turnX, layout.y + 91, 52, 'bold 13px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
-  drawFittedText(ctx, 'mm', turnX + 8, layout.y + 106, 18, '10px "Arial Narrow", Arial, sans-serif', 'rgba(255,255,255,0.8)', 'middle');
-  drawFittedText(ctx, 'ACUM.', accumX, layout.y + 91, 52, 'bold 13px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
-  drawFittedText(ctx, 'mm', accumX + 8, layout.y + 106, 18, '10px "Arial Narrow", Arial, sans-serif', 'rgba(255,255,255,0.8)', 'middle');
+  if (hasRain) {
+    drawFittedText(ctx, 'TURNO', turnX, layout.y + 91, 52, 'bold 13px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+    drawFittedText(ctx, 'mm', turnX + 8, layout.y + 106, 18, '10px "Arial Narrow", Arial, sans-serif', 'rgba(255,255,255,0.8)', 'middle');
+    drawFittedText(ctx, 'ACUM.', accumX, layout.y + 91, 52, 'bold 13px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+    drawFittedText(ctx, 'mm', accumX + 8, layout.y + 106, 18, '10px "Arial Narrow", Arial, sans-serif', 'rgba(255,255,255,0.8)', 'middle');
+  }
 
   ctx.beginPath();
   ctx.moveTo(left, layout.y + 119);
@@ -645,11 +661,13 @@ function drawRows(ctx, unit, layout, geometry) {
     ctx.fill();
 
     drawFittedText(ctx, front, frontX + 22, cy + 0.5, 44, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
-    drawFittedText(ctx, sector, sectorX, cy + 0.5, 60, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
-    drawFittedText(ctx, status, statusX, cy + 0.5, 103, `${statusFontSize}px "Arial Narrow", Arial, sans-serif`, status === 'SOLO ÚMIDO' ? '#ffd325' : statusTextColor(color), 'middle');
+    drawFittedText(ctx, sector, sectorX, cy + 0.5, hasRain ? 60 : 90, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
+    drawFittedText(ctx, status, statusX, cy + 0.5, hasRain ? 103 : 152, `${statusFontSize}px "Arial Narrow", Arial, sans-serif`, status === 'SOLO ÚMIDO' ? '#ffd325' : statusTextColor(color), 'middle');
     drawFittedText(ctx, String(atr ?? '').trim() || '—', atrX, cy + 0.5, 34, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
-    drawFittedText(ctx, String(parseRainValue(rain.turn)), turnX + 8, cy + 0.5, 24, `${fontSize}px "Arial Narrow", Arial, sans-serif`, parseRainValue(rain.turn) > 0 ? '#8af45b' : '#ffffff', 'middle');
-    drawFittedText(ctx, String(parseRainValue(rain.accum)), accumX + 8, cy + 0.5, 28, `${fontSize}px "Arial Narrow", Arial, sans-serif`, parseRainValue(rain.accum) > 0 ? '#8af45b' : '#ffffff', 'middle');
+    if (hasRain) {
+      drawFittedText(ctx, String(parseRainValue(rain.turn)), turnX + 8, cy + 0.5, 24, `${fontSize}px "Arial Narrow", Arial, sans-serif`, parseRainValue(rain.turn) > 0 ? '#8af45b' : '#ffffff', 'middle');
+      drawFittedText(ctx, String(parseRainValue(rain.accum)), accumX + 8, cy + 0.5, 28, `${fontSize}px "Arial Narrow", Arial, sans-serif`, parseRainValue(rain.accum) > 0 ? '#8af45b' : '#ffffff', 'middle');
+    }
 
     ctx.beginPath();
     ctx.moveTo(left, Math.min(geometry.tableBottom, cy + lineOffset));
@@ -657,11 +675,13 @@ function drawRows(ctx, unit, layout, geometry) {
     ctx.stroke();
   });
 
-  fillRoundedRect(ctx, left, geometry.summaryY, right - left, geometry.summaryH, 10, 'rgba(93, 146, 174, 0.18)');
-  strokeRoundedRect(ctx, left, geometry.summaryY, right - left, geometry.summaryH, 10, 'rgba(150, 219, 230, 0.32)', 1);
-  drawFittedText(ctx, '☁', left + 10, geometry.summaryY + 15, 16, 'bold 13px Arial, sans-serif', '#bfe7ff', 'middle');
-  drawFittedText(ctx, `Média: Turno ${rainSummary.turn} mm | Acum ${rainSummary.accum} mm`, left + 29, geometry.summaryY + 15, 248, 'bold 13px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
-  drawFittedText(ctx, `acum.: desde ${formatAccumSinceDate()}`, right - 88, geometry.summaryY + 15, 80, '10px "Arial Narrow", Arial, sans-serif', 'rgba(255,255,255,0.75)', 'middle');
+  if (hasRain) {
+    fillRoundedRect(ctx, left, geometry.summaryY, right - left, geometry.summaryH, 10, 'rgba(93, 146, 174, 0.18)');
+    strokeRoundedRect(ctx, left, geometry.summaryY, right - left, geometry.summaryH, 10, 'rgba(150, 219, 230, 0.32)', 1);
+    drawFittedText(ctx, '☁', left + 10, geometry.summaryY + 15, 16, 'bold 13px Arial, sans-serif', '#bfe7ff', 'middle');
+    drawFittedText(ctx, `Média: Turno ${rainSummary.turn} mm | Acum ${rainSummary.accum} mm`, left + 29, geometry.summaryY + 15, 248, 'bold 13px "Arial Narrow", Arial, sans-serif', '#ffffff', 'middle');
+    drawFittedText(ctx, `acum.: desde ${formatAccumSinceDate()}`, right - 88, geometry.summaryY + 15, 80, '10px "Arial Narrow", Arial, sans-serif', 'rgba(255,255,255,0.75)', 'middle');
+  }
 
   ctx.restore();
 }
@@ -1102,8 +1122,9 @@ function globalUnitPlacement(ctx, unit, minHeight, isLower) {
   // A quantidade real de frentes determina a barra de chuva e os cards de produção.
   const visibleRows = lineCount || 1;
   const rowsEnd = GLOBAL_TABLE_LAYOUT.firstRow + (visibleRows - 1) * GLOBAL_TABLE_LAYOUT.rowStep;
-  const summary = rowsEnd + 19;
-  const metrics = summary + 38;
+  const hasRain = reportHasRainData(unit);
+  const summary = hasRain ? rowsEnd + 19 : null;
+  const metrics = hasRain ? summary + 38 : rowsEnd + 23;
   const notes = metrics + 2 * 46 + 6 + 12;
   const obsLines = globalNoteLines(unit, 'observation', ctx);
   const changeLines = globalNoteLines(unit, 'changes', ctx);
@@ -1111,7 +1132,7 @@ function globalUnitPlacement(ctx, unit, minHeight, isLower) {
   const changesH = changeLines.length ? 8 + 22 + changeLines.length * 16 : 0;
   const required = Math.ceil(notes + obsH + changesH + 18);
   return { height: Math.max(minHeight, required), rowsEnd, summary, metrics, notes,
-    obsLines, changeLines, isLower };
+    hasRain, obsLines, changeLines, isLower };
 }
 
 function globalDrawCardBase(ctx, layout, unit, leaf) {
@@ -1135,24 +1156,31 @@ function globalDrawCardBase(ctx, layout, unit, leaf) {
 
 function globalDrawCardTable(ctx, layout, unit, placing) {
   const {x,y,w} = layout;
-  const col = {front:x+17, sector:x+94, status:x+164, atr:x+270, turn:x+305, accum:x+367};
-  const rain = globalFrontRainMap(unit);
+  const hasRain = placing.hasRain;
+  const col = hasRain
+    ? {front:x+17, sector:x+94, status:x+164, atr:x+270, turn:x+305, accum:x+367}
+    : {front:x+17, sector:x+115, status:x+203, atr:x+368};
+  const rain = hasRain ? globalFrontRainMap(unit) : null;
 
-  globalDrawText(ctx, '☁', x + 318, y + 57, 22, 'bold 15px Arial, sans-serif', '#a8cfdd');
-  globalDrawText(ctx, 'CHUVA', x + 340, y + 56, 64, 'bold 12.7px "Arial Narrow", Arial, sans-serif');
-  ctx.save();ctx.strokeStyle = GLOBAL_COLORS.rule;ctx.lineWidth = 0.9;
-  ctx.beginPath();ctx.moveTo(x+308,y+65);ctx.lineTo(x+w-17,y+65);ctx.stroke();ctx.restore();
+  if (hasRain) {
+    globalDrawText(ctx, '☁', x + 318, y + 57, 22, 'bold 15px Arial, sans-serif', '#a8cfdd');
+    globalDrawText(ctx, 'CHUVA', x + 340, y + 56, 64, 'bold 12.7px "Arial Narrow", Arial, sans-serif');
+    ctx.save();ctx.strokeStyle = GLOBAL_COLORS.rule;ctx.lineWidth = 0.9;
+    ctx.beginPath();ctx.moveTo(x+308,y+65);ctx.lineTo(x+w-17,y+65);ctx.stroke();ctx.restore();
+  }
 
   const yHeader=y+GLOBAL_TABLE_LAYOUT.headerY;
   const titleFont='bold 13.2px "Arial Narrow", Arial, sans-serif';
   globalDrawText(ctx,'FRENTE',col.front,yHeader,67,titleFont);
   globalDrawText(ctx,'SETOR',col.sector,yHeader,60,titleFont);
-  globalDrawText(ctx,'STATUS',col.status,yHeader,93,titleFont);
+  globalDrawText(ctx,'STATUS',col.status,yHeader,hasRain?93:145,titleFont);
   globalDrawText(ctx,'ATR',col.atr,yHeader,34,titleFont);
-  globalDrawText(ctx,'TURNO',col.turn,y+GLOBAL_TABLE_LAYOUT.rainLabelY,45,'bold 12.5px "Arial Narrow", Arial, sans-serif');
-  globalDrawText(ctx,'mm',col.turn+11,y+GLOBAL_TABLE_LAYOUT.rainUnitY,23,'9.6px "Arial Narrow", Arial, sans-serif',GLOBAL_COLORS.secondary);
-  globalDrawText(ctx,'ACUM.',col.accum,y+GLOBAL_TABLE_LAYOUT.rainLabelY,40,'bold 12.5px "Arial Narrow", Arial, sans-serif');
-  globalDrawText(ctx,'mm',col.accum+11,y+GLOBAL_TABLE_LAYOUT.rainUnitY,23,'9.6px "Arial Narrow", Arial, sans-serif',GLOBAL_COLORS.secondary);
+  if (hasRain) {
+    globalDrawText(ctx,'TURNO',col.turn,y+GLOBAL_TABLE_LAYOUT.rainLabelY,45,'bold 12.5px "Arial Narrow", Arial, sans-serif');
+    globalDrawText(ctx,'mm',col.turn+11,y+GLOBAL_TABLE_LAYOUT.rainUnitY,23,'9.6px "Arial Narrow", Arial, sans-serif',GLOBAL_COLORS.secondary);
+    globalDrawText(ctx,'ACUM.',col.accum,y+GLOBAL_TABLE_LAYOUT.rainLabelY,40,'bold 12.5px "Arial Narrow", Arial, sans-serif');
+    globalDrawText(ctx,'mm',col.accum+11,y+GLOBAL_TABLE_LAYOUT.rainUnitY,23,'9.6px "Arial Narrow", Arial, sans-serif',GLOBAL_COLORS.secondary);
+  }
   ctx.save();ctx.strokeStyle = GLOBAL_COLORS.rule;ctx.lineWidth=.8;
   ctx.beginPath();ctx.moveTo(x+16,y+GLOBAL_TABLE_LAYOUT.ruleY);ctx.lineTo(x+w-16,y+GLOBAL_TABLE_LAYOUT.ruleY);ctx.stroke();ctx.restore();
 
@@ -1164,24 +1192,28 @@ function globalDrawCardTable(ctx, layout, unit, placing) {
     ctx.beginPath();ctx.arc(x+25,cy,6,0,2*Math.PI);ctx.fill();ctx.restore();
     const font='bold 15.5px "Arial Narrow", Arial, sans-serif';
     globalDrawText(ctx, front, x+38, cy, 42, font);
-    globalDrawText(ctx, sector, col.sector, cy, 61, font);
+    globalDrawText(ctx, sector, col.sector, cy, hasRain?61:78, font);
     const displayedStatus=String(status).toLowerCase().replace(/(^|\s)\p{L}/gu, char => char.toUpperCase());
     const softenedStatus=displayedStatus.replace('Úmido','úmido').replace('Atividade','atividade');
-    globalDrawText(ctx, softenedStatus, col.status, cy, 96, 'bold 14.3px "Arial Narrow", Arial, sans-serif', color === 'yellow' ? GLOBAL_COLORS.yellow : statusColorValue(color));
-    globalDrawText(ctx, String(atr ?? '').trim() || '—', col.atr+6, cy, 29, font);
-    const rainfall=rain.get(canonicalFrontKey(front));
-    globalDrawText(ctx, rainfall ? globalRainCell(rainfall.turn) : '—', col.turn+25, cy, 25, font, globalHighlightValueColor(rainfall ? rainfall.turn : ''), 'center');
-    globalDrawText(ctx, rainfall ? globalRainCell(rainfall.accum) : '—', col.accum+27, cy, 28, font, globalHighlightValueColor(rainfall ? rainfall.accum : ''), 'center');
+    globalDrawText(ctx, softenedStatus, col.status, cy, hasRain?96:145, 'bold 14.3px "Arial Narrow", Arial, sans-serif', color === 'yellow' ? GLOBAL_COLORS.yellow : statusColorValue(color));
+    globalDrawText(ctx, String(atr ?? '').trim() || '—', col.atr+(hasRain?6:0), cy, 29, font);
+    if (hasRain) {
+      const rainfall=rain.get(canonicalFrontKey(front));
+      globalDrawText(ctx, rainfall ? globalRainCell(rainfall.turn) : '—', col.turn+25, cy, 25, font, globalHighlightValueColor(rainfall ? rainfall.turn : ''), 'center');
+      globalDrawText(ctx, rainfall ? globalRainCell(rainfall.accum) : '—', col.accum+27, cy, 28, font, globalHighlightValueColor(rainfall ? rainfall.accum : ''), 'center');
+    }
   });
 
-  const barY=y+placing.summary;
-  fillRoundedRect(ctx,x+16,barY,w-32,29,9,'rgba(53,98,116,0.23)');
-  strokeRoundedRect(ctx,x+16,barY,w-32,29,9,GLOBAL_COLORS.rainBorder,1.2);
-  globalDrawText(ctx,'☁',x+26,barY+14.5,17,'bold 14px Arial, sans-serif','#abd9ea');
-  const mean=globalRainMean(unit);
-  globalDrawText(ctx,`Média: Turno ${mean.turn} mm | Acum ${mean.accum} mm`,x+51,barY+15,258,'bold 13.6px "Arial Narrow", Arial, sans-serif', (globalHasNumericValue(mean.turn) || globalHasNumericValue(mean.accum)) ? '#d7f7ff' : GLOBAL_COLORS.white);
-  const startDate = unit.rainStartDate || unit.rain_start_date || unit.rainStart || '';
-  if (startDate) globalDrawText(ctx,`acum.: desde ${startDate}`,x+w-99,barY+15,78,'9px "Arial Narrow", Arial, sans-serif','#abbac2');
+  if (hasRain) {
+    const barY=y+placing.summary;
+    fillRoundedRect(ctx,x+16,barY,w-32,29,9,'rgba(53,98,116,0.23)');
+    strokeRoundedRect(ctx,x+16,barY,w-32,29,9,GLOBAL_COLORS.rainBorder,1.2);
+    globalDrawText(ctx,'☁',x+26,barY+14.5,17,'bold 14px Arial, sans-serif','#abd9ea');
+    const mean=globalRainMean(unit);
+    globalDrawText(ctx,`Média: Turno ${mean.turn} mm | Acum ${mean.accum} mm`,x+51,barY+15,258,'bold 13.6px "Arial Narrow", Arial, sans-serif', (globalHasNumericValue(mean.turn) || globalHasNumericValue(mean.accum)) ? '#d7f7ff' : GLOBAL_COLORS.white);
+    const startDate = unit.rainStartDate || unit.rain_start_date || unit.rainStart || '';
+    if (startDate) globalDrawText(ctx,`acum.: desde ${startDate}`,x+w-99,barY+15,78,'9px "Arial Narrow", Arial, sans-serif','#abbac2');
+  }
 }
 
 // Os valores informados de produção ficam verdes apenas quando há quantidade positiva.
