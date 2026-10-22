@@ -53,7 +53,7 @@ const context = vm.createContext({
       { code: 'ATIVO', name: 'Em atividade', style_key: 'active' },
       { code: 'UMIDO', name: 'Solo úmido', style_key: 'wet' },
       { code: 'AGUARDA', name: 'Aguardando', style_key: 'waiting' },
-      { code: 'CRITICO', name: 'Crítico', style_key: 'stopped' }
+      { code: 'CRITICO', name: 'Parado', style_key: 'stopped' }
     ] };
     if (url.includes('/api/production/daily-summary?unit=PPT')) return { summary: {
       rain_turn_mm: 3, rain_accumulated_mm: 5,
@@ -241,6 +241,26 @@ for (const name of ['production-consolidation.js', 'production-export.js', 'emis
   assert.equal(grid.plans[2].height, grid.plans[3].height);
   assert.ok(grid.plans.every(plan => plan.contentHeight <= plan.height));
 
+  const configuredStatuses = new Map([
+    ['CUSTOM', { code: 'CUSTOM', name: 'Situação cadastrada', style_key: 'wet', is_active: true }],
+    ['OLD', { code: 'OLD', name: 'Status desativado', style_key: 'stopped', is_active: false }]
+  ]);
+  const configuredLegend = context.productionExportLegendLayout(paint, [], configuredStatuses);
+  assert.equal(configuredLegend.entries.length, 1);
+  assert.equal(configuredLegend.entries[0].lines.join(' '), 'Situação cadastrada');
+  assert.equal(configuredLegend.entries[0].state, 'wet');
+  const legacyLegend = context.productionExportLegendLayout(paint,
+    [{ items: [{ entry: { status: 'OLD' } }] }], configuredStatuses);
+  assert.equal(legacyLegend.entries.length, 2, 'Status desativado ainda usado deve constar na legenda');
+  const manyStatuses = new Map(Array.from({ length: 9 }, (_, index) => [String(index), {
+    code: String(index), name: `Status ${index}`, style_key: 'active'
+  }]));
+  const expandedGrid = context.productionExportPageLayout(paint,
+    ['PPT', 'NRD', 'RBR', 'PST'].map(code => ({ code, items: [] })), manyStatuses);
+  assert.equal(expandedGrid.legend.entries.length, 9);
+  assert.equal(expandedGrid.firstY, 434, 'Os cartões devem acompanhar as linhas extras da legenda');
+  assert.ok(expandedGrid.legend.entries.every(entry => entry.y < expandedGrid.firstY));
+
   await button.click({ currentTarget: button });
   assert.equal(button.disabled, false);
   assert.equal(downloads.length, 1);
@@ -255,6 +275,11 @@ for (const name of ['production-consolidation.js', 'production-export.js', 'emis
   assert.ok(labels.includes('POSIÇÃO DE CAMPO'));
   assert.ok(!labels.includes('TROCA DE TURNO'));
   assert.ok(labels.includes('PRODUÇÃO AGRÍCOLA'));
+  assert.ok(labels.includes('Parado'));
+  assert.ok(!labels.includes('Parado / crítico'));
+  assert.ok(labels.includes('Solo úmido'));
+  assert.ok(labels.includes('Aguardando'));
+  assert.ok(!labels.includes('Solo úmido / teste'));
   assert.ok(labels.includes('Nenhum lançamento nesta unidade.'));
   assert.ok(labels.some(value => value.startsWith('Unidade não liberada')));
   assert.ok(labels.includes('Frente 19'));

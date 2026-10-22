@@ -586,7 +586,7 @@ class ProductionTests(unittest.TestCase):
     def test_status_catalog_is_configurable_and_used_status_is_protected(self):
         defaults = production.list_statuses(self.user["id"])["statuses"]
         self.assertEqual([item["name"] for item in defaults], [
-            "Em atividade", "Solo úmido / teste", "Aguardando atividade", "Parado / crítico"
+            "Em atividade", "Solo úmido", "Aguardando atividade", "Parado"
         ])
         with self.assertRaises(PermissionError):
             production.save_status(self.user["id"], {"name": "Teste", "style_key": "active", "position": 9})
@@ -635,6 +635,41 @@ class ProductionTests(unittest.TestCase):
         )
         production.delete_status(self.admin["id"], unused["id"])
         self.assertFalse(any(item["id"] == unused["id"] for item in production.list_statuses(self.admin["id"], include_inactive=True)["statuses"]))
+
+    def test_default_status_labels_upgrade_preserves_codes_entries_and_custom_names(self):
+        front = self._front()
+        item = production.save_my_item(self.user["id"], {
+            "unit_code": "NRD", "service_front_id": front["id"], "sector": "3392",
+            "work_date": "2026-10-22", "status": "SOLO ÚMIDO / TESTE",
+        })
+        with storage.connection() as conn:
+            conn.execute("DELETE FROM main.schema_info WHERE key='production_status_labels_version'")
+            conn.execute("UPDATE main.production_statuses SET name='Solo úmido / teste' WHERE code='SOLO ÚMIDO / TESTE'")
+            conn.execute("UPDATE main.production_statuses SET name='Parado / crítico' WHERE code='PARADO / CRÍTICO'")
+        db.init_db()
+        defaults = {status["code"]: status for status in production.list_statuses(self.user["id"])["statuses"]}
+        self.assertEqual(defaults["SOLO ÚMIDO / TESTE"]["name"], "Solo úmido")
+        self.assertEqual(defaults["PARADO / CRÍTICO"]["name"], "Parado")
+        with storage.connection() as conn:
+            self.assertEqual(conn.execute("SELECT status FROM production_daily_entries WHERE user_item_id=?",
+                                          (item["id"],)).fetchone()[0], "SOLO ÚMIDO / TESTE")
+            conn.execute("DELETE FROM main.schema_info WHERE key='production_status_labels_version'")
+            conn.execute("UPDATE main.production_statuses SET name='Parada técnica' WHERE code='PARADO / CRÍTICO'")
+        db.init_db()
+        db.init_db()
+        defaults = {status["code"]: status for status in production.list_statuses(self.user["id"])["statuses"]}
+        self.assertEqual(defaults["PARADO / CRÍTICO"]["name"], "Parada técnica")
+        self.assertEqual(len(defaults), 4)
+
+        custom = production.save_status(self.admin["id"], {"name": "Em teste", "style_key": "wet"})
+        with storage.connection() as conn:
+            conn.execute("DELETE FROM main.schema_info WHERE key='production_status_labels_version'")
+            conn.execute("UPDATE main.production_statuses SET name='Solo úmido / teste' WHERE code='SOLO ÚMIDO / TESTE'")
+            conn.execute("UPDATE main.production_statuses SET name='Solo úmido' WHERE id=?", (custom["id"],))
+        db.init_db()
+        defaults = {status["code"]: status for status in production.list_statuses(self.user["id"])["statuses"]}
+        self.assertEqual(defaults[custom["code"]]["name"], "Solo úmido")
+        self.assertEqual(defaults["SOLO ÚMIDO / TESTE"]["name"], "Solo úmido / teste")
 
     def test_status_and_front_unit_validation(self):
         front = self._front(name="FRENTE UNIT", units=["NRD"])

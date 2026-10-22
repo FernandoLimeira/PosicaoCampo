@@ -283,7 +283,25 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
     counts, extraSummary, contentHeight, height: Math.max(minHeight, contentHeight) };
 }
 
-function drawProductionExportHeader(ctx, workDate, background, pageNumber, totalPages, height) {
+function productionExportLegendLayout(ctx, page, statusByCode) {
+  const used = new Set(page.flatMap(report => (report.items || []).map(item => item.entry?.status)));
+  const statuses = [...statusByCode.values()].filter(status => status.is_active !== false || used.has(status.code));
+  const font = 'bold 18px "Arial Narrow", Arial, sans-serif';
+  const entries = [];
+  let rowY = 334;
+  for (let offset = 0; offset < statuses.length; offset += 4) {
+    const row = statuses.slice(offset, offset + 4).map((status, column) => ({
+      state: productionExportStatus({ entry: { status: status.code } }, statusByCode),
+      lines: productionExportWrap(ctx, status.name, 220, font),
+      x: 40 + column * 250, y: rowY
+    }));
+    entries.push(...row);
+    rowY += Math.max(1, ...row.map(entry => entry.lines.length)) * 22 + 10;
+  }
+  return { entries, font, extraHeight: Math.max(0, rowY - 366) };
+}
+
+function drawProductionExportHeader(ctx, workDate, background, pageNumber, totalPages, height, legend) {
   ctx.fillStyle = PRODUCTION_EXPORT_BODY;
   ctx.fillRect(0, 0, PRODUCTION_EXPORT_WIDTH, height);
   if (background) {
@@ -330,17 +348,12 @@ function drawProductionExportHeader(ctx, workDate, background, pageNumber, total
     'bold 68px Impact, "Roboto Condensed", "Arial Narrow", sans-serif', PRODUCTION_EXPORT_COLORS.active);
   productionExportText(ctx, 'Preparo, plantio, tratos culturais e fertirrigação', 40, 293, 930,
     'bold 24px "Arial Narrow", Arial, sans-serif', '#e7eeee');
-  const legend = [
-    ['active', 'Em atividade', 40], ['wet', 'Solo úmido / teste', 286],
-    ['waiting', 'Aguardando atividade', 575], ['stopped', 'Parado / crítico', 892]
-  ];
-  legend.forEach(([state, label, x]) => {
+  legend.entries.forEach(({ state, lines, x, y }) => {
     ctx.beginPath();
-    ctx.arc(x + 9, 325, 9, 0, Math.PI * 2);
+    ctx.arc(x + 9, y - 9, 9, 0, Math.PI * 2);
     ctx.fillStyle = PRODUCTION_EXPORT_COLORS[state];
     ctx.fill();
-    productionExportText(ctx, label, x + 25, 334, 260,
-      'bold 18px "Arial Narrow", Arial, sans-serif');
+    lines.forEach((line, index) => productionExportText(ctx, line, x + 25, y + index * 22, 220, legend.font));
   });
 }
 
@@ -508,6 +521,8 @@ function drawProductionExportFooter(ctx, y, workDate, height) {
 }
 
 function productionExportPageLayout(ctx, page, statusByCode) {
+  const legend = productionExportLegendLayout(ctx, page, statusByCode);
+  const firstY = 370 + legend.extraHeight;
   const plans = page.map((report, index) => {
     const items = report.items?.length || 0;
     const isContinuation = Boolean(report.continuation);
@@ -530,9 +545,9 @@ function productionExportPageLayout(ctx, page, statusByCode) {
   const secondHeight = Math.max(plans[2].height, plans[3].height);
   plans[0].height = plans[1].height = firstHeight;
   plans[2].height = plans[3].height = secondHeight;
-  const secondY = 370 + firstHeight + 16;
+  const secondY = firstY + firstHeight + 16;
   const footerY = secondY + secondHeight + 16;
-  return { page, plans, secondY, footerY, height: footerY + 123 };
+  return { page, plans, legend, firstY, secondY, footerY, height: footerY + 123 };
 }
 
 function productionExportSplitTextPage(page, plans) {
@@ -615,10 +630,10 @@ async function generateProductionReportImages(reports, statuses, workDate) {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.scale(PRODUCTION_EXPORT_SCALE, PRODUCTION_EXPORT_SCALE);
-    drawProductionExportHeader(ctx, workDate, background, index + 1, pages.length, layout.height);
+    drawProductionExportHeader(ctx, workDate, background, index + 1, pages.length, layout.height, layout.legend);
     layout.page.forEach((report, cardIndex) => drawProductionExportCard(ctx, report,
       layout.plans[cardIndex], cardIndex % 2 ? 548 : 26,
-      cardIndex < 2 ? 370 : layout.secondY));
+      cardIndex < 2 ? layout.firstY : layout.secondY));
     drawProductionExportFooter(ctx, layout.footerY, workDate, layout.height);
     const blob = await new Promise((resolve, reject) => canvas.toBlob(
       result => result ? resolve(result) : reject(new Error('Não foi possível gerar a imagem da Produção Agrícola.')),

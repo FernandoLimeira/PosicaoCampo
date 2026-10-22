@@ -392,9 +392,9 @@ def seed_production_defaults(conn):
         )
     default_statuses = (
         ("EM ATIVIDADE", "Em atividade", "active", 0),
-        ("SOLO ÚMIDO / TESTE", "Solo úmido / teste", "wet", 1),
+        ("SOLO ÚMIDO / TESTE", "Solo úmido", "wet", 1),
         ("AGUARDANDO ATIVIDADE", "Aguardando atividade", "waiting", 2),
-        ("PARADO / CRÍTICO", "Parado / crítico", "stopped", 3),
+        ("PARADO / CRÍTICO", "Parado", "stopped", 3),
     )
     for code, name, style_key, position in default_statuses:
         conn.execute(
@@ -411,6 +411,22 @@ def _upgrade_operational_schema(conn):
     initialize_front_notes(conn)
     _create_return_soil_wet_table(conn)
     _create_production_tables(conn)
+    if not conn.execute(
+        "SELECT 1 FROM main.schema_info WHERE key='production_status_labels_version'"
+    ).fetchone():
+        # Mantém os códigos usados nos lançamentos e os nomes personalizados.
+        for code, old_name, new_name in (
+            ("SOLO ÚMIDO / TESTE", "Solo úmido / teste", "Solo úmido"),
+            ("PARADO / CRÍTICO", "Parado / crítico", "Parado"),
+        ):
+            conn.execute(
+                """UPDATE main.production_statuses SET name=? WHERE code=? AND name=?
+                   AND NOT EXISTS (SELECT 1 FROM main.production_statuses WHERE name=?)""",
+                (new_name, code, old_name, new_name),
+            )
+        conn.execute(
+            "INSERT INTO main.schema_info(key,value) VALUES ('production_status_labels_version','1')"
+        )
     entry_columns = {row[1] for row in conn.execute("PRAGMA main.table_info(production_daily_entries)")}
     if "changes" not in entry_columns:
         conn.execute("ALTER TABLE main.production_daily_entries ADD COLUMN changes TEXT NOT NULL DEFAULT ''")
