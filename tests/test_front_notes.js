@@ -21,13 +21,29 @@ async function main() {
   for (const text of ['Manutenção', 'Aguardar transbordo', 'Retorno às 15h', '+ 1 ponto em aberto']) assert(preview.includes(text));
   assert(!preview.includes('<script>'));
   assert(preview.includes('&lt;script&gt;'));
+  assert(preview.includes('<ul class="field-observation-points"'));
+  assert.equal((preview.match(/<li class="field-observation-point"/g) || []).length, 3);
+  assert(!preview.includes('<details'), 'Observações curtas aparecem completas');
+  const extensive = 'Acompanhar manutenção. '.repeat(35) + '\nRetorno após liberação da equipe.';
+  const expanded = ctx.fieldObservationPoint({ text: extensive });
+  assert(expanded.includes('<details class="field-observation-details">'));
+  assert(expanded.includes('Ler observação completa'));
+  assert(expanded.includes('Recolher observação'));
+  assert(expanded.includes(extensive), 'O conteúdo completo permanece acessível na própria coluna');
+  assert(ctx.fieldObservationPoint({ text: 'Primeiro ponto\nSegundo ponto\nTerceiro ponto\nQuarto ponto' }).includes('<details'));
+  assert(ctx.fieldObservationPoint({ text: 'Manutenção\r\nRetorno previsto às 15h' }).includes('Manutenção\nRetorno previsto às 15h'));
   assert(ctx.fieldFrontNoteForm().includes('name="highlighted" checked'));
-  const history = ctx.fieldFrontNotesHistory({ entries: [{ id: 1, text: '<b>Observação</b>', author: 'Analista',
-    sector: '101', highlighted: true, resolved_at: 1, created_at: 1 }], total: 1 });
+  const history = ctx.fieldFrontNotesHistory({ entries: [{ id: 1, text: '<b>Observação</b>\nRetorno previsto às 15h.', author: 'Nome do analista oculto',
+    sector: '101', shift: 'B', highlighted: true, resolved_at: 1, created_at: 1 }], total: 1 });
   assert(history.includes('Concluído'));
   assert(history.includes('Reabrir ponto'));
   assert(!history.includes('<b>Observação</b>'));
+  assert(!history.includes('Nome do analista oculto'), 'O popup mostra somente o conteúdo e o contexto da observação');
+  assert(history.includes('&lt;b&gt;Observação&lt;/b&gt;\nRetorno previsto às 15h.'));
+  assert(history.includes('Turno B'));
+  assert(history.includes('Setor 101'));
   vm.runInContext('moduleAccess.dashboard.edit = false;', ctx);
+  assert(!ctx.fieldNotePreview('02', 1).includes('Adicionar observação'));
   assert(!ctx.fieldFrontNoteForm().includes('<form'));
   assert(!ctx.fieldFrontNotesHistory({ entries: [{ id: 1, highlighted: true }], total: 1 }).includes('data-field-note-id'));
   assert(ctx.fieldFrontNotesHistory({ entries: [{ id: 1 }], total: 2, next_cursor: 1 }).includes('Carregar anteriores'));

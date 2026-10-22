@@ -163,9 +163,8 @@ async function loadServerState() {
   if (!applyServerPayload(data)) throw new Error('Resposta de unidades inválida.');
 }
 
-async function saveUnitToServer(index, unit) {
+async function saveUnitToServer(index, unit, expectedVersion = unitMeta[unit?.code]?.version ?? null) {
   if (!unit) throw new Error('Unidade inválida.');
-  const expectedVersion = unitMeta[unit.code]?.version ?? null;
   return apiRequest(`/api/units/${encodeURIComponent(unit.code)}`, {
     method: 'PUT',
     body: JSON.stringify({ unit, position: index, expected_version: expectedVersion })
@@ -296,14 +295,31 @@ function fieldLatestNote(front) {
   return fieldFrontNotesSummary[fieldFrontNoteKey(front)] || null;
 }
 
+function fieldObservationPoint(entry) {
+  const text = String(entry.text || '').replace(/\r\n?/g, '\n').trim();
+  const lines = text.split('\n');
+  const firstLines = lines.slice(0, 3).join('\n');
+  const excerpt = (firstLines.length > 180
+    ? firstLines.slice(0, 180).replace(/\s+\S*$/, '') : firstLines).trimEnd();
+  const content = text.length > 180 || lines.length > 3
+    ? `<details class="field-observation-details">
+        <summary><span class="field-observation-excerpt">${escapeHtml(excerpt)}…</span>
+          <span class="field-observation-expand">Ler observação completa</span>
+          <span class="field-observation-collapse">Recolher observação</span></summary>
+        <p class="field-observation-text">${escapeHtml(text)}</p>
+      </details>`
+    : `<p class="field-observation-text">${escapeHtml(text)}</p>`;
+  return `<li class="field-observation-point">${content}</li>`;
+}
+
 function fieldNotePreview(front, index) {
   const summary = fieldLatestNote(front);
   const highlights = summary?.highlights || [];
-  if (!highlights.length) return `<button type="button" class="field-note-inline-button is-empty" data-field-front-index="${index}" aria-label="Acompanhar a Frente ${escapeHtml(front)}">${summary?.count ? 'Sem pontos em aberto · Ver histórico' : '+ Adicionar observação'}</button>`;
-  const points = highlights.map(entry => `<span role="listitem" title="${escapeHtml(entry.text)}"><span class="field-observation-preview">${escapeHtml(entry.text)}</span></span>`).join('');
+  if (!highlights.length) return `<button type="button" class="field-note-inline-button is-empty" data-field-front-index="${index}" aria-label="Acompanhar a Frente ${escapeHtml(front)}">${summary?.count ? 'Sem pontos em aberto · Ver histórico' : canEditModule('dashboard') ? '+ Adicionar observação' : 'Sem observações em aberto · Ver histórico'}</button>`;
+  const points = highlights.map(fieldObservationPoint).join('');
   const remaining = Math.max(0, summary.highlight_count - highlights.length);
-  return `<button type="button" class="field-note-inline-button" data-field-front-index="${index}" aria-label="Ver observações da Frente ${escapeHtml(front)}">
-    <span class="field-observation-points" role="list">${points}</span>
+  return `<ul class="field-observation-points" aria-label="Observações em destaque da Frente ${escapeHtml(front)}">${points}</ul>
+    <button type="button" class="field-note-inline-button" data-field-front-index="${index}" aria-label="Ver observações da Frente ${escapeHtml(front)}">
     <small>${remaining ? `+ ${remaining} ponto${remaining === 1 ? '' : 's'} em aberto · ` : ''}Ver acompanhamento</small>
   </button>`;
 }
@@ -356,21 +372,48 @@ function fieldFrontNoteForm() {
   </form>`;
 }
 
+function fieldFrontStatusForm(status) {
+  if (!canEditModule('dashboard')) return '';
+  return `<form id="field-front-status-form" class="field-front-status-form">
+    <label for="field-front-status">Situação da frente
+      <select id="field-front-status" name="status">${statusOptionsHtml(status, true)}</select>
+    </label>
+    <button class="modal-button save" type="submit">Salvar situação</button>
+    <small id="field-front-status-state" role="status" aria-live="polite">Mudanças, trajetos e espera por pipa continuam em atividade na imagem.</small>
+  </form>`;
+}
+
+async function saveFieldFrontStatus(context, status) {
+  if (!canEditModule('dashboard')) throw new Error('Você não possui permissão para alterar a situação.');
+  if (!statusOptions.some(option => option.label === status)) throw new Error('Situação inválida.');
+  const index = units.findIndex(unit => unit.code === context.unit);
+  const updatedUnit = clone(context.unitSnapshot);
+  const row = updatedUnit.rows[context.index];
+  if (index < 0 || !row || row[0] !== context.front || row[1] !== context.sector) {
+    throw new Error('A frente foi alterada. Feche e abra os detalhes novamente.');
+  }
+  row[2] = getStatusColor(status);
+  row[3] = status;
+  updatedUnit.border = calculateUnitBorder(updatedUnit.rows);
+  const saved = await saveUnitToServer(index, updatedUnit, context.version);
+  units[index] = normalizeUnitsCollection(units.map((unit, unitIndex) => unitIndex === index ? saved.unit : unit))[index];
+  if (saved.meta) unitMeta[context.unit] = saved.meta;
+  context.unitSnapshot = clone(units[index]);
+  context.version = unitMeta[context.unit]?.version ?? null;
+  renderDashboard();
+}
+
 function fieldFrontNotesHistory(data) {
   const entries = data?.entries || [];
   if (!entries.length) return '<p class="field-front-note-empty">Nenhum registro de acompanhamento para esta frente.</p>';
   const body = entries.map(entry => `<li class="field-front-note-event">
-    <div class="field-front-note-meta">
-      <strong>${escapeHtml(entry.author)}</strong>
-      <small>${escapeHtml(formatServerTimestamp(entry.created_at, 'America/Sao_Paulo'))}${entry.shift ? ` · Turno ${escapeHtml(entry.shift)}` : ''}</small>
-    </div>
     <p>${escapeHtml(entry.text)}</p>
     <div class="field-note-management">
-      <span class="field-note-state">${entry.resolved_at ? 'Concluído' : entry.highlighted ? 'Em destaque' : 'Somente no histórico'} · Setor ${escapeHtml(entry.sector)}</span>
+      <small class="field-note-state">${escapeHtml(formatServerTimestamp(entry.created_at, 'America/Sao_Paulo'))}${entry.shift ? ` · Turno ${escapeHtml(entry.shift)}` : ''} · Setor ${escapeHtml(entry.sector)} · ${entry.resolved_at ? 'Concluído' : entry.highlighted ? 'Em destaque' : 'Somente no histórico'}</small>
       ${canEditModule('dashboard') ? `<button type="button" class="field-note-action" data-field-note-id="${entry.id}" data-field-note-action="${entry.resolved_at ? 'reopen' : entry.highlighted ? 'resolve' : 'highlight'}">${entry.resolved_at ? 'Reabrir ponto' : entry.highlighted ? 'Concluir ponto' : 'Destacar ponto'}</button>` : ''}
     </div>
   </li>`).join('');
-  return `<ol class="field-front-note-timeline">${body}</ol>${data.total > entries.length ? `<small>Exibindo ${entries.length} de ${data.total} registros.</small>` : ''}
+  return `<ul class="field-front-note-timeline" aria-label="Observações da frente">${body}</ul>${data.total > entries.length ? `<small>Exibindo ${entries.length} de ${data.total} registros.</small>` : ''}
     ${data.next_cursor ? '<button type="button" class="field-filter-clear" data-field-notes-more>Carregar anteriores</button>' : ''}`;
 }
 
@@ -414,7 +457,7 @@ function openFieldFrontDetails(index) {
   content.innerHTML = `
     <div class="field-front-detail-unit">
       <span>${escapeHtml(unit.code)} · ${escapeHtml(unit.name)}</span>
-      <span class="field-status-chip ${statusClass}">${escapeHtml(status)}</span>
+      <span id="field-front-current-status" class="field-status-chip ${statusClass}">${escapeHtml(status)}</span>
     </div>
     <dl class="field-front-detail-grid">
       <div><dt>Setor</dt><dd>${escapeHtml(sector)}</dd></div>
@@ -423,12 +466,14 @@ function openFieldFrontDetails(index) {
       <div><dt>ATR</dt><dd>${escapeHtml(atr || '—')}</dd></div>
     </dl>
     ${rainSection}
+    ${fieldFrontStatusForm(status)}
     ${fieldFrontNoteForm()}
-    <section class="field-front-detail-section" aria-label="Histórico de acompanhamento">
-      <h3>Acompanhamento da frente</h3>
+    <section class="field-front-detail-section" aria-label="Observações da frente">
+      <h3>Observações da frente</h3>
       <div id="field-front-note-history"></div>
     </section>`;
-  const context = { unit: unit.code, front, sector, index };
+  const context = { unit: unit.code, front, sector, index, unitSnapshot: clone(unit),
+    version: unitMeta[unit.code]?.version ?? null };
   activeFieldFrontContext = context;
   const title = document.querySelector('#field-front-detail-title');
   if (title) title.textContent = `Detalhes da Frente ${front}`;
@@ -738,9 +783,19 @@ function openUnitEditor(index) {
   openModal('data-modal');
 }
 
-function statusOptionsHtml(selectedStatus) {
-  const normalizedStatus = normalizeStatus(selectedStatus);
-  return statusOptions.map(({ label }) => `
+function primaryFieldStatus(status) {
+  const classification = getFieldStatus(status);
+  return classification.group === 'active' ? 'EM ATIVIDADE'
+    : classification.group === 'wet' ? 'SOLO ÚMIDO' : '';
+}
+
+function statusOptionsHtml(selectedStatus, detailed = false) {
+  const normalizedStatus = detailed ? normalizeStatus(selectedStatus) : primaryFieldStatus(selectedStatus);
+  const options = detailed ? statusOptions
+    : statusOptions.filter(option => ['EM ATIVIDADE', 'SOLO ÚMIDO'].includes(option.label));
+  const placeholder = !detailed && !normalizedStatus
+    ? '<option value="" disabled selected hidden>Definido em Ver</option>' : '';
+  return placeholder + options.map(({ label }) => `
     <option value="${escapeHtml(label)}" ${label === normalizedStatus ? 'selected' : ''}>${escapeHtml(label)}</option>
   `).join('');
 }
@@ -790,7 +845,7 @@ function frontRowHtml(front = '', sector = '', status = 'EM ATIVIDADE', atr = ''
       <td class="sector-input-cell">
         <input class="sector-input" type="text" maxlength="16" value="${escapeHtml(sector)}" placeholder="Ex.: 67620" />
       </td>
-      <td><select class="status-input">${statusOptionsHtml(status)}</select></td>
+      <td><select class="status-input" data-original-status="${escapeHtml(normalizeStatus(status))}">${statusOptionsHtml(status)}</select></td>
       <td><input class="atr-input" type="text" inputmode="decimal" maxlength="12" value="${escapeHtml(atr)}" placeholder="Ex.: 135,5" aria-label="ATR da frente" /></td>
       <td><button class="row-remove remove-front-row" type="button" aria-label="Remover frente">×</button></td>
     </tr>
@@ -913,13 +968,21 @@ function collectFrontRows() {
     .map(row => {
       const front = row.querySelector('.front-input').value.trim();
       const sector = row.querySelector('.sector-input').value.trim();
-      const status = normalizeStatus(row.querySelector('.status-input').value);
+      const input = row.querySelector('.status-input');
+      const status = collectPrimaryFieldStatus(input);
       const atr = row.querySelector('.atr-input').value.trim();
       return [front, sector, getStatusColor(status), status, atr];
     })
     .filter(([front, sector]) => front || sector);
 
   return sortFrontRows(rows);
+}
+
+function collectPrimaryFieldStatus(input) {
+  const original = input.dataset.originalStatus;
+  // Salvar outros campos ou reordenar frentes não pode apagar uma situação detalhada.
+  return original && input.value === primaryFieldStatus(original)
+    ? normalizeStatus(original) : normalizeStatus(input.value);
 }
 
 function collectMetrics() {
@@ -1006,6 +1069,33 @@ function setupEvents() {
     refreshFieldFrontNotes().catch(error => console.error('Falha ao consultar observações.', error));
   });
   document.querySelector('#field-front-detail-modal')?.addEventListener('submit', async event => {
+    if (event.target?.id === 'field-front-status-form') {
+      event.preventDefault();
+      const context = activeFieldFrontContext;
+      const form = event.target;
+      const button = form.querySelector('[type="submit"]');
+      const state = form.querySelector('#field-front-status-state');
+      const status = form.querySelector('[name="status"]').value;
+      if (!context || button.disabled) return;
+      button.disabled = true;
+      state.textContent = 'Salvando situação…';
+      try {
+        await saveFieldFrontStatus(context, status);
+        if (activeFieldFrontContext !== context) return;
+        const chip = document.querySelector('#field-front-current-status');
+        chip.textContent = status;
+        chip.className = `field-status-chip ${fieldStatusClass(status)}`;
+        state.textContent = 'Situação salva e atualizada para a emissão da imagem.';
+        showToast('Situação da frente atualizada.');
+      } catch (error) {
+        state.textContent = error.status === 409
+          ? 'A unidade foi atualizada por outro analista. Atualize a página e revise a situação antes de salvar novamente.'
+          : error.message || 'Não foi possível salvar a situação.';
+      } finally {
+        button.disabled = false;
+      }
+      return;
+    }
     if (event.target?.id !== 'field-front-note-form') return;
     event.preventDefault();
     const context = activeFieldFrontContext;

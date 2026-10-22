@@ -16,9 +16,20 @@ async function main() {
   for (const item of catalog) {
     assert.equal(ctx.normalizeStatus(item.label), item.label);
     assert.equal(ctx.getStatusColor(item.label), item.color);
-    assert(ctx.statusOptionsHtml(item.label).includes(`value="${item.label}" selected`));
+    assert(ctx.statusOptionsHtml(item.label, true).includes(`value="${item.label}" selected`));
     assert.equal(ctx.fieldStatusClass(item.label), `is-${item.group}`);
+    const primary = ctx.statusOptionsHtml(item.label);
+    assert(primary.includes('value="EM ATIVIDADE"'));
+    assert(primary.includes('value="SOLO ÚMIDO"'));
+    assert.equal((primary.match(/<option value="[^\"]+"/g) || []).length, 2);
+    assert.equal(ctx.collectPrimaryFieldStatus({ value: ctx.primaryFieldStatus(item.label),
+      dataset: { originalStatus: item.label } }), item.label, 'O editor principal deve preservar o detalhe existente');
   }
+  assert.equal(ctx.collectPrimaryFieldStatus({ value: 'SOLO ÚMIDO', dataset: { originalStatus: 'AGUARDANDO PIPA' } }), 'SOLO ÚMIDO');
+  assert.equal(ctx.collectPrimaryFieldStatus({ value: 'EM ATIVIDADE', dataset: { originalStatus: 'PARADA' } }), 'EM ATIVIDADE');
+  assert.equal(ctx.fieldFrontStatusForm('EM ATIVIDADE'), '', 'Sem permissão, Ver deve continuar apenas para consulta');
+  vm.runInContext('moduleAccess.dashboard = { edit: true };', ctx);
+  assert(ctx.fieldFrontStatusForm('EM ATIVIDADE').includes('value="AGUARDANDO PIPA"'));
   for (const [raw, expected] of [[' mudanca de patio ', 'MUDANÇA DE PÁTIO'],
     ['trajeto   travado vazio', 'TRAJETO TRAVADO VAZIO'], ['solo umido', 'SOLO ÚMIDO'], ['parado', 'PARADA']]) {
     assert.equal(ctx.normalizeStatus(raw), expected);
@@ -66,6 +77,52 @@ async function main() {
   assert(drawn.some(item => item.text === 'Solo úmido'));
   assert(drawn.some(item => item.text === 'Parada / situação crítica'));
   assert(!drawn.some(item => /mudança ou teste/i.test(item.text)));
+
+  // Salvar em Ver usa a versão aberta e mantém observações, chuva, ATR e demais frentes/unidades.
+  vm.runInContext('unitMeta.PPT = { version: 7 };', ctx);
+  const opened = vm.runInContext('clone(units[0])', ctx);
+  const otherUnit = vm.runInContext('JSON.stringify(units[1])', ctx);
+  const detailContext = { unit: 'PPT', front: opened.rows[0][0], sector: opened.rows[0][1], index: 0,
+    unitSnapshot: JSON.parse(JSON.stringify(opened)), version: 7 };
+  let sent;
+  ctx.renderDashboard = () => {};
+  ctx.apiRequest = async (path, options) => {
+    sent = { path, ...JSON.parse(options.body) };
+    return { unit: sent.unit, meta: { version: 8 } };
+  };
+  await ctx.saveFieldFrontStatus(detailContext, 'AGUARDANDO PIPA');
+  assert.equal(sent.path, '/api/units/PPT');
+  assert.equal(sent.expected_version, 7);
+  assert.equal(sent.unit.rows[0][3], 'AGUARDANDO PIPA');
+  assert.equal(sent.unit.rows[0][2], 'green');
+  const expected = JSON.parse(JSON.stringify(opened));
+  expected.rows[0][2] = 'green';
+  expected.rows[0][3] = 'AGUARDANDO PIPA';
+  expected.border = ctx.calculateUnitBorder(expected.rows);
+  assert.deepEqual(sent.unit, expected);
+  assert.equal(vm.runInContext('JSON.stringify(units[1])', ctx), otherUnit);
+  assert.equal(detailContext.version, 8);
+  const savedBeforeConflict = vm.runInContext('JSON.stringify(units[0])', ctx);
+  ctx.apiRequest = async () => { const error = new Error('Atualização concorrente'); error.status = 409; throw error; };
+  await assert.rejects(ctx.saveFieldFrontStatus(detailContext, 'PARADA'), error => error.status === 409);
+  assert.equal(vm.runInContext('JSON.stringify(units[0])', ctx), savedBeforeConflict);
+  vm.runInContext('moduleAccess.dashboard.edit = false;', ctx);
+  await assert.rejects(ctx.saveFieldFrontStatus(detailContext, 'PARADA'), /permissão/);
+  vm.runInContext('moduleAccess.dashboard.edit = true;', ctx);
+  ctx.detailContext = detailContext;
+  vm.runInContext('activeFieldFrontContext = detailContext;', ctx);
+  ctx.apiRequest = async (_path, options) => ({ unit: JSON.parse(options.body).unit, meta: { version: 9 } });
+  ctx.showToast = () => {};
+  ctx.setupEvents();
+  const button = { disabled: false };
+  const state = { textContent: '' };
+  const form = { id: 'field-front-status-form', querySelector(selector) {
+    return selector === '[type="submit"]' ? button : selector === '[name="status"]' ? { value: 'PARADA' } : state;
+  } };
+  await ctx.document.querySelector('#field-front-detail-modal').listeners.submit({ target: form, preventDefault() {} });
+  assert.equal(ctx.document.querySelector('#field-front-current-status').textContent, 'PARADA');
+  assert.match(state.textContent, /Situação salva/);
+  assert.equal(button.disabled, false);
   console.log('OK: situações detalhadas, contadores, filtros, cores e emissão individual/global sem alterar a origem.');
 }
 
