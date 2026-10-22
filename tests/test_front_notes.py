@@ -63,6 +63,25 @@ class FrontNotesTests(unittest.TestCase):
         self.assertEqual(notes.front_notes_summary('PPT', self.analyst)['1']['highlight_count'], 4)
         self.assertEqual(db.list_units_payload(), before)
 
+    def test_open_summary_filters_before_pagination_and_keeps_full_history(self):
+        first = self.add('Acesso em avaliação')
+        completed = self.add('Manutenção concluída')
+        notes.update_front_note(completed['id'], {'resolved': True}, self.admin)
+        self.add('Somente no histórico', highlighted=False)
+        self.add('Outra unidade', unit='NRD')
+        second = self.add('Aguardando pipa')
+        last = self.add('Previsão de liberação')
+        page = notes.list_front_notes('PPT', '01', self.analyst, limit=2, open_only=True)
+        self.assertEqual(page['total'], 3)
+        self.assertEqual([entry['id'] for entry in page['entries']], [last['id'], second['id']])
+        remaining = notes.list_front_notes('PPT', '1', self.analyst, limit=2,
+                                           before_id=page['next_cursor'], open_only=True)
+        self.assertEqual([entry['id'] for entry in remaining['entries']], [first['id']])
+        self.assertIsNone(remaining['next_cursor'])
+        self.assertEqual(notes.list_front_notes('PPT', '1', self.analyst)['total'], 5)
+        with self.assertRaises(ValueError):
+            notes.list_front_notes('PPT', '1', self.analyst, open_only='true')
+
     def test_units_and_fronts_are_isolated_and_stale_sector_is_rejected(self):
         self.add('Somente PPT')
         self.add('Somente NRD', unit='NRD')

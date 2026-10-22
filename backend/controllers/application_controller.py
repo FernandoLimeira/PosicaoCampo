@@ -746,7 +746,11 @@ def application(environ, start_response):
                     unit = (query.get("unit") or [""])[0]
                     front = (query.get("front") or [""])[0]
                     before = (query.get("before_id") or [None])[0]
-                    result = list_front_notes(unit, front, user, before_id=int(before) if before is not None else None) if front else {
+                    open_only = (query.get("open_only") or ["0"])[0]
+                    if open_only not in {"0", "1"}:
+                        raise ValueError("Filtro de acontecimentos inválido.")
+                    result = list_front_notes(unit, front, user, before_id=int(before) if before is not None else None,
+                                              open_only=open_only == "1") if front else {
                         "summaries": front_notes_summary(unit, user), "period": shift_at(int(time.time()))
                     }
                     return _json(start_response, HTTPStatus.OK, result)

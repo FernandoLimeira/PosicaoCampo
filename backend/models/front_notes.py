@@ -122,21 +122,25 @@ def front_notes_summary(unit, actor):
     return result
 
 
-def list_front_notes(unit, front, actor, limit=100, before_id=None):
+def list_front_notes(unit, front, actor, limit=100, before_id=None, open_only=False):
     code = _unit(unit)
     key = _front_key(front)
     if before_id is not None and (not isinstance(before_id, int) or before_id < 1):
         raise ValueError('Página de histórico inválida.')
+    if not isinstance(open_only, bool):
+        raise ValueError('Filtro de acontecimentos inválido.')
     with connection() as conn:
         conn.execute('BEGIN')
         _authorize(conn, actor, 'view')
         total = conn.execute('''
           SELECT COUNT(*) FROM field_front_notes WHERE unit_code=? AND front_key=?
-        ''', (code, key)).fetchone()[0]
+          AND (?=0 OR (highlighted=1 AND resolved_at IS NULL))
+        ''', (code, key, int(open_only))).fetchone()[0]
         rows = conn.execute('''
           SELECT * FROM field_front_notes
-          WHERE unit_code=? AND front_key=? AND (? IS NULL OR id<?) ORDER BY id DESC LIMIT ?
-        ''', (code, key, before_id, before_id, limit + 1)).fetchall()
+          WHERE unit_code=? AND front_key=? AND (? IS NULL OR id<?)
+          AND (?=0 OR (highlighted=1 AND resolved_at IS NULL)) ORDER BY id DESC LIMIT ?
+        ''', (code, key, before_id, before_id, int(open_only), limit + 1)).fetchall()
     return {'entries': [_item(row) for row in rows[:limit]], 'total': total,
             'next_cursor': rows[limit - 1]['id'] if len(rows) > limit else None}
 

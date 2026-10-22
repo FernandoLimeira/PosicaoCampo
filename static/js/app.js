@@ -95,6 +95,7 @@ let fieldCurrentPeriod = null;
 let activeFieldFrontContext = null;
 let fieldShiftReviewContext = null;
 let fieldShiftReviewRequest = 0;
+const FIELD_FRONT_NOTES_PAGE_SIZE = 3;
 
 
 
@@ -295,13 +296,16 @@ function fieldLatestNote(front) {
   return fieldFrontNotesSummary[fieldFrontNoteKey(front)] || null;
 }
 
-function fieldObservationPoint(entry) {
-  const text = String(entry.text || '').replace(/\r\n?/g, '\n').trim();
+function fieldObservationText(value, previewOnly = false) {
+  const text = String(value || '').replace(/\r\n?/g, '\n').trim();
   const lines = text.split('\n');
   const firstLines = lines.slice(0, 3).join('\n');
   const excerpt = (firstLines.length > 180
     ? firstLines.slice(0, 180).replace(/\s+\S*$/, '') : firstLines).trimEnd();
-  const content = text.length > 180 || lines.length > 3
+  if (previewOnly && (text.length > 180 || lines.length > 3)) {
+    return `<p class="field-observation-text">${escapeHtml(excerpt)}…</p>`;
+  }
+  return text.length > 180 || lines.length > 3
     ? `<details class="field-observation-details">
         <summary><span class="field-observation-excerpt">${escapeHtml(excerpt)}…</span>
           <span class="field-observation-expand">Ler observação completa</span>
@@ -309,19 +313,20 @@ function fieldObservationPoint(entry) {
         <p class="field-observation-text">${escapeHtml(text)}</p>
       </details>`
     : `<p class="field-observation-text">${escapeHtml(text)}</p>`;
-  return `<li class="field-observation-point">${content}</li>`;
 }
 
-function fieldNotePreview(front, index) {
+function fieldObservationPoint(entry) {
+  return `<li class="field-observation-point">${fieldObservationText(entry.text, true)}</li>`;
+}
+
+function fieldNotePreview(front) {
   const summary = fieldLatestNote(front);
   const highlights = summary?.highlights || [];
-  if (!highlights.length) return `<button type="button" class="field-note-inline-button is-empty" data-field-front-index="${index}" aria-label="Acompanhar a Frente ${escapeHtml(front)}">${summary?.count ? 'Sem pontos em aberto · Ver histórico' : canEditModule('dashboard') ? '+ Adicionar observação' : 'Sem observações em aberto · Ver histórico'}</button>`;
+  if (!highlights.length) return '<span class="field-observation-empty">Sem acontecimentos em aberto</span>';
   const points = highlights.map(fieldObservationPoint).join('');
   const remaining = Math.max(0, summary.highlight_count - highlights.length);
   return `<ul class="field-observation-points" aria-label="Observações em destaque da Frente ${escapeHtml(front)}">${points}</ul>
-    <button type="button" class="field-note-inline-button" data-field-front-index="${index}" aria-label="Ver observações da Frente ${escapeHtml(front)}">
-    <small>${remaining ? `+ ${remaining} ponto${remaining === 1 ? '' : 's'} em aberto · ` : ''}Ver acompanhamento</small>
-  </button>`;
+    <small>${remaining ? `+ ${remaining} ponto${remaining === 1 ? '' : 's'} em aberto · ` : ''}Ver resumo dos acontecimentos</small>`;
 }
 
 async function refreshFieldFrontNotes(unitCode = units[selectedUnitIndex]?.code) {
@@ -352,7 +357,7 @@ async function refreshFieldFrontNotes(unitCode = units[selectedUnitIndex]?.code)
     const index = Number(row.dataset.fieldFrontIndex);
     const cell = row.querySelector('.field-observation-cell');
     const front = units[selectedUnitIndex]?.rows[index]?.[0];
-    if (cell && front !== undefined) cell.innerHTML = fieldNotePreview(front, index);
+    if (cell && front !== undefined) cell.innerHTML = fieldNotePreview(front);
   });
   applyFieldViewFilters();
 }
@@ -362,7 +367,7 @@ function fieldFrontNoteForm() {
   if (!mayWrite) return '<p class="field-note-readonly">Você pode consultar o histórico, mas não possui permissão para adicionar observações.</p>';
   return `<form id="field-front-note-form" class="field-front-note-form">
     <label for="field-front-note-text">Nova observação
-      <textarea id="field-front-note-text" name="text" rows="3" maxlength="1500" required placeholder="Descreva a ocorrência, a ação necessária ou a previsão de retorno."></textarea>
+      <textarea id="field-front-note-text" name="text" rows="2" maxlength="1500" required placeholder="Descreva a ocorrência, a ação necessária ou a previsão de retorno."></textarea>
     </label>
     <label class="field-front-highlight-option"><input type="checkbox" name="highlighted" checked /> Destacar na coluna Observações</label>
     <div class="field-front-note-actions">
@@ -403,18 +408,23 @@ async function saveFieldFrontStatus(context, status) {
   renderDashboard();
 }
 
-function fieldFrontNotesHistory(data) {
+function fieldFrontNotesHistory(data, page = 1, summaryOnly = false) {
   const entries = data?.entries || [];
-  if (!entries.length) return '<p class="field-front-note-empty">Nenhum registro de acompanhamento para esta frente.</p>';
-  const body = entries.map(entry => `<li class="field-front-note-event">
-    <p>${escapeHtml(entry.text)}</p>
-    <div class="field-note-management">
-      <small class="field-note-state">${escapeHtml(formatServerTimestamp(entry.created_at, 'America/Sao_Paulo'))}${entry.shift ? ` · Turno ${escapeHtml(entry.shift)}` : ''} · Setor ${escapeHtml(entry.sector)} · ${entry.resolved_at ? 'Concluído' : entry.highlighted ? 'Em destaque' : 'Somente no histórico'}</small>
-      ${canEditModule('dashboard') ? `<button type="button" class="field-note-action" data-field-note-id="${entry.id}" data-field-note-action="${entry.resolved_at ? 'reopen' : entry.highlighted ? 'resolve' : 'highlight'}">${entry.resolved_at ? 'Reabrir ponto' : entry.highlighted ? 'Concluir ponto' : 'Destacar ponto'}</button>` : ''}
-    </div>
+  if (!entries.length) return `<p class="field-front-note-empty">${summaryOnly ? 'Nenhum acontecimento em aberto para esta frente.' : 'Nenhum registro de acompanhamento para esta frente.'}</p>`;
+  const pageCount = Math.ceil(entries.length / FIELD_FRONT_NOTES_PAGE_SIZE);
+  const currentPage = Math.max(1, Math.min(Number(page) || 1, pageCount));
+  const start = (currentPage - 1) * FIELD_FRONT_NOTES_PAGE_SIZE;
+  const body = entries.slice(start, start + FIELD_FRONT_NOTES_PAGE_SIZE).map(entry => `<li class="field-front-note-event">
+    <div class="field-front-note-copy">${fieldObservationText(entry.text)}</div>
+      ${!summaryOnly && canEditModule('dashboard') ? `<button type="button" class="field-note-action" data-field-note-id="${entry.id}" data-field-note-action="${entry.resolved_at ? 'reopen' : entry.highlighted ? 'resolve' : 'highlight'}">${entry.resolved_at ? 'Reabrir ponto' : entry.highlighted ? 'Concluir ponto' : 'Destacar ponto'}</button>` : ''}
   </li>`).join('');
-  return `<ul class="field-front-note-timeline" aria-label="Observações da frente">${body}</ul>${data.total > entries.length ? `<small>Exibindo ${entries.length} de ${data.total} registros.</small>` : ''}
-    ${data.next_cursor ? '<button type="button" class="field-filter-clear" data-field-notes-more>Carregar anteriores</button>' : ''}`;
+  const pagination = data.total > FIELD_FRONT_NOTES_PAGE_SIZE || entries.length > FIELD_FRONT_NOTES_PAGE_SIZE || data.next_cursor
+    ? `<nav class="field-notes-pagination" aria-label="Páginas das observações">
+        <small>${start + 1}–${Math.min(start + FIELD_FRONT_NOTES_PAGE_SIZE, entries.length)} de ${data.total || entries.length} observações</small>
+        <div><button type="button" class="field-note-action" data-field-notes-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}>Anteriores</button>
+          <button type="button" class="field-note-action" data-field-notes-page="${currentPage + 1}" ${currentPage === pageCount && !data.next_cursor ? 'disabled' : ''}>Próximas</button></div>
+      </nav>` : '';
+  return `<ul class="field-front-note-timeline" aria-label="Observações da frente">${body}</ul>${pagination}`;
 }
 
 async function loadFieldFrontHistory(context, older = false) {
@@ -424,10 +434,11 @@ async function loadFieldFrontHistory(context, older = false) {
   if (!older) container.innerHTML = '<p class="field-front-note-empty">Carregando histórico…</p>';
   try {
     const cursor = older && context.history?.next_cursor ? `&before_id=${context.history.next_cursor}` : '';
-    const data = await apiRequest(`/api/front-notes?unit=${encodeURIComponent(context.unit)}&front=${encodeURIComponent(context.front)}${cursor}`, { cache: 'no-store' });
+    const data = await apiRequest(`/api/front-notes?unit=${encodeURIComponent(context.unit)}&front=${encodeURIComponent(context.front)}${context.summaryOnly ? '&open_only=1' : ''}${cursor}`, { cache: 'no-store' });
     if (activeFieldFrontContext !== context || context.historyRequest !== request) return;
     context.history = { ...data, entries: older ? [...context.history.entries, ...data.entries] : data.entries };
-    container.innerHTML = fieldFrontNotesHistory(context.history);
+    context.historyPage = Math.max(1, Math.min(context.historyPage || 1, Math.ceil(context.history.entries.length / FIELD_FRONT_NOTES_PAGE_SIZE)));
+    container.innerHTML = fieldFrontNotesHistory(context.history, context.historyPage, context.summaryOnly);
   } catch (error) {
     if (activeFieldFrontContext !== context || context.historyRequest !== request) return;
     if (older) showToast('Não foi possível carregar os registros anteriores. Tente novamente.', true);
@@ -441,7 +452,7 @@ function fieldFrontRainKey(value) {
   return /^\d+$/.test(raw) ? String(Number(raw)) : raw.toLocaleLowerCase('pt-BR');
 }
 
-function openFieldFrontDetails(index) {
+function openFieldFrontDetails(index, summaryOnly = false) {
   const unit = units[selectedUnitIndex];
   const row = unit?.rows?.[index];
   const modal = document.querySelector('#field-front-detail-modal');
@@ -466,19 +477,29 @@ function openFieldFrontDetails(index) {
       <div><dt>ATR</dt><dd>${escapeHtml(atr || '—')}</dd></div>
     </dl>
     ${rainSection}
-    ${fieldFrontStatusForm(status)}
-    ${fieldFrontNoteForm()}
-    <section class="field-front-detail-section" aria-label="Observações da frente">
-      <h3>Observações da frente</h3>
+    ${summaryOnly ? '' : `<div class="field-front-edit-row">
+      ${fieldFrontStatusForm(status)}
+      ${fieldFrontNoteForm()}
+    </div>`}
+    <section class="field-front-detail-section" aria-label="${summaryOnly ? 'Acontecimentos em aberto' : 'Observações da frente'}">
+      <h3>${summaryOnly ? 'Acontecimentos em aberto' : 'Observações da frente'}</h3>
       <div id="field-front-note-history"></div>
     </section>`;
-  const context = { unit: unit.code, front, sector, index, unitSnapshot: clone(unit),
+  const context = { unit: unit.code, front, sector, index, summaryOnly, unitSnapshot: clone(unit),
     version: unitMeta[unit.code]?.version ?? null };
   activeFieldFrontContext = context;
   const title = document.querySelector('#field-front-detail-title');
-  if (title) title.textContent = `Detalhes da Frente ${front}`;
+  if (title) title.textContent = `${summaryOnly ? 'Resumo' : 'Detalhes'} da Frente ${front}`;
   openModal('field-front-detail-modal');
   loadFieldFrontHistory(context);
+}
+
+function fieldDashboardStatusClass(status) {
+  const normalized = normalizeStatus(status);
+  if (normalized.startsWith('MUDANÇA')) return 'is-moving';
+  if (normalized.startsWith('TRAJETO TRAVADO')) return 'is-blocked';
+  if (normalized === 'AGUARDANDO PIPA') return 'is-waiting';
+  return fieldStatusClass(normalized);
 }
 
 function unitCard(unit) {
@@ -486,7 +507,7 @@ function unitCard(unit) {
   const rainVisible = fieldHasRain(unit);
   const rows = unit.rows.length
     ? unit.rows.map(([front, sector, color, status, atr = ''], index) => {
-      const statusClass = fieldStatusClass(status);
+      const statusClass = fieldDashboardStatusClass(status);
       const group = getFieldStatus(status).group === 'active' ? 'active' : 'attention';
       const farm = fieldFarmFromSector(sector);
       return `
@@ -496,7 +517,7 @@ function unitCard(unit) {
         <td data-label="Fazenda" class="field-farm-cell" title="${escapeHtml(farm.note || farm.name)}">${escapeHtml(farm.name)}</td>
         <td data-label="Status"><span class="field-status-chip ${statusClass}">${escapeHtml(status)}</span></td>
         <td data-label="ATR" class="field-atr-cell">${escapeHtml(atr || '—')}</td>
-        <td data-label="Observações" class="field-observation-cell">${fieldNotePreview(front, index)}</td>
+        <td data-label="Observações" class="field-observation-cell" data-field-summary-index="${index}" tabindex="0" aria-label="Ver acontecimentos em aberto da Frente ${escapeHtml(front)}">${fieldNotePreview(front)}</td>
         <td data-label="Detalhes" class="field-front-action-cell"><button type="button" class="field-front-details-button" data-field-front-index="${index}" aria-label="Ver detalhes da Frente ${escapeHtml(front)}" title="Ver detalhes da Frente ${escapeHtml(front)}">Ver</button></td>
       </tr>`;
     }).join('')
@@ -1035,6 +1056,11 @@ function setupEvents() {
     applyFieldViewFilters();
   });
   fieldView?.addEventListener('click', event => {
+    const summaryCell = event.target.closest('[data-field-summary-index]');
+    if (summaryCell && fieldView.contains(summaryCell) && !event.target.closest('details, button, a')) {
+      openFieldFrontDetails(Number(summaryCell.dataset.fieldSummaryIndex), true);
+      return;
+    }
     const detailButton = event.target.closest('button[data-field-front-index]');
     if (detailButton && fieldView.contains(detailButton)) {
       openFieldFrontDetails(Number(detailButton.dataset.fieldFrontIndex));
@@ -1054,6 +1080,11 @@ function setupEvents() {
     if (!button || !fieldView.contains(button)) return;
     fieldViewFilter = button.dataset.fieldFilter;
     applyFieldViewFilters();
+  });
+  fieldView?.addEventListener('keydown', event => {
+    if (!['Enter', ' '].includes(event.key) || !event.target.matches('[data-field-summary-index]')) return;
+    event.preventDefault();
+    openFieldFrontDetails(Number(event.target.dataset.fieldSummaryIndex), true);
   });
   document.addEventListener('click', event => {
     const fillButton = event.target.closest('#open-data-modal');
@@ -1116,6 +1147,7 @@ function setupEvents() {
       if (activeFieldFrontContext !== context) return;
       form.querySelector('textarea[name="text"]').value = '';
       if (state) state.textContent = 'Registro salvo no histórico.';
+      context.historyPage = 1;
       const updates = await Promise.allSettled([loadFieldFrontHistory(context), refreshFieldFrontNotes(context.unit)]);
       const failed = updates.some(update => update.status === 'rejected');
       if (failed && state) state.textContent = 'Registro salvo. Atualize a tela para consultar os destaques.';
@@ -1129,11 +1161,20 @@ function setupEvents() {
     }
   });
   document.querySelector('#field-front-detail-modal')?.addEventListener('click', async event => {
-    const more = event.target.closest('[data-field-notes-more]');
-    if (more && activeFieldFrontContext && !more.disabled) {
-      more.disabled = true;
-      await loadFieldFrontHistory(activeFieldFrontContext, true);
-      more.disabled = false;
+    const pageButton = event.target.closest('[data-field-notes-page]');
+    if (pageButton && activeFieldFrontContext && !pageButton.disabled) {
+      const context = activeFieldFrontContext;
+      const page = Number(pageButton.dataset.fieldNotesPage);
+      if (!Number.isInteger(page) || page < 1) return;
+      pageButton.disabled = true;
+      if (page > Math.ceil((context.history?.entries?.length || 0) / FIELD_FRONT_NOTES_PAGE_SIZE) && context.history?.next_cursor) {
+        await loadFieldFrontHistory(context, true);
+      }
+      if (activeFieldFrontContext === context && page <= Math.ceil((context.history?.entries?.length || 0) / FIELD_FRONT_NOTES_PAGE_SIZE)) {
+        context.historyPage = page;
+        document.querySelector('#field-front-note-history').innerHTML = fieldFrontNotesHistory(context.history, page, context.summaryOnly);
+      }
+      pageButton.disabled = false;
       return;
     }
     const button = event.target.closest('[data-field-note-id]');

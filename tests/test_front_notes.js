@@ -25,28 +25,50 @@ async function main() {
   assert.equal((preview.match(/<li class="field-observation-point"/g) || []).length, 3);
   assert(!preview.includes('<details'), 'Observações curtas aparecem completas');
   const extensive = 'Acompanhar manutenção. '.repeat(35) + '\nRetorno após liberação da equipe.';
-  const expanded = ctx.fieldObservationPoint({ text: extensive });
+  const expanded = ctx.fieldObservationText(extensive);
   assert(expanded.includes('<details class="field-observation-details">'));
   assert(expanded.includes('Ler observação completa'));
   assert(expanded.includes('Recolher observação'));
   assert(expanded.includes(extensive), 'O conteúdo completo permanece acessível na própria coluna');
-  assert(ctx.fieldObservationPoint({ text: 'Primeiro ponto\nSegundo ponto\nTerceiro ponto\nQuarto ponto' }).includes('<details'));
+  assert(!ctx.fieldObservationPoint({ text: extensive }).includes('<details'), 'A coluna apresenta o resumo e abre o popup ao clicar');
+  assert(!ctx.fieldObservationPoint({ text: extensive }).includes(extensive));
+  assert(ctx.fieldObservationText('Primeiro ponto\nSegundo ponto\nTerceiro ponto\nQuarto ponto').includes('<details'));
   assert(ctx.fieldObservationPoint({ text: 'Manutenção\r\nRetorno previsto às 15h' }).includes('Manutenção\nRetorno previsto às 15h'));
   assert(ctx.fieldFrontNoteForm().includes('name="highlighted" checked'));
   const history = ctx.fieldFrontNotesHistory({ entries: [{ id: 1, text: '<b>Observação</b>\nRetorno previsto às 15h.', author: 'Nome do analista oculto',
     sector: '101', shift: 'B', highlighted: true, resolved_at: 1, created_at: 1 }], total: 1 });
-  assert(history.includes('Concluído'));
+  assert(!history.includes('Concluído'));
   assert(history.includes('Reabrir ponto'));
   assert(!history.includes('<b>Observação</b>'));
   assert(!history.includes('Nome do analista oculto'), 'O popup mostra somente o conteúdo e o contexto da observação');
   assert(history.includes('&lt;b&gt;Observação&lt;/b&gt;\nRetorno previsto às 15h.'));
-  assert(history.includes('Turno B'));
-  assert(history.includes('Setor 101'));
+  assert(!history.includes('Turno B'));
+  assert(!history.includes('Setor 101'));
+  const pagedNotes = Array.from({ length: 7 }, (_, index) => ({ id: index + 1, text: `Ocorrência ${index + 1}` }));
+  const allPages = [1, 2, 3].map(page => ctx.fieldFrontNotesHistory({ entries: pagedNotes, total: 7 }, page));
+  assert(allPages[0].includes('1–3 de 7 observações'));
+  assert(!allPages[0].includes('Ocorrência 4'));
+  assert(allPages[1].includes('4–6 de 7 observações'));
+  assert(allPages[2].includes('7–7 de 7 observações'));
+  for (let index = 1; index <= 7; index += 1) assert.equal(allPages.filter(html => html.includes(`Ocorrência ${index}`)).length, 1);
   vm.runInContext('moduleAccess.dashboard.edit = false;', ctx);
   assert(!ctx.fieldNotePreview('02', 1).includes('Adicionar observação'));
   assert(!ctx.fieldFrontNoteForm().includes('<form'));
   assert(!ctx.fieldFrontNotesHistory({ entries: [{ id: 1, highlighted: true }], total: 1 }).includes('data-field-note-id'));
-  assert(ctx.fieldFrontNotesHistory({ entries: [{ id: 1 }], total: 2, next_cursor: 1 }).includes('Carregar anteriores'));
+  assert(ctx.fieldFrontNotesHistory({ entries: [{ id: 1 }], total: 2, next_cursor: 1 }).includes('Próximas'));
+  assert(ctx.fieldNotePreview('02', 1).includes('Sem acontecimentos em aberto'));
+  assert(!ctx.fieldNotePreview('01', 0).includes('<button'), 'A coluna abre o resumo pelo clique na célula');
+  const openModal = ctx.openModal;
+  const loadHistory = ctx.loadFieldFrontHistory;
+  let openedContext;
+  ctx.openModal = () => {};
+  ctx.loadFieldFrontHistory = context => { openedContext = context; };
+  ctx.openFieldFrontDetails(0, true);
+  assert.equal(openedContext.summaryOnly, true);
+  assert(!elements.get('#field-front-detail-content').innerHTML.includes('<form'));
+  assert(elements.get('#field-front-detail-content').innerHTML.includes('Acontecimentos em aberto'));
+  ctx.openModal = openModal;
+  ctx.loadFieldFrontHistory = loadHistory;
 
   // Uma consulta atrasada não pode esconder os dados de uma consulta mais recente.
   vm.runInContext("units[0].rows = [['01', '101', 'green', 'EM ATIVIDADE']];", ctx);
@@ -80,6 +102,36 @@ async function main() {
   // Salvar pelo formulário envia a unidade/frente/setor e atualiza os destaques sem novo lançamento.
   vm.runInContext("moduleAccess.dashboard.edit = true; activeFieldFrontContext = {unit: 'PPT', front: '1', sector: '101'};", ctx);
   ctx.setupEvents();
+  const openDetails = ctx.openFieldFrontDetails;
+  let summarySelection;
+  ctx.openFieldFrontDetails = (...args) => { summarySelection = args; };
+  const summaryCell = { dataset: { fieldSummaryIndex: '1' }, parent: grid };
+  await grid.listeners.click({ target: { closest(selector) { return selector === '[data-field-summary-index]' ? summaryCell : null; } } });
+  assert.deepEqual(summarySelection, [1, true]);
+  ctx.openFieldFrontDetails = openDetails;
+  // O botão de página preserva a paginação do servidor sem perder acontecimentos antigos.
+  ctx.pagedNotes = pagedNotes;
+  vm.runInContext('activeFieldFrontContext.history = { entries: pagedNotes.slice(0, 3), total: 4, next_cursor: 3 };', ctx);
+  let requestedCursor;
+  ctx.apiRequest = async path => {
+    requestedCursor = path;
+    return { entries: pagedNotes.slice(3, 4), total: 4, next_cursor: null };
+  };
+  const nextPage = { disabled: false, dataset: { fieldNotesPage: '2' } };
+  await elements.get('#field-front-detail-modal').listeners.click({ target: { closest(selector) {
+    return selector === '[data-field-notes-page]' ? nextPage : null;
+  } } });
+  assert(requestedCursor.includes('before_id=3'));
+  assert(elements.get('#field-front-note-history').innerHTML.includes('Ocorrência 4'));
+  assert(elements.get('#field-front-note-history').innerHTML.includes('4–4 de 4 observações'));
+  assert.equal(nextPage.disabled, false);
+  vm.runInContext('activeFieldFrontContext.summaryOnly = true;', ctx);
+  let summaryQuery;
+  ctx.apiRequest = async path => { summaryQuery = path; return { entries: pagedNotes.slice(0, 1), total: 1 }; };
+  await ctx.loadFieldFrontHistory(vm.runInContext('activeFieldFrontContext', ctx));
+  assert(summaryQuery.includes('open_only=1'));
+  assert(!elements.get('#field-front-note-history').innerHTML.includes('data-field-note-id'));
+  vm.runInContext('activeFieldFrontContext.summaryOnly = false;', ctx);
   const requests = [];
   ctx.apiRequest = async (path, options) => {
     requests.push({ path, options });
