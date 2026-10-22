@@ -364,15 +364,13 @@ function fieldFrontNoteForm() {
   const mayWrite = canEditModule('dashboard');
   if (!mayWrite) return '<p class="field-note-readonly">Você pode consultar o histórico, mas não possui permissão para adicionar observações.</p>';
   return `<form id="field-front-note-form" class="field-front-note-form">
-    <h3>Adicionar observação</h3>
-    <p class="field-front-note-disclaimer">Registre ocorrências, ações necessárias e previsões de retorno desta frente.</p>
-    <label for="field-front-note-text">Observação
-      <textarea id="field-front-note-text" name="text" rows="3" maxlength="1500" required placeholder="Digite uma informação sobre esta frente..."></textarea>
+    <label for="field-front-note-text">Nova observação
+      <textarea id="field-front-note-text" name="text" rows="3" maxlength="1500" required placeholder="Descreva a ocorrência, a ação necessária ou a previsão de retorno."></textarea>
     </label>
-    <label class="field-front-highlight-option"><input type="checkbox" name="highlighted" checked /> Destacar este ponto na coluna Observações</label>
+    <label class="field-front-highlight-option"><input type="checkbox" name="highlighted" checked /> Destacar na coluna Observações</label>
     <div class="field-front-note-actions">
-      <small id="field-front-note-state" role="status" aria-live="polite">Pontos destacados ficam visíveis até serem concluídos.</small>
-      <button class="modal-button save" type="submit">Adicionar observação</button>
+      <small id="field-front-note-state" role="status" aria-live="polite">Será registrada também no Histórico.</small>
+      <button class="modal-button save" type="submit">Salvar observação</button>
     </div>
   </form>`;
 }
@@ -387,10 +385,9 @@ function fieldFrontNotesHistory(data) {
     </div>
     <p>${escapeHtml(entry.text)}</p>
     <div class="field-note-management">
-      <span class="field-note-state">${entry.resolved_at ? 'Concluído' : entry.highlighted ? 'Em destaque' : 'Somente no histórico'}</span>
-      ${canEditModule('dashboard') ? `<button type="button" class="field-filter-clear" data-field-note-id="${entry.id}" data-field-note-action="${entry.resolved_at ? 'reopen' : entry.highlighted ? 'resolve' : 'highlight'}">${entry.resolved_at ? 'Reabrir ponto' : entry.highlighted ? 'Concluir ponto' : 'Destacar ponto'}</button>` : ''}
+      <span class="field-note-state">${entry.resolved_at ? 'Concluído' : entry.highlighted ? 'Em destaque' : 'Somente no histórico'} · Setor ${escapeHtml(entry.sector)}</span>
+      ${canEditModule('dashboard') ? `<button type="button" class="field-note-action" data-field-note-id="${entry.id}" data-field-note-action="${entry.resolved_at ? 'reopen' : entry.highlighted ? 'resolve' : 'highlight'}">${entry.resolved_at ? 'Reabrir ponto' : entry.highlighted ? 'Concluir ponto' : 'Destacar ponto'}</button>` : ''}
     </div>
-    <small>Setor na data: ${escapeHtml(entry.sector)}</small>
   </li>`).join('');
   return `<ol class="field-front-note-timeline">${body}</ol>${data.total > entries.length ? `<small>Exibindo ${entries.length} de ${data.total} registros.</small>` : ''}
     ${data.next_cursor ? '<button type="button" class="field-filter-clear" data-field-notes-more>Carregar anteriores</button>' : ''}`;
@@ -426,34 +423,29 @@ function openFieldFrontDetails(index) {
   const modal = document.querySelector('#field-front-detail-modal');
   const content = document.querySelector('#field-front-detail-content');
   if (!Array.isArray(row) || !modal || !content) return;
-  const [front = '', sector = '', color = 'yellow', status = '', atr = ''] = row;
+  const [front = '', sector = '', , status = '', atr = ''] = row;
   const farm = fieldFarmFromSector(sector);
   const matchKey = fieldFrontRainKey(front);
   const rainRow = (Array.isArray(unit.rain) ? unit.rain : []).find(item => Array.isArray(item) && fieldFrontRainKey(item[0]) === matchKey);
   const statusClass = normalizeStatus(status) === 'EM ATIVIDADE' ? 'is-active'
     : normalizeStatus(status) === 'SOLO ÚMIDO' ? 'is-wet' : 'is-attention';
-  const rainSection = fieldHasRain(unit) && rainRow ? `
-    <div class="field-front-detail-section">
-      <h3>Precipitação da frente</h3>
-      <div class="field-front-detail-grid">
-        <div><span>Chuva no turno</span><strong>${escapeHtml(rainRow[1] ?? '—')} mm</strong></div>
-        <div><span>Acumulado</span><strong>${escapeHtml(rainRow[2] ?? '—')} mm</strong></div>
-      </div>
-    </div>` : '';
+  const rainSection = rainRow ? `<p class="field-front-detail-rain"><strong>Chuva:</strong>
+    turno ${escapeHtml(rainRow[1] ?? '—')} mm · acumulado ${escapeHtml(rainRow[2] ?? '—')} mm</p>` : '';
   content.innerHTML = `
-    <div class="field-front-detail-unit">${escapeHtml(unit.code)} · ${escapeHtml(unit.name)}</div>
-    <div class="field-front-detail-grid">
-      <div><span>Frente</span><strong>${escapeHtml(front)}</strong></div>
-      <div><span>Setor</span><strong>${escapeHtml(sector)}</strong></div>
-      <div class="field-front-detail-wide"><span>Fazenda</span><strong>${escapeHtml(farm.name)}</strong>
-        ${farm.note ? `<small>${escapeHtml(farm.note)}</small>` : ''}</div>
-      <div><span>Status</span><strong><span class="field-status-chip ${statusClass}">${escapeHtml(status)}</span></strong></div>
-      <div><span>ATR</span><strong>${escapeHtml(atr || '—')}</strong></div>
+    <div class="field-front-detail-unit">
+      <span>${escapeHtml(unit.code)} · ${escapeHtml(unit.name)}</span>
+      <span class="field-status-chip ${statusClass}">${escapeHtml(status)}</span>
     </div>
+    <dl class="field-front-detail-grid">
+      <div><dt>Setor</dt><dd>${escapeHtml(sector)}</dd></div>
+      <div><dt>Fazenda</dt><dd>${escapeHtml(farm.name)}
+        ${farm.note ? `<small>${escapeHtml(farm.note)}</small>` : ''}</dd></div>
+      <div><dt>ATR</dt><dd>${escapeHtml(atr || '—')}</dd></div>
+    </dl>
     ${rainSection}
     ${fieldFrontNoteForm()}
-    <section class="field-front-detail-section field-front-history-section" aria-label="Histórico de acompanhamento">
-      <h3>Histórico de informações</h3>
+    <section class="field-front-detail-section" aria-label="Histórico de acompanhamento">
+      <h3>Acompanhamento da frente</h3>
       <div id="field-front-note-history"></div>
     </section>`;
   const context = { unit: unit.code, front, sector, index };
