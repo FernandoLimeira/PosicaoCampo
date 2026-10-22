@@ -150,10 +150,16 @@ class PageTests(unittest.TestCase):
             draft = self.request('/api/front-notes/shift', role='member', overrides=draft_query)
             self.assertEqual(draft['status'], 200, draft['body'])
             draft_data = json.loads(draft['body'])
+            self.assertIn('last_note_id', draft_data)
+            only_new = self.request('/api/front-notes/shift', role='member', overrides={
+                'QUERY_STRING': f"unit=PPT&after_id={draft_data['last_note_id']}"
+            })
+            self.assertEqual(json.loads(only_new['body'])['total'], 0)
             self.assertIn(payload['text'], draft_data['suggested_text'])
             self.assertNotIn('TestOperator', draft_data['suggested_text'])
             self.assertEqual(self.request('/api/front-notes/shift', cookie=denied_cookie, overrides=draft_query)['status'], 403)
             self.assertEqual(self.request('/api/front-notes/shift', role='member', overrides={'QUERY_STRING': 'unit=PPT&date=2026-10-22&shift=D'})['status'], 400)
+            self.assertEqual(self.request('/api/front-notes/shift', role='member', overrides={'QUERY_STRING': 'unit=PPT&after_id=-1'})['status'], 400)
             self.assertEqual(self.request(f'/api/front-notes/{note_id}', role='member', method='PUT', body={'resolved': 'false'})['status'], 400)
         finally:
             self.db.save_unit(original, 0, self.admin['id'])

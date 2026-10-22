@@ -739,7 +739,8 @@ def application(environ, start_response):
         try:
             if path == "/api/front-notes/shift" and method == "GET":
                 result = front_notes_for_shift((query.get("unit") or [""])[0], user,
-                                               (query.get("date") or [None])[0], (query.get("shift") or [None])[0])
+                                               (query.get("date") or [None])[0], (query.get("shift") or [None])[0],
+                                               after_id=int((query.get("after_id") or ["0"])[0]))
                 return _json(start_response, HTTPStatus.OK, result)
             if path == "/api/front-notes":
                 if method == "GET":

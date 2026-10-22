@@ -93,8 +93,8 @@ let fieldFrontNotesSummary = {};
 let fieldNotesRequest = 0;
 let fieldCurrentPeriod = null;
 let activeFieldFrontContext = null;
-let fieldShiftReviewContext = null;
-let fieldShiftReviewRequest = 0;
+let editorObservationContext = null;
+let editorObservationRequest = 0;
 const FIELD_FRONT_NOTES_PAGE_SIZE = 3;
 
 
@@ -677,7 +677,6 @@ function getEditorSnapshot() {
   const form = document.querySelector('#operation-form');
   if (!form) return null;
   return JSON.stringify([...form.querySelectorAll('input:not([type="hidden"]), select, textarea')]
-    .filter(field => !field.hasAttribute('data-review-only'))
     .map(field => [field.className, field.value]));
 }
 
@@ -693,86 +692,48 @@ function refreshEditorSaveStatus() {
   label.classList.toggle('is-dirty', isDirty);
 }
 
-function resetFieldShiftReview(unitCode) {
-  fieldShiftReviewContext = { unitCode, loaded: false, appliedPeriod: null };
-  fieldShiftReviewRequest += 1;
-  document.querySelector('#field-shift-date').value = '';
-  document.querySelector('#field-shift-select').value = '';
-  document.querySelector('#field-shift-draft').value = '';
-  document.querySelector('#field-shift-result').hidden = true;
-  document.querySelector('#field-shift-apply').disabled = true;
-  document.querySelector('#field-shift-load').disabled = false;
-  document.querySelector('#field-shift-state').textContent = 'Horários de Brasília. Consulte os acontecimentos para revisar a observação da imagem.';
+function resetEditorObservations(unit) {
+  editorObservationContext = { unitCode: unit.code, edited: false,
+    savedPeriod: clone(unit.observation_period || null), appliedPeriod: clone(unit.observation_period || null) };
+  editorObservationRequest += 1;
 }
 
-async function loadFieldShiftReview() {
-  const context = fieldShiftReviewContext;
+async function loadEditorObservations() {
+  const context = editorObservationContext;
   if (!context) return;
-  const state = document.querySelector('#field-shift-state');
-  const dateInput = document.querySelector('#field-shift-date');
-  const shiftInput = document.querySelector('#field-shift-select');
-  const button = document.querySelector('#field-shift-load');
-  const apply = document.querySelector('#field-shift-apply');
-  const result = document.querySelector('#field-shift-result');
-  const date = dateInput.value;
-  const shift = shiftInput.value;
-  const request = ++fieldShiftReviewRequest;
-  context.loadRequest = request;
-  context.loaded = true;
-  context.period = null;
-  apply.disabled = true;
-  result.hidden = true;
-  if (Boolean(date) !== Boolean(shift)) {
-    state.textContent = 'Selecione a data e o turno para consultar.';
-    return;
-  }
+  const input = document.querySelector('#observation-input');
+  if (!input) return;
+  const originalText = input.value;
+  const request = ++editorObservationRequest;
   const query = new URLSearchParams({ unit: context.unitCode });
-  if (date) { query.set('date', date); query.set('shift', shift); }
-  button.disabled = true;
-  state.textContent = 'Consultando os acontecimentos da unidade…';
+  if (context.savedPeriod?.last_note_id !== undefined) query.set('after_id', context.savedPeriod.last_note_id);
   try {
     const data = await apiRequest(`/api/front-notes/shift?${query}`, { cache: 'no-store' });
-    if (fieldShiftReviewContext !== context || request !== fieldShiftReviewRequest) return;
-    dateInput.value = data.work_date;
-    shiftInput.value = data.shift;
-    context.period = { work_date: data.work_date, shift: data.shift };
-    document.querySelector('#field-shift-draft').value = data.suggested_text || '';
-    result.hidden = !data.total;
-    apply.disabled = !data.total;
-    state.textContent = data.total
-      ? `${data.total} registro(s) da unidade ${context.unitCode} no turno ${data.shift}. Revise o texto e use na observação. Nenhuma alteração foi salva.`
-      : 'Nenhum acontecimento registrado nesta unidade e turno. A observação atual foi mantida.';
+    if (editorObservationContext !== context || request !== editorObservationRequest || context.edited || input.value !== originalText || document.querySelector('#data-modal')?.hidden) return;
+    const samePeriod = context.savedPeriod?.work_date === data.work_date && context.savedPeriod?.shift === data.shift;
+    const suggestion = String(data.suggested_text || '').trim();
+    // No mesmo turno, preserva a revisão salva e acrescenta somente registros posteriores.
+    if (suggestion && !(samePeriod && context.savedPeriod.last_note_id === undefined && originalText.trim())) {
+      input.value = samePeriod && originalText.trim() ? `${originalText.trim()}\n\n${suggestion}` : suggestion;
+    }
+    if (suggestion || samePeriod) context.appliedPeriod = {
+      work_date: data.work_date, shift: data.shift, last_note_id: data.last_note_id ?? 0
+    };
+    context.savedPeriod = clone(context.appliedPeriod);
+    autoResizeTextarea(input);
+    refreshEditorSaveStatus();
+    if (input.value.length > 10000) showToast('A observação excede 10.000 caracteres. Revise o texto antes de salvar.', true);
   } catch (error) {
-    if (fieldShiftReviewContext !== context || request !== fieldShiftReviewRequest) return;
-    state.textContent = error.message || 'Não foi possível consultar os acontecimentos. A observação atual foi mantida.';
-  } finally {
-    if (fieldShiftReviewContext === context && context.loadRequest === request) button.disabled = false;
+    if (editorObservationContext === context && request === editorObservationRequest) {
+      showToast('Não foi possível carregar os acontecimentos. A observação salva foi mantida.', true);
+    }
   }
-}
-
-function applyFieldShiftReview() {
-  const context = fieldShiftReviewContext;
-  if (!context?.period) return;
-  const text = document.querySelector('#field-shift-draft').value.trim();
-  const state = document.querySelector('#field-shift-state');
-  if (!text || text.length > 10000) {
-    state.textContent = 'Revise o texto: a observação deve ter de 1 a 10.000 caracteres. Nenhum conteúdo foi cortado.';
-    return;
-  }
-  const input = document.querySelector('#observation-input');
-  input.value = text;
-  context.appliedPeriod = { ...context.period };
-  autoResizeTextarea(input);
-  refreshEditorSaveStatus();
-  state.textContent = 'Texto transferido para a observação abaixo. Revise e salve a atualização para usar na imagem.';
-  input.focus();
 }
 
 function setEditorStep(step) {
   const maxStep = editorSteps.length - 1;
   const safeStep = Math.max(0, Math.min(Number(step) || 0, maxStep));
   currentEditorStep = safeStep;
-  if (safeStep === 2 && fieldShiftReviewContext && !fieldShiftReviewContext.loaded) loadFieldShiftReview();
 
   document.querySelectorAll('[data-step-panel]').forEach(panel => {
     const isActive = Number(panel.dataset.stepPanel) === safeStep;
@@ -808,11 +769,12 @@ function openUnitEditor(index) {
   const safeIndex = Number(index);
   if (!Number.isInteger(safeIndex) || !units[safeIndex]) return;
   loadUnitEditor(safeIndex);
-  resetFieldShiftReview(units[safeIndex].code);
+  resetEditorObservations(units[safeIndex]);
   setEditorStep(0);
   editorInitialSnapshot = getEditorSnapshot();
   refreshEditorSaveStatus();
   openModal('data-modal');
+  editorObservationContext.loadPromise = loadEditorObservations();
 }
 
 function primaryFieldStatus(status) {
@@ -1050,16 +1012,6 @@ async function loadSectorBase({ render = false } = {}) {
 }
 
 function setupEvents() {
-  document.querySelector('#field-shift-load')?.addEventListener('click', loadFieldShiftReview);
-  document.querySelector('#field-shift-apply')?.addEventListener('click', applyFieldShiftReview);
-  ['#field-shift-date', '#field-shift-select'].forEach(selector => {
-    document.querySelector(selector)?.addEventListener('change', () => {
-      fieldShiftReviewRequest += 1;
-      if (fieldShiftReviewContext) fieldShiftReviewContext.period = null;
-      document.querySelector('#field-shift-apply').disabled = true;
-      document.querySelector('#field-shift-state').textContent = 'Período alterado. Consulte novamente os acontecimentos antes de usar o texto.';
-    });
-  });
   const fieldView = document.querySelector('#units-grid');
   fieldView?.addEventListener('input', event => {
     if (event.target?.id !== 'field-front-search') return;
@@ -1104,6 +1056,8 @@ function setupEvents() {
   });
 
   document.addEventListener('report-unit-change', () => {
+    editorObservationContext = null;
+    editorObservationRequest += 1;
     closeAllModals();
     activeFieldFrontContext = null;
     fieldFrontNotesSummary = {};
@@ -1285,7 +1239,10 @@ function setupEvents() {
 
   ['#observation-input', '#changes-input'].forEach(selector => {
     const textarea = document.querySelector(selector);
-    textarea?.addEventListener('input', () => autoResizeTextarea(textarea));
+    textarea?.addEventListener('input', () => {
+      if (selector === '#observation-input' && editorObservationContext) editorObservationContext.edited = true;
+      autoResizeTextarea(textarea);
+    });
   });
 
   document.querySelector('#operation-form').addEventListener('submit', async event => {
@@ -1296,22 +1253,32 @@ function setupEvents() {
       return;
     }
 
+    const saveButton = document.querySelector('#wizard-save');
+    if (saveButton?.disabled) return;
+    if (saveButton) saveButton.disabled = true;
+    const observationContext = editorObservationContext;
+    await observationContext?.loadPromise;
+    if (editorObservationContext !== observationContext) {
+      if (saveButton) saveButton.disabled = false;
+      return;
+    }
+
     const index = Number(document.querySelector('#unit-select').value);
     const currentUnit = units[index];
-    if (!currentUnit) return;
+    if (!currentUnit) {
+      if (saveButton) saveButton.disabled = false;
+      return;
+    }
 
     const updatedUnit = clone(currentUnit);
     updatedUnit.rows = collectFrontRows();
     updatedUnit.border = calculateUnitBorder(updatedUnit.rows);
     updatedUnit.metrics = collectMetrics();
     updatedUnit.observation = document.querySelector('#observation-input').value.trim() || '-';
-    updatedUnit.observation_period = fieldShiftReviewContext?.appliedPeriod || null;
+    updatedUnit.observation_period = editorObservationContext?.appliedPeriod || currentUnit.observation_period || null;
     updatedUnit.changes = document.querySelector('#changes-input').value.trim() || '-';
     updatedUnit.rain = collectRainRows();
     selectedUnitIndex = index;
-
-    const saveButton = document.querySelector('#wizard-save');
-    if (saveButton) saveButton.disabled = true;
 
     try {
       const saved = await saveUnitToServer(index, updatedUnit);

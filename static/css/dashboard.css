@@ -1262,15 +1262,6 @@ body[data-page="dashboard"] { --page: #e7efea; --data-border: #d1dfd6; }
 .field-note-action:hover { color: #1f573e; text-decoration: underline; }
 .field-front-note-form .field-front-highlight-option { flex-direction: row; align-items: flex-start; gap: 8px; font-weight: 600; line-height: 1.5; }
 .field-front-highlight-option input { width: 16px; height: 16px; flex: 0 0 16px; margin: 2px 0 0; padding: 0; }
-.field-shift-review { margin-bottom: 16px; padding: 16px; border: 1px solid var(--data-border); border-radius: var(--control-radius); background: #f5faf7; }
-.field-shift-review h4 { margin: 0 0 6px; color: #2c604c; }
-.field-shift-review p, .field-shift-review small { color: #617f70; font-size: 11px; line-height: 1.5; }
-.field-shift-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin: 12px 0; }
-.field-shift-controls label { display: flex; flex: 1 1 140px; flex-direction: column; gap: 5px; color: #426b57; font-size: 12px; }
-.field-shift-controls input, .field-shift-controls select, #field-shift-draft { width: 100%; min-width: 0; border: 1px solid var(--control-border); border-radius: var(--control-radius); background: #fff; color: var(--text); padding: 9px; }
-#field-shift-draft { min-height: 120px; max-height: 260px; overflow-y: auto; resize: vertical; line-height: 1.5; }
-#field-shift-result .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
-#field-shift-result small { display: block; margin-top: 7px; }
 .field-front-note-form { margin: 0; padding: 0; min-width: 0; }
 .field-front-note-form label { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; font-size: 13px; font-weight: 650; color: #315b47; }
 .field-front-note-form textarea {

@@ -145,8 +145,10 @@ def list_front_notes(unit, front, actor, limit=100, before_id=None, open_only=Fa
             'next_cursor': rows[limit - 1]['id'] if len(rows) > limit else None}
 
 
-def front_notes_for_shift(unit, actor, work_date=None, shift=None):
+def front_notes_for_shift(unit, actor, work_date=None, shift=None, after_id=0):
     code = _unit(unit)
+    if isinstance(after_id, bool) or not isinstance(after_id, int) or not 0 <= after_id <= 2**63 - 1:
+        raise ValueError('Referência dos acontecimentos inválida.')
     if work_date is None and shift is None:
         current = shift_at(int(time.time()))
         work_date, shift = current['work_date'], current['shift']
@@ -155,9 +157,9 @@ def front_notes_for_shift(unit, actor, work_date=None, shift=None):
         conn.execute('BEGIN')
         _authorize(conn, actor, 'view')
         rows = conn.execute('''
-          SELECT * FROM field_front_notes WHERE unit_code=? AND created_at>=? AND created_at<?
+          SELECT * FROM field_front_notes WHERE unit_code=? AND created_at>=? AND created_at<? AND id>?
           ORDER BY front_key,sector_snapshot,id
-        ''', (code, start, end)).fetchall()
+        ''', (code, start, end, after_id)).fetchall()
     # O histórico preserva todos os lançamentos. Só a sugestão elimina textos
     # idênticos na mesma frente/setor, sem atribuir autores ao texto da imagem.
     groups = {}
@@ -173,7 +175,8 @@ def front_notes_for_shift(unit, actor, work_date=None, shift=None):
                 '\n'.join(f'• {text}' for text in group['points'].values())
                 for group in sorted(groups.values(), key=order)]
     return {'unit': code, 'work_date': work_date, 'shift': shift, 'total': len(rows),
-            'suggested_text': '\n\n'.join(sections)}
+            'suggested_text': '\n\n'.join(sections),
+            'last_note_id': max((row['id'] for row in rows), default=after_id)}
 
 
 def append_front_note(payload, actor):

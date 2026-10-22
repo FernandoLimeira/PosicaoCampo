@@ -122,7 +122,12 @@ def _normalize_unit_payload(unit: dict[str, Any], position: int) -> dict[str, An
         if not isinstance(observation_period, dict):
             raise ValueError("Período da observação inválido.")
         shift_period(observation_period.get("work_date"), observation_period.get("shift"))
+        last_note_id = observation_period.get("last_note_id")
+        if last_note_id is not None and (isinstance(last_note_id, bool) or not isinstance(last_note_id, int) or not 0 <= last_note_id <= 2**63 - 1):
+            raise ValueError("Referência dos acontecimentos inválida.")
         observation_period = {key: observation_period[key] for key in ("work_date", "shift")}
+        if last_note_id is not None:
+            observation_period["last_note_id"] = last_note_id
 
     raw_rain = unit.get("rain", [])
     if not isinstance(raw_rain, list) or len(raw_rain) > 100:
