@@ -56,7 +56,7 @@ async function main() {
   assert(!ctx.fieldFrontNoteForm().includes('<form'));
   assert(!ctx.fieldFrontNotesHistory({ entries: [{ id: 1, highlighted: true }], total: 1 }).includes('data-field-note-id'));
   assert(ctx.fieldFrontNotesHistory({ entries: [{ id: 1 }], total: 2, next_cursor: 1 }).includes('Próximas'));
-  assert(ctx.fieldNotePreview('02', 1).includes('Sem acontecimentos em aberto'));
+  assert.equal(ctx.fieldNotePreview('02', 1), '', 'A célula sem acontecimentos em aberto permanece vazia');
   assert(!ctx.fieldNotePreview('01', 0).includes('<button'), 'A coluna abre o resumo pelo clique na célula');
   const openModal = ctx.openModal;
   const loadHistory = ctx.loadFieldFrontHistory;

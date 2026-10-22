@@ -322,7 +322,7 @@ function fieldObservationPoint(entry) {
 function fieldNotePreview(front) {
   const summary = fieldLatestNote(front);
   const highlights = summary?.highlights || [];
-  if (!highlights.length) return '<span class="field-observation-empty">Sem acontecimentos em aberto</span>';
+  if (!highlights.length) return '';
   const points = highlights.map(fieldObservationPoint).join('');
   const remaining = Math.max(0, summary.highlight_count - highlights.length);
   return `<ul class="field-observation-points" aria-label="Observações em destaque da Frente ${escapeHtml(front)}">${points}</ul>
