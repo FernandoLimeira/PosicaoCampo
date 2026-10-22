@@ -29,7 +29,11 @@ function normalizeReportUnit(unit, index) {
     code: cloned.code || fallbackCodes[index] || `UN${index + 1}`,
     name: cloned.name || fallbackNames[index] || 'UNIDADE',
     border: ['active', 'attention', 'critical'].includes(cloned.border) ? cloned.border : 'active',
-    rows: Array.isArray(cloned.rows) ? cloned.rows : [],
+    rows: Array.isArray(cloned.rows) ? cloned.rows.map(row => {
+      const [front = '', sector = '', , status = 'EM ATIVIDADE', atr = ''] = row;
+      const classification = getFieldStatus(status);
+      return [front, sector, classification.color, classification.image_status, atr];
+    }) : [],
     metrics: Array.isArray(cloned.metrics) && cloned.metrics.length === REPORT_METRICS.length ? cloned.metrics : REPORT_METRICS.map(([icon, label, suffix, extra = '']) => [icon, label, `0 ${suffix}`, extra]),
     observation: String(cloned.observation || '-'),
     changes: String(cloned.changes || '-'),
@@ -38,9 +42,8 @@ function normalizeReportUnit(unit, index) {
 
   if (normalized.code === 'PST' && (!normalized.name || normalized.name === 'PARAÍSA TEMPO')) normalized.name = 'PASSA TEMPO';
   const statuses = normalized.rows.filter(row => String(row?.[0] || '').trim() || String(row?.[1] || '').trim())
-    .map(row => String(row?.[3] || 'EM ATIVIDADE').trim().toUpperCase());
-  normalized.border = !statuses.length || statuses.every(status => status === 'EM ATIVIDADE') ? 'active'
-    : statuses.every(status => status === 'SOLO ÚMIDO') ? 'critical' : 'attention';
+    .map(row => row[3]);
+  normalized.border = fieldUnitBorder(statuses);
   return normalized;
 }
 
@@ -198,7 +201,8 @@ function statusColorValue(color) {
 }
 
 function statusTextColor(color) {
-  return color === 'green' ? '#8af45b' : '#ffffff';
+  if (color === 'green') return '#8af45b';
+  return color === 'red' ? statusColorValue(color) : '#ffffff';
 }
 
 function drawReportUnitIcon(ctx, x, y, width = 40, height = 46) {
@@ -1014,7 +1018,7 @@ function globalDrawReportHeader(ctx, art) {
   ctx.drawImage(art, 0, 0, GLOBAL_REFERENCE_WIDTH, GLOBAL_REFERENCE_HEADER_END,
     0, 0, GLOBAL_REFERENCE_WIDTH, GLOBAL_REFERENCE_HEADER_END);
 
-  // Somente a saudação/data/turno são dinâmicos; toda a arte original fica intacta.
+  // Atualiza os dados variáveis sobre o cabeçalho do modelo aprovado.
   const headerClear = ctx.createLinearGradient(0, 0, 0, 78);
   headerClear.addColorStop(0, '#0d242c');
   headerClear.addColorStop(1, '#112a32');
@@ -1046,6 +1050,21 @@ function globalDrawReportHeader(ctx, art) {
   ctx.beginPath(); ctx.moveTo(330, 29); ctx.lineTo(330, 60); ctx.stroke();
   // Antes, a emissão mostrava - TC (turno C). Agora usa a apresentação do modelo.
   globalDrawText(ctx, 'TURNO C', 348, 48, 105, '900 26px "Arial Narrow", Arial, sans-serif');
+
+  // A legenda impressa na arte associava mudança ao amarelo. Usa a classificação atual.
+  ctx.save();
+  ctx.fillStyle = GLOBAL_COLORS.background;
+  ctx.fillRect(0, 257, GLOBAL_REFERENCE_WIDTH, 33);
+  for (const [status, label, x] of [
+    ['EM ATIVIDADE', 'Em atividade', 37],
+    ['SOLO ÚMIDO', 'Solo úmido', 280],
+    ['PARADA', 'Parada / situação crítica', 624]
+  ]) {
+    ctx.fillStyle = statusColorValue(getFieldStatus(status).color);
+    ctx.beginPath(); ctx.arc(x, 270, 6.5, 0, Math.PI * 2); ctx.fill();
+    globalDrawText(ctx, label, x + 14, 270, 240, 'bold 15px "Arial Narrow", Arial, sans-serif');
+  }
+  ctx.restore();
 }
 
 function globalFrontRainMap(unit) {

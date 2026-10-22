@@ -31,7 +31,8 @@ function context(search = '?unit=PPT', stored = 'NRD', baseUnit = 'PPT', pathnam
     setInterval(handler, delay) { (ctx.intervals ||= []).push({ handler, delay }); ctx.clockInterval = { handler, delay }; },
     CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
     document: {
-      body: { dataset: { userId, userName: 'Operador Teste', userRole: 'user', userBaseUnit: baseUnit }, classList: { add() {}, remove() {} } },
+      body: { dataset: { userId, userName: 'Operador Teste', userRole: 'user', userBaseUnit: baseUnit,
+        fieldStatuses: fs.readFileSync(path.join(__dirname, '../backend/services/field_statuses.json'), 'utf8') }, classList: { add() {}, remove() {} } },
       querySelector: element,
       querySelectorAll: selector => selector === '[data-unit-context]' ? [link] : selector === '[data-report-unit]' ? unitButtons : [],
       addEventListener(type, handler) { (listeners[type] ||= []).push(handler); },

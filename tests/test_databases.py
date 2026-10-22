@@ -40,6 +40,48 @@ class DatabaseTests(unittest.TestCase):
         db.initialize_units(self.units(), admin["id"])
         return admin, member
 
+    def test_field_status_details_survive_save_restart_and_sacarose_sync(self):
+        from backend.services.field_status import FIELD_STATUSES
+
+        admin, _ = self.seed()
+        unit = self.units()[0]
+        unit["rows"] = [[str(index), "101", "yellow", item["label"], "145"]
+                        for index, item in enumerate(FIELD_STATUSES, 1)]
+        db.save_sector_base_item("101", "10", "Fazenda", admin["id"])
+        db.save_unit(unit, 0, admin["id"])
+
+        def assert_rows():
+            saved = next(unit for unit in db.list_units() if unit["code"] == "PPT")
+            self.assertEqual(saved["rows"], [
+                [str(index), "101", item["color"], item["label"], "145"]
+                for index, item in enumerate(FIELD_STATUSES, 1)
+            ])
+            self.assertEqual(saved["border"], "attention")
+
+        assert_rows()
+        db.init_db()
+        assert_rows()
+        db.save_sacarose_positions({"PPT": [
+            {"front": str(index), "sector": "101", "section": "10"}
+            for index in range(1, len(FIELD_STATUSES) + 1)
+        ]}, admin["id"])
+        assert_rows()
+
+    def test_field_status_aliases_and_borders(self):
+        from backend.services.field_status import field_status, field_unit_border
+
+        for raw, label in [(" mudanca de patio ", "MUDANÇA DE PÁTIO"),
+                           ("trajeto   travado vazio", "TRAJETO TRAVADO VAZIO"),
+                           ("solo umido", "SOLO ÚMIDO"), ("parado", "PARADA")]:
+            self.assertEqual(db._normalize_status(raw), label)
+        self.assertEqual(field_status("aguardando pipa")["image_status"], "EM ATIVIDADE")
+        for statuses, border in [([], "active"),
+                                 (["MUDANÇA DE SETOR", "AGUARDANDO PIPA"], "active"),
+                                 (["SOLO ÚMIDO"], "critical"), (["PARADA"], "critical"),
+                                 (["SOLO ÚMIDO", "PARADA"], "critical"),
+                                 (["TRAJETO TRAVADO CARREGADO", "PARADA"], "attention")]:
+            self.assertEqual(field_unit_border(statuses), border)
+
     @contextmanager
     def legacy_connection(self):
         conn = sqlite3.connect(config.LEGACY_DB_PATH)

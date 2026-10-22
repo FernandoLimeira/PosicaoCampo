@@ -7,6 +7,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 
 from ..config import STATIC_DIR, TEMPLATE_DIR
 from ..models.module_access import MODULES
+from ..services.field_status import FIELD_STATUSES
 
 @lru_cache(maxsize=1)
 def _asset_version_for_files(signature: tuple) -> str:
@@ -41,4 +42,5 @@ def render_template(name: str, *, user=None, page="login") -> bytes:
         user = {**user, "module_access": {item["key"]: {"view": True, "edit": item["edit"]} for item in MODULES}}
     return environment.get_template(name).render(
         user=user, page=page, asset_version=get_asset_version(), modules=MODULES,
+        field_statuses=FIELD_STATUSES,
     ).encode("utf-8")

@@ -1,0 +1,11 @@
+[
+  {"label": "EM ATIVIDADE", "color": "green", "image_status": "EM ATIVIDADE", "group": "active", "aliases": []},
+  {"label": "MUDANÇA DE SETOR", "color": "green", "image_status": "EM ATIVIDADE", "group": "active", "aliases": []},
+  {"label": "MUDANÇA DE PÁTIO", "color": "green", "image_status": "EM ATIVIDADE", "group": "active", "aliases": []},
+  {"label": "TRAJETO TRAVADO VAZIO", "color": "green", "image_status": "EM ATIVIDADE", "group": "active", "aliases": []},
+  {"label": "TRAJETO TRAVADO CARREGADO", "color": "green", "image_status": "EM ATIVIDADE", "group": "active", "aliases": []},
+  {"label": "AGUARDANDO PIPA", "color": "green", "image_status": "EM ATIVIDADE", "group": "active", "aliases": []},
+  {"label": "SOLO ÚMIDO", "color": "yellow", "image_status": "SOLO ÚMIDO", "group": "wet", "aliases": []},
+  {"label": "PARADA", "color": "red", "image_status": "PARADA", "group": "stopped", "aliases": ["PARADO"]},
+  {"label": "MUDANÇA", "color": "green", "image_status": "EM ATIVIDADE", "group": "active", "aliases": []}
+]

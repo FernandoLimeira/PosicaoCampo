@@ -1072,7 +1072,7 @@ body[data-page="dashboard"] { --page: #e7efea; --data-border: #d1dfd6; }
 .field-status-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 4px 8px; background: #f4f6f5; color: #577167; border: 1px solid #e0e8e3; border-radius: 8px; font-size: 12px; font-weight: 750; white-space: normal; line-height: 1.35; }
 .field-status-chip.is-active { color: #247a54; background: #e9f7ef; border-color: #cce7d7; }
 .field-status-chip.is-wet { color: #94711c; background: #fff7df; border-color: #f2e5b3; }
-.field-status-chip.is-attention { color: #a16e27; background: #fff1dd; border-color: #f0dfc4; }
+.field-status-chip.is-stopped { color: #ac3535; background: #fff0ee; border-color: #f0ceca; }
 .field-data-table .field-table-empty td, .field-data-table .field-filter-empty td { padding: 23px 12px; text-align: center; color: #758d82; background: #fbfdfc; font-size: 11px; }
 .field-subsection-title { margin-bottom: 12px; color: #345f59; font-size: 11px; font-weight: 850; letter-spacing: .3px; }
 .field-note-empty { color: #83998e !important; font-style: italic; }

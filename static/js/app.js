@@ -2,11 +2,7 @@
 
 
 
-const statusOptions = [
-  { label: 'SOLO ÚMIDO', color: 'yellow' },
-  { label: 'EM ATIVIDADE', color: 'green' },
-  { label: 'MUDANÇA', color: 'yellow' }
-];
+const statusOptions = fieldStatusOptions;
 
 const metricDefinitions = [
   { icon: '🏭', label: 'INDÚSTRIA', unit: 'TN/H' },
@@ -179,15 +175,11 @@ async function saveUnitToServer(index, unit) {
 
 
 function normalizeStatus(status) {
-  const value = String(status || '').trim().toUpperCase();
-  if (value.includes('SOLO ÚMIDO')) return 'SOLO ÚMIDO';
-  if (value === 'EM ATIVIDADE') return 'EM ATIVIDADE';
-  return 'MUDANÇA';
+  return getFieldStatus(status).label;
 }
 
 function getStatusColor(status) {
-  const normalizedStatus = normalizeStatus(status);
-  return statusOptions.find(option => option.label === normalizedStatus)?.color || 'yellow';
+  return getFieldStatus(status).color;
 }
 
 function normalizeFrontRows(rows = []) {
@@ -206,18 +198,7 @@ function calculateUnitBorder(rows = []) {
     Array.isArray(row) && (String(row[0] || '').trim() || String(row[1] || '').trim())
   );
 
-  if (!validRows.length) return 'active';
-
-  const statuses = validRows.map(row => row[3]);
-
-  // Todas as frentes em atividade = borda verde.
-  if (statuses.every(status => status === 'EM ATIVIDADE')) return 'active';
-
-  // Todas as frentes em solo úmido = borda vermelha.
-  if (statuses.every(status => status === 'SOLO ÚMIDO')) return 'critical';
-
-  // Qualquer combinação diferente das duas condições acima = borda amarela.
-  return 'attention';
+  return fieldUnitBorder(validRows.map(row => row[3]));
 }
 
 function getUnitStateLabel(border) {
@@ -266,7 +247,7 @@ function renderUnitSelection() {
 function fieldUnitSummary(unit) {
   const rows = (Array.isArray(unit.rows) ? unit.rows : [])
     .filter(row => Array.isArray(row) && (String(row[0] ?? '').trim() || String(row[1] ?? '').trim()));
-  const active = rows.filter(row => normalizeStatus(row[3]) === 'EM ATIVIDADE').length;
+  const active = rows.filter(row => getFieldStatus(row[3]).group === 'active').length;
   return { total: rows.length, active, attention: rows.length - active };
 }
 
@@ -427,8 +408,7 @@ function openFieldFrontDetails(index) {
   const farm = fieldFarmFromSector(sector);
   const matchKey = fieldFrontRainKey(front);
   const rainRow = (Array.isArray(unit.rain) ? unit.rain : []).find(item => Array.isArray(item) && fieldFrontRainKey(item[0]) === matchKey);
-  const statusClass = normalizeStatus(status) === 'EM ATIVIDADE' ? 'is-active'
-    : normalizeStatus(status) === 'SOLO ÚMIDO' ? 'is-wet' : 'is-attention';
+  const statusClass = fieldStatusClass(status);
   const rainSection = rainRow ? `<p class="field-front-detail-rain"><strong>Chuva:</strong>
     turno ${escapeHtml(rainRow[1] ?? '—')} mm · acumulado ${escapeHtml(rainRow[2] ?? '—')} mm</p>` : '';
   content.innerHTML = `
@@ -461,9 +441,8 @@ function unitCard(unit) {
   const rainVisible = fieldHasRain(unit);
   const rows = unit.rows.length
     ? unit.rows.map(([front, sector, color, status, atr = ''], index) => {
-      const normalized = normalizeStatus(status);
-      const statusClass = normalized === 'EM ATIVIDADE' ? 'is-active' : normalized === 'SOLO ÚMIDO' ? 'is-wet' : 'is-attention';
-      const group = normalized === 'EM ATIVIDADE' ? 'active' : 'attention';
+      const statusClass = fieldStatusClass(status);
+      const group = getFieldStatus(status).group === 'active' ? 'active' : 'attention';
       const farm = fieldFarmFromSector(sector);
       return `
       <tr class="field-front-row" data-field-front-index="${index}" data-field-group="${group}">

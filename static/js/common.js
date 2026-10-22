@@ -10,6 +10,26 @@ const moduleAccess = JSON.parse(document.body.dataset.moduleAccess || '{}');
 function canEditModule(key) { return currentUser?.role === 'admin' || Boolean(moduleAccess[key]?.edit); }
 let toastTimer;
 
+// O catálogo vem do mesmo arquivo usado pelo servidor, sem regras de status duplicadas.
+const fieldStatusOptions = JSON.parse(document.body.dataset.fieldStatuses || '[]');
+function fieldStatusKey(value) {
+  return String(value || '').trim().toUpperCase().replace(/\s+/g, ' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+const fieldStatusesByKey = new Map(fieldStatusOptions.flatMap(option =>
+  [option.label, ...option.aliases].map(label => [fieldStatusKey(label), option])));
+function getFieldStatus(value) {
+  const key = fieldStatusKey(value);
+  return fieldStatusesByKey.get(key.includes('SOLO UMIDO') ? 'SOLO UMIDO' : key) || fieldStatusesByKey.get('MUDANCA');
+}
+function fieldUnitBorder(statuses) {
+  const groups = statuses.map(status => getFieldStatus(status).group);
+  if (!groups.length || groups.every(group => group === 'active')) return 'active';
+  return groups.every(group => group !== 'active') ? 'critical' : 'attention';
+}
+function fieldStatusClass(status) {
+  return `is-${getFieldStatus(status).group}`;
+}
+
 async function apiRequest(path, options = {}) {
   const response = await fetch(path, {
     ...options,

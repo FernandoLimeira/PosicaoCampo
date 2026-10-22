@@ -9,6 +9,7 @@ from ..config import MIN_PASSWORD_LENGTH, REMEMBER_SESSION_TTL_SECONDS, SESSION_
 from .storage import ALL_USER_REFERENCES, auth_connection, connection, initialize_databases, seed_production_defaults, validate_actor
 from .security import hash_password, new_session_token, token_digest, verify_password
 from ..services.operational_shifts import shift_at, shift_period
+from ..services.field_status import field_status, field_unit_border
 
 
 class UnitConflictError(Exception):
@@ -43,12 +44,7 @@ _DUMMY_PASSWORD_HASH = hash_password("__invalid_user_timing_guard__")
 
 
 def _normalize_status(value: Any) -> str:
-    status = str(value or "").strip().upper()
-    if "SOLO ÚMIDO" in status:
-        return "SOLO ÚMIDO"
-    if status == "EM ATIVIDADE":
-        return "EM ATIVIDADE"
-    return "MUDANÇA"
+    return field_status(value)["label"]
 
 
 def _nonnegative_number(value: Any, field: str) -> int | float:
@@ -102,19 +98,13 @@ def _normalize_unit_payload(unit: dict[str, Any], position: int) -> dict[str, An
         if not front and not sector:
             continue
         status = _normalize_status(raw_row[3])
-        color = "green" if status == "EM ATIVIDADE" else "yellow"
+        color = field_status(status)["color"]
         atr = str(raw_row[4] if len(raw_row) > 4 and raw_row[4] is not None else "").strip()
         if len(atr) > 12:
             raise ValueError("ATR excede o tamanho permitido.")
         rows.append([front, sector, color, status, atr])
 
-    statuses = [row[3] for row in rows]
-    if not statuses or all(status == "EM ATIVIDADE" for status in statuses):
-        border = "active"
-    elif all(status == "SOLO ÚMIDO" for status in statuses):
-        border = "critical"
-    else:
-        border = "attention"
+    border = field_unit_border([row[3] for row in rows])
 
     raw_metrics = unit.get("metrics", [])
     metrics: list[list[str]] = []
@@ -1527,7 +1517,7 @@ def save_sacarose_positions(
                 else:
                     display_front = item["front"]
                     status = "EM ATIVIDADE"
-                color = "green" if status == "EM ATIVIDADE" else "yellow"
+                color = field_status(status)["color"]
                 atr = str(match[4] or "").strip() if match and len(match) > 4 else ""
                 synced_rows.append([display_front, item["sector"], color, status, atr])
 

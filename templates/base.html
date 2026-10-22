@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="/css/base.css?v={{ asset_version }}" />
   {% block styles %}{% endblock %}
 </head>
-<body data-page="{{ page }}" data-app-build="{{ asset_version }}"
+<body data-page="{{ page }}" data-app-build="{{ asset_version }}" data-field-statuses="{{ field_statuses|tojson|forceescape }}"
       {% if user %}data-user-id="{{ user.id }}" data-user-role="{{ user.role }}" data-user-name="{{ user.name }}" data-user-base-unit="{{ user.base_unit|default('PPT', true) }}" data-module-access="{{ user.module_access|tojson|forceescape }}"{% endif %}>
   {% if user %}
   <div class="dashboard-shell">
