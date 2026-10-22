@@ -1051,6 +1051,16 @@ function globalDrawReportHeader(ctx, art) {
   // Antes, a emissão mostrava - TC (turno C). Agora usa a apresentação do modelo.
   globalDrawText(ctx, 'TURNO C', 348, 48, 105, '900 26px "Arial Narrow", Arial, sans-serif');
 
+  // Substitui o subtítulo incorporado à arte, mantendo o título e a fotografia.
+  const subtitleBackground = ctx.createLinearGradient(0, 0, 400, 0);
+  subtitleBackground.addColorStop(0, '#102930');
+  subtitleBackground.addColorStop(.86, '#102930');
+  subtitleBackground.addColorStop(1, 'rgba(16,41,48,0)');
+  ctx.fillStyle = subtitleBackground;
+  ctx.fillRect(0, 162, 400, 59);
+  globalDrawText(ctx, 'CTT', 30, 190, 310,
+    'bold 64px Impact, "Roboto Condensed", "Arial Narrow", sans-serif', GLOBAL_COLORS.green);
+
   // A legenda impressa na arte associava mudança ao amarelo. Usa a classificação atual.
   ctx.save();
   ctx.fillStyle = GLOBAL_COLORS.background;

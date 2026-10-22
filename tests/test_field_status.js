@@ -76,6 +76,7 @@ async function main() {
   }
   assert(drawn.some(item => item.text === 'Solo úmido'));
   assert(drawn.some(item => item.text === 'Parada / situação crítica'));
+  assert(drawn.some(item => item.text === 'CTT' && item.color === '#80b82e'));
   assert(!drawn.some(item => /mudança ou teste/i.test(item.text)));
 
   // Salvar em Ver usa a versão aberta e mantém observações, chuva, ATR e demais frentes/unidades.
