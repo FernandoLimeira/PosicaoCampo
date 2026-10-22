@@ -344,10 +344,10 @@ body.modal-open { overflow: hidden; }
   position: fixed;
   inset: 0;
   z-index: 100;
-  padding: 24px;
+  padding: clamp(10px, 2vw, 24px);
   display: grid;
   place-items: center;
-  background: rgba(18, 43, 50, .49);
+  background: rgba(18, 43, 50, .52);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
 }
@@ -378,19 +378,20 @@ body.modal-open { overflow: hidden; }
   color: var(--text);
   background: #fff;
   border: 1px solid rgba(206, 229, 222, .9);
-  border-radius: 19px;
+  border-radius: 21px;
   box-shadow: var(--modal-shadow);
 }
 
 .modal-header {
-  padding: 22px 26px 18px;
+  padding: 21px 26px 18px;
+  flex: 0 0 auto;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
   background: linear-gradient(180deg, #ffffff 0%, #f6fbf9 100%);
   border-bottom: 1px solid var(--line);
-  box-shadow: 0 3px 12px rgba(25, 75, 77, .035);
+  box-shadow: 0 4px 16px rgba(25, 75, 77, .045);
 }
 
 .modal-kicker { display: block; margin-bottom: 5px; color: var(--green); font-size: 10px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; }
@@ -411,7 +412,8 @@ body.modal-open { overflow: hidden; }
   line-height: 1;
 }
 
-.modal-close:hover { background: var(--control-hover); box-shadow: 0 4px 11px rgba(22, 72, 68, .10); }
+.modal-close:hover { background: var(--control-hover); box-shadow: 0 4px 11px rgba(22, 72, 68, .10); transform: translateY(-1px); }
+.modal-close:focus-visible, .modal-backdrop button:focus-visible { outline: 2px solid #2c8764; outline-offset: 3px; }
 
 .editor-unit-summary { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 
@@ -476,16 +478,22 @@ input, select { height: 38px; padding: 0 10px; }
 textarea { min-height: 84px; padding: 10px; resize: vertical; }
 
 input:focus, select:focus, textarea:focus { border-color: #63ab90; box-shadow: 0 0 0 3px rgba(44,135,100,.12); outline: 0; }
+.modal-backdrop :is(input, select, textarea):hover:not(:focus) { border-color: #a9ccc1; }
+.modal-backdrop :is(input, select, textarea):focus-visible { box-shadow: 0 0 0 3px rgba(44,135,100,.15), 0 3px 11px rgba(25,75,77,.045); }
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop *, .modal-backdrop *::before, .modal-backdrop *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
 
 .modal-footer {
   padding: 15px 26px;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
   background: linear-gradient(180deg, #f6fbf9, #ffffff);
   border-top: 1px solid var(--line);
-  box-shadow: 0 -3px 12px rgba(25, 75, 77, .025);
+  box-shadow: 0 -5px 16px rgba(25, 75, 77, .045);
 }
 
 .modal-footer p { margin: 0; color: #78877f; font-size: 10px; }

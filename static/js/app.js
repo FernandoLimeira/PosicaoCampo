@@ -84,6 +84,7 @@ let units = clone(defaultUnits);
 let unitMeta = {};
 let selectedUnitIndex = Math.max(0, units.findIndex(unit => unit.code === getReportUnit()));
 let currentEditorStep = 0;
+let editorInitialSnapshot = null;
 let sectorBaseItems = [];
 let sectorBaseMap = new Map();
 
@@ -334,6 +335,26 @@ function buildUnitSelect() {
   input.value = String(Number.isInteger(current) && units[current] ? current : 0);
 }
 
+// Estado local do formulário, usado somente para evitar perder alterações por engano.
+function getEditorSnapshot() {
+  const form = document.querySelector('#operation-form');
+  if (!form) return null;
+  return JSON.stringify([...form.querySelectorAll('input:not([type="hidden"]), select, textarea')]
+    .map(field => [field.className, field.value]));
+}
+
+function editorHasUnsavedChanges() {
+  return editorInitialSnapshot !== null && getEditorSnapshot() !== editorInitialSnapshot;
+}
+
+function refreshEditorSaveStatus() {
+  const label = document.querySelector('#wizard-save-status');
+  if (!label) return;
+  const isDirty = editorHasUnsavedChanges();
+  label.textContent = isDirty ? 'Alterações ainda não salvas' : 'Sem alterações nesta sessão';
+  label.classList.toggle('is-dirty', isDirty);
+}
+
 function setEditorStep(step) {
   const maxStep = editorSteps.length - 1;
   const safeStep = Math.max(0, Math.min(Number(step) || 0, maxStep));
@@ -374,6 +395,8 @@ function openUnitEditor(index) {
   if (!Number.isInteger(safeIndex) || !units[safeIndex]) return;
   loadUnitEditor(safeIndex);
   setEditorStep(0);
+  editorInitialSnapshot = getEditorSnapshot();
+  refreshEditorSaveStatus();
   openModal('data-modal');
 }
 
@@ -602,6 +625,31 @@ function setupEvents() {
     closeAllModals();
     renderDashboard();
   });
+  const editorModal = document.querySelector('#data-modal');
+  // O fechamento comum acontece em common.js; a captura evita descartes acidentais.
+  document.addEventListener('click', event => {
+    const closeButton = event.target.closest('[data-close-modal="data-modal"]');
+    if (!closeButton || editorModal?.hidden || !editorHasUnsavedChanges()) return;
+    if (!window.confirm('Existem alterações não salvas. Deseja sair sem salvar?')) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || editorModal?.hidden || !editorHasUnsavedChanges()) return;
+    if (!window.confirm('Existem alterações não salvas. Deseja sair sem salvar?')) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
+  editorModal?.addEventListener('click', event => {
+    const indicator = event.target.closest('[data-step-indicator]');
+    if (indicator) setEditorStep(Number(indicator.dataset.stepIndicator));
+    if (event.target.closest('button')) refreshEditorSaveStatus();
+  });
+  document.querySelector('#operation-form')?.addEventListener('input', refreshEditorSaveStatus);
+  document.querySelector('#operation-form')?.addEventListener('change', refreshEditorSaveStatus);
+
   document.querySelector('#wizard-prev')?.addEventListener('click', () => {
     setEditorStep(currentEditorStep - 1);
   });
@@ -613,11 +661,13 @@ function setupEvents() {
   document.querySelector('#add-front-row').addEventListener('click', () => {
     document.querySelector('#front-rows').insertAdjacentHTML('beforeend', frontRowHtml());
     document.querySelector('#front-rows tr:last-child .front-input')?.focus();
+    refreshEditorSaveStatus();
   });
 
   document.querySelector('#add-rain-row').addEventListener('click', () => {
     document.querySelector('#rain-form').insertAdjacentHTML('beforeend', rainRowHtml());
     document.querySelector('#rain-form .rain-edit-row:last-child .rain-eq')?.focus();
+    refreshEditorSaveStatus();
   });
 
   document.querySelector('#front-rows').addEventListener('click', event => {
@@ -625,11 +675,13 @@ function setupEvents() {
     if (!button) return;
     button.closest('.front-edit-row')?.remove();
     reorderFrontForm();
+    refreshEditorSaveStatus();
   });
 
   document.querySelector('#front-rows').addEventListener('change', event => {
     if (!event.target.closest('.front-input')) return;
     reorderFrontForm();
+    refreshEditorSaveStatus();
   });
 
   document.querySelector('#rain-form').addEventListener('click', event => {
@@ -637,11 +689,13 @@ function setupEvents() {
     if (!button) return;
     button.closest('.rain-edit-row')?.remove();
     reorderRainForm();
+    refreshEditorSaveStatus();
   });
 
   document.querySelector('#rain-form').addEventListener('change', event => {
     if (!event.target.closest('.rain-eq')) return;
     reorderRainForm();
+    refreshEditorSaveStatus();
   });
 
   ['#observation-input', '#changes-input'].forEach(selector => {
@@ -678,6 +732,7 @@ function setupEvents() {
       units[index] = normalizeUnitsCollection(units.map((unit, unitIndex) => unitIndex === index ? saved.unit : unit))[index];
       if (saved.meta) unitMeta[updatedUnit.code] = saved.meta;
       renderDashboard();
+      editorInitialSnapshot = getEditorSnapshot();
       closeModal('data-modal');
       showToast(`${updatedUnit.code} atualizado e salvo no servidor.`);
     } catch (error) {
