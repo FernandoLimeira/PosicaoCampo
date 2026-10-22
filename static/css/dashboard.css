@@ -1276,6 +1276,8 @@ body[data-page="dashboard"] { --page: #e7efea; --data-border: #d1dfd6; }
 .field-front-note-timeline { margin: 0; padding: 0; list-style: none; }
 .field-front-note-event { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 5px 0; }
 .field-front-note-copy { flex: 1; min-width: 0; }
+.field-front-note-copy .field-observation-text,
+.field-front-note-copy .field-observation-excerpt { color: #000; }
 .field-front-note-event .field-note-action { flex: 0 0 auto; min-height: 28px; }
 .field-notes-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-top: 8px; }
 .field-notes-pagination small { color: #526c60; font-size: 12px; }
