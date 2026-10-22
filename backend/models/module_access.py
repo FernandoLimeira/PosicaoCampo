@@ -190,6 +190,12 @@ def required_permission(path: str, method: str):
     Retorna (módulos aceitos, ação). Os handlers continuam validando método,
     payload e demais regras próprias após a barreira de acesso.
     """
+    if path == "/api/front-notes/shift" and method == "GET":
+        return (("dashboard",), "view")
+    if path == "/api/front-notes" and method in {"GET", "POST"}:
+        return (("dashboard",), "view" if method == "GET" else "edit")
+    if path.startswith("/api/front-notes/") and method == "PUT":
+        return (("dashboard",), "edit")
     if path == "/api/units" and method == "GET":
         return (("dashboard", "emission"), "view")
     if path == "/api/units/meta" and method == "GET":

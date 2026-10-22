@@ -102,6 +102,54 @@ class PageTests(unittest.TestCase):
                 self.assertEqual(response["status"], 302)
                 self.assertEqual(response["headers"]["Location"], "/login")
 
+    def test_field_front_notes_http_flow_and_module_permissions(self):
+        from backend.models.module_access import MODULES
+        self.assertEqual(self.request('/api/front-notes')['status'], 401)
+        self.assertIn('id="field-front-detail-modal"', self.request('/', role='member')['body'])
+        modules = {item['key']: {'view': True, 'edit': False} for item in MODULES}
+        viewer = self.db.create_user('NotesViewer', 'Test-password-42', module_access=modules)
+        viewer_cookie = f"{config.SESSION_COOKIE}={self.db.create_session(viewer['id'])}"
+        modules['dashboard'] = {'view': False, 'edit': False}
+        denied = self.db.create_user('NotesDenied', 'Test-password-42', module_access=modules)
+        denied_cookie = f"{config.SESSION_COOKIE}={self.db.create_session(denied['id'])}"
+        query = {'QUERY_STRING': 'unit=PPT&front=91'}
+        original = next(unit for unit in self.db.list_units_payload()['units'] if unit['code'] == 'PPT')
+        updated = {**original, 'rows': [['91', '101', 'green', 'EM ATIVIDADE', '']]}
+        self.db.save_unit(updated, 0, self.admin['id'])
+        try:
+            payload = {'unit': 'PPT', 'front': '91', 'sector': '101', 'text': 'Aguardar manutenção'}
+            saved = self.request('/api/front-notes', role='member', method='POST', body=payload)
+            self.assertEqual(saved['status'], 201, saved['body'])
+            note_id = json.loads(saved['body'])['entry']['id']
+            viewed = self.request('/api/front-notes', cookie=viewer_cookie, overrides=query)
+            self.assertEqual(viewed['status'], 200, viewed['body'])
+            self.assertEqual(self.request('/api/front-notes', cookie=viewer_cookie, method='POST', body=payload)['status'], 403)
+            self.assertEqual(self.request(f'/api/front-notes/{note_id}', cookie=viewer_cookie, method='PUT', body={'resolved': True})['status'], 403)
+            self.assertEqual(self.request('/api/front-notes', cookie=denied_cookie, overrides=query)['status'], 403)
+            result = self.request(f'/api/front-notes/{note_id}', role='admin', method='PUT', body={'resolved': True})
+            self.assertEqual(result['status'], 200)
+            summary = self.request('/api/front-notes', role='member', overrides={'QUERY_STRING': 'unit=PPT'})
+            self.assertEqual(json.loads(summary['body'])['summaries']['91']['highlight_count'], 0)
+            history = self.request('/api/front-notes', role='member', overrides=query)
+            self.assertEqual(json.loads(history['body'])['entries'][0]['text'], payload['text'])
+            daily = self.request('/api/history', role='member', overrides={'QUERY_STRING': 'unit=PPT'})
+            self.assertEqual(daily['status'], 200)
+            daily_entry = next(entry for entry in json.loads(daily['body'])['history'] if entry['id'] == f'front-note:{note_id}')
+            self.assertEqual(daily_entry['text'], payload['text'])
+            self.assertEqual(daily_entry['user_name'], 'TestOperator')
+            self.assertIn(daily_entry['shift'], ('A', 'B', 'C'))
+            draft_query = {'QUERY_STRING': 'unit=PPT'}
+            draft = self.request('/api/front-notes/shift', role='member', overrides=draft_query)
+            self.assertEqual(draft['status'], 200, draft['body'])
+            draft_data = json.loads(draft['body'])
+            self.assertIn(payload['text'], draft_data['suggested_text'])
+            self.assertNotIn('TestOperator', draft_data['suggested_text'])
+            self.assertEqual(self.request('/api/front-notes/shift', cookie=denied_cookie, overrides=draft_query)['status'], 403)
+            self.assertEqual(self.request('/api/front-notes/shift', role='member', overrides={'QUERY_STRING': 'unit=PPT&date=2026-10-22&shift=D'})['status'], 400)
+            self.assertEqual(self.request(f'/api/front-notes/{note_id}', role='member', method='PUT', body={'resolved': 'false'})['status'], 400)
+        finally:
+            self.db.save_unit(original, 0, self.admin['id'])
+
     def test_presentation_download_permissions_consistency_and_errors(self):
         from backend.services.return_presentation import PPTX_MIME, report_digest
         from tests.test_return_presentation import sample_report

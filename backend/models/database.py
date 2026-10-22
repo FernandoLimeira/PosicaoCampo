@@ -8,6 +8,7 @@ from typing import Any
 from ..config import MIN_PASSWORD_LENGTH, REMEMBER_SESSION_TTL_SECONDS, SESSION_TTL_SECONDS
 from .storage import ALL_USER_REFERENCES, auth_connection, connection, initialize_databases, seed_production_defaults, validate_actor
 from .security import hash_password, new_session_token, token_digest, verify_password
+from ..services.operational_shifts import shift_at, shift_period
 
 
 class UnitConflictError(Exception):
@@ -126,6 +127,12 @@ def _normalize_unit_payload(unit: dict[str, Any], position: int) -> dict[str, An
     changes = str(unit.get("changes", "-")).strip() or "-"
     if len(observation) > 10_000 or len(changes) > 10_000:
         raise ValueError("Apontamentos excedem o tamanho permitido.")
+    observation_period = unit.get("observation_period")
+    if observation_period is not None:
+        if not isinstance(observation_period, dict):
+            raise ValueError("Período da observação inválido.")
+        shift_period(observation_period.get("work_date"), observation_period.get("shift"))
+        observation_period = {key: observation_period[key] for key in ("work_date", "shift")}
 
     raw_rain = unit.get("rain", [])
     if not isinstance(raw_rain, list) or len(raw_rain) > 100:
@@ -154,6 +161,7 @@ def _normalize_unit_payload(unit: dict[str, Any], position: int) -> dict[str, An
         "observation": observation,
         "changes": changes,
         "rain": rain,
+        **({"observation_period": observation_period} if observation_period is not None else {}),
     }
 
 
@@ -1077,29 +1085,58 @@ def list_history(limit: int = 100, unit_code: str | None = None) -> list[dict[st
     with connection() as conn:
         rows = conn.execute(
             f"""
-            SELECT h.id, h.unit_code, h.unit_name, h.action, h.version, h.created_at,
-                   users.name AS user_name
-            FROM unit_history h
-            LEFT JOIN auth.users AS users ON users.id = h.user_id
+            SELECT h.* FROM (
+                SELECT p.id, p.unit_code, p.unit_name, p.action, p.version, p.created_at,
+                       users.name AS user_name, 'position' AS kind,
+                       NULL AS front, NULL AS sector, NULL AS text,
+                       NULL AS resolved_at, NULL AS highlighted, p.after_json AS snapshot
+                FROM unit_history p
+                LEFT JOIN auth.users AS users ON users.id = p.user_id
+                UNION ALL
+                SELECT n.id, n.unit_code, COALESCE(u.name, n.unit_code),
+                       'Acompanhamento da frente', NULL, n.created_at, n.author_name,
+                       'front_note', n.front_label, n.sector_snapshot, n.note,
+                       n.resolved_at, n.highlighted, NULL
+                FROM field_front_notes n
+                LEFT JOIN units u ON u.code = n.unit_code
+            ) h
             {where}
-            ORDER BY h.created_at DESC, h.id DESC
+            ORDER BY h.created_at DESC, h.id DESC, h.kind DESC
             LIMIT ?
             """,
             params,
         ).fetchall()
 
-    return [
-        {
-            "id": row["id"],
+    result = []
+    for row in rows:
+        period = shift_at(row['created_at'])
+        if row['snapshot']:
+            try:
+                snapshot = json.loads(row['snapshot'])
+                candidate = snapshot.get('observation_period') if isinstance(snapshot, dict) else None
+                if isinstance(candidate, dict):
+                    shift_period(candidate.get('work_date'), candidate.get('shift'))
+                    period = candidate
+            except (ValueError, TypeError):
+                pass  # Um snapshot legado inválido não deve ocultar o histórico.
+        result.append({
+            "id": f"front-note:{row['id']}" if row["kind"] == "front_note" else row["id"],
             "unit_code": row["unit_code"],
             "unit_name": row["unit_name"],
             "action": row["action"],
             "version": row["version"],
             "created_at": row["created_at"],
             "user_name": row["user_name"] or "Usuário removido",
-        }
-        for row in rows
-    ]
+            "kind": row["kind"],
+            "front": row["front"],
+            "sector": row["sector"],
+            "text": row["text"],
+            "resolved_at": row["resolved_at"],
+            "highlighted": bool(row["highlighted"]),
+            "shift": period['shift'],
+            "work_date": period['work_date'],
+        })
+    return result
 
 
 

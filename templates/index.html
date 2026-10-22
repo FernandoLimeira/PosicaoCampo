@@ -7,11 +7,16 @@
 <div id="dashboard-view" class="app-view is-active" aria-hidden="false">
         <section class="module-standard-header dashboard-preview-heading">
           <div class="dashboard-heading-copy">
-            <p>VISUALIZAÇÃO</p>
+            <p>ACOMPANHAMENTO OPERACIONAL</p>
             <h1>Posição de Campo</h1>
+            <div class="dashboard-context" aria-label="Unidade, turno e atualização da posição">
+              <span id="preview-unit-label" class="dashboard-context-unit">Exibindo a unidade selecionada</span>
+              <span id="preview-unit-shift" class="dashboard-context-shift">Consultando turno…</span>
+              <span id="preview-unit-updated" class="dashboard-heading-updated">Consultando atualização…</span>
+            </div>
           </div>
           <div class="dashboard-heading-actions">
-            <span id="preview-unit-label">Exibindo a unidade selecionada</span>
+            <span id="preview-unit-state" class="unit-state dashboard-unit-state"></span>
             {% if user.module_access.dashboard.edit %}<button id="open-data-modal" class="dashboard-fill-button" type="button">Preencher</button>{% endif %}
           </div>
         </section>
@@ -20,6 +25,18 @@
       </div>
 {% endblock %}
 {% block modals %}
+<div id="field-front-detail-modal" class="modal-backdrop" hidden>
+  <section class="editor-modal field-front-detail-modal" role="dialog" aria-modal="true" aria-labelledby="field-front-detail-title">
+    <header class="modal-header">
+      <h2 id="field-front-detail-title">Acompanhamento da frente</h2>
+      <button class="modal-close" type="button" data-close-modal="field-front-detail-modal" aria-label="Fechar">×</button>
+    </header>
+    <div id="field-front-detail-content" class="field-front-detail-content"></div>
+    <footer class="modal-footer field-front-detail-footer">
+      <button class="modal-button secondary" type="button" data-close-modal="field-front-detail-modal">Fechar</button>
+    </footer>
+  </section>
+</div>
 <div id="data-modal" class="modal-backdrop" hidden>
     <section class="editor-modal operation-editor-modal" role="dialog" aria-modal="true" aria-labelledby="data-modal-title">
       <header class="modal-header operation-modal-header">
@@ -99,9 +116,33 @@
               </div>
             </div>
 
+            <section class="field-shift-review" aria-labelledby="field-shift-title">
+              <h4 id="field-shift-title">Acontecimentos do turno</h4>
+              <p>Consulte os registros da unidade e revise o texto antes de usar na observação da imagem.</p>
+              <div class="field-shift-controls">
+                <label>Data <input id="field-shift-date" type="date" data-review-only /></label>
+                <label>Turno
+                  <select id="field-shift-select" data-review-only>
+                    <option value="">Turno atual</option>
+                    <option value="A">A · 00:00–07:20</option>
+                    <option value="B">B · 07:20–15:40</option>
+                    <option value="C">C · 15:40–00:00</option>
+                  </select>
+                </label>
+                <button id="field-shift-load" type="button" class="section-action">Consultar acontecimentos</button>
+              </div>
+              <div id="field-shift-result" hidden>
+                <label class="field">Texto para revisão
+                  <textarea id="field-shift-draft" rows="5" data-review-only></textarea>
+                </label>
+                <button id="field-shift-apply" type="button" class="section-action">Usar texto revisado na observação</button>
+                <small>Substitui apenas a observação deste formulário. Revise e salve a atualização para alimentar a imagem.</small>
+              </div>
+              <p id="field-shift-state" role="status" aria-live="polite">Horários de Brasília. A consulta inclui os acontecimentos do turno, mesmo os já concluídos.</p>
+            </section>
             <div class="notes-form-grid">
               <label class="field">
-                <span>Observação</span>
+                <span>Observação para emissão</span>
                 <textarea id="observation-input" rows="3" placeholder="Digite a observação do turno"></textarea>
               </label>
 

@@ -244,10 +244,11 @@ function showToast(message, error = false) {
   toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
-function formatServerTimestamp(timestamp) {
+function formatServerTimestamp(timestamp, timeZone) {
   const numeric = Number(timestamp);
   if (!Number.isFinite(numeric) || numeric <= 0) return '-';
   return new Date(numeric * 1000).toLocaleString('pt-BR', {
+    ...(timeZone ? { timeZone } : {}),
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

@@ -94,7 +94,11 @@ let sectorBaseMap = new Map();
 let sectorBaseLoaded = false;
 // Ocorrências independentes da posição oficial (status/ATR/chuva/exportação).
 let fieldFrontNotesSummary = {};
+let fieldNotesRequest = 0;
+let fieldCurrentPeriod = null;
 let activeFieldFrontContext = null;
+let fieldShiftReviewContext = null;
+let fieldShiftReviewRequest = 0;
 
 
 
@@ -229,12 +233,23 @@ function renderUnitSelection() {
   const unit = units[selectedUnitIndex];
   const previewLabel = document.querySelector('#preview-unit-label');
   if (previewLabel) previewLabel.textContent = `${unit.code} — ${unit.name}`;
+  const shiftLabel = document.querySelector('#preview-unit-shift');
+  if (shiftLabel && fieldCurrentPeriod) {
+    shiftLabel.textContent = `Turno ${fieldCurrentPeriod.shift} · ${fieldCurrentPeriod.work_date.split('-').reverse().join('/')}`;
+    const hours = { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo', hour12: false };
+    const start = new Date(fieldCurrentPeriod.start_at * 1000).toLocaleTimeString('pt-BR', hours);
+    const end = new Date(fieldCurrentPeriod.end_at * 1000).toLocaleTimeString('pt-BR', hours);
+    shiftLabel.setAttribute('title', `${start}–${end} · Horário de Brasília`);
+  }
 
   const meta = unitMeta[unit.code] || {};
   const updatedAt = document.querySelector('#preview-unit-updated');
-  if (updatedAt) updatedAt.textContent = meta.updated_at
-    ? `Atualizado por ${meta.updated_by || '-'} em ${formatServerTimestamp(meta.updated_at)}`
-    : 'Aguardando primeira atualização no servidor';
+  if (updatedAt) {
+    updatedAt.textContent = meta.updated_at
+      ? `Posição atualizada: ${formatServerTimestamp(meta.updated_at, 'America/Sao_Paulo')}`
+      : 'Posição ainda não atualizada';
+    updatedAt.setAttribute('title', meta.updated_at ? `Atualização feita por ${meta.updated_by || '-'}` : 'Aguardando primeira atualização no servidor');
+  }
   const state = document.querySelector('#preview-unit-state');
   if (state) {
     state.textContent = getUnitStateLabel(unit.border);
@@ -302,34 +317,61 @@ function fieldLatestNote(front) {
 
 function fieldNotePreview(front, index) {
   const summary = fieldLatestNote(front);
-  if (!summary?.latest) return `<button type="button" class="field-note-inline-button is-empty" data-field-front-index="${index}" aria-label="Adicionar observação na Frente ${escapeHtml(front)}">+ Adicionar</button>`;
-  const text = String(summary.latest.text || '');
-  const short = text.length > 86 ? `${text.slice(0, 83).trimEnd()}…` : text;
+  const highlights = summary?.highlights || [];
+  if (!highlights.length) return `<button type="button" class="field-note-inline-button is-empty" data-field-front-index="${index}" aria-label="Acompanhar a Frente ${escapeHtml(front)}">${summary?.count ? 'Sem pontos em aberto · Ver histórico' : '+ Adicionar observação'}</button>`;
+  const points = highlights.map(entry => `<span role="listitem" title="${escapeHtml(entry.text)}"><span class="field-observation-preview">${escapeHtml(entry.text)}</span></span>`).join('');
+  const remaining = Math.max(0, summary.highlight_count - highlights.length);
   return `<button type="button" class="field-note-inline-button" data-field-front-index="${index}" aria-label="Ver observações da Frente ${escapeHtml(front)}">
-    <span class="field-observation-preview" title="${escapeHtml(text)}">${escapeHtml(short)}</span>
-    <small>${summary.count} registro${summary.count === 1 ? '' : 's'}</small>
+    <span class="field-observation-points" role="list">${points}</span>
+    <small>${remaining ? `+ ${remaining} ponto${remaining === 1 ? '' : 's'} em aberto · ` : ''}Ver acompanhamento</small>
   </button>`;
 }
 
 async function refreshFieldFrontNotes(unitCode = units[selectedUnitIndex]?.code) {
   if (!unitCode) return;
-  const data = await apiRequest(`/api/front-notes?unit=${encodeURIComponent(unitCode)}`);
-  if (units[selectedUnitIndex]?.code !== unitCode) return;
-  fieldFrontNotesSummary = data?.summaries || {};
-  renderDashboard();
+  const request = ++fieldNotesRequest;
+  let data;
+  try {
+    data = await apiRequest(`/api/front-notes?unit=${encodeURIComponent(unitCode)}`, { cache: 'no-store' });
+  } catch (error) {
+    if (request === fieldNotesRequest && units[selectedUnitIndex]?.code === unitCode) {
+      fieldCurrentPeriod = null;
+      const label = document.querySelector('#preview-unit-shift');
+      if (label) label.textContent = 'Turno indisponível';
+    }
+    throw error;
+  }
+  if (request !== fieldNotesRequest || units[selectedUnitIndex]?.code !== unitCode) return;
+  if (data?.period) {
+    fieldCurrentPeriod = data.period;
+    renderUnitSelection();
+  }
+  const summaries = data?.summaries || {};
+  if (JSON.stringify(summaries) === JSON.stringify(fieldFrontNotesSummary)) return;
+  fieldFrontNotesSummary = summaries;
+  // Atualiza só as observações para preservar foco, busca e posição da tabela.
+  const grid = document.querySelector('#units-grid');
+  grid?.querySelectorAll('.field-front-row').forEach(row => {
+    const index = Number(row.dataset.fieldFrontIndex);
+    const cell = row.querySelector('.field-observation-cell');
+    const front = units[selectedUnitIndex]?.rows[index]?.[0];
+    if (cell && front !== undefined) cell.innerHTML = fieldNotePreview(front, index);
+  });
+  applyFieldViewFilters();
 }
 
 function fieldFrontNoteForm() {
-  const mayWrite = currentUser?.module_access?.dashboard?.edit || currentUser?.role === 'admin';
+  const mayWrite = canEditModule('dashboard');
   if (!mayWrite) return '<p class="field-note-readonly">Você pode consultar o histórico, mas não possui permissão para adicionar observações.</p>';
   return `<form id="field-front-note-form" class="field-front-note-form">
     <h3>Adicionar observação</h3>
-    <p class="field-front-note-disclaimer">Anote livremente o acompanhamento da frente. Não altera o status oficial nem a imagem emitida.</p>
+    <p class="field-front-note-disclaimer">Registre ocorrências, ações necessárias e previsões de retorno desta frente.</p>
     <label for="field-front-note-text">Observação
       <textarea id="field-front-note-text" name="text" rows="3" maxlength="1500" required placeholder="Digite uma informação sobre esta frente..."></textarea>
     </label>
+    <label class="field-front-highlight-option"><input type="checkbox" name="highlighted" checked /> Destacar este ponto na coluna Observações</label>
     <div class="field-front-note-actions">
-      <small id="field-front-note-state" role="status" aria-live="polite">A observação será salva no histórico desta frente.</small>
+      <small id="field-front-note-state" role="status" aria-live="polite">Pontos destacados ficam visíveis até serem concluídos.</small>
       <button class="modal-button save" type="submit">Adicionar observação</button>
     </div>
   </form>`;
@@ -341,25 +383,34 @@ function fieldFrontNotesHistory(data) {
   const body = entries.map(entry => `<li class="field-front-note-event">
     <div class="field-front-note-meta">
       <strong>${escapeHtml(entry.author)}</strong>
-      <small>${escapeHtml(formatServerTimestamp(entry.created_at))}</small>
+      <small>${escapeHtml(formatServerTimestamp(entry.created_at, 'America/Sao_Paulo'))}${entry.shift ? ` · Turno ${escapeHtml(entry.shift)}` : ''}</small>
     </div>
     <p>${escapeHtml(entry.text)}</p>
+    <div class="field-note-management">
+      <span class="field-note-state">${entry.resolved_at ? 'Concluído' : entry.highlighted ? 'Em destaque' : 'Somente no histórico'}</span>
+      ${canEditModule('dashboard') ? `<button type="button" class="field-filter-clear" data-field-note-id="${entry.id}" data-field-note-action="${entry.resolved_at ? 'reopen' : entry.highlighted ? 'resolve' : 'highlight'}">${entry.resolved_at ? 'Reabrir ponto' : entry.highlighted ? 'Concluir ponto' : 'Destacar ponto'}</button>` : ''}
+    </div>
     <small>Setor na data: ${escapeHtml(entry.sector)}</small>
   </li>`).join('');
-  return `<ol class="field-front-note-timeline">${body}</ol>${data.total > entries.length ? `<small>Exibindo os ${entries.length} registros mais recentes de ${data.total}.</small>` : ''}`;
+  return `<ol class="field-front-note-timeline">${body}</ol>${data.total > entries.length ? `<small>Exibindo ${entries.length} de ${data.total} registros.</small>` : ''}
+    ${data.next_cursor ? '<button type="button" class="field-filter-clear" data-field-notes-more>Carregar anteriores</button>' : ''}`;
 }
 
-async function loadFieldFrontHistory(context) {
+async function loadFieldFrontHistory(context, older = false) {
   const container = document.querySelector('#field-front-note-history');
   if (!container) return;
-  container.innerHTML = '<p class="field-front-note-empty">Carregando histórico…</p>';
+  const request = context.historyRequest = (context.historyRequest || 0) + 1;
+  if (!older) container.innerHTML = '<p class="field-front-note-empty">Carregando histórico…</p>';
   try {
-    const data = await apiRequest(`/api/front-notes?unit=${encodeURIComponent(context.unit)}&front=${encodeURIComponent(context.front)}`);
-    if (activeFieldFrontContext !== context) return;
-    container.innerHTML = fieldFrontNotesHistory(data);
+    const cursor = older && context.history?.next_cursor ? `&before_id=${context.history.next_cursor}` : '';
+    const data = await apiRequest(`/api/front-notes?unit=${encodeURIComponent(context.unit)}&front=${encodeURIComponent(context.front)}${cursor}`, { cache: 'no-store' });
+    if (activeFieldFrontContext !== context || context.historyRequest !== request) return;
+    context.history = { ...data, entries: older ? [...context.history.entries, ...data.entries] : data.entries };
+    container.innerHTML = fieldFrontNotesHistory(context.history);
   } catch (error) {
-    if (activeFieldFrontContext !== context) return;
-    container.textContent = 'Não foi possível carregar o histórico. Tente abrir os detalhes novamente.';
+    if (activeFieldFrontContext !== context || context.historyRequest !== request) return;
+    if (older) showToast('Não foi possível carregar os registros anteriores. Tente novamente.', true);
+    else container.textContent = 'Não foi possível carregar o histórico. Tente abrir os detalhes novamente.';
     console.error(error);
   }
 }
@@ -423,14 +474,14 @@ function unitCard(unit) {
       const group = normalized === 'EM ATIVIDADE' ? 'active' : 'attention';
       const farm = fieldFarmFromSector(sector);
       return `
-      <tr class="field-front-row" data-field-group="${group}">
+      <tr class="field-front-row" data-field-front-index="${index}" data-field-group="${group}">
         <td data-label="Frente"><span class="front-cell"><i class="status-dot ${escapeHtml(color)}"></i><strong>${escapeHtml(front)}</strong></span></td>
         <td data-label="Setor" class="field-sector-cell">${escapeHtml(sector)}</td>
         <td data-label="Fazenda" class="field-farm-cell" title="${escapeHtml(farm.note || farm.name)}">${escapeHtml(farm.name)}</td>
         <td data-label="Status"><span class="field-status-chip ${statusClass}">${escapeHtml(status)}</span></td>
         <td data-label="ATR" class="field-atr-cell">${escapeHtml(atr || '—')}</td>
         <td data-label="Observações" class="field-observation-cell">${fieldNotePreview(front, index)}</td>
-        <td data-label="Detalhes" class="field-front-action-cell"><button type="button" class="field-front-details-button" data-field-front-index="${index}" aria-label="Visualizar informações da Frente ${escapeHtml(front)}">Ver detalhes</button></td>
+        <td data-label="Detalhes" class="field-front-action-cell"><button type="button" class="field-front-details-button" data-field-front-index="${index}" aria-label="Ver detalhes da Frente ${escapeHtml(front)}" title="Ver detalhes da Frente ${escapeHtml(front)}">Ver</button></td>
       </tr>`;
     }).join('')
     : '';
@@ -479,7 +530,7 @@ function unitCard(unit) {
 
           <div class="table-wrap status-table-wrap">
             <table class="data-table field-data-table">
-              <thead><tr><th>Frente</th><th>Setor</th><th>Fazenda</th><th>Status</th><th>ATR</th><th>Observações</th><th>Detalhes</th></tr></thead>
+              <thead><tr><th>Frente</th><th>Setor</th><th>Fazenda</th><th>Status</th><th>ATR</th><th>Observações</th><th>Ação</th></tr></thead>
               <tbody>${rows || '<tr class="field-table-empty"><td colspan="7">Aguardando preenchimento do turno</td></tr>'}
                 <tr class="field-filter-empty" hidden><td colspan="7">Nenhuma frente encontrada para este filtro.</td></tr>
               </tbody>
@@ -501,7 +552,7 @@ function unitCard(unit) {
           <section class="dashboard-block notes-changes-block">
             <div class="notes-changes-grid">
               <div class="text-panel">
-                <h4>Observação</h4>
+                <h4>Observação para emissão</h4>
                 ${fieldNoteContent(unit.observation, 'observação')}
               </div>
               <div class="text-panel">
@@ -578,6 +629,7 @@ function getEditorSnapshot() {
   const form = document.querySelector('#operation-form');
   if (!form) return null;
   return JSON.stringify([...form.querySelectorAll('input:not([type="hidden"]), select, textarea')]
+    .filter(field => !field.hasAttribute('data-review-only'))
     .map(field => [field.className, field.value]));
 }
 
@@ -593,10 +645,86 @@ function refreshEditorSaveStatus() {
   label.classList.toggle('is-dirty', isDirty);
 }
 
+function resetFieldShiftReview(unitCode) {
+  fieldShiftReviewContext = { unitCode, loaded: false, appliedPeriod: null };
+  fieldShiftReviewRequest += 1;
+  document.querySelector('#field-shift-date').value = '';
+  document.querySelector('#field-shift-select').value = '';
+  document.querySelector('#field-shift-draft').value = '';
+  document.querySelector('#field-shift-result').hidden = true;
+  document.querySelector('#field-shift-apply').disabled = true;
+  document.querySelector('#field-shift-load').disabled = false;
+  document.querySelector('#field-shift-state').textContent = 'Horários de Brasília. Consulte os acontecimentos para revisar a observação da imagem.';
+}
+
+async function loadFieldShiftReview() {
+  const context = fieldShiftReviewContext;
+  if (!context) return;
+  const state = document.querySelector('#field-shift-state');
+  const dateInput = document.querySelector('#field-shift-date');
+  const shiftInput = document.querySelector('#field-shift-select');
+  const button = document.querySelector('#field-shift-load');
+  const apply = document.querySelector('#field-shift-apply');
+  const result = document.querySelector('#field-shift-result');
+  const date = dateInput.value;
+  const shift = shiftInput.value;
+  const request = ++fieldShiftReviewRequest;
+  context.loadRequest = request;
+  context.loaded = true;
+  context.period = null;
+  apply.disabled = true;
+  result.hidden = true;
+  if (Boolean(date) !== Boolean(shift)) {
+    state.textContent = 'Selecione a data e o turno para consultar.';
+    return;
+  }
+  const query = new URLSearchParams({ unit: context.unitCode });
+  if (date) { query.set('date', date); query.set('shift', shift); }
+  button.disabled = true;
+  state.textContent = 'Consultando os acontecimentos da unidade…';
+  try {
+    const data = await apiRequest(`/api/front-notes/shift?${query}`, { cache: 'no-store' });
+    if (fieldShiftReviewContext !== context || request !== fieldShiftReviewRequest) return;
+    dateInput.value = data.work_date;
+    shiftInput.value = data.shift;
+    context.period = { work_date: data.work_date, shift: data.shift };
+    document.querySelector('#field-shift-draft').value = data.suggested_text || '';
+    result.hidden = !data.total;
+    apply.disabled = !data.total;
+    state.textContent = data.total
+      ? `${data.total} registro(s) da unidade ${context.unitCode} no turno ${data.shift}. Revise o texto e use na observação. Nenhuma alteração foi salva.`
+      : 'Nenhum acontecimento registrado nesta unidade e turno. A observação atual foi mantida.';
+  } catch (error) {
+    if (fieldShiftReviewContext !== context || request !== fieldShiftReviewRequest) return;
+    state.textContent = error.message || 'Não foi possível consultar os acontecimentos. A observação atual foi mantida.';
+  } finally {
+    if (fieldShiftReviewContext === context && context.loadRequest === request) button.disabled = false;
+  }
+}
+
+function applyFieldShiftReview() {
+  const context = fieldShiftReviewContext;
+  if (!context?.period) return;
+  const text = document.querySelector('#field-shift-draft').value.trim();
+  const state = document.querySelector('#field-shift-state');
+  if (!text || text.length > 10000) {
+    state.textContent = 'Revise o texto: a observação deve ter de 1 a 10.000 caracteres. Nenhum conteúdo foi cortado.';
+    return;
+  }
+  const input = document.querySelector('#observation-input');
+  input.value = text;
+  context.appliedPeriod = { ...context.period };
+  autoResizeTextarea(input);
+  refreshEditorSaveStatus();
+  state.textContent = 'Texto transferido para a observação abaixo. Revise e salve a atualização para usar na imagem.';
+  input.focus();
+}
+
 function setEditorStep(step) {
   const maxStep = editorSteps.length - 1;
   const safeStep = Math.max(0, Math.min(Number(step) || 0, maxStep));
   currentEditorStep = safeStep;
+  if (safeStep === 2 && fieldShiftReviewContext && !fieldShiftReviewContext.loaded) loadFieldShiftReview();
 
   document.querySelectorAll('[data-step-panel]').forEach(panel => {
     const isActive = Number(panel.dataset.stepPanel) === safeStep;
@@ -632,6 +760,7 @@ function openUnitEditor(index) {
   const safeIndex = Number(index);
   if (!Number.isInteger(safeIndex) || !units[safeIndex]) return;
   loadUnitEditor(safeIndex);
+  resetFieldShiftReview(units[safeIndex].code);
   setEditorStep(0);
   editorInitialSnapshot = getEditorSnapshot();
   refreshEditorSaveStatus();
@@ -855,6 +984,16 @@ async function loadSectorBase({ render = false } = {}) {
 }
 
 function setupEvents() {
+  document.querySelector('#field-shift-load')?.addEventListener('click', loadFieldShiftReview);
+  document.querySelector('#field-shift-apply')?.addEventListener('click', applyFieldShiftReview);
+  ['#field-shift-date', '#field-shift-select'].forEach(selector => {
+    document.querySelector(selector)?.addEventListener('change', () => {
+      fieldShiftReviewRequest += 1;
+      if (fieldShiftReviewContext) fieldShiftReviewContext.period = null;
+      document.querySelector('#field-shift-apply').disabled = true;
+      document.querySelector('#field-shift-state').textContent = 'Período alterado. Consulte novamente os acontecimentos antes de usar o texto.';
+    });
+  });
   const fieldView = document.querySelector('#units-grid');
   fieldView?.addEventListener('input', event => {
     if (event.target?.id !== 'field-front-search') return;
@@ -862,7 +1001,7 @@ function setupEvents() {
     applyFieldViewFilters();
   });
   fieldView?.addEventListener('click', event => {
-    const detailButton = event.target.closest('[data-field-front-index]');
+    const detailButton = event.target.closest('button[data-field-front-index]');
     if (detailButton && fieldView.contains(detailButton)) {
       openFieldFrontDetails(Number(detailButton.dataset.fieldFrontIndex));
       return;
@@ -904,23 +1043,56 @@ function setupEvents() {
     const button = form.querySelector('[type="submit"]');
     const state = form.querySelector('#field-front-note-state');
     const data = new FormData(form);
+    if (button.disabled) return;
     button.disabled = true;
     if (state) state.textContent = 'Salvando registro…';
     try {
       await apiRequest('/api/front-notes', {
         method: 'POST',
         body: JSON.stringify({ unit: context.unit, front: context.front, sector: context.sector,
-          text: data.get('text') })
+          text: data.get('text'), highlighted: data.get('highlighted') === 'on' })
       });
       if (activeFieldFrontContext !== context) return;
       form.querySelector('textarea[name="text"]').value = '';
       if (state) state.textContent = 'Registro salvo no histórico.';
-      await Promise.all([loadFieldFrontHistory(context), refreshFieldFrontNotes(context.unit)]);
-      showToast('Informação da frente salva sem alterar o status oficial.');
+      const updates = await Promise.allSettled([loadFieldFrontHistory(context), refreshFieldFrontNotes(context.unit)]);
+      const failed = updates.some(update => update.status === 'rejected');
+      if (failed && state) state.textContent = 'Registro salvo. Atualize a tela para consultar os destaques.';
+      showToast(failed ? 'Observação salva. Não foi possível atualizar a tabela agora.' : 'Observação salva no acompanhamento da frente.', failed);
     } catch (error) {
       console.error(error);
       if (state) state.textContent = error?.payload?.error || 'Falha ao salvar o registro.';
       showToast('Não foi possível salvar a informação da frente.', true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+  document.querySelector('#field-front-detail-modal')?.addEventListener('click', async event => {
+    const more = event.target.closest('[data-field-notes-more]');
+    if (more && activeFieldFrontContext && !more.disabled) {
+      more.disabled = true;
+      await loadFieldFrontHistory(activeFieldFrontContext, true);
+      more.disabled = false;
+      return;
+    }
+    const button = event.target.closest('[data-field-note-id]');
+    const context = activeFieldFrontContext;
+    if (!button || !context || button.disabled) return;
+    const action = button.dataset.fieldNoteAction;
+    button.disabled = true;
+    try {
+      await apiRequest(`/api/front-notes/${button.dataset.fieldNoteId}`, {
+        method: 'PUT',
+        body: JSON.stringify(action === 'resolve' ? { resolved: true }
+          : action === 'reopen' ? { resolved: false, highlighted: true } : { highlighted: true })
+      });
+      if (activeFieldFrontContext !== context) return;
+      const updates = await Promise.allSettled([loadFieldFrontHistory(context), refreshFieldFrontNotes(context.unit)]);
+      const failed = updates.some(update => update.status === 'rejected');
+      showToast(failed ? 'Ponto atualizado. Atualize a tela para consultar a tabela.'
+        : action === 'resolve' ? 'Ponto concluído e mantido no histórico.' : 'Ponto destacado na tabela.', failed);
+    } catch (error) {
+      showToast(error.message || 'Não foi possível atualizar o ponto.', true);
     } finally {
       button.disabled = false;
     }
@@ -1020,6 +1192,7 @@ function setupEvents() {
     updatedUnit.border = calculateUnitBorder(updatedUnit.rows);
     updatedUnit.metrics = collectMetrics();
     updatedUnit.observation = document.querySelector('#observation-input').value.trim() || '-';
+    updatedUnit.observation_period = fieldShiftReviewContext?.appliedPeriod || null;
     updatedUnit.changes = document.querySelector('#changes-input').value.trim() || '-';
     updatedUnit.rain = collectRainRows();
     selectedUnitIndex = index;
@@ -1077,4 +1250,12 @@ async function initializeApp() {
   }
 }
 
+// Compartilha o acompanhamento entre analistas sem recarregar o formulário aberto.
+function refreshVisibleFieldNotes() {
+  if (document.visibilityState === 'hidden') return;
+  refreshFieldFrontNotes().catch(error => console.warn('Não foi possível atualizar o acompanhamento.', error));
+}
+
+setInterval(refreshVisibleFieldNotes, 30000);
+window.addEventListener('focus', refreshVisibleFieldNotes);
 initializeApp();

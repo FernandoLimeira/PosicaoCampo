@@ -104,6 +104,21 @@ body[data-page="history"] .app-content { height: 100dvh; min-height: 0; }
 .history-item-meta { align-items: flex-end; text-align: right; white-space: nowrap; }
 
 .history-item-meta strong { color: #376047; font-size: 10px; }
+.history-item-meta .history-analyst {
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: var(--green-soft);
+  color: var(--green-strong);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.history-day-heading { margin: 6px 0 2px; color: #426856; font-size: 12px; font-weight: 800; }
+.history-item-occurrence { border-left: 3px solid #74a88b; }
+.history-occurrence-content { flex: 1 0 100%; min-width: 0; }
+.history-occurrence-label { color: #658171; font-size: 10px; font-weight: 750; }
+.history-occurrence-content p { margin: 7px 0 0; color: #315347; font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 @media (max-width: 760px) {
 body[data-page="history"] .dashboard-shell { display: flex; flex-direction: column; }

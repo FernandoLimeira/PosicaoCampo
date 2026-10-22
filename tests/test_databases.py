@@ -60,6 +60,8 @@ class DatabaseTests(unittest.TestCase):
                 # A base legada anterior não possui os campos novos de perfil.
                 statement = statement.replace(",\n    email TEXT NOT NULL DEFAULT '',\n    base_unit TEXT NOT NULL DEFAULT 'PPT'", "")
                 conn.execute(statement.replace("auth.", ""))
+            from backend.models.front_notes import initialize_front_notes
+            initialize_front_notes(conn)
             conn.execute("INSERT INTO users VALUES (7, 'LegacyAdmin', ?, 'admin', 1, ?)",
                          (hash_password("Legacy-pass-42"), now))
             conn.execute("INSERT INTO users VALUES (17, 'LegacyOperator', ?, 'user', 1, ?)",

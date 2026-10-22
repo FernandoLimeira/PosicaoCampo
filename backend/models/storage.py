@@ -22,7 +22,7 @@ PRODUCTION_TABLES = (
     "production_statuses", "production_groups", "production_service_fronts", "production_service_front_units",
     "production_user_items", "production_daily_entries", "production_daily_summaries",
 )
-DATA_TABLES = CORE_DATA_TABLES + ("return_analysis_soil_wet",) + PRODUCTION_TABLES
+DATA_TABLES = CORE_DATA_TABLES + ("return_analysis_soil_wet", "field_front_notes") + PRODUCTION_TABLES
 USER_REFERENCES = (
     ("units", "updated_by"), ("unit_history", "user_id"),
     ("sector_base", "updated_by"), ("sacarose_positions", "updated_by"),
@@ -219,6 +219,8 @@ def initialize_databases():
             for statement in SCHEMA_SQL.split(";"):
                 if statement.strip():
                     conn.execute(statement)
+            from .front_notes import initialize_front_notes
+            initialize_front_notes(conn)
             legacy_layouts = _copy_legacy(conn) if config.LEGACY_DB_PATH.is_file() else False
             _upgrade_user_profile(conn)
             _upgrade_user_access_schema(conn)
@@ -405,6 +407,8 @@ def seed_production_defaults(conn):
 
 def _upgrade_operational_schema(conn):
     """Migrações idempotentes dos dados operacionais sem perder registros existentes."""
+    from .front_notes import initialize_front_notes
+    initialize_front_notes(conn)
     _create_return_soil_wet_table(conn)
     _create_production_tables(conn)
     entry_columns = {row[1] for row in conn.execute("PRAGMA main.table_info(production_daily_entries)")}

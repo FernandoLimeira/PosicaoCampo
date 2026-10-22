@@ -14,6 +14,7 @@ from ..services.return_analysis import MAX_RETURN_UPLOAD_BYTES, analyze_return_f
 from ..services.soil_wet_import import MAX_SOIL_WET_UPLOAD_BYTES, parse_soil_wet_file
 from ..services.return_presentation import PPTX_MIME, generate_return_presentation, report_digest
 from ..services.sector_base_import import MAX_SECTOR_BASE_UPLOAD_BYTES, parse_sector_base_excel_details
+from ..services.operational_shifts import shift_at
 from ..models.database import (
     UnitConflictError,
     authenticate_user,
@@ -47,6 +48,7 @@ from ..models.module_access import (
     get_module_access, get_full_user_access, save_full_user_access,
     required_permission, user_can, landing_page,
 )
+from ..models.front_notes import front_notes_summary, list_front_notes, append_front_note, update_front_note, front_notes_for_shift
 from ..models.production import (
     get_user_access as get_production_user_access,
     save_user_access as save_production_user_access,
@@ -726,6 +728,35 @@ def application(environ, start_response):
             if method == "DELETE":
                 remove_production_my_item(user["id"], item_id)
                 return _json(start_response, HTTPStatus.OK, {"ok": True})
+        except PermissionError as exc:
+            return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
+        except (ValueError, TypeError) as exc:
+            return _json(start_response, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+    if path == "/api/front-notes" or path.startswith("/api/front-notes/"):
+        if not user:
+            return _json(start_response, HTTPStatus.UNAUTHORIZED, {"error": "Autenticação necessária."})
+        try:
+            if path == "/api/front-notes/shift" and method == "GET":
+                result = front_notes_for_shift((query.get("unit") or [""])[0], user,
+                                               (query.get("date") or [None])[0], (query.get("shift") or [None])[0])
+                return _json(start_response, HTTPStatus.OK, result)
+            if path == "/api/front-notes":
+                if method == "GET":
+                    unit = (query.get("unit") or [""])[0]
+                    front = (query.get("front") or [""])[0]
+                    before = (query.get("before_id") or [None])[0]
+                    result = list_front_notes(unit, front, user, before_id=int(before) if before is not None else None) if front else {
+                        "summaries": front_notes_summary(unit, user), "period": shift_at(int(time.time()))
+                    }
+                    return _json(start_response, HTTPStatus.OK, result)
+                if method == "POST":
+                    item = append_front_note(_json_body(environ), user)
+                    return _json(start_response, HTTPStatus.CREATED, {"entry": item})
+            elif method == "PUT" and re.fullmatch(r"/api/front-notes/\d+", path):
+                item = update_front_note(int(path.rsplit("/", 1)[-1]), _json_body(environ), user)
+                return _json(start_response, HTTPStatus.OK, {"entry": item})
+            return _json(start_response, HTTPStatus.METHOD_NOT_ALLOWED, {"error": "Método não permitido."})
         except PermissionError as exc:
             return _json(start_response, HTTPStatus.FORBIDDEN, {"error": str(exc)})
         except (ValueError, TypeError) as exc:
