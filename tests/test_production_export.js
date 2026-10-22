@@ -252,7 +252,8 @@ for (const name of ['production-consolidation.js', 'production-export.js', 'emis
   assert.ok(requests.some(url => url.includes('unit=NRD') && url.includes('scope=all')));
   assert.ok(requests.some(url => url.includes('daily-summary?unit=PPT')));
   assert.ok(!requests.some(url => url.includes('unit=RBR')));
-  assert.ok(labels.includes('TROCA DE TURNO'));
+  assert.ok(labels.includes('POSIÇÃO DE CAMPO'));
+  assert.ok(!labels.includes('TROCA DE TURNO'));
   assert.ok(labels.includes('PRODUÇÃO AGRÍCOLA'));
   assert.ok(labels.includes('Nenhum lançamento nesta unidade.'));
   assert.ok(labels.some(value => value.startsWith('Unidade não liberada')));

@@ -324,7 +324,7 @@ function drawProductionExportHeader(ctx, workDate, background, pageNumber, total
   if (totalPages > 1) productionExportText(ctx, `${pageNumber}/${totalPages}`, 989, 64, 55,
     'bold 21px Impact, "Arial Narrow", sans-serif', PRODUCTION_EXPORT_MUTED);
 
-  productionExportText(ctx, 'TROCA DE TURNO', 40, 181, 520,
+  productionExportText(ctx, 'POSIÇÃO DE CAMPO', 40, 181, 520,
     'bold 71px Impact, "Roboto Condensed", "Arial Narrow", sans-serif');
   productionExportText(ctx, 'PRODUÇÃO AGRÍCOLA', 40, 250, 570,
     'bold 68px Impact, "Roboto Condensed", "Arial Narrow", sans-serif', PRODUCTION_EXPORT_COLORS.active);
