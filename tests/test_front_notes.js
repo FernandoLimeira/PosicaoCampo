@@ -51,6 +51,9 @@ async function main() {
   assert(allPages[1].includes('4–6 de 7 observações'));
   assert(allPages[2].includes('7–7 de 7 observações'));
   for (let index = 1; index <= 7; index += 1) assert.equal(allPages.filter(html => html.includes(`Ocorrência ${index}`)).length, 1);
+  const fullSummary = ctx.fieldFrontNotesHistory({ entries: pagedNotes, total: 7 }, 1, true);
+  for (let index = 1; index <= 7; index += 1) assert(fullSummary.includes(`Ocorrência ${index}`));
+  assert(!fullSummary.includes('data-field-notes-page'), 'Todas as observações em aberto aparecem juntas no resumo');
   vm.runInContext('moduleAccess.dashboard.edit = false;', ctx);
   assert(!ctx.fieldNotePreview('02', 1).includes('Adicionar observação'));
   assert(!ctx.fieldFrontNoteForm().includes('<form'));
@@ -66,7 +69,7 @@ async function main() {
   ctx.openFieldFrontDetails(0, true);
   assert.equal(openedContext.summaryOnly, true);
   assert(!elements.get('#field-front-detail-content').innerHTML.includes('<form'));
-  assert(elements.get('#field-front-detail-content').innerHTML.includes('Acontecimentos em aberto'));
+  assert(elements.get('#field-front-detail-content').innerHTML.includes('<h3>Observações</h3>'));
   ctx.openModal = openModal;
   ctx.loadFieldFrontHistory = loadHistory;
 
@@ -131,6 +134,22 @@ async function main() {
   await ctx.loadFieldFrontHistory(vm.runInContext('activeFieldFrontContext', ctx));
   assert(summaryQuery.includes('open_only=1'));
   assert(!elements.get('#field-front-note-history').innerHTML.includes('data-field-note-id'));
+  const manyOpenNotes = Array.from({ length: 207 }, (_, index) => ({ id: 207 - index, text: `Ponto aberto ${index + 1}` }));
+  const summaryRequests = [];
+  ctx.apiRequest = async path => {
+    summaryRequests.push(path);
+    const cursor = new URL(path, 'http://localhost').searchParams.get('before_id');
+    const start = cursor === null ? 0 : manyOpenNotes.findIndex(entry => entry.id < Number(cursor));
+    const entries = manyOpenNotes.slice(start, start + 100);
+    return { entries, total: 207, next_cursor: start + 100 < 207 ? entries.at(-1).id : null };
+  };
+  await ctx.loadFieldFrontHistory(vm.runInContext('activeFieldFrontContext', ctx));
+  assert.equal(summaryRequests.length, 3);
+  assert(summaryRequests.every(path => path.includes('open_only=1')));
+  const completeSummary = elements.get('#field-front-note-history').innerHTML;
+  assert(completeSummary.includes('Ponto aberto 207'));
+  assert.equal((completeSummary.match(/class="field-front-note-event"/g) || []).length, 207);
+  assert(!completeSummary.includes('data-field-notes-page'));
   vm.runInContext('activeFieldFrontContext.summaryOnly = false;', ctx);
   const requests = [];
   ctx.apiRequest = async (path, options) => {

@@ -371,7 +371,7 @@ function fieldFrontNoteForm() {
     </label>
     <label class="field-front-highlight-option"><input type="checkbox" name="highlighted" checked /> Destacar na coluna Observações</label>
     <div class="field-front-note-actions">
-      <small id="field-front-note-state" role="status" aria-live="polite">Será registrada também no Histórico.</small>
+      <small id="field-front-note-state" role="status" aria-live="polite"></small>
       <button class="modal-button save" type="submit">Salvar observação</button>
     </div>
   </form>`;
@@ -384,7 +384,7 @@ function fieldFrontStatusForm(status) {
       <select id="field-front-status" name="status">${statusOptionsHtml(status, true)}</select>
     </label>
     <button class="modal-button save" type="submit">Salvar situação</button>
-    <small id="field-front-status-state" role="status" aria-live="polite">Mudanças, trajetos e espera por pipa continuam em atividade na imagem.</small>
+    <small id="field-front-status-state" role="status" aria-live="polite"></small>
   </form>`;
 }
 
@@ -414,11 +414,12 @@ function fieldFrontNotesHistory(data, page = 1, summaryOnly = false) {
   const pageCount = Math.ceil(entries.length / FIELD_FRONT_NOTES_PAGE_SIZE);
   const currentPage = Math.max(1, Math.min(Number(page) || 1, pageCount));
   const start = (currentPage - 1) * FIELD_FRONT_NOTES_PAGE_SIZE;
-  const body = entries.slice(start, start + FIELD_FRONT_NOTES_PAGE_SIZE).map(entry => `<li class="field-front-note-event">
+  const visibleEntries = summaryOnly ? entries : entries.slice(start, start + FIELD_FRONT_NOTES_PAGE_SIZE);
+  const body = visibleEntries.map(entry => `<li class="field-front-note-event">
     <div class="field-front-note-copy">${fieldObservationText(entry.text)}</div>
       ${!summaryOnly && canEditModule('dashboard') ? `<button type="button" class="field-note-action" data-field-note-id="${entry.id}" data-field-note-action="${entry.resolved_at ? 'reopen' : entry.highlighted ? 'resolve' : 'highlight'}">${entry.resolved_at ? 'Reabrir ponto' : entry.highlighted ? 'Concluir ponto' : 'Destacar ponto'}</button>` : ''}
   </li>`).join('');
-  const pagination = data.total > FIELD_FRONT_NOTES_PAGE_SIZE || entries.length > FIELD_FRONT_NOTES_PAGE_SIZE || data.next_cursor
+  const pagination = !summaryOnly && (data.total > FIELD_FRONT_NOTES_PAGE_SIZE || entries.length > FIELD_FRONT_NOTES_PAGE_SIZE || data.next_cursor)
     ? `<nav class="field-notes-pagination" aria-label="Páginas das observações">
         <small>${start + 1}–${Math.min(start + FIELD_FRONT_NOTES_PAGE_SIZE, entries.length)} de ${data.total || entries.length} observações</small>
         <div><button type="button" class="field-note-action" data-field-notes-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}>Anteriores</button>
@@ -434,9 +435,19 @@ async function loadFieldFrontHistory(context, older = false) {
   if (!older) container.innerHTML = '<p class="field-front-note-empty">Carregando histórico…</p>';
   try {
     const cursor = older && context.history?.next_cursor ? `&before_id=${context.history.next_cursor}` : '';
-    const data = await apiRequest(`/api/front-notes?unit=${encodeURIComponent(context.unit)}&front=${encodeURIComponent(context.front)}${context.summaryOnly ? '&open_only=1' : ''}${cursor}`, { cache: 'no-store' });
+    const path = `/api/front-notes?unit=${encodeURIComponent(context.unit)}&front=${encodeURIComponent(context.front)}${context.summaryOnly ? '&open_only=1' : ''}`;
+    let data = await apiRequest(`${path}${cursor}`, { cache: 'no-store' });
     if (activeFieldFrontContext !== context || context.historyRequest !== request) return;
-    context.history = { ...data, entries: older ? [...context.history.entries, ...data.entries] : data.entries };
+    const entries = older ? [...context.history.entries, ...data.entries] : [...data.entries];
+    // O resumo reúne também os lotes seguintes da API antes de mostrar a lista completa.
+    while (context.summaryOnly && data.next_cursor) {
+      const beforeId = data.next_cursor;
+      data = await apiRequest(`${path}&before_id=${beforeId}`, { cache: 'no-store' });
+      if (activeFieldFrontContext !== context || context.historyRequest !== request) return;
+      if (data.next_cursor && data.next_cursor >= beforeId) throw new Error('Página de observações inválida.');
+      entries.push(...data.entries);
+    }
+    context.history = { ...data, entries };
     context.historyPage = Math.max(1, Math.min(context.historyPage || 1, Math.ceil(context.history.entries.length / FIELD_FRONT_NOTES_PAGE_SIZE)));
     container.innerHTML = fieldFrontNotesHistory(context.history, context.historyPage, context.summaryOnly);
   } catch (error) {
@@ -481,8 +492,8 @@ function openFieldFrontDetails(index, summaryOnly = false) {
       ${fieldFrontStatusForm(status)}
       ${fieldFrontNoteForm()}
     </div>`}
-    <section class="field-front-detail-section" aria-label="${summaryOnly ? 'Acontecimentos em aberto' : 'Observações da frente'}">
-      <h3>${summaryOnly ? 'Acontecimentos em aberto' : 'Observações da frente'}</h3>
+    <section class="field-front-detail-section" aria-label="${summaryOnly ? 'Observações' : 'Observações da frente'}">
+      <h3>${summaryOnly ? 'Observações' : 'Observações da frente'}</h3>
       <div id="field-front-note-history"></div>
     </section>`;
   const context = { unit: unit.code, front, sector, index, summaryOnly, unitSnapshot: clone(unit),
