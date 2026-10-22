@@ -54,7 +54,7 @@ async function main() {
   const canvasContext = new Proxy({
     measureText: text => ({ width: String(text).length * 5 }),
     createLinearGradient: () => ({ addColorStop() {} }),
-    fillText(text) { drawn.push({ text: String(text), color: this.fillStyle }); }
+    fillText(text, x, y, maxWidth) { drawn.push({ text: String(text), color: this.fillStyle, x, y, maxWidth }); }
   }, { get: (target, key) => key in target ? target[key] : () => {} });
   ctx.document.createElement = () => ({ width: 0, height: 0, getContext: () => canvasContext,
     toBlob(callback) { callback({ width: this.width, height: this.height }); } });
@@ -75,7 +75,12 @@ async function main() {
     assert.equal(JSON.stringify(source), original, 'Emitir não pode alterar os detalhes salvos no painel');
   }
   assert(drawn.some(item => item.text === 'Solo úmido'));
-  assert(drawn.some(item => item.text === 'Parada / situação crítica'));
+  assert(drawn.some(item => item.text === 'Parada'));
+  assert(!drawn.some(item => /situação crítica/i.test(item.text)));
+  const legend = drawn.filter(item => item.y === 270);
+  assert.deepEqual(legend.map(item => item.text), ['Em atividade', 'Solo úmido', 'Parada']);
+  assert(legend.every((item, index) => index === legend.length - 1
+    || item.x + item.maxWidth < legend[index + 1].x), 'A legenda deve ficar alinhada sem sobreposição');
   assert(drawn.some(item => item.text === 'CTT' && item.color === '#80b82e'));
   assert(!drawn.some(item => /mudança ou teste/i.test(item.text)));
 

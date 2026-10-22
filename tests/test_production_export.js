@@ -245,11 +245,11 @@ for (const name of ['production-consolidation.js', 'production-export.js', 'emis
     ['CUSTOM', { code: 'CUSTOM', name: 'Situação cadastrada', style_key: 'wet', is_active: true }],
     ['OLD', { code: 'OLD', name: 'Status desativado', style_key: 'stopped', is_active: false }]
   ]);
-  const configuredLegend = context.productionExportLegendLayout(paint, [], configuredStatuses);
+  const configuredLegend = context.productionExportLegendLayout([], configuredStatuses);
   assert.equal(configuredLegend.entries.length, 1);
-  assert.equal(configuredLegend.entries[0].lines.join(' '), 'Situação cadastrada');
+  assert.equal(configuredLegend.entries[0].label, 'Situação cadastrada');
   assert.equal(configuredLegend.entries[0].state, 'wet');
-  const legacyLegend = context.productionExportLegendLayout(paint,
+  const legacyLegend = context.productionExportLegendLayout(
     [{ items: [{ entry: { status: 'OLD' } }] }], configuredStatuses);
   assert.equal(legacyLegend.entries.length, 2, 'Status desativado ainda usado deve constar na legenda');
   const manyStatuses = new Map(Array.from({ length: 9 }, (_, index) => [String(index), {
@@ -258,8 +258,17 @@ for (const name of ['production-consolidation.js', 'production-export.js', 'emis
   const expandedGrid = context.productionExportPageLayout(paint,
     ['PPT', 'NRD', 'RBR', 'PST'].map(code => ({ code, items: [] })), manyStatuses);
   assert.equal(expandedGrid.legend.entries.length, 9);
-  assert.equal(expandedGrid.firstY, 434, 'Os cartões devem acompanhar as linhas extras da legenda');
-  assert.ok(expandedGrid.legend.entries.every(entry => entry.y < expandedGrid.firstY));
+  assert.equal(expandedGrid.firstY, 370, 'A legenda deve permanecer em uma linha sem deslocar os cartões');
+  assert.ok(expandedGrid.legend.entries.every((entry, index, entries) => entry.y === 334
+    && entry.width > 0 && entry.x + 25 + entry.width <= 1040
+    && (index === entries.length - 1 || entry.x + 25 + entry.width < entries[index + 1].x)),
+  'Todos os status devem ficar alinhados dentro da imagem e sem sobreposição');
+  const longLabel = 'Status cadastrado com uma descrição extensa para a operação agrícola';
+  const longLegend = context.productionExportLegendLayout([], new Map([
+    ['LONG', { code: 'LONG', name: longLabel, style_key: 'active' }]
+  ]));
+  assert.equal(longLegend.entries[0].label, longLabel, 'O nome completo deve ser preservado');
+  assert.equal(longLegend.entries[0].y, 334);
 
   await button.click({ currentTarget: button });
   assert.equal(button.disabled, false);

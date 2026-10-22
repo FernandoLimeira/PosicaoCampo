@@ -283,22 +283,17 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
     counts, extraSummary, contentHeight, height: Math.max(minHeight, contentHeight) };
 }
 
-function productionExportLegendLayout(ctx, page, statusByCode) {
+function productionExportLegendLayout(page, statusByCode) {
   const used = new Set(page.flatMap(report => (report.items || []).map(item => item.entry?.status)));
   const statuses = [...statusByCode.values()].filter(status => status.is_active !== false || used.has(status.code));
   const font = 'bold 18px "Arial Narrow", Arial, sans-serif';
-  const entries = [];
-  let rowY = 334;
-  for (let offset = 0; offset < statuses.length; offset += 4) {
-    const row = statuses.slice(offset, offset + 4).map((status, column) => ({
-      state: productionExportStatus({ entry: { status: status.code } }, statusByCode),
-      lines: productionExportWrap(ctx, status.name, 220, font),
-      x: 40 + column * 250, y: rowY
-    }));
-    entries.push(...row);
-    rowY += Math.max(1, ...row.map(entry => entry.lines.length)) * 22 + 10;
-  }
-  return { entries, font, extraHeight: Math.max(0, rowY - 366) };
+  const columnWidth = (PRODUCTION_EXPORT_WIDTH - 80) / Math.max(1, statuses.length);
+  const entries = statuses.map((status, index) => ({
+    state: productionExportStatus({ entry: { status: status.code } }, statusByCode),
+    label: status.name,
+    x: 40 + index * columnWidth, y: 334, width: Math.max(1, columnWidth - 35)
+  }));
+  return { entries, font };
 }
 
 function drawProductionExportHeader(ctx, workDate, background, pageNumber, totalPages, height, legend) {
@@ -348,12 +343,12 @@ function drawProductionExportHeader(ctx, workDate, background, pageNumber, total
     'bold 68px Impact, "Roboto Condensed", "Arial Narrow", sans-serif', PRODUCTION_EXPORT_COLORS.active);
   productionExportText(ctx, 'Preparo, plantio, tratos culturais e fertirrigação', 40, 293, 930,
     'bold 24px "Arial Narrow", Arial, sans-serif', '#e7eeee');
-  legend.entries.forEach(({ state, lines, x, y }) => {
+  legend.entries.forEach(({ state, label, x, y, width }) => {
     ctx.beginPath();
     ctx.arc(x + 9, y - 9, 9, 0, Math.PI * 2);
     ctx.fillStyle = PRODUCTION_EXPORT_COLORS[state];
     ctx.fill();
-    lines.forEach((line, index) => productionExportText(ctx, line, x + 25, y + index * 22, 220, legend.font));
+    productionExportText(ctx, label, x + 25, y, width, legend.font);
   });
 }
 
@@ -521,8 +516,8 @@ function drawProductionExportFooter(ctx, y, workDate, height) {
 }
 
 function productionExportPageLayout(ctx, page, statusByCode) {
-  const legend = productionExportLegendLayout(ctx, page, statusByCode);
-  const firstY = 370 + legend.extraHeight;
+  const legend = productionExportLegendLayout(page, statusByCode);
+  const firstY = 370;
   const plans = page.map((report, index) => {
     const items = report.items?.length || 0;
     const isContinuation = Boolean(report.continuation);

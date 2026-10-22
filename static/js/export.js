@@ -1061,19 +1061,19 @@ function globalDrawReportHeader(ctx, art) {
   globalDrawText(ctx, 'CTT', 30, 190, 310,
     'bold 64px Impact, "Roboto Condensed", "Arial Narrow", sans-serif', GLOBAL_COLORS.green);
 
-  // A legenda impressa na arte associava mudança ao amarelo. Usa a classificação atual.
+  // Usa os status de emissão do catálogo, agrupando os detalhes operacionais.
   ctx.save();
   ctx.fillStyle = GLOBAL_COLORS.background;
   ctx.fillRect(0, 257, GLOBAL_REFERENCE_WIDTH, 33);
-  for (const [status, label, x] of [
-    ['EM ATIVIDADE', 'Em atividade', 37],
-    ['SOLO ÚMIDO', 'Solo úmido', 280],
-    ['PARADA', 'Parada / situação crítica', 624]
-  ]) {
+  const legendStatuses = [...new Set(fieldStatusOptions.map(status => status.image_status))];
+  const legendColumnWidth = (GLOBAL_REFERENCE_WIDTH - 60) / Math.max(1, legendStatuses.length);
+  legendStatuses.forEach((status, index) => {
+    const x = 37 + index * legendColumnWidth;
+    const label = status.charAt(0) + status.slice(1).toLocaleLowerCase('pt-BR');
     ctx.fillStyle = statusColorValue(getFieldStatus(status).color);
     ctx.beginPath(); ctx.arc(x, 270, 6.5, 0, Math.PI * 2); ctx.fill();
-    globalDrawText(ctx, label, x + 14, 270, 240, 'bold 15px "Arial Narrow", Arial, sans-serif');
-  }
+    globalDrawText(ctx, label, x + 14, 270, legendColumnWidth - 28, 'bold 15px "Arial Narrow", Arial, sans-serif');
+  });
   ctx.restore();
 }
 
