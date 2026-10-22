@@ -51,10 +51,6 @@ class PageTests(unittest.TestCase):
         cls.db.init_db()
         cls.admin = cls.db.create_or_update_admin("TestAdmin", "Test-password-42")
         cls.member = cls.db.create_user("TestOperator", "Test-password-42")
-        cls.cookies = {
-            role: f"{config.SESSION_COOKIE}={cls.db.create_session(user['id'])}"
-            for role, user in (("admin", cls.admin), ("member", cls.member))
-        }
         cls.db.initialize_units([
             {"code": code, "name": definition["name"], "rows": [], "metrics": [], "rain": []}
             for code, definition in cls.db.UNIT_DEFINITIONS.items()
@@ -67,6 +63,12 @@ class PageTests(unittest.TestCase):
         for p in reversed(cls.patches):
             p.stop()
         cls.temporary.cleanup()
+
+    def setUp(self):
+        self.cookies = {
+            role: f"{config.SESSION_COOKIE}={self.db.create_session(user['id'])}"
+            for role, user in (("admin", self.admin), ("member", self.member))
+        }
 
     def request(self, path, *, role=None, method="GET", body=None, cookie=None, overrides=None):
         result = {}
@@ -664,6 +666,7 @@ class PageTests(unittest.TestCase):
         self.assertEqual(response["status"], 200)
         cookies = SimpleCookie()
         cookies.load(response["headers"]["Set-Cookie"])
+        self.cookies["admin"] = f"{config.SESSION_COOKIE}={cookies[config.SESSION_COOKIE].value}"
         return response, cookies[config.SESSION_COOKIE]
 
     def test_session_cookie_without_remember_me_and_persistent_cookie_with_it(self):
@@ -714,6 +717,22 @@ class PageTests(unittest.TestCase):
         self.assertIsNone(self.db.get_user_by_session(old_cookie.value))
         self.assertIsNotNone(self.db.get_user_by_session(new_cookie.value))
         self.assertEqual(new_cookie["max-age"], "")
+
+    def test_login_on_another_device_revokes_first_device_and_preserves_latest_on_failed_login(self):
+        _, first = self.login(remember_me=True, overrides={"HTTP_USER_AGENT": "Device A", "REMOTE_ADDR": "192.0.2.10"})
+        first_cookie = f"{config.SESSION_COOKIE}={first.value}"
+        _, second = self.login(overrides={"HTTP_USER_AGENT": "Device B", "REMOTE_ADDR": "192.0.2.20"})
+        second_cookie = f"{config.SESSION_COOKIE}={second.value}"
+        self.assertEqual(self.request('/api/auth/me', cookie=first_cookie)['status'], 401)
+        self.assertEqual(self.request('/api/units', cookie=first_cookie)['status'], 401)
+        self.assertEqual(self.request('/api/production/my-items/batch', cookie=first_cookie, method='POST')['status'], 401)
+        self.assertEqual(self.request('/api/auth/me', cookie=second_cookie)['status'], 200)
+        self.assertEqual(self.request('/api/auth/me', role='member')['status'], 200)
+        failed = self.request('/api/auth/login', method='POST', body={'name': 'TestAdmin', 'password': 'wrong-password'})
+        self.assertEqual(failed['status'], 401)
+        self.assertEqual(self.request('/api/auth/me', cookie=second_cookie)['status'], 200)
+        self.request('/api/auth/logout', cookie=first_cookie, method='POST')
+        self.assertEqual(self.request('/api/auth/me', cookie=second_cookie)['status'], 200)
 
     def test_remember_me_requires_a_json_boolean(self):
         for invalid in ("false", "true", 0, 1, None, []):

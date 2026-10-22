@@ -52,6 +52,19 @@ async function logout() {
   }
 }
 
+let sessionCheckInProgress = false;
+async function checkSessionStatus() {
+  if (!currentUser || sessionCheckInProgress || document.visibilityState === 'hidden') return;
+  sessionCheckInProgress = true;
+  try {
+    await apiRequest('/api/auth/me', { cache: 'no-store' });
+  } catch (_) {
+    // apiRequest redireciona sessões revogadas; falhas de rede são verificadas novamente depois.
+  } finally {
+    sessionCheckInProgress = false;
+  }
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -266,4 +279,9 @@ document.querySelector('#logout-button')?.addEventListener('click', logout);
   });
 
 updateDateAndGreeting();
+if (currentUser) {
+  setInterval(checkSessionStatus, 30000);
+  window.addEventListener('focus', checkSessionStatus);
+  document.addEventListener('visibilitychange', checkSessionStatus);
+}
 setInterval(updateDateAndGreeting, 1000);

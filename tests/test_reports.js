@@ -28,7 +28,7 @@ function context(search = '?unit=PPT', stored = 'NRD', baseUnit = 'PPT', pathnam
   const link = { href: 'http://localhost/sacarose', pathname: '/sacarose' };
   const ctx = vm.createContext({
     URL, URLSearchParams, console, Date, setTimeout, clearTimeout,
-    setInterval(handler, delay) { ctx.clockInterval = { handler, delay }; },
+    setInterval(handler, delay) { (ctx.intervals ||= []).push({ handler, delay }); ctx.clockInterval = { handler, delay }; },
     CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
     document: {
       body: { dataset: { userId, userName: 'Operador Teste', userRole: 'user', userBaseUnit: baseUnit }, classList: { add() {}, remove() {} } },
@@ -172,4 +172,5 @@ async function main() {
   console.log('OK: saudação, filtro compartilhado, isolamento de unidades e emissões HD.');
 }
 
-main().catch(error => { console.error(error); process.exitCode = 1; });
+module.exports = { context };
+if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1; });

@@ -85,8 +85,17 @@ let unitMeta = {};
 let selectedUnitIndex = Math.max(0, units.findIndex(unit => unit.code === getReportUnit()));
 let currentEditorStep = 0;
 let editorInitialSnapshot = null;
+// Filtros apenas de visualização: não alteram os dados enviados ao servidor.
+let fieldViewFilter = 'all';
+let fieldSearchQuery = '';
+let fieldViewUnitCode = '';
 let sectorBaseItems = [];
 let sectorBaseMap = new Map();
+let sectorBaseLoaded = false;
+// Ocorrências independentes da posição oficial (status/ATR/chuva/exportação).
+let fieldFrontNotesSummary = {};
+let activeFieldFrontContext = null;
+
 
 
 const editorSteps = ['Campo', 'Produção', 'Apontamentos e Mudanças', 'Precipitação'];
@@ -219,8 +228,17 @@ function renderUnitSelection() {
 
   const unit = units[selectedUnitIndex];
   const previewLabel = document.querySelector('#preview-unit-label');
-  if (previewLabel) {
-    previewLabel.textContent = `Exibindo ${unit.code} — ${unit.name}`;
+  if (previewLabel) previewLabel.textContent = `${unit.code} — ${unit.name}`;
+
+  const meta = unitMeta[unit.code] || {};
+  const updatedAt = document.querySelector('#preview-unit-updated');
+  if (updatedAt) updatedAt.textContent = meta.updated_at
+    ? `Atualizado por ${meta.updated_by || '-'} em ${formatServerTimestamp(meta.updated_at)}`
+    : 'Aguardando primeira atualização no servidor';
+  const state = document.querySelector('#preview-unit-state');
+  if (state) {
+    state.textContent = getUnitStateLabel(unit.border);
+    state.className = `unit-state dashboard-unit-state ${unit.border}`;
   }
 
   const fillButton = document.querySelector('#open-data-modal');
@@ -230,22 +248,192 @@ function renderUnitSelection() {
   }
 }
 
-function unitCard(unit) {
-  const meta = unitMeta[unit.code] || {};
-  const updateText = meta.updated_at
-    ? `Atualizado por ${meta.updated_by || '-'} em ${formatServerTimestamp(meta.updated_at)}`
-    : 'Aguardando primeira atualização no servidor';
+function fieldUnitSummary(unit) {
+  const rows = (Array.isArray(unit.rows) ? unit.rows : [])
+    .filter(row => Array.isArray(row) && (String(row[0] ?? '').trim() || String(row[1] ?? '').trim()));
+  const active = rows.filter(row => normalizeStatus(row[3]) === 'EM ATIVIDADE').length;
+  return { total: rows.length, active, attention: rows.length - active };
+}
 
+function fieldHasRain(unit) {
+  return (Array.isArray(unit.rain) ? unit.rain : []).some(row => Array.isArray(row) &&
+    (normalizeNumber(row[1]) > 0 || normalizeNumber(row[2]) > 0));
+}
+
+function fieldNoteContent(raw, label) {
+  const value = String(raw ?? '').trim();
+  if (!value || value === '-') return '<p class="field-note-empty">Nenhum registro informado.</p>';
+  // Textos extensos são acessíveis por expansão, sem remover conteúdo salvo.
+  if (value.length > 230) {
+    return `<p class="field-note-preview">${escapeHtml(value.slice(0, 180).trimEnd())}…</p>
+      <details class="field-note-details"><summary>Ver ${escapeHtml(label)} completa</summary><p>${escapeHtml(value)}</p></details>`;
+  }
+  return `<p>${escapeHtml(value)}</p>`;
+}
+
+// A base cadastra descrições por Setor + Seção, mas a Posição de Campo
+// informa apenas Setor. Usamos o nome somente quando não há ambiguidade.
+function fieldFarmFromSector(sector) {
+  if (!sectorBaseLoaded) return { name: 'Base indisponível', note: 'Não foi possível consultar a base de setores.' };
+  const entries = getSectorBaseItems(sector);
+  const names = new Map();
+  entries.forEach(entry => {
+    const name = String(entry?.description ?? '').trim();
+    if (!name || name === '-') return;
+    const key = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').replace(/\s+/g, ' ');
+    if (!names.has(key)) names.set(key, name);
+  });
+  if (names.size > 1) return {
+    name: 'Verificar seção',
+    note: 'Este setor possui descrições diferentes na base. A frente não informa a seção; confirme antes de associar uma fazenda.'
+  };
+  if (names.size === 1) return { name: names.values().next().value, note: '' };
+  return { name: 'Não cadastrada', note: 'Setor sem descrição de fazenda na base.' };
+}
+
+function fieldFrontNoteKey(front) {
+  const raw = String(front ?? '').trim();
+  return /^\d+$/.test(raw) ? String(Number(raw)) : raw.toLocaleLowerCase('pt-BR');
+}
+
+function fieldLatestNote(front) {
+  return fieldFrontNotesSummary[fieldFrontNoteKey(front)] || null;
+}
+
+function fieldNotePreview(front, index) {
+  const summary = fieldLatestNote(front);
+  if (!summary?.latest) return `<button type="button" class="field-note-inline-button is-empty" data-field-front-index="${index}" aria-label="Adicionar observação na Frente ${escapeHtml(front)}">+ Adicionar</button>`;
+  const text = String(summary.latest.text || '');
+  const short = text.length > 86 ? `${text.slice(0, 83).trimEnd()}…` : text;
+  return `<button type="button" class="field-note-inline-button" data-field-front-index="${index}" aria-label="Ver observações da Frente ${escapeHtml(front)}">
+    <span class="field-observation-preview" title="${escapeHtml(text)}">${escapeHtml(short)}</span>
+    <small>${summary.count} registro${summary.count === 1 ? '' : 's'}</small>
+  </button>`;
+}
+
+async function refreshFieldFrontNotes(unitCode = units[selectedUnitIndex]?.code) {
+  if (!unitCode) return;
+  const data = await apiRequest(`/api/front-notes?unit=${encodeURIComponent(unitCode)}`);
+  if (units[selectedUnitIndex]?.code !== unitCode) return;
+  fieldFrontNotesSummary = data?.summaries || {};
+  renderDashboard();
+}
+
+function fieldFrontNoteForm() {
+  const mayWrite = currentUser?.module_access?.dashboard?.edit || currentUser?.role === 'admin';
+  if (!mayWrite) return '<p class="field-note-readonly">Você pode consultar o histórico, mas não possui permissão para adicionar observações.</p>';
+  return `<form id="field-front-note-form" class="field-front-note-form">
+    <h3>Adicionar observação</h3>
+    <p class="field-front-note-disclaimer">Anote livremente o acompanhamento da frente. Não altera o status oficial nem a imagem emitida.</p>
+    <label for="field-front-note-text">Observação
+      <textarea id="field-front-note-text" name="text" rows="3" maxlength="1500" required placeholder="Digite uma informação sobre esta frente..."></textarea>
+    </label>
+    <div class="field-front-note-actions">
+      <small id="field-front-note-state" role="status" aria-live="polite">A observação será salva no histórico desta frente.</small>
+      <button class="modal-button save" type="submit">Adicionar observação</button>
+    </div>
+  </form>`;
+}
+
+function fieldFrontNotesHistory(data) {
+  const entries = data?.entries || [];
+  if (!entries.length) return '<p class="field-front-note-empty">Nenhum registro de acompanhamento para esta frente.</p>';
+  const body = entries.map(entry => `<li class="field-front-note-event">
+    <div class="field-front-note-meta">
+      <strong>${escapeHtml(entry.author)}</strong>
+      <small>${escapeHtml(formatServerTimestamp(entry.created_at))}</small>
+    </div>
+    <p>${escapeHtml(entry.text)}</p>
+    <small>Setor na data: ${escapeHtml(entry.sector)}</small>
+  </li>`).join('');
+  return `<ol class="field-front-note-timeline">${body}</ol>${data.total > entries.length ? `<small>Exibindo os ${entries.length} registros mais recentes de ${data.total}.</small>` : ''}`;
+}
+
+async function loadFieldFrontHistory(context) {
+  const container = document.querySelector('#field-front-note-history');
+  if (!container) return;
+  container.innerHTML = '<p class="field-front-note-empty">Carregando histórico…</p>';
+  try {
+    const data = await apiRequest(`/api/front-notes?unit=${encodeURIComponent(context.unit)}&front=${encodeURIComponent(context.front)}`);
+    if (activeFieldFrontContext !== context) return;
+    container.innerHTML = fieldFrontNotesHistory(data);
+  } catch (error) {
+    if (activeFieldFrontContext !== context) return;
+    container.textContent = 'Não foi possível carregar o histórico. Tente abrir os detalhes novamente.';
+    console.error(error);
+  }
+}
+
+function fieldFrontRainKey(value) {
+  const raw = String(value ?? '').trim().replace(/^(?:eq(?:uipamento)?|frente)\.?\s*/i, '').trim();
+  return /^\d+$/.test(raw) ? String(Number(raw)) : raw.toLocaleLowerCase('pt-BR');
+}
+
+function openFieldFrontDetails(index) {
+  const unit = units[selectedUnitIndex];
+  const row = unit?.rows?.[index];
+  const modal = document.querySelector('#field-front-detail-modal');
+  const content = document.querySelector('#field-front-detail-content');
+  if (!Array.isArray(row) || !modal || !content) return;
+  const [front = '', sector = '', color = 'yellow', status = '', atr = ''] = row;
+  const farm = fieldFarmFromSector(sector);
+  const matchKey = fieldFrontRainKey(front);
+  const rainRow = (Array.isArray(unit.rain) ? unit.rain : []).find(item => Array.isArray(item) && fieldFrontRainKey(item[0]) === matchKey);
+  const statusClass = normalizeStatus(status) === 'EM ATIVIDADE' ? 'is-active'
+    : normalizeStatus(status) === 'SOLO ÚMIDO' ? 'is-wet' : 'is-attention';
+  const rainSection = fieldHasRain(unit) && rainRow ? `
+    <div class="field-front-detail-section">
+      <h3>Precipitação da frente</h3>
+      <div class="field-front-detail-grid">
+        <div><span>Chuva no turno</span><strong>${escapeHtml(rainRow[1] ?? '—')} mm</strong></div>
+        <div><span>Acumulado</span><strong>${escapeHtml(rainRow[2] ?? '—')} mm</strong></div>
+      </div>
+    </div>` : '';
+  content.innerHTML = `
+    <div class="field-front-detail-unit">${escapeHtml(unit.code)} · ${escapeHtml(unit.name)}</div>
+    <div class="field-front-detail-grid">
+      <div><span>Frente</span><strong>${escapeHtml(front)}</strong></div>
+      <div><span>Setor</span><strong>${escapeHtml(sector)}</strong></div>
+      <div class="field-front-detail-wide"><span>Fazenda</span><strong>${escapeHtml(farm.name)}</strong>
+        ${farm.note ? `<small>${escapeHtml(farm.note)}</small>` : ''}</div>
+      <div><span>Status</span><strong><span class="field-status-chip ${statusClass}">${escapeHtml(status)}</span></strong></div>
+      <div><span>ATR</span><strong>${escapeHtml(atr || '—')}</strong></div>
+    </div>
+    ${rainSection}
+    ${fieldFrontNoteForm()}
+    <section class="field-front-detail-section field-front-history-section" aria-label="Histórico de acompanhamento">
+      <h3>Histórico de informações</h3>
+      <div id="field-front-note-history"></div>
+    </section>`;
+  const context = { unit: unit.code, front, sector, index };
+  activeFieldFrontContext = context;
+  const title = document.querySelector('#field-front-detail-title');
+  if (title) title.textContent = `Detalhes da Frente ${front}`;
+  openModal('field-front-detail-modal');
+  loadFieldFrontHistory(context);
+}
+
+function unitCard(unit) {
+  const summary = fieldUnitSummary(unit);
+  const rainVisible = fieldHasRain(unit);
   const rows = unit.rows.length
-    ? unit.rows.map(([front, sector, color, status, atr = '']) => `
-      <tr>
-        <td><span class="front-cell"><i class="status-dot ${escapeHtml(color)}"></i>${escapeHtml(front)}</span></td>
-        <td>${escapeHtml(sector)}</td>
-        <td><span class="status-cell ${color === 'green' ? 'active-text' : ''}">${escapeHtml(status)}</span></td>
-        <td>${escapeHtml(atr || '—')}</td>
-      </tr>
-    `).join('')
-    : '<tr class="empty-table-row"><td colspan="4">Aguardando preenchimento do turno</td></tr>';
+    ? unit.rows.map(([front, sector, color, status, atr = ''], index) => {
+      const normalized = normalizeStatus(status);
+      const statusClass = normalized === 'EM ATIVIDADE' ? 'is-active' : normalized === 'SOLO ÚMIDO' ? 'is-wet' : 'is-attention';
+      const group = normalized === 'EM ATIVIDADE' ? 'active' : 'attention';
+      const farm = fieldFarmFromSector(sector);
+      return `
+      <tr class="field-front-row" data-field-group="${group}">
+        <td data-label="Frente"><span class="front-cell"><i class="status-dot ${escapeHtml(color)}"></i><strong>${escapeHtml(front)}</strong></span></td>
+        <td data-label="Setor" class="field-sector-cell">${escapeHtml(sector)}</td>
+        <td data-label="Fazenda" class="field-farm-cell" title="${escapeHtml(farm.note || farm.name)}">${escapeHtml(farm.name)}</td>
+        <td data-label="Status"><span class="field-status-chip ${statusClass}">${escapeHtml(status)}</span></td>
+        <td data-label="ATR" class="field-atr-cell">${escapeHtml(atr || '—')}</td>
+        <td data-label="Observações" class="field-observation-cell">${fieldNotePreview(front, index)}</td>
+        <td data-label="Detalhes" class="field-front-action-cell"><button type="button" class="field-front-details-button" data-field-front-index="${index}" aria-label="Visualizar informações da Frente ${escapeHtml(front)}">Ver detalhes</button></td>
+      </tr>`;
+    }).join('')
+    : '';
 
   const metrics = unit.metrics.map(([, label, value, extra = '']) => `
     <div class="metric ${escapeHtml(extra)}">
@@ -256,54 +444,69 @@ function unitCard(unit) {
     </div>
   `).join('');
 
-  const rain = unit.rain.length
-    ? unit.rain.map(([eq, turn, accum]) => `
+  const rain = rainVisible
+    ? unit.rain.filter(([eq, turn, accum]) => String(eq ?? '').trim() || normalizeNumber(turn) > 0 || normalizeNumber(accum) > 0).map(([eq, turn, accum]) => `
       <div class="rain-row"><span>${escapeHtml(eq)}</span><span>${escapeHtml(turn)}</span><span>/</span><span>${escapeHtml(accum)}</span></div>
     `).join('')
-    : '<div class="rain-empty">Sem apontamento de chuva</div>';
+    : '';
 
   return `
     <article class="unit-card ${escapeHtml(unit.border)}">
       <div class="unit-layout-grid">
-        <section class="dashboard-block unit-main-block">
-          <div class="unit-header">
-            <div class="unit-title">
-              <strong>${escapeHtml(unit.code)}</strong>
-              <span>${escapeHtml(unit.name)}</span>
+        <section class="dashboard-block unit-main-block" aria-label="Frentes e indicadores da unidade">
+          <div class="field-overview" aria-label="Resumo das frentes desta unidade">
+            <div class="field-overview-item is-total"><span>Total de frentes</span><strong>${summary.total}</strong></div>
+            <div class="field-overview-item is-active"><span>Em atividade</span><strong>${summary.active}</strong></div>
+            <div class="field-overview-item is-attention"><span>Em atenção</span><strong>${summary.attention}</strong></div>
+          </div>
+
+          <div class="field-list-heading">
+            <div><h3>Frentes de campo</h3><p>Frentes, setores e situação operacional.</p></div>
+          </div>
+          <div class="field-toolbar" role="search" aria-label="Filtrar frentes de campo">
+            <label class="field-search-label" for="field-front-search">
+              <span class="field-search-icon" aria-hidden="true">⌕</span>
+              <input id="field-front-search" type="search" placeholder="Buscar frente, setor, fazenda ou observação" autocomplete="off" value="${escapeHtml(fieldSearchQuery)}" />
+            </label>
+            <div class="field-status-filters" aria-label="Filtrar por condição">
+              <button type="button" class="field-filter-button ${fieldViewFilter === 'all' ? 'is-selected' : ''}" data-field-filter="all" aria-pressed="${fieldViewFilter === 'all'}">Todas</button>
+              <button type="button" class="field-filter-button ${fieldViewFilter === 'active' ? 'is-selected' : ''}" data-field-filter="active" aria-pressed="${fieldViewFilter === 'active'}">Em atividade</button>
+              <button type="button" class="field-filter-button ${fieldViewFilter === 'attention' ? 'is-selected' : ''}" data-field-filter="attention" aria-pressed="${fieldViewFilter === 'attention'}">Em atenção</button>
             </div>
-            <div class="unit-header-status">
-              <span class="unit-state">${escapeHtml(getUnitStateLabel(unit.border))}</span>
-              <small class="unit-updated">${escapeHtml(updateText)}</small>
-            </div>
+            <button type="button" id="field-filter-clear" class="field-filter-clear" ${fieldViewFilter === 'all' && !fieldSearchQuery ? 'hidden' : ''}>Limpar filtros</button>
+            <small id="field-result-count" class="field-result-count" role="status" aria-live="polite"></small>
           </div>
 
           <div class="table-wrap status-table-wrap">
-            <table class="data-table">
-              <thead><tr><th>Frente</th><th>Setor</th><th>Status</th><th>ATR</th></tr></thead>
-              <tbody>${rows}</tbody>
+            <table class="data-table field-data-table">
+              <thead><tr><th>Frente</th><th>Setor</th><th>Fazenda</th><th>Status</th><th>ATR</th><th>Observações</th><th>Detalhes</th></tr></thead>
+              <tbody>${rows || '<tr class="field-table-empty"><td colspan="7">Aguardando preenchimento do turno</td></tr>'}
+                <tr class="field-filter-empty" hidden><td colspan="7">Nenhuma frente encontrada para este filtro.</td></tr>
+              </tbody>
             </table>
           </div>
 
           <div class="unit-metrics-strip" aria-label="Indicadores da unidade">
+            <div class="field-subsection-title">Indicadores de produção</div>
             <div class="metrics-grid">${metrics}</div>
           </div>
         </section>
 
-        <div class="unit-side-stack">
-          <section class="dashboard-block rain-turn-block">
+        <div class="unit-side-stack ${rainVisible ? '' : 'has-no-rain'}">
+          ${rainVisible ? `<section class="dashboard-block rain-turn-block">
             <div class="compact-block-title">Chuva turno / acum. (mm)</div>
             <div class="rain-box">${rain}</div>
-          </section>
+          </section>` : ''}
 
           <section class="dashboard-block notes-changes-block">
             <div class="notes-changes-grid">
               <div class="text-panel">
                 <h4>Observação</h4>
-                <p>${escapeHtml(unit.observation || '-')}</p>
+                ${fieldNoteContent(unit.observation, 'observação')}
               </div>
               <div class="text-panel">
-                <h4>Mudanças</h4>
-                <p>${escapeHtml(unit.changes || '-')}</p>
+                <h4>Mudanças registradas</h4>
+                ${fieldNoteContent(unit.changes, 'lista de mudanças')}
               </div>
             </div>
           </section>
@@ -313,13 +516,48 @@ function unitCard(unit) {
   `;
 }
 
+function applyFieldViewFilters() {
+  const grid = document.querySelector('#units-grid');
+  if (!grid || typeof grid.querySelectorAll !== 'function') return;
+  const rows = [...grid.querySelectorAll('.field-front-row')];
+  const search = fieldSearchQuery.trim().toLocaleLowerCase('pt-BR');
+  let visible = 0;
+  rows.forEach(row => {
+    const front = row.querySelector('.front-cell')?.textContent || '';
+    const sector = row.querySelector('.field-sector-cell')?.textContent || '';
+    const farm = row.querySelector('.field-farm-cell')?.textContent || '';
+    const note = row.querySelector('.field-observation-cell')?.textContent || '';
+    const matchesText = !search || `${front} ${sector} ${farm} ${note}`.toLocaleLowerCase('pt-BR').includes(search);
+    const matchesStatus = fieldViewFilter === 'all' || row.dataset.fieldGroup === fieldViewFilter;
+    row.hidden = !(matchesText && matchesStatus);
+    if (!row.hidden) visible += 1;
+  });
+  const noResults = grid.querySelector('.field-filter-empty');
+  if (noResults) noResults.hidden = visible !== 0 || rows.length === 0;
+  const count = grid.querySelector('#field-result-count');
+  if (count) count.textContent = `Exibindo ${visible} de ${rows.length} frentes`;
+  const clear = grid.querySelector('#field-filter-clear');
+  if (clear) clear.hidden = fieldViewFilter === 'all' && !fieldSearchQuery.trim();
+  grid.querySelectorAll('[data-field-filter]').forEach(button => {
+    const selected = button.dataset.fieldFilter === fieldViewFilter;
+    button.classList.toggle('is-selected', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
+}
+
 function renderDashboard() {
   selectedUnitIndex = Math.max(0, units.findIndex(unit => unit.code === getReportUnit()));
   units.forEach(unit => { unit.border = calculateUnitBorder(unit.rows); });
   if (!units[selectedUnitIndex]) selectedUnitIndex = 0;
 
   const selectedUnit = units[selectedUnitIndex];
+  if (fieldViewUnitCode !== selectedUnit.code) {
+    fieldViewUnitCode = selectedUnit.code;
+    fieldViewFilter = 'all';
+    fieldSearchQuery = '';
+  }
   document.querySelector('#units-grid').innerHTML = unitCard(selectedUnit);
+  applyFieldViewFilters();
   renderUnitSelection();
   document.querySelectorAll('[data-unit-context]').forEach(link => {
     link.href = `${link.pathname}?unit=${encodeURIComponent(selectedUnit.code)}`;
@@ -610,11 +848,40 @@ function collectRainRows() {
 async function loadSectorBase({ render = false } = {}) {
   const data = await apiRequest('/api/sector-base');
   sectorBaseItems = Array.isArray(data?.items) ? data.items : [];
+  sectorBaseLoaded = true;
   rebuildSectorBaseMap();
+  if (render) renderDashboard();
   return sectorBaseItems;
 }
 
 function setupEvents() {
+  const fieldView = document.querySelector('#units-grid');
+  fieldView?.addEventListener('input', event => {
+    if (event.target?.id !== 'field-front-search') return;
+    fieldSearchQuery = event.target.value;
+    applyFieldViewFilters();
+  });
+  fieldView?.addEventListener('click', event => {
+    const detailButton = event.target.closest('[data-field-front-index]');
+    if (detailButton && fieldView.contains(detailButton)) {
+      openFieldFrontDetails(Number(detailButton.dataset.fieldFrontIndex));
+      return;
+    }
+    const clearButton = event.target.closest('#field-filter-clear');
+    if (clearButton && fieldView.contains(clearButton)) {
+      fieldViewFilter = 'all';
+      fieldSearchQuery = '';
+      const search = fieldView.querySelector('#field-front-search');
+      if (search) search.value = '';
+      applyFieldViewFilters();
+      search?.focus();
+      return;
+    }
+    const button = event.target.closest('[data-field-filter]');
+    if (!button || !fieldView.contains(button)) return;
+    fieldViewFilter = button.dataset.fieldFilter;
+    applyFieldViewFilters();
+  });
   document.addEventListener('click', event => {
     const fillButton = event.target.closest('#open-data-modal');
     if (!fillButton) return;
@@ -623,7 +890,40 @@ function setupEvents() {
 
   document.addEventListener('report-unit-change', () => {
     closeAllModals();
+    activeFieldFrontContext = null;
+    fieldFrontNotesSummary = {};
     renderDashboard();
+    refreshFieldFrontNotes().catch(error => console.error('Falha ao consultar observações.', error));
+  });
+  document.querySelector('#field-front-detail-modal')?.addEventListener('submit', async event => {
+    if (event.target?.id !== 'field-front-note-form') return;
+    event.preventDefault();
+    const context = activeFieldFrontContext;
+    if (!context) return;
+    const form = event.target;
+    const button = form.querySelector('[type="submit"]');
+    const state = form.querySelector('#field-front-note-state');
+    const data = new FormData(form);
+    button.disabled = true;
+    if (state) state.textContent = 'Salvando registro…';
+    try {
+      await apiRequest('/api/front-notes', {
+        method: 'POST',
+        body: JSON.stringify({ unit: context.unit, front: context.front, sector: context.sector,
+          text: data.get('text') })
+      });
+      if (activeFieldFrontContext !== context) return;
+      form.querySelector('textarea[name="text"]').value = '';
+      if (state) state.textContent = 'Registro salvo no histórico.';
+      await Promise.all([loadFieldFrontHistory(context), refreshFieldFrontNotes(context.unit)]);
+      showToast('Informação da frente salva sem alterar o status oficial.');
+    } catch (error) {
+      console.error(error);
+      if (state) state.textContent = error?.payload?.error || 'Falha ao salvar o registro.';
+      showToast('Não foi possível salvar a informação da frente.', true);
+    } finally {
+      button.disabled = false;
+    }
   });
   const editorModal = document.querySelector('#data-modal');
   // O fechamento comum acontece em common.js; a captura evita descartes acidentais.
@@ -760,9 +1060,14 @@ async function initializeApp() {
   try {
     await loadServerState();
     try {
-      await loadSectorBase({ render: false });
+      await loadSectorBase({ render: true });
     } catch (sectorError) {
       console.warn('Não foi possível carregar a base de setores.', sectorError);
+    }
+    try {
+      await refreshFieldFrontNotes();
+    } catch (noteError) {
+      console.warn('Não foi possível carregar as observações de frente.', noteError);
     }
   } catch (error) {
     console.error(error);

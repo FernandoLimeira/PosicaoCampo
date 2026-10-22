@@ -499,9 +499,17 @@ def import_return_soil_wet_records(
 def init_db() -> None:
     initialize_databases()
     with auth_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
         conn.execute("UPDATE users SET role = 'user' WHERE role IS NULL OR role NOT IN ('admin', 'user', 'coordinator', 'analyst')")
         conn.execute("UPDATE users SET is_active = 1 WHERE is_active IS NULL")
         conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (int(time.time()),))
+        conn.execute(
+            """DELETE FROM sessions WHERE id != (
+                 SELECT latest.id FROM sessions latest WHERE latest.user_id=sessions.user_id
+                 ORDER BY latest.created_at DESC,latest.id DESC LIMIT 1
+               )"""
+        )
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)")
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         _repair_unit_identities(conn)
@@ -743,6 +751,7 @@ def create_session(user_id: int, *, remember_me: bool = False, replace_token: st
         if not conn.execute("SELECT 1 FROM users WHERE id = ? AND is_active = 1", (user_id,)).fetchone():
             raise ValueError("Conta indisponível para autenticação.")
         conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (now,))
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
         if replace_token:
             conn.execute("DELETE FROM sessions WHERE token_hash = ?", (token_digest(replace_token),))
         conn.execute(

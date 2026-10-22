@@ -6,7 +6,9 @@ import tempfile
 import time
 import unittest
 from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 from unittest.mock import patch
 
 from backend import config
@@ -77,6 +79,55 @@ class DatabaseTests(unittest.TestCase):
             if layouts:
                 conn.execute("INSERT INTO return_analysis_fronts VALUES ('PPT', '02', 'Personalizada', 0, 17, ?)", (now,))
                 conn.execute("INSERT INTO return_analysis_equipment VALUES ('PPT', '02', 999, 17, ?)", (now,))
+
+    def test_new_session_revokes_other_devices_but_not_other_accounts(self):
+        admin, member = self.seed()
+        admin_token = db.create_session(admin["id"])
+        old_token = db.create_session(member["id"], remember_me=True)
+        new_token = db.create_session(member["id"])
+        self.assertIsNone(db.get_user_by_session(old_token))
+        self.assertEqual(db.get_user_by_session(new_token)["id"], member["id"])
+        self.assertEqual(db.get_user_by_session(admin_token)["id"], admin["id"])
+        db.delete_session(old_token)
+        self.assertIsNotNone(db.get_user_by_session(new_token))
+        with storage.auth_connection() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM sessions WHERE user_id=?", (member["id"],)).fetchone()[0], 1)
+        with patch.object(db, "new_session_token", return_value=admin_token), self.assertRaises(sqlite3.IntegrityError):
+            db.create_session(member["id"])
+        self.assertIsNotNone(db.get_user_by_session(new_token))
+        self.assertIsNotNone(db.get_user_by_session(admin_token))
+
+    def test_simultaneous_logins_leave_only_one_valid_session(self):
+        _, member = self.seed()
+        barrier = Barrier(4)
+        def login(index):
+            barrier.wait(timeout=10)
+            return db.create_session(member["id"], remember_me=bool(index % 2))
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            tokens = list(pool.map(login, range(4)))
+        self.assertEqual(sum(db.get_user_by_session(token) is not None for token in tokens), 1)
+        with storage.auth_connection() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM sessions WHERE user_id=?", (member["id"],)).fetchone()[0], 1)
+
+    def test_existing_duplicate_sessions_keep_latest_valid_session_on_upgrade(self):
+        admin, member = self.seed()
+        admin_token = db.create_session(admin["id"])
+        old_token = db.create_session(member["id"], remember_me=True)
+        now = int(time.time())
+        with storage.auth_connection() as conn:
+            conn.execute("DROP INDEX idx_sessions_user_id")
+            conn.execute("INSERT INTO sessions(user_id,token_hash,expires_at,created_at) VALUES (?,?,?,?)",
+                         (member["id"], token_digest("latest-device"), now + 3600, now))
+            conn.execute("INSERT INTO sessions(user_id,token_hash,expires_at,created_at) VALUES (?,?,?,?)",
+                         (member["id"], token_digest("expired-device"), now - 1, now + 1))
+        for _ in range(2):
+            db.init_db()
+            self.assertIsNone(db.get_user_by_session(old_token))
+            self.assertIsNotNone(db.get_user_by_session("latest-device"))
+            self.assertIsNotNone(db.get_user_by_session(admin_token))
+        with storage.auth_connection() as conn, self.assertRaises(sqlite3.IntegrityError):
+            conn.execute("INSERT INTO sessions(user_id,token_hash,expires_at,created_at) VALUES (?,?,?,?)",
+                         (member["id"], token_digest("extra-device"), now + 3600, now))
 
     def test_physical_separation_and_no_automatic_copies(self):
         self.seed()

@@ -38,8 +38,15 @@ Essa distinção entre cookies de sessão e persistentes está documentada na
 [referência de Set-Cookie da MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie).
 
 Use “Lembrar de mim” somente em dispositivos pessoais. “Sair” apaga a sessão
-no banco e limpa o cookie. Ao fazer um novo login no mesmo navegador, o token
-anterior é substituído; isso não encerra sessões de outros dispositivos.
+no banco e limpa o cookie. Cada conta tem uma única sessão ativa: um novo login
+revoga todas as sessões anteriores da conta, inclusive em outros dispositivos
+e as criadas com “Lembrar de mim”. Abas do mesmo navegador compartilham a sessão.
+O banco impõe a unicidade e a troca acontece em uma única transação, inclusive
+com logins simultâneos. Na inicialização, sessões antigas duplicadas são
+reduzidas à mais recente ainda válida, sem alterar contas ou dados operacionais.
+A sessão revogada perde acesso às APIs imediatamente. As telas verificam a
+sessão a cada 30 segundos enquanto visíveis e ao recuperar o foco, retornando
+ao login quando necessário. Uma falha temporária de rede não provoca logout.
 Desativar uma conta, excluí-la ou redefinir sua senha revoga suas sessões,
 inclusive as de 30 dias. A criação de sessão verifica novamente se a conta
 está ativa dentro da transação.
@@ -69,6 +76,7 @@ na aba Web. Não substitua as bases existentes ao publicar.
 ```powershell
 & '.\.venv\Scripts\python.exe' -m unittest discover -s tests -v
 node tests/test_login.js
+node tests/test_sessions.js
 ```
 
 Os testes verificam credenciais, cookies normais e persistentes, expiração,
