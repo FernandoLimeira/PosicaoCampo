@@ -155,7 +155,10 @@ function productionExportBorderState(counts) {
 function productionExportRainText(summary) {
   const turn = summary?.rain_turn_mm;
   const accumulated = summary?.rain_accumulated_mm;
-  if (turn == null && accumulated == null) return 'Chuva: sem registro para esta data';
+  const hasRain = [turn, accumulated].some(value => value != null
+    && Number.isFinite(Number(String(value).replace(',', '.')))
+    && Number(String(value).replace(',', '.')) > 0);
+  if (!hasRain) return '';
   const format = value => value == null ? '—' : String(value).replace('.', ',');
   return `Chuva: turno ${format(turn)} mm | acumulado ${format(accumulated)} mm`;
 }
@@ -271,13 +274,13 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
   }
   const extraSummary = counts.waiting || counts.stopped || counts.pending ? 24 : 0;
   const rainText = productionExportRainText(report.summary);
-  const rainLines = productionExportWrap(ctx, rainText, 418,
-    'bold 18px "Roboto Condensed", "Arial Narrow", Arial, sans-serif');
-  const rainHeight = Math.max(36, rainLines.length * 22 + 12);
+  const rainLines = rainText ? productionExportWrap(ctx, rainText, 418,
+    'bold 18px "Roboto Condensed", "Arial Narrow", Arial, sans-serif') : [];
+  const rainHeight = rainLines.length ? Math.max(36, rainLines.length * 22 + 12) : 0;
   // Todas as seções são medidas com os mesmos espaçamentos usados no desenho.
   // A altura cresce com dados reais, sem cortar observações ou deixar lacunas fixas.
   const contentHeight = 125 + extraSummary + rows.reduce((sum, row) => sum + row.height, 0)
-    + 16 + rainHeight + 14 + 26 + noteLines.length * 21 + 13
+    + (rainLines.length ? 16 + rainHeight + 14 : 0) + 26 + noteLines.length * 21 + 13
     + 26 + changeLines.length * 21 + 26;
   return { rows, noteLines, changeLines, rainLines, rainHeight,
     counts, extraSummary, contentHeight, height: Math.max(minHeight, contentHeight) };
@@ -442,13 +445,15 @@ function drawProductionExportCard(ctx, report, plan, x, y) {
     cursor += row.height;
   }
 
-  cursor += 16;
-  productionExportRoundRect(ctx, x + 17, cursor, 472, plan.rainHeight, 9, '#213b46');
-  productionExportText(ctx, '☁', x + 29, cursor + 26, 30, 'bold 23px Arial', PRODUCTION_EXPORT_MUTED);
-  plan.rainLines.forEach((line, index) => productionExportText(ctx, line,
-    x + 60, cursor + 25 + index * 22, 418,
-    'bold 18px "Roboto Condensed", "Arial Narrow", Arial, sans-serif'));
-  cursor += plan.rainHeight + 14;
+  if (plan.rainLines.length) {
+    cursor += 16;
+    productionExportRoundRect(ctx, x + 17, cursor, 472, plan.rainHeight, 9, '#213b46');
+    productionExportText(ctx, '☁', x + 29, cursor + 26, 30, 'bold 23px Arial', PRODUCTION_EXPORT_MUTED);
+    plan.rainLines.forEach((line, index) => productionExportText(ctx, line,
+      x + 60, cursor + 25 + index * 22, 418,
+      'bold 18px "Roboto Condensed", "Arial Narrow", Arial, sans-serif'));
+    cursor += plan.rainHeight + 14;
+  }
   productionExportText(ctx, 'OBSERVAÇÃO', x + 17, cursor + 20, 460,
     'bold 21px Bahnschrift, "Arial Narrow", sans-serif', PRODUCTION_EXPORT_COLORS.wet);
   cursor += 26;

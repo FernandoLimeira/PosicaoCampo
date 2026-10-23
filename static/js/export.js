@@ -391,10 +391,15 @@ function drawWrappedTextFit(ctx, text, x, y, maxWidth, maxHeight, options = {}) 
 }
 
 function canonicalFrontKey(value) {
-  const source = String(value ?? '').trim();
+  const source = String(value ?? '').normalize('NFKC').trim().toUpperCase();
   if (!source) return '';
-  const numeric = source.match(/\d+/g)?.join('') || '';
-  return numeric ? String(Number(numeric)) : source.toUpperCase();
+  // Remove apenas os rótulos da identificação. Concatenar todos os números
+  // confunde frente com setor e descartar letras mistura frentes como 13A/13B.
+  const identifier = source
+    .replace(/^(?:(?:EQ(?:UIPE|UIPAMENTO)?|FRENTE|FRT|CTT|CCT|PPT|NRD|RBR|PST)(?=[.\s:#-]|\d|$)[.\s:#-]*)+/, '')
+    .replace(/\s*[-–—|]\s*(?:SETOR|FAZENDA)\b.*$/, '')
+    .replace(/\s+/g, '');
+  return identifier.replace(/\d+/g, digits => String(Number(digits)));
 }
 
 function parseRainValue(value) {
