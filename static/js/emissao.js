@@ -84,7 +84,8 @@ document.querySelector('#emit-global-production')?.addEventListener('click', asy
       summary: byUnit.get(code)?.summary || null
     }));
     status.textContent = 'Gerando imagem no formato da troca de turno…';
-    const images = await generateProductionReportImages(reports, statusPayload.statuses || [], workDate);
+    const images = await generateProductionReportImages(reports,
+      [...(statusPayload.statuses || []), ...(statusPayload.archived_statuses || [])], workDate);
     const suffix = workDate.split('-').reverse().join('-');
     images.forEach((blob, index) => {
       const page = images.length > 1 ? `-Pagina-${index + 1}` : '';

@@ -54,6 +54,9 @@ const context = vm.createContext({
       { code: 'UMIDO', name: 'Solo úmido', style_key: 'wet' },
       { code: 'AGUARDA', name: 'Aguardando', style_key: 'waiting' },
       { code: 'CRITICO', name: 'Parado', style_key: 'stopped' }
+    ], archived_statuses: [
+      { code: 'ANTIGO', name: 'Status removido do cadastro', style_key: 'wet', is_active: false },
+      { code: 'SEMUSO', name: 'Status excluído sem uso nesta imagem', style_key: 'stopped', is_active: false }
     ] };
     if (url.includes('/api/production/daily-summary?unit=PPT')) return { summary: {
       rain_turn_mm: 3, rain_accumulated_mm: 5,
@@ -65,7 +68,7 @@ const context = vm.createContext({
     if (url.includes('unit=PPT')) return { items: Array.from({ length: 19 }, (_, index) => ({
       group_name: 'Fertirrigação', service_name: `Frente ${index + 1}`, owner_name: 'Analista',
       is_current_day: index !== 0,
-      entry: { sector: '3392', section: '10', farm: 'Fazenda', status: 'ATIVO',
+      entry: { sector: '3392', section: '10', farm: 'Fazenda', status: index === 0 ? 'ANTIGO' : 'ATIVO',
         work_date: '2026-10-15', observation: 'Operação normal' }
     })) };
     if (url.includes('unit=NRD')) return { items: [] };
@@ -284,6 +287,8 @@ for (const name of ['production-consolidation.js', 'production-export.js', 'emis
   assert.ok(labels.includes('POSIÇÃO DE CAMPO'));
   assert.ok(!labels.includes('TROCA DE TURNO'));
   assert.ok(labels.includes('PRODUÇÃO AGRÍCOLA'));
+  assert.ok(labels.includes('Status removido do cadastro'));
+  assert.ok(!labels.includes('Status excluído sem uso nesta imagem'));
   assert.ok(labels.includes('Parado'));
   assert.ok(!labels.includes('Parado / crítico'));
   assert.ok(labels.includes('Solo úmido'));

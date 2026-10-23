@@ -583,7 +583,7 @@ class ProductionTests(unittest.TestCase):
             self.assertEqual(row["observation"], "Registro preservado")
             storage.check_integrity(conn)
 
-    def test_status_catalog_is_configurable_and_used_status_is_protected(self):
+    def test_status_catalog_allows_deletion_and_preserves_used_status_history(self):
         defaults = production.list_statuses(self.user["id"])["statuses"]
         self.assertEqual([item["name"] for item in defaults], [
             "Em atividade", "Solo úmido", "Aguardando atividade", "Parado"
@@ -615,8 +615,8 @@ class ProductionTests(unittest.TestCase):
                 "status": custom["code"],
             },
         )
-        with self.assertRaisesRegex(ValueError, "já foi usado em lançamentos"):
-            production.delete_status(self.admin["id"], custom["id"])
+        with self.assertRaises(PermissionError):
+            production.delete_status(self.user["id"], custom["id"])
 
         production.save_status(
             self.admin["id"],
@@ -628,6 +628,25 @@ class ProductionTests(unittest.TestCase):
         })
         historical = production.list_statuses(self.user["id"], include_inactive=True)["statuses"]
         self.assertEqual(next(item for item in historical if item["code"] == custom["code"])["style_key"], "wet")
+        with storage.connection() as conn:
+            entries_before = [tuple(row) for row in conn.execute("SELECT * FROM production_daily_entries")]
+        production.delete_status(self.admin["id"], custom["id"])
+        catalog = production.list_statuses(self.user["id"], include_inactive=True)
+        self.assertNotIn(custom["code"], {item["code"] for item in catalog["statuses"]})
+        archived = next(item for item in catalog["archived_statuses"] if item["code"] == custom["code"])
+        self.assertEqual(archived["name"], updated["name"])
+        self.assertEqual(archived["style_key"], "wet")
+        self.assertFalse(archived["is_active"])
+        with storage.connection() as conn:
+            self.assertEqual(entries_before, [tuple(row) for row in conn.execute("SELECT * FROM production_daily_entries")])
+            storage.check_integrity(conn)
+        with self.assertRaisesRegex(ValueError, "Status não encontrado"):
+            production.delete_status(self.admin["id"], custom["id"])
+        with self.assertRaisesRegex(ValueError, "status válido"):
+            production.save_my_item(self.user["id"], {"unit_code": "NRD", "service_front_id": front["id"],
+                "work_date": "2026-10-11", "sector": "3392", "status": custom["code"]})
+        replacement = production.save_status(self.admin["id"], {"name": updated["name"], "style_key": "active"})
+        self.assertNotEqual(replacement["code"], custom["code"])
 
         unused = production.save_status(
             self.admin["id"],
@@ -635,6 +654,19 @@ class ProductionTests(unittest.TestCase):
         )
         production.delete_status(self.admin["id"], unused["id"])
         self.assertFalse(any(item["id"] == unused["id"] for item in production.list_statuses(self.admin["id"], include_inactive=True)["statuses"]))
+
+    def test_deleted_default_status_stays_deleted_after_reinitialization(self):
+        statuses = production.list_statuses(self.admin["id"])["statuses"]
+        removed = statuses[0]
+        production.delete_status(self.admin["id"], removed["id"])
+        db.init_db()
+        catalog = production.list_statuses(self.admin["id"], include_inactive=True)
+        self.assertNotIn(removed["code"], {item["code"] for item in catalog["statuses"]})
+        self.assertIn(removed["code"], {item["code"] for item in catalog["archived_statuses"]})
+        for status in statuses[1:-1]:
+            production.delete_status(self.admin["id"], status["id"])
+        with self.assertRaisesRegex(ValueError, "ao menos um status"):
+            production.delete_status(self.admin["id"], statuses[-1]["id"])
 
     def test_default_status_labels_upgrade_preserves_codes_entries_and_custom_names(self):
         front = self._front()

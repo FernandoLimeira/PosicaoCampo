@@ -17,6 +17,7 @@ let productionCatalog = { groups: [] };
 let productionConfigCatalog = { groups: [] };
 let productionStatuses = [];
 let productionConfigStatuses = [];
+let productionArchivedStatuses = [];
 let productionEditingFrontUnits = [];
 let productionEditingFrontActive = true;
 let productionItems = [];
@@ -128,6 +129,7 @@ async function loadProductionStatuses({ includeInactive = false } = {}) {
   const suffix = includeInactive ? '?include_inactive=1' : '';
   const data = await apiRequest(`/api/production/statuses${suffix}`);
   const statuses = Array.isArray(data.statuses) ? data.statuses : [];
+  productionArchivedStatuses = Array.isArray(data.archived_statuses) ? data.archived_statuses : [];
   if (includeInactive) productionConfigStatuses = statuses;
   else productionStatuses = statuses;
   return statuses;
@@ -208,7 +210,7 @@ async function submitProductionDailySummary(event) {
 }
 
 function statusMeta(code) {
-  const statuses = [...productionStatuses, ...productionConfigStatuses];
+  const statuses = [...productionStatuses, ...productionConfigStatuses, ...productionArchivedStatuses];
   const status = statuses.find(item => item.code === code);
   const style = PRODUCTION_STATUS_STYLES[status?.style_key] || PRODUCTION_STATUS_STYLES.waiting;
   return {
@@ -1038,7 +1040,7 @@ async function submitProductionStatus(event) {
 
 async function deleteProductionStatus(statusId, statusName = '') {
   const label = statusName ? ` “${statusName}”` : '';
-  if (!window.confirm(`Apagar o status${label}? Status já usado em lançamentos não pode ser apagado.`)) return;
+  if (!window.confirm(`Excluir o status${label} das opções de preenchimento? Os lançamentos e o histórico serão preservados.`)) return;
   try {
     await apiRequest(`/api/production/statuses/${statusId}`, { method: 'DELETE' });
     clearStatusConfigForm();

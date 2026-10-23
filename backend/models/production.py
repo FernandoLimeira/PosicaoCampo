@@ -295,6 +295,10 @@ def list_statuses(user_id: int, *, include_inactive: bool = False) -> dict[str, 
         ).fetchall()
         return {
             "statuses": [_status_payload(row) for row in rows],
+            "archived_statuses": [_status_payload(row) for row in conn.execute(
+                "SELECT id,code,name,style_key,position,0 AS is_active "
+                "FROM production_status_history ORDER BY position,name COLLATE NOCASE"
+            ).fetchall()],
             "can_configure": access["can_configure"],
         }
 
@@ -350,15 +354,14 @@ def delete_status(user_id: int, status_id: int) -> None:
         row = conn.execute("SELECT id,code,name FROM production_statuses WHERE id=?", (status_id,)).fetchone()
         if not row:
             raise ValueError("Status não encontrado.")
-        used = conn.execute(
-            "SELECT COUNT(*) FROM production_daily_entries WHERE status=? COLLATE NOCASE",
-            (row["code"],),
-        ).fetchone()[0]
-        if int(used or 0) > 0:
-            raise ValueError("Não é possível apagar este status porque ele já foi usado em lançamentos. O histórico foi preservado.")
         remaining = conn.execute("SELECT COUNT(*) FROM production_statuses WHERE id<>? AND is_active=1", (status_id,)).fetchone()[0]
         if int(remaining or 0) < 1:
             raise ValueError("Mantenha ao menos um status disponível para os lançamentos.")
+        conn.execute(
+            "INSERT INTO production_status_history (id,code,name,style_key,position) "
+            "SELECT id,code,name,style_key,position FROM production_statuses WHERE id=?",
+            (status_id,),
+        )
         conn.execute("DELETE FROM production_statuses WHERE id=?", (status_id,))
 
 

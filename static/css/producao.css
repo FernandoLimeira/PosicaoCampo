@@ -55,13 +55,12 @@
 
 .production-summary {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(180px, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
   gap: 10px;
   margin: 16px 0;
-  overflow-x: auto;
 }
 .production-summary-item {
+  min-width: 0;
   min-height: 70px;
   padding: 13px 15px;
   display: flex;
@@ -74,8 +73,8 @@
   background: var(--data-surface);
   box-shadow: var(--data-shadow);
 }
-.production-summary-item span { color: #607168; font-size: 10px; font-weight: 800; text-transform: uppercase; }
-.production-summary-item strong { color: #173c28; font-size: 24px; }
+.production-summary-item span { min-width: 0; color: #607168; font-size: 10px; font-weight: 800; text-transform: uppercase; overflow-wrap: anywhere; }
+.production-summary-item strong { flex-shrink: 0; color: #173c28; font-size: 24px; }
 .production-summary-item.is-active { border-left-color: #188a45; }
 .production-summary-item.is-wet { border-left-color: #d4a116; }
 .production-summary-item.is-waiting { border-left-color: #87948d; }
@@ -228,7 +227,7 @@
 
 
 @media (min-width: 621px) {
-  .production-config-pane:not(:has(#production-front-editor[open])):not(:has(#production-group-editor[open])) { overflow-y: hidden; }
+  .production-config-pane:not(.production-status-config-pane):not(:has(#production-front-editor[open])):not(:has(#production-group-editor[open])) { overflow-y: hidden; }
   #production-group-editor[open], #production-front-editor[open] { max-height: calc(100dvh - 210px); overflow-y: auto; }
 }
 
@@ -277,7 +276,12 @@
 .production-inline-text-button:hover { color: var(--green-strong); text-decoration: underline; }
 .production-inline-text-button[hidden] { display: none; }
 
-.production-status-config-card { width: min(720px, 100%); margin: 0 auto; }
+.production-status-config-card { width: 100%; margin: 0 auto; }
+#production-status-list { max-height: none; overflow: visible; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+#production-status-list .production-config-list-item { flex-wrap: wrap; }
+#production-status-list .production-config-list-item-copy { flex: 1 1 140px; }
+#production-status-list .production-config-list-item-copy strong { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
+#production-status-list .production-config-list-actions { flex-wrap: wrap; margin-left: auto; }
 #production-status-form { grid-template-columns: minmax(0, 1fr) 150px 92px; align-items: end; }
 #production-status-form .field:first-of-type { grid-column: auto; }
 .production-status-dot { width: 7px; height: 7px; margin-right: 6px; display: inline-block; border-radius: 50%; vertical-align: 1px; background: #87948d; }
@@ -285,16 +289,12 @@
 .production-status-dot.is-wet { background: #d4a116; }
 .production-status-dot.is-waiting { background: #87948d; }
 .production-status-dot.is-stopped { background: #c13c45; }
-#production-status-editor[open] { max-height: calc(100dvh - 235px); overflow-y: auto; overscroll-behavior: contain; }
-
-@media (min-width: 621px) {
-  #production-status-config-pane:not(:has(#production-status-editor[open])) { overflow-y: hidden; }
-}
+#production-status-editor[open] { max-height: none; overflow: visible; }
+#production-status-config-pane { overflow-y: auto; }
 
 @media (max-width: 620px) {
   #production-status-form { grid-template-columns: 1fr; }
   #production-status-form .field:first-of-type { grid-column: 1; }
-  #production-status-editor[open] { max-height: calc(100dvh - 190px); }
 }
 
 .production-table-heading-actions {

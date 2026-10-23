@@ -141,6 +141,24 @@ function sectorRow(sector, status = 'ATIVO') {
   assert.equal(requests.length, requestCount);
   assert.match(toasts.at(-1), /repetido/);
 
+  const previousApiRequest = context.apiRequest;
+  context.apiRequest = async (url, options) => {
+    requests.push({ url, options });
+    return { statuses: [{ id: 1, code: 'ATIVO', name: 'Em atividade', style_key: 'active', is_active: true }],
+      archived_statuses: [{ id: 9, code: 'ANTIGO', name: 'Status excluído', style_key: 'wet', is_active: false }] };
+  };
+  await context.loadProductionConfigStatuses();
+  await context.loadProductionStatuses();
+  assert.doesNotMatch(element('#production-status-list').innerHTML, /Status excluído/);
+  context.renderStatusOptions();
+  assert.doesNotMatch(element('#production-status-options').innerHTML, /Status excluído/);
+  assert.match(context.statusBadge('ANTIGO'), /is-wet.*Status excluído/);
+  await context.deleteProductionStatus(9, 'Status excluído');
+  assert(requests.some(request => request.url === '/api/production/statuses/9' && request.options?.method === 'DELETE'));
+  assert.match(confirmations.at(-1), /histórico serão preservados/);
+  assert.doesNotMatch(confirmations.at(-1), /não pode ser apagado/);
+  context.apiRequest = previousApiRequest;
+
   // Delayed sector-base responses must remain tied to their own row and current value.
   const pending = [];
   context.apiRequest = (url) => new Promise(resolve => pending.push({ url, resolve }));
