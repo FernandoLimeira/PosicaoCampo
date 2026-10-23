@@ -19,7 +19,6 @@ async function main() {
     ],
     rain: [['Eq. 08 — Setor 3108', '7,5', 19], ['Eq. 13A', 11, 23], ['Eq. 13B', 17, 29]]
   };
-  const original = JSON.stringify(unit);
   const drawn = [];
   const canvasContext = new Proxy({
     measureText: text => ({ width: String(text).length * 5 }),
@@ -33,23 +32,49 @@ async function main() {
   ctx.loadReportUnitIconImage = async () => null;
   ctx.drawFittedText = (_canvas, text, x, y) => drawn.push({ text: String(text), x, y });
 
-  for (const global of [false, true]) {
-    drawn.length = 0;
-    if (global) {
-      await ctx.generateReportImageBlob(['PPT', 'NRD', 'RBR', 'PST'].map(code =>
-        code === 'NRD' ? unit : { code, rows: [], rain: [] }));
-    } else {
-      await ctx.generateUnitReportImageBlob(unit);
+  async function checkImages(source, expected) {
+    const original = JSON.stringify(source);
+    for (const global of [false, true]) {
+      drawn.length = 0;
+      if (global) {
+        await ctx.generateReportImageBlob(['PPT', 'NRD', 'RBR', 'PST'].map(code =>
+          code === source.code ? source : { code, rows: [], rain: [] }));
+      } else {
+        await ctx.generateUnitReportImageBlob(source);
+      }
+      for (const [index, values] of expected) {
+        const front = drawn.find(item => item.text === index);
+        assert(front, `A frente ${index} deve aparecer na imagem`);
+        const rainCells = drawn.filter(item => item.y === front.y && item.x > front.x + 270)
+          .map(item => Number(item.text.replace(',', '.')));
+        assert.deepEqual(rainCells, values,
+          `A emissão ${global ? 'global' : 'individual'} deve associar a chuva à frente ${index}`);
+      }
+      assert.equal(JSON.stringify(source), original, 'A emissão deve preservar os dados cadastrados');
     }
-    for (const [index, values] of [['08', [7.5, 19]], ['13A', [11, 23]], ['13B', [17, 29]]]) {
-      const front = drawn.find(item => item.text === index);
-      assert(front, `A frente ${index} deve aparecer na imagem`);
-      const rainCells = drawn.filter(item => item.y === front.y && item.x > front.x + 270)
-        .map(item => Number(item.text.replace(',', '.')));
-      assert.deepEqual(rainCells, values,
-        `A emissão ${global ? 'global' : 'individual'} deve associar a chuva à frente ${index}`);
-    }
-    assert.equal(JSON.stringify(unit), original, 'A emissão deve preservar os dados cadastrados');
+  }
+  await checkImages(unit, [['08', [7.5, 19]], ['13A', [11, 23]], ['13B', [17, 29]]]);
+
+  // NRD cadastra chuva por equipe (EQ 3–12) e a posição por frente (13–22).
+  // FT 8 é a frente 08; EQ 8 pertence à frente 18, com valores independentes.
+  const nrd = {
+    code: 'NRD', name: 'NARANDIBA',
+    rows: ['08', ...Array.from({ length: 10 }, (_, i) => String(i + 13))]
+      .map(front => [front, '1000', 'yellow', 'SOLO ÚMIDO']),
+    rain: [['EQ - 3', 2, 31], ['EQ - 4', 2, 30], ['EQ - 5', 0, 60],
+      ['EQ - 6', 0, 29], ['EQ - 7', 0, 36], ['EQ - 8', 0, 37],
+      ['EQ - 9', 0, 35.9], ['EQ - 10', 1, 28], ['EQ - 11', 1, 28],
+      ['EQ - 12', 2, 44], ['FT - 8', 2, 44]]
+  };
+  const expectedNrd = [['08', [2, 44]], ...nrd.rain.slice(0, 10)
+    .map((row, index) => [String(index + 13), row.slice(1)])];
+  await checkImages(nrd, expectedNrd);
+  await checkImages({ ...nrd, rows: [...nrd.rows].reverse(), rain: [...nrd.rain].reverse() }, expectedNrd);
+
+  // A conversão de equipes deve ficar restrita a NRD.
+  for (const code of ['PPT', 'RBR', 'PST']) {
+    await checkImages({ code, rows: [['03', '1000', 'green', 'EM ATIVIDADE']],
+      rain: [['EQ - 3', 2, 31]] }, [['03', [2, 31]]]);
   }
 
   for (const defaultUnit of vm.runInContext('defaultUnits', ctx)) {

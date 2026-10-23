@@ -396,7 +396,7 @@ function canonicalFrontKey(value) {
   // Remove apenas os rótulos da identificação. Concatenar todos os números
   // confunde frente com setor e descartar letras mistura frentes como 13A/13B.
   const identifier = source
-    .replace(/^(?:(?:EQ(?:UIPE|UIPAMENTO)?|FRENTE|FRT|CTT|CCT|PPT|NRD|RBR|PST)(?=[.\s:#-]|\d|$)[.\s:#-]*)+/, '')
+    .replace(/^(?:(?:EQ(?:UIPE|UIPAMENTO)?|FRENTE|FRT|FT|CTT|CCT|PPT|NRD|RBR|PST)(?=[.\s:#-]|\d|$)[.\s:#-]*)+/, '')
     .replace(/\s*[-–—|]\s*(?:SETOR|FAZENDA)\b.*$/, '')
     .replace(/\s+/g, '');
   return identifier.replace(/\d+/g, digits => String(Number(digits)));
@@ -416,14 +416,33 @@ function reportHasRainData(unit) {
   );
 }
 
-function buildRainLookup(unit) {
+function nrdRainTeamNumber(label) {
+  const match = String(label ?? '').normalize('NFKC').trim()
+    .match(/^EQ(?:UIPE|UIPAMENTO)?[.\s:-]*0*(\d+)$/i);
+  const team = match ? Number(match[1]) : null;
+  return team >= 3 && team <= 12 ? team : null;
+}
+
+function buildRainLookup(unit, { rawValues = false } = {}) {
   const lookup = new Map();
-  (Array.isArray(unit?.rain) ? unit.rain : []).forEach(entry => {
-    if (!Array.isArray(entry)) return;
+  const rainRows = (Array.isArray(unit?.rain) ? unit.rain : []).filter(Array.isArray);
+  const frontKeys = new Set((Array.isArray(unit?.rows) ? unit.rows : [])
+    .map(row => canonicalFrontKey(row?.[0])));
+  // Cadastro legado de NRD: EQ 3–12 = frentes 13–22; FT 8 = frente 08.
+  // Detecta esse cadastro sem converter os registros que já usam a frente.
+  const nrdTeamCodes = String(unit?.code ?? '').toUpperCase() === 'NRD'
+    && rainRows.some(([label]) => {
+      const team = nrdRainTeamNumber(label);
+      return (team !== null && !frontKeys.has(String(team)) && frontKeys.has(String(team + 10)))
+        || (/^FT[.\s:-]*0*8$/i.test(String(label).trim()) && frontKeys.has('8'));
+    });
+  rainRows.forEach(entry => {
     const [front = '', turn = 0, accum = 0] = entry;
-    const key = canonicalFrontKey(front);
+    const team = nrdTeamCodes ? nrdRainTeamNumber(front) : null;
+    const key = team === null ? canonicalFrontKey(front) : String(team + 10);
     if (!key) return;
-    lookup.set(key, { turn: parseRainValue(turn), accum: parseRainValue(accum) });
+    lookup.set(key, rawValues ? { turn, accum }
+      : { turn: parseRainValue(turn), accum: parseRainValue(accum) });
   });
   return lookup;
 }
@@ -1083,13 +1102,7 @@ function globalDrawReportHeader(ctx, art) {
 }
 
 function globalFrontRainMap(unit) {
-  const lookup = new Map();
-  for (const item of Array.isArray(unit.rain) ? unit.rain : []) {
-    if (!Array.isArray(item)) continue;
-    const key = canonicalFrontKey(item[0]);
-    if (key) lookup.set(key, { turn: item[1], accum: item[2] });
-  }
-  return lookup;
+  return buildRainLookup(unit, { rawValues: true });
 }
 
 function globalRainCell(value) {
