@@ -26,6 +26,11 @@ let productionFilterGroup = '';
 let productionFilterFront = '';
 const productionSectorOptions = new WeakMap();
 let productionSectorSequence = 0;
+let productionPageEpoch = 0;
+
+function isCurrentProductionRequest(unit, epoch) {
+  return unit === currentProductionUnit() && epoch === productionPageEpoch;
+}
 
 function localIsoDate(date = new Date()) {
   const year = date.getFullYear();
@@ -120,8 +125,10 @@ async function loadProductionAccess() {
   return currentProductionUnit();
 }
 
-async function loadProductionCatalog(unit) {
-  productionCatalog = await apiRequest(`/api/production/catalog?unit=${encodeURIComponent(unit)}`);
+async function loadProductionCatalog(unit, epoch = productionPageEpoch) {
+  const data = await apiRequest(`/api/production/catalog?unit=${encodeURIComponent(unit)}`);
+  if (!isCurrentProductionRequest(unit, epoch)) return null;
+  productionCatalog = data;
   return productionCatalog;
 }
 
@@ -135,21 +142,22 @@ async function loadProductionStatuses({ includeInactive = false } = {}) {
   return statuses;
 }
 
-async function loadProductionItems(unit) {
+async function loadProductionItems(unit, epoch = productionPageEpoch) {
   const workDate = localIsoDate();
   const data = await apiRequest(`/api/production/my-items?unit=${encodeURIComponent(unit)}&date=${encodeURIComponent(workDate)}&scope=all`);
+  if (!isCurrentProductionRequest(unit, epoch) || workDate !== localIsoDate()) return null;
   productionItems = Array.isArray(data.items) ? data.items : [];
   renderProductionFilters();
   renderProductionItems(data);
   return data;
 }
 
-async function loadProductionDailySummary(unit) {
+async function loadProductionDailySummary(unit, epoch = productionPageEpoch) {
   const workDate = localIsoDate();
   const save = document.querySelector('#production-daily-save');
   if (save) save.disabled = true;
   const { summary } = await apiRequest(`/api/production/daily-summary?unit=${encodeURIComponent(unit)}&date=${workDate}`);
-  if (unit !== currentProductionUnit() || workDate !== localIsoDate()) return;
+  if (!isCurrentProductionRequest(unit, epoch) || workDate !== localIsoDate()) return;
   const fields = [
     ['#production-rain-turn', summary?.rain_turn_mm],
     ['#production-rain-accumulated', summary?.rain_accumulated_mm]
@@ -725,10 +733,21 @@ async function removeProductionItem(itemId) {
 }
 
 async function refreshProductionPage(unit = currentProductionUnit()) {
+  const epoch = ++productionPageEpoch;
+  productionItems = [];
+  productionCatalog = { groups: [] };
   setProductionContext(unit);
-  await Promise.all([loadProductionCatalog(unit), loadProductionStatuses(), loadProductionDailySummary(unit)]);
-  renderStatusOptions(defaultStatusCode());
-  await loadProductionItems(unit);
+  renderProductionFilters();
+  renderProductionItems();
+  try {
+    await Promise.all([loadProductionCatalog(unit, epoch), loadProductionStatuses(), loadProductionDailySummary(unit, epoch)]);
+    if (!isCurrentProductionRequest(unit, epoch)) return;
+    renderStatusOptions(defaultStatusCode());
+    await loadProductionItems(unit, epoch);
+  } catch (error) {
+    if (!isCurrentProductionRequest(unit, epoch)) return;
+    throw error;
+  }
 }
 
 function renderConfigGroupOptions() {

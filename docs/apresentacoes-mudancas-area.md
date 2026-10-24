@@ -116,6 +116,14 @@ da análise exibida. Diferenças retornam HTTP 409, pedindo nova análise.
 O digest é um controle de consistência, não uma assinatura/autorização.
 O cliente não envia totais ou conclusões para montar slides.
 
+A análise indexa atividades por datas/setores e apontamentos de solo úmido
+por equipamento/data, sem percorrer o histórico inteiro a cada retorno.
+Os códigos de setor, colhedora e talhão preenchido precisam ser inteiros
+positivos. Valores como `101.0` são aceitos, mas códigos fracionários ou
+texto misturado com números não são arredondados nem corrigidos por suposição.
+Se houver data ou código inválido, o arquivo é recusado com a quantidade e
+os motivos das linhas inválidas (até vinte exemplos), sem gerar análise parcial.
+
 O download retorna o MIME de PPTX, `Content-Disposition: attachment` e
 `Cache-Control: no-store`. Arquivos, resultados e apresentações permanecem
 em memória. A exportação não altera bancos nem implementa armazenamento

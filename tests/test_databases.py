@@ -17,6 +17,29 @@ from backend.models.security import hash_password, token_digest
 
 
 class DatabaseTests(unittest.TestCase):
+    def test_sacarose_metadata_changes_advance_version_and_reject_stale_edits(self):
+        admin, _ = self.seed()
+        uid = admin["id"]
+        db.save_sector_base_item("101", "10", "Fazenda A", uid)
+        db.save_sector_base_item("101", "20", "Fazenda B", uid)
+        initial = {"front": "02", "sector": "101", "section": "10", "exclude_image": False}
+        saved = db.save_sacarose_positions({"PPT": [initial]}, uid)
+        version = saved["meta"]["PPT"]["version"]
+        for change in ({"exclude_image": True}, {"section": "20"}):
+            with storage.connection() as conn:
+                history_count = conn.execute("SELECT COUNT(*) FROM unit_history").fetchone()[0]
+            updated = {**initial, **change}
+            saved = db.save_sacarose_positions({"PPT": [updated]}, uid, {"PPT": version})
+            self.assertEqual(saved["meta"]["PPT"]["version"], version + 1)
+            with self.assertRaises(db.UnitConflictError):
+                db.save_sacarose_positions({"PPT": [initial]}, uid, {"PPT": version})
+            with storage.connection() as conn:
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM unit_history").fetchone()[0], history_count)
+            version += 1
+            unchanged = db.save_sacarose_positions({"PPT": [updated]}, uid, {"PPT": version})
+            self.assertEqual(unchanged["meta"]["PPT"]["version"], version)
+            initial = updated
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

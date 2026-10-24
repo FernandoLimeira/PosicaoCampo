@@ -24,6 +24,16 @@ MAX_XLSX_COLUMNS = 256
 MAX_SHARED_STRINGS = 300000
 
 
+class _WorksheetRow(list):
+    """Retain the actual worksheet row for import diagnostics, including gaps."""
+
+    __slots__ = ("source_line",)
+
+    def __init__(self, values, source_line):
+        super().__init__(values)
+        self.source_line = source_line
+
+
 def _validate_xlsx_archive(archive: zipfile.ZipFile):
     total = 0
     for info in archive.infolist():
@@ -247,7 +257,8 @@ def _read_xlsx_rows(file_bytes: bytes):
                             value = str(numeric)
                 cells[col] = value
             if max_col >= 0:
-                rows.append([cells.get(index, "") for index in range(max_col + 1)])
+                source_line = int(row_node.get("r", len(rows) + 1))
+                rows.append(_WorksheetRow([cells.get(index, "") for index in range(max_col + 1)], source_line))
     return rows
 
 

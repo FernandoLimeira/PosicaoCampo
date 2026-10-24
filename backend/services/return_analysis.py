@@ -9,7 +9,9 @@ informados, mas não entram na disputa.
 from __future__ import annotations
 
 from collections import defaultdict
+from bisect import bisect_left, bisect_right
 from datetime import date, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from pathlib import Path
 import math
@@ -75,6 +77,15 @@ def _normalize_number(value: Any, *, integer: bool = False) -> int | float | Non
         return None
     if isinstance(value, bool):
         return None
+    if integer:
+        text = str(value).strip().replace("\xa0", "").replace(" ", "")
+        if not re.fullmatch(r"[+-]?\d+(?:[.,]\d+)?", text):
+            return None
+        try:
+            number = Decimal(text.replace(",", "."))
+        except InvalidOperation:
+            return None
+        return int(number) if number.is_finite() and number == number.to_integral_value() else None
     if isinstance(value, (int, float)):
         number = float(value)
     else:
@@ -91,13 +102,10 @@ def _normalize_number(value: Any, *, integer: bool = False) -> int | float | Non
         try:
             number = float(text)
         except ValueError:
-            match = re.search(r"-?\d+(?:\.\d+)?", text)
-            if not match:
-                return None
-            number = float(match.group(0))
+            return None
     if not math.isfinite(number):
         return None
-    return int(round(number)) if integer else number
+    return number
 
 
 def _parse_date(value: Any) -> date | None:
@@ -219,8 +227,10 @@ def parse_operational_file(file_bytes: bytes, filename: str) -> list[dict[str, A
         raise ValueError("Não foi possível localizar um cabeçalho com DIA, SETOR e COLHEDORA/FROTA.")
 
     parsed: list[dict[str, Any]] = []
-    invalid_dates = 0
-    for raw in rows[header_index + 1 :]:
+    invalid_count = 0
+    invalid_examples = []
+    for line_number, raw in enumerate(rows[header_index + 1 :], start=header_index + 2):
+        line_number = getattr(raw, "source_line", line_number)
         if not raw or not any(str(value or "").strip() for value in raw):
             continue
 
@@ -231,12 +241,21 @@ def parse_operational_file(file_bytes: bytes, filename: str) -> list[dict[str, A
         operation_date = _parse_date(value("date"))
         sector = _normalize_number(value("sector"), integer=True)
         equipment = _normalize_number(value("equipment"), integer=True)
-        if operation_date is None:
-            invalid_dates += 1
-            continue
-        if sector is None or equipment is None:
-            continue
         field = _normalize_number(value("field"), integer=True)
+        errors = []
+        if operation_date is None:
+            errors.append("DIA inválido")
+        if sector is None or sector <= 0:
+            errors.append("SETOR deve ser um código inteiro positivo")
+        if equipment is None or equipment <= 0:
+            errors.append("COLHEDORA/FROTA deve ser um código inteiro positivo")
+        if value("field") not in (None, "") and (field is None or field <= 0):
+            errors.append("TALHÃO deve ser um código inteiro positivo")
+        if errors:
+            invalid_count += 1
+            if len(invalid_examples) < 20:
+                invalid_examples.append(f"Linha {line_number}: {', '.join(errors)}")
+            continue
         loads = _normalize_number(value("loads")) or 0.0
         tons = _normalize_number(value("tons")) or 0.0
         parsed.append(
@@ -253,9 +272,11 @@ def parse_operational_file(file_bytes: bytes, filename: str) -> list[dict[str, A
         if len(parsed) > MAX_REPORT_ROWS:
             raise ValueError(f"A planilha excede o limite de {MAX_REPORT_ROWS} registros válidos.")
 
+    if invalid_count:
+        remaining = f" Mais {invalid_count - len(invalid_examples)} linha(s) inválida(s)." if invalid_count > len(invalid_examples) else ""
+        raise ValueError(f"A planilha contém {invalid_count} linha(s) inválida(s). "
+                         "Corrija os registros antes de processar. " + "; ".join(invalid_examples) + remaining)
     if not parsed:
-        if invalid_dates:
-            raise ValueError("Nenhum registro válido foi encontrado. Verifique o formato da coluna DIA.")
         raise ValueError("Nenhum registro válido foi encontrado na planilha.")
     parsed.sort(key=lambda row: (row["date"], row["sector"], row["equipment"]))
     return parsed
@@ -615,12 +636,71 @@ def _daily_count_series(daily: list[dict[str, Any]], *, front_code: str | None =
 
 
 
+class _ActivityIndex:
+    """Range unions over active dates, without scanning every activity period."""
+
+    def __init__(self, assignments, target_code):
+        by_date = defaultdict(set)
+        for (sector, day), assignment in assignments.items():
+            if assignment["assigned_front_code"] == target_code:
+                by_date[day].add(sector)
+        self.dates = sorted(by_date)
+        self.size = 1
+        while self.size < len(self.dates):
+            self.size *= 2
+        self.tree = [frozenset() for _ in range(2 * self.size)]
+        for index, day in enumerate(self.dates):
+            self.tree[self.size + index] = frozenset(by_date[day])
+        for index in range(self.size - 1, 0, -1):
+            self.tree[index] = self.tree[2 * index] | self.tree[2 * index + 1]
+
+    def sectors_between(self, start, end, excluded):
+        left = self.size + bisect_left(self.dates, start)
+        right = self.size + bisect_right(self.dates, end)
+        found = set()
+        while left < right:
+            if left % 2:
+                found.update(self.tree[left])
+                left += 1
+            if right % 2:
+                right -= 1
+                found.update(self.tree[right])
+            left //= 2
+            right //= 2
+        found.discard(excluded)
+        return sorted(found)
+
+
+class _DatedRecords:
+    """Build once per analysis; each interruption reads only its date range."""
+
+    def __init__(self, records, equipment):
+        by_date = defaultdict(list)
+        for record in records:
+            try:
+                fleet = int(record.get("equipment"))
+            except (TypeError, ValueError):
+                continue
+            if fleet not in equipment:
+                continue
+            day = _parse_date(record.get("date"))
+            if day is not None:
+                by_date[day].append({**record, "date": day})
+        self.dates = sorted(by_date)
+        self.by_date = by_date
+
+    def between(self, start, end):
+        for index in range(bisect_left(self.dates, start), bisect_right(self.dates, end)):
+            yield from self.by_date[self.dates[index]]
+
+
 def _aggregate_sector_coverage(
     day_assignments: dict[tuple[int, date], dict[str, Any]],
     sector: int,
     gap_start: date,
     gap_end: date,
     target_front_code: str,
+    sector_days: dict[int, list[date]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Agrupa quem executou no mesmo setor durante a ausência da frente analisada.
 
@@ -631,8 +711,9 @@ def _aggregate_sector_coverage(
     """
     relevant = []
     ties = []
-    day = gap_start
-    while day <= gap_end:
+    days = (sector_days.get(sector, []) if sector_days is not None
+            else sorted(day for code, day in day_assignments if code == sector))
+    for day in days[bisect_left(days, gap_start):bisect_right(days, gap_end)]:
         assignment = day_assignments.get((sector, day))
         if assignment:
             if assignment["tie"]:
@@ -644,7 +725,6 @@ def _aggregate_sector_coverage(
                 })
             elif assignment["assigned_front_code"] and assignment["assigned_front_code"] != target_front_code:
                 relevant.append((day, assignment))
-        day += timedelta(days=1)
 
     blocks: list[dict[str, Any]] = []
     current: dict[str, Any] | None = None
@@ -766,6 +846,7 @@ def _soil_wet_evidence(
     gap_start: date,
     gap_end: date,
     target_equipment: list[int],
+    record_index: _DatedRecords | None = None,
 ) -> dict[str, Any]:
     """Cruza a interrupção com SOLO ÚMIDO usando equipamento + dia como evidência principal.
 
@@ -781,7 +862,8 @@ def _soil_wet_evidence(
     daily_seconds: dict[date, int] = defaultdict(int)
     daily_locations: dict[date, dict[tuple[int | None, str, int | None], dict[str, Any]]] = defaultdict(dict)
 
-    for record in soil_wet_records or []:
+    records = record_index.between(gap_start, gap_end) if record_index is not None else soil_wet_records or []
+    for record in records:
         try:
             equipment = int(record.get("equipment"))
         except (TypeError, ValueError):
@@ -1025,6 +1107,10 @@ def analyze_return_rows(
     sector_dates: dict[int, list[date]] = defaultdict(list)
     for sector, operation_date in day_sector:
         sector_dates[sector].append(operation_date)
+    for dates in sector_dates.values():
+        dates.sort()
+    activity_index = _ActivityIndex(day_assignments, normalized_target)
+    soil_index = None
 
     # Períodos gerais também nascem da classificação diária. Só depois dias
     # consecutivos da mesma frente/empate são agrupados para exibição.
@@ -1110,17 +1196,9 @@ def analyze_return_rows(
                 continue
             gap_start = previous_end + timedelta(days=1)
             gap_end = return_start - timedelta(days=1)
-            sectors_between = sorted(
-                {
-                    period["sector"]
-                    for period in target_activity_periods
-                    if period["sector"] != sector
-                    and date.fromisoformat(period["end"]) >= gap_start
-                    and date.fromisoformat(period["start"]) <= gap_end
-                }
-            )
+            sectors_between = activity_index.sectors_between(gap_start, gap_end, sector)
             other_fronts_in_sector, ties_in_sector = _aggregate_sector_coverage(
-                day_assignments, sector, gap_start, gap_end, normalized_target
+                day_assignments, sector, gap_start, gap_end, normalized_target, sector_dates
             )
             occurrence = {
                 "front": target["name"],
@@ -1144,8 +1222,10 @@ def analyze_return_rows(
             if sectors_between:
                 returns.append(occurrence)
             else:
+                if soil_index is None:
+                    soil_index = _DatedRecords(soil_wet_records or [], target_equipment)
                 evidence = _soil_wet_evidence(
-                    soil_wet_records or [], sector, gap_start, gap_end, target["equipment"]
+                    soil_wet_records or [], sector, gap_start, gap_end, target["equipment"], soil_index
                 )
                 occurrence["soil_wet_evidence"] = evidence
                 if evidence["confirmed"]:

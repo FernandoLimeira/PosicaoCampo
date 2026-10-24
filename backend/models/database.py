@@ -1488,6 +1488,15 @@ def save_sacarose_positions(
                     },
                 })
 
+            previous_sacarose = [{
+                "front": row["front"], "sector": row["sector"], "section": row["section"],
+                "exclude_image": bool(row["exclude_image"]),
+            } for row in conn.execute(
+                "SELECT front,sector,section,exclude_image FROM sacarose_positions WHERE unit_code=?",
+                (code,),
+            )]
+            previous_sacarose.sort(key=lambda item: _sacarose_front_key(item["front"]))
+            sacarose_changed = previous_sacarose != normalized[code]
             conn.execute("DELETE FROM sacarose_positions WHERE unit_code = ?", (code,))
             for item in normalized[code]:
                 conn.execute(
@@ -1534,8 +1543,10 @@ def save_sacarose_positions(
             after_json = json.dumps(normalized_unit, ensure_ascii=False)
             before_json = unit_row["data_json"]
 
-            # Só cria nova versão/histórico quando Frente/Setor realmente mudarem.
-            if after_json != before_json:
+            # The shared version must also protect section/image-only edits.
+            # Keep operational history limited to changes in the field position.
+            position_changed = after_json != before_json
+            if position_changed or sacarose_changed:
                 new_version = current_version + 1
                 conn.execute(
                     """
@@ -1553,6 +1564,7 @@ def save_sacarose_positions(
                         code,
                     ),
                 )
+            if position_changed:
                 _history_insert(
                     conn,
                     unit_code=code,
