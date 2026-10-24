@@ -122,7 +122,8 @@ for (const name of ['production-consolidation.js', 'production-export.js', 'emis
     new Map([['ATIVO', { style_key: 'active' }], ['UMIDO', { style_key: 'wet' }]]));
   assert.equal(duplicatePages[0].plans[0].counts.wet, 1);
   assert.equal(duplicatePages[0].plans[0].counts.active, 2);
-  assert.ok(duplicatePages[0].plans[0].noteLines.join(' ').includes('setor 42: Atualizada'));
+  assert.ok(duplicatePages[0].plans[0].noteLines.join(' ').includes('Preparo: Atualizada'));
+  assert.ok(!duplicatePages[0].plans[0].noteLines.join(' ').includes('setor 42'));
   assert.ok(!duplicatePages[0].plans[0].noteLines.join(' ').includes('Revisor'));
   assert.ok(!duplicatePages[0].plans[0].noteLines.join(' ').includes('Antiga'));
   const stale = { group_name: 'Teste', service_name: 'Frente 1', is_current_day: false,
@@ -158,13 +159,30 @@ for (const name of ['production-consolidation.js', 'production-export.js', 'emis
     { group_name: 'Preparo e Plantio', service_name: 'Preparo de solo', owner_name: 'Beto',
       is_current_day: true, entry: { sector: '200', status: 'UMIDO', observation: 'Texto igual', changes: 'Mudança B', updated_by_name: 'Revisor B' } }
   ] }, mixedStatuses, 0);
-  assert.ok(sharedObservation.noteLines.join(' ').includes('setor 100: Texto igual'));
-  assert.ok(sharedObservation.noteLines.join(' ').includes('setor 200: Texto igual'));
-  assert.ok(sharedObservation.changeLines.join(' ').includes('setor 100: Mudança A'));
-  assert.ok(sharedObservation.changeLines.join(' ').includes('setor 200: Mudança B'));
+  assert.equal(sharedObservation.noteLines.join(' ').match(/Preparo de solo: Texto igual/g).length, 2);
+  assert.ok(sharedObservation.changeLines.join(' ').includes('Preparo de solo: Mudança A'));
+  assert.ok(sharedObservation.changeLines.join(' ').includes('Preparo de solo: Mudança B'));
+  assert.ok(![...sharedObservation.noteLines, ...sharedObservation.changeLines].join(' ').match(/setor 100|setor 200/));
   assert.ok(![...sharedObservation.noteLines, ...sharedObservation.changeLines].join(' ').match(/Ana|Beto|Revisor/));
   assert.ok(sharedObservation.changeLines.join(' ').includes('Mudança A'));
   assert.ok(sharedObservation.changeLines.join(' ').includes('Mudança B'));
+  for (const code of ['PPT', 'NRD', 'RBR', 'PST']) {
+    for (const current of [true, false]) {
+      const report = {code, items: [{group_name: 'Colheita', service_name: 'Frente 56',
+        is_current_day: current, entry: {sector: '3480', status: 'ATIVO', work_date: '2026-10-22',
+          observation: 'Conferir o setor 3110.', changes: 'Iniciou o setor 3211.'}}]};
+      const original = JSON.stringify(report);
+      const plan = context.productionExportCardPlan(paint, report, mixedStatuses, 0);
+      const prefix = current ? 'Frente 56: ' : 'Frente 56 (22/10/2026): ';
+      assert.ok(plan.noteLines.join(' ').includes(prefix + 'Conferir o setor 3110.'));
+      assert.ok(plan.changeLines.join(' ').includes(prefix + 'Iniciou o setor 3211.'));
+      assert.ok(![...plan.noteLines, ...plan.changeLines].join(' ').includes('3480'));
+      assert.ok(plan.rows.filter(row => row.type === 'service')
+        .flatMap(row => row.lines).flatMap(line => line.pills).some(pill => pill.label === '3480'),
+        'O setor permanece na tabela de operações');
+      assert.equal(JSON.stringify(report), original, 'Nenhum dado cadastrado deve ser alterado');
+    }
+  }
   context.drawProductionExportCard(paint, mixedReport, mixedPlan, 26, 370);
   for (const color of ['#679b2b', '#bba020', '#969d9e', '#bf594d']) {
     assert.ok(strokes.some(stroke => stroke.color === color && !stroke.dash.length));

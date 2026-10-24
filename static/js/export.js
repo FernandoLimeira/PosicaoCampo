@@ -690,7 +690,7 @@ function drawRows(ctx, unit, layout, geometry) {
     ctx.fillStyle = statusColorValue(color);
     ctx.fill();
 
-    drawFittedText(ctx, front, frontX + 22, cy + 0.5, 44, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
+    drawFittedText(ctx, fieldFrontNumber(front), frontX + 22, cy + 0.5, 44, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
     drawFittedText(ctx, sector, sectorX, cy + 0.5, hasRain ? 60 : 90, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');
     drawFittedText(ctx, status, statusX, cy + 0.5, hasRain ? 103 : 152, `${statusFontSize}px "Arial Narrow", Arial, sans-serif`, status === 'SOLO ÚMIDO' ? '#ffd325' : statusTextColor(color), 'middle');
     drawFittedText(ctx, String(atr ?? '').trim() || '—', atrX, cy + 0.5, 34, `${fontSize}px "Arial Narrow", Arial, sans-serif`, '#ffffff', 'middle');

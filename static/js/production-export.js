@@ -212,7 +212,7 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
     services.get(serviceName).push({ label: sector, state, pending: !item.is_current_day });
     const dated = item.is_current_day || !item.entry?.work_date
       ? '' : ` (${formatProductionExportDate(item.entry.work_date)})`;
-    const prefix = `${serviceName} · setor ${sector}${dated}: `;
+    const prefix = `${serviceName}${dated}: `;
     for (const [field, target] of [['observation', notes], ['changes', changes]]) {
       const value = item.entry?.[field]?.trim();
       if (!value) continue;
