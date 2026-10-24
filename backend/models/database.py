@@ -10,6 +10,7 @@ from .storage import ALL_USER_REFERENCES, auth_connection, connection, initializ
 from .security import hash_password, new_session_token, token_digest, verify_password
 from ..services.operational_shifts import shift_at, shift_period
 from ..services.field_status import field_status, field_unit_border
+from ..services.front_identifiers import standardize_rain_labels
 
 
 class UnitConflictError(Exception):
@@ -155,9 +156,29 @@ def _normalize_unit_payload(unit: dict[str, Any], position: int) -> dict[str, An
         "metrics": metrics,
         "observation": observation,
         "changes": changes,
-        "rain": rain,
+        "rain": standardize_rain_labels(code, rows, rain),
         **({"observation_period": observation_period} if observation_period is not None else {}),
     }
+
+
+def _standardize_unit_rain(conn: sqlite3.Connection) -> int:
+    """Idempotent label migration. Preserve rainfall values and official front IDs."""
+    changed = 0
+    for row in conn.execute("SELECT code,data_json FROM units WHERE code IN ('PPT','NRD','RBR','PST')").fetchall():
+        try:
+            unit = json.loads(row["data_json"])
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(unit, dict) or not isinstance(unit.get("rain", []), list):
+            continue
+        rain = standardize_rain_labels(row["code"], unit.get("rows") or [], unit.get("rain") or [])
+        if rain == unit.get("rain", []):
+            continue
+        unit["rain"] = rain
+        conn.execute("UPDATE units SET data_json=?,version=version+1 WHERE code=?",
+                     (json.dumps(unit, ensure_ascii=False), row["code"]))
+        changed += 1
+    return changed
 
 
 def _repair_unit_identities(conn: sqlite3.Connection) -> None:
@@ -516,6 +537,7 @@ def init_db() -> None:
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         _repair_unit_identities(conn)
+        _standardize_unit_rain(conn)
         seed_production_defaults(conn)
         conn.execute(
             """
@@ -822,6 +844,7 @@ def list_units_payload() -> dict[str, Any]:
         if definition:
             unit["code"] = code
             unit["name"] = definition["name"]
+            unit["rain"] = standardize_rain_labels(code, unit.get("rows") or [], unit.get("rain") or [])
         units.append(unit)
         if code:
             meta[code] = {

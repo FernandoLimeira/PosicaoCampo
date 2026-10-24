@@ -37,7 +37,7 @@ function normalizeReportUnit(unit, index) {
     metrics: Array.isArray(cloned.metrics) && cloned.metrics.length === REPORT_METRICS.length ? cloned.metrics : REPORT_METRICS.map(([icon, label, suffix, extra = '']) => [icon, label, `0 ${suffix}`, extra]),
     observation: String(cloned.observation || '-'),
     changes: String(cloned.changes || '-'),
-    rain: Array.isArray(cloned.rain) ? cloned.rain : []
+    rain: standardizeFieldRainLabels(cloned.code || fallbackCodes[index], cloned.rows, cloned.rain)
   };
 
   if (normalized.code === 'PST' && (!normalized.name || normalized.name === 'PARAÍSA TEMPO')) normalized.name = 'PASSA TEMPO';
@@ -391,15 +391,7 @@ function drawWrappedTextFit(ctx, text, x, y, maxWidth, maxHeight, options = {}) 
 }
 
 function canonicalFrontKey(value) {
-  const source = String(value ?? '').normalize('NFKC').trim().toUpperCase();
-  if (!source) return '';
-  // Remove apenas os rótulos da identificação. Concatenar todos os números
-  // confunde frente com setor e descartar letras mistura frentes como 13A/13B.
-  const identifier = source
-    .replace(/^(?:(?:EQ(?:UIPE|UIPAMENTO)?|FRENTE|FRT|FT|CTT|CCT|PPT|NRD|RBR|PST)(?=[.\s:#-]|\d|$)[.\s:#-]*)+/, '')
-    .replace(/\s*[-–—|]\s*(?:SETOR|FAZENDA)\b.*$/, '')
-    .replace(/\s+/g, '');
-  return identifier.replace(/\d+/g, digits => String(Number(digits)));
+  return canonicalFieldFrontKey(value);
 }
 
 function parseRainValue(value) {
@@ -1248,7 +1240,7 @@ function globalDrawCardTable(ctx, layout, unit, placing) {
     ctx.save(); ctx.fillStyle = statusColorValue(color);
     ctx.beginPath();ctx.arc(x+25,cy,6,0,2*Math.PI);ctx.fill();ctx.restore();
     const font='bold 15.5px "Arial Narrow", Arial, sans-serif';
-    globalDrawText(ctx, front, x+38, cy, 42, font);
+    globalDrawText(ctx, fieldFrontNumber(front), x+38, cy, 42, font);
     globalDrawText(ctx, sector, col.sector, cy, hasRain?61:78, font);
     const displayedStatus=String(status).toLowerCase().replace(/(^|\s)\p{L}/gu, char => char.toUpperCase());
     const softenedStatus=displayedStatus.replace('Úmido','úmido').replace('Atividade','atividade');

@@ -134,7 +134,7 @@ function normalizeUnitsCollection(collection) {
       ...unit,
       rows: normalizeFrontRows(Array.isArray(unit.rows) ? unit.rows : []),
       metrics: Array.isArray(unit.metrics) && unit.metrics.length === metricDefinitions.length ? unit.metrics : makeMetrics(),
-      rain: Array.isArray(unit.rain) ? unit.rain : []
+      rain: standardizeFieldRainLabels(unit.code || defaultUnits[index].code, unit.rows, unit.rain)
     };
 
     if (merged.code === 'PST' && (!merged.name || merged.name === 'PARAÍSA TEMPO')) merged.name = 'PASSA TEMPO';
@@ -459,8 +459,7 @@ async function loadFieldFrontHistory(context, older = false) {
 }
 
 function fieldFrontRainKey(value) {
-  const raw = String(value ?? '').trim().replace(/^(?:eq(?:uipamento)?|frente)\.?\s*/i, '').trim();
-  return /^\d+$/.test(raw) ? String(Number(raw)) : raw.toLocaleLowerCase('pt-BR');
+  return canonicalFieldFrontKey(value);
 }
 
 function openFieldFrontDetails(index, summaryOnly = false) {
@@ -883,8 +882,8 @@ function rainRowHtml(eq = '', turn = 0, accum = 0) {
   return `
     <div class="rain-edit-row">
       <label>
-        <span>Equipamento / frente</span>
-        <input class="rain-eq" type="text" maxlength="20" value="${escapeHtml(eq)}" placeholder="Ex.: Eq. 402" />
+        <span>Frente</span>
+        <input class="rain-eq" type="text" maxlength="20" value="${escapeHtml(eq)}" placeholder="Ex.: FT 06" />
       </label>
       <label>
         <span>Chuva turno (mm)</span>
@@ -900,10 +899,7 @@ function rainRowHtml(eq = '', turn = 0, accum = 0) {
 }
 
 function rainSortKey(value) {
-  return String(value ?? '')
-    .trim()
-    .replace(/^eq(?:uipamento)?[.\s:-]*/i, '')
-    .trim();
+  return canonicalFieldFrontKey(value);
 }
 
 function sortRainRows(rain = []) {
@@ -912,7 +908,9 @@ function sortRainRows(rain = []) {
 
 function renderRainForm(rain) {
   const container = document.querySelector('#rain-form');
-  const sortedRain = sortRainRows(rain);
+  const index = Number(document.querySelector('#unit-select')?.value ?? selectedUnitIndex);
+  const unit = units[index] || units[selectedUnitIndex];
+  const sortedRain = sortRainRows(standardizeFieldRainLabels(unit?.code, unit?.rows, rain));
   container.innerHTML = sortedRain.length
     ? sortedRain.map(([eq, turn, accum]) => rainRowHtml(eq, turn, accum)).join('')
     : rainRowHtml();

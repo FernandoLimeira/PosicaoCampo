@@ -17,6 +17,28 @@ from backend.models.security import hash_password, token_digest
 
 
 class DatabaseTests(unittest.TestCase):
+    def test_rain_labels_migrate_once_without_changing_fronts_values_or_notes(self):
+        self.seed()
+        with storage.connection() as conn:
+            for code in db.UNIT_DEFINITIONS:
+                unit = db.list_units_payload()['units'][list(db.UNIT_DEFINITIONS).index(code)]
+                unit['rows'] = [['13' if code == 'NRD' else '06', '101', 'green', 'EM ATIVIDADE', '']]
+                unit['rain'] = [['EQ - 3' if code == 'NRD' else 'F-06', 1, 11]]
+                unit['observation'] = 'Manter observação'
+                conn.execute('UPDATE units SET data_json=? WHERE code=?', (json.dumps(unit), code))
+        before = db.list_unit_versions()
+        with storage.connection() as conn:
+            self.assertEqual(db._standardize_unit_rain(conn), 4)
+            self.assertEqual(db._standardize_unit_rain(conn), 0)
+        payload = db.list_units_payload()
+        for unit in payload['units']:
+            code = unit['code']
+            number = '13' if code == 'NRD' else '06'
+            self.assertEqual(unit['rain'], [[f'FT {number}', 1, 11]])
+            self.assertEqual(unit['rows'][0][0], number)
+            self.assertEqual(unit['observation'], 'Manter observação')
+            self.assertEqual(payload['meta'][code]['version'], before['meta'][code]['version'] + 1)
+
     def test_sacarose_metadata_changes_advance_version_and_reject_stale_edits(self):
         admin, _ = self.seed()
         uid = admin["id"]

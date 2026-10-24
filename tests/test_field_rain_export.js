@@ -54,6 +54,18 @@ async function main() {
     }
   }
   await checkImages(unit, [['08', [7.5, 19]], ['13A', [11, 23]], ['13B', [17, 29]]]);
+  // O cadastro usa FT NN; a tabela continua FRENTE + número, inclusive dados F-NN antigos.
+  for (const code of ['PPT', 'NRD', 'RBR', 'PST']) {
+    const numbers = code === 'NRD' ? ['13', '15', '16'] : ['02', '03', '06'];
+    const source = {code, rows: numbers.map(number => [`FT ${number}`, '1000', 'green', 'EM ATIVIDADE']),
+      rain: numbers.map((number, index) => [`F-${number}`, index + 1, index + 11])};
+    const labels = ctx.standardizeFieldRainLabels(code, source.rows, source.rain);
+    assert.deepEqual(Array.from(labels, row => row[0]), numbers.map(number => `FT ${number}`));
+    assert.deepEqual(Array.from(ctx.standardizeFieldRainLabels(code, source.rows, labels), row => row[0]), numbers.map(number => `FT ${number}`));
+    await checkImages(source, numbers.map((number, index) => [number, [index + 1, index + 11]]));
+    assert(drawn.some(item => item.text === 'FRENTE'));
+    assert(!drawn.some(item => /^FT\s*\d/.test(item.text)), 'A imagem deve mostrar só o número da frente');
+  }
 
   // NRD cadastra chuva por equipe (EQ 3–12) e a posição por frente (13–22).
   // FT 8 é a frente 08; EQ 8 pertence à frente 18, com valores independentes.
