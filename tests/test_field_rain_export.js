@@ -83,6 +83,40 @@ async function main() {
       assert(lookup.has(ctx.canonicalFrontKey(row[0])), `A chuva padrão de ${defaultUnit.code}/${row[0]} deve continuar associada`);
     }
   }
+
+  // A ausência de chuva remove ambas as colunas em todas as unidades,
+  // mesmo com cadastros antigos com valores positivos para outras frentes.
+  const codes = ['PPT', 'NRD', 'RBR', 'PST'];
+  const noRainCases = [undefined, [], [['Frente 01', '', '']],
+    [['Frente 01', null, null]], [['Frente 01', '-', '—']],
+    [['Frente 01', 0, '0,0']], [['Frente 01', 'não informado 12', 'NaN']],
+    [['Frente 99', 12, 28], ['Frente 01', '', '']]];
+  for (const code of codes) {
+    for (const rain of noRainCases) {
+      const source = {code, rows: [['01', '1000', 'green', 'EM ATIVIDADE']], rain};
+      assert.equal(ctx.reportHasRainData(source), false, `${code}: chuva vazia/não associada`);
+      for (const global of [false, true]) {
+        drawn.length = 0;
+        if (global) await ctx.generateReportImageBlob(codes.map(other => other === code ? source : {code: other, rows: [], rain: []}));
+        else await ctx.generateUnitReportImageBlob(source);
+        assert(!drawn.some(item => ['TURNO', 'ACUM.', 'CHUVA'].includes(item.text)),
+          `${code}: emissão ${global ? 'global' : 'individual'} não deve desenhar cabeçalhos vazios`);
+        assert(!drawn.some(item => item.text.startsWith('Média: Turno')),
+          `${code}: emissão não deve reservar a barra de média sem chuva`);
+        assert(drawn.some(item => item.text === '01'), 'As frentes continuam na imagem');
+      }
+    }
+  }
+  for (const values of [[3, ''], ['', '7,5'], [0, 7]]) {
+    const reports = codes.map(code => ({code, rows: [['01', '1000', 'green', 'EM ATIVIDADE']],
+      rain: [['Frente 01', ...(code === 'NRD' ? values : ['', ''])]]}));
+    drawn.length = 0;
+    await ctx.generateReportImageBlob(reports);
+    for (const heading of ['TURNO', 'ACUM.', 'CHUVA']) {
+      assert.equal(drawn.filter(item => item.text === heading).length, 1,
+        `${heading}: somente a unidade preenchida deve mostrar as colunas`);
+    }
+  }
   assert.notEqual(ctx.canonicalFrontKey('13A'), ctx.canonicalFrontKey('13B'));
   assert.notEqual(ctx.canonicalFrontKey('1.3'), ctx.canonicalFrontKey('13'));
   assert.equal(ctx.canonicalFrontKey('Frente 008'), ctx.canonicalFrontKey('Eq. 08'));

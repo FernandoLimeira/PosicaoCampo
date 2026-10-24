@@ -407,13 +407,23 @@ function parseRainValue(value) {
   return match ? Number(match[0]) : 0;
 }
 
-// Uma unidade só exibe CHUVA quando algum turno ou acumulado possui
-// precipitação maior que zero. Campos vazios, traços e zeros não criam
-// cabeçalhos nem barras de chuva na imagem exportada.
+// Só considera chuva das frentes que realmente aparecem no informativo.
+// Cadastros antigos de outras frentes não podem criar colunas preenchidas
+// apenas com traços. Vazios, traços, valores inválidos e zeros não as ativam.
 function reportHasRainData(unit) {
-  return Array.isArray(unit?.rain) && unit.rain.some(entry =>
-    Array.isArray(entry) && (parseRainValue(entry[1]) > 0 || parseRainValue(entry[2]) > 0)
-  );
+  const lookup = buildRainLookup(unit, { rawValues: true });
+  const positiveRain = value => {
+    const text = String(value ?? '').trim().replace(',', '.');
+    if (!/^\d+(?:\.\d+)?$/.test(text)) return false;
+    const number = Number(text);
+    return Number.isFinite(number) && number > 0;
+  };
+  return (Array.isArray(unit?.rows) ? unit.rows : []).some(row => {
+    if (!Array.isArray(row)) return false;
+    const key = canonicalFrontKey(row[0]);
+    const rain = key ? lookup.get(key) : null;
+    return rain && (positiveRain(rain.turn) || positiveRain(rain.accum));
+  });
 }
 
 function nrdRainTeamNumber(label) {
