@@ -116,6 +116,8 @@
 .production-status-badge.is-wet { background: #fff4cf; color: #876812; }
 .production-status-badge.is-waiting { background: #eef1ef; color: #64726b; }
 .production-status-badge.is-stopped { background: #fde9ea; color: #a52d36; }
+.production-observation { min-width: 160px; max-width: 300px; color: #3f584b; font-size: 10.5px; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
+.production-observation.is-empty { color: #9aa79f; }
 .production-update-state { display: flex; flex-direction: column; gap: 2px; }
 .production-update-state strong { color: #334d40; font-size: 10px; }
 .production-update-state small { color: #849087; font-size: 9px; }

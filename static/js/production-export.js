@@ -272,18 +272,18 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
   if (!changeLines.length && !report.continuation && report.changeLinesOverride == null) {
     changeLines.push('• Sem mudanças registradas.');
   }
-  const extraSummary = counts.waiting || counts.stopped || counts.pending ? 24 : 0;
   const rainText = productionExportRainText(report.summary);
   const rainLines = rainText ? productionExportWrap(ctx, rainText, 418,
     'bold 18px "Roboto Condensed", "Arial Narrow", Arial, sans-serif') : [];
   const rainHeight = rainLines.length ? Math.max(36, rainLines.length * 22 + 12) : 0;
   // Todas as seções são medidas com os mesmos espaçamentos usados no desenho.
   // A altura cresce com dados reais, sem cortar observações ou deixar lacunas fixas.
-  const contentHeight = 125 + extraSummary + rows.reduce((sum, row) => sum + row.height, 0)
+  // Sem a linha de status por unidade: a legenda geral do cabeçalho já identifica as cores.
+  const contentHeight = 99 + rows.reduce((sum, row) => sum + row.height, 0)
     + (rainLines.length ? 16 + rainHeight + 14 : 0) + 26 + noteLines.length * 21 + 13
     + 26 + changeLines.length * 21 + 26;
   return { rows, noteLines, changeLines, rainLines, rainHeight,
-    counts, extraSummary, contentHeight, height: Math.max(minHeight, contentHeight) };
+    counts, contentHeight, height: Math.max(minHeight, contentHeight) };
 }
 
 function productionExportLegendLayout(page, statusByCode) {
@@ -380,33 +380,9 @@ function drawProductionExportCard(ctx, report, plan, x, y) {
     '12px "Roboto Condensed", "Arial Narrow", Arial, sans-serif', '#c2d3d6');
   ctx.restore();
 
-  ctx.beginPath(); ctx.arc(x + 24, y + 97, 6, 0, Math.PI * 2);
-  ctx.fillStyle = PRODUCTION_EXPORT_COLORS.active; ctx.fill();
-  productionExportText(ctx, `${counts.active} em atividade`, x + 34, y + 104, 150,
-    'bold 16px "Roboto Condensed", "Arial Narrow", Arial, sans-serif');
-  ctx.beginPath(); ctx.arc(x + 195, y + 97, 6, 0, Math.PI * 2);
-  ctx.fillStyle = PRODUCTION_EXPORT_COLORS.wet; ctx.fill();
-  productionExportText(ctx, `${counts.wet} solo úmido`, x + 205, y + 104, 155,
-    'bold 16px "Roboto Condensed", "Arial Narrow", Arial, sans-serif');
-  if (plan.extraSummary) {
-    const details = [
-      ['waiting', counts.waiting, 'aguardando'],
-      ['stopped', counts.stopped, 'parado(s)'],
-      ['pending', counts.pending, 'pendente(s)']
-    ].filter(([, count]) => count);
-    let detailX = x + 24;
-    for (const [state, count, label] of details) {
-      const color = PRODUCTION_EXPORT_COLORS[state] || PRODUCTION_EXPORT_MUTED;
-      ctx.beginPath(); ctx.arc(detailX, y + 126, 5, 0, Math.PI * 2);
-      ctx.fillStyle = color; ctx.fill();
-      productionExportText(ctx, `${count} ${label}`, detailX + 10, y + 132, 130,
-        'bold 14px "Arial Narrow", Arial, sans-serif');
-      detailX += 155;
-    }
-  }
-  productionExportRule(ctx, x + 17, y + 116 + plan.extraSummary, x + 489);
+  productionExportRule(ctx, x + 17, y + 90, x + 489);
 
-  let cursor = y + 125 + plan.extraSummary;
+  let cursor = y + 99;
   for (const row of plan.rows) {
     if (row.type === 'group') {
       productionExportGroupIcon(ctx, x + 17, cursor + 2, row.nameLines.join(' '));

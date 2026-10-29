@@ -24,6 +24,8 @@ let productionItems = [];
 let productionEditingItemId = null;
 let productionFilterGroup = '';
 let productionFilterFront = '';
+// Grupo e Frente filtrados ficam salvos na aba (por conta e unidade) para não voltarem a "Todos" ao atualizar.
+const PRODUCTION_FILTERS_KEY = `posicao-campo-production-filters:${(typeof currentUser !== 'undefined' && currentUser?.id) || 'anonymous'}`;
 const productionSectorOptions = new WeakMap();
 let productionSectorSequence = 0;
 let productionPageEpoch = 0;
@@ -148,6 +150,7 @@ async function loadProductionItems(unit, epoch = productionPageEpoch) {
   if (!isCurrentProductionRequest(unit, epoch) || workDate !== localIsoDate()) return null;
   productionItems = Array.isArray(data.items) ? data.items : [];
   renderProductionFilters();
+  saveProductionFilters(unit);
   renderProductionItems(data);
   return data;
 }
@@ -255,6 +258,21 @@ function visibleProductionItems() {
     (!productionFilterFront || String(item.service_front_id) === productionFilterFront));
 }
 
+function restoreProductionFilters(unit) {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(PRODUCTION_FILTERS_KEY) || '{}');
+    if (saved?.unit !== unit) return;
+    productionFilterGroup = typeof saved.group === 'string' ? saved.group : '';
+    productionFilterFront = typeof saved.front === 'string' ? saved.front : '';
+  } catch (_) { /* Armazenamento opcional: sem ele, os filtros começam em Todos. */ }
+}
+
+function saveProductionFilters(unit = currentProductionUnit()) {
+  try {
+    sessionStorage.setItem(PRODUCTION_FILTERS_KEY, JSON.stringify({ unit, group: productionFilterGroup, front: productionFilterFront }));
+  } catch (_) { /* Armazenamento opcional. */ }
+}
+
 function renderProductionFilters() {
   const container = document.querySelector('#production-filters');
   const groupSelect = document.querySelector('#production-filter-group');
@@ -339,6 +357,7 @@ function renderProductionItems(data) {
       </div>` : '';
     const actionCell = canFillProduction() ? `<td>${actions}</td>` : '';
     const ownerCell = `<td><span class="production-owner-name">${escapeHtml(entry.updated_by_name || item.owner_name || '-')}</span></td>`;
+    const observation = String(entry.observation || '').trim();
     return `<tr>
       <td>${escapeHtml(item.group_name || '-')}</td>
       <td><div class="production-item-name"><strong>${escapeHtml(item.service_name || '-')}</strong><small>${escapeHtml(styleLabel)}</small></div></td>
@@ -346,6 +365,7 @@ function renderProductionItems(data) {
       <td>${escapeHtml(entry.sector || '-')}</td>
       <td>${escapeHtml(entry.farm || '-')}</td>
       <td>${statusBadge(entry.status)}</td>
+      <td><div class="production-observation${observation ? '' : ' is-empty'}">${escapeHtml(observation || '-')}</div></td>
       <td><div class="production-update-state ${current ? '' : 'is-pending'}"><strong>${updatedLabel}</strong><small>${escapeHtml(updatedDetail)}</small></div></td>
       ${actionCell}
     </tr>`;
@@ -692,7 +712,7 @@ async function submitProductionEntry(event) {
     });
     closeModal('production-entry-modal');
     showToast(itemId ? 'Frente atualizada.' : `${sectors.length} ${sectors.length === 1 ? 'setor salvo' : 'setores salvos'} na frente.`);
-    await refreshProductionPage(unit);
+    await refreshProductionPage(unit, { keepFilters: true });
   } catch (error) {
     console.error(error);
     showToast(error.message || 'Não foi possível salvar a frente.', true);
@@ -725,19 +745,20 @@ async function removeProductionItem(itemId) {
   try {
     await apiRequest(`/api/production/my-items/${itemId}`, { method: 'DELETE' });
     showToast('Lançamento removido da unidade.');
-    await refreshProductionPage(currentProductionUnit());
+    await refreshProductionPage(currentProductionUnit(), { keepFilters: true });
   } catch (error) {
     console.error(error);
     showToast(error.message || 'Não foi possível remover a frente.', true);
   }
 }
 
-async function refreshProductionPage(unit = currentProductionUnit()) {
+async function refreshProductionPage(unit = currentProductionUnit(), { keepFilters = false } = {}) {
   const epoch = ++productionPageEpoch;
   productionItems = [];
   productionCatalog = { groups: [] };
   setProductionContext(unit);
-  renderProductionFilters();
+  // Ao salvar, remover ou atualizar a página, os filtros escolhidos não voltam para "Todos".
+  if (!keepFilters) renderProductionFilters();
   renderProductionItems();
   try {
     await Promise.all([loadProductionCatalog(unit, epoch), loadProductionStatuses(), loadProductionDailySummary(unit, epoch)]);
@@ -1078,7 +1099,8 @@ async function initializeProductionPage() {
   const accessMessage = document.querySelector('#production-access-message');
   try {
     const unit = await loadProductionAccess();
-    await refreshProductionPage(unit);
+    restoreProductionFilters(unit);
+    await refreshProductionPage(unit, { keepFilters: true });
     updateProductionAccessMessage();
   } catch (error) {
     console.error(error);
@@ -1106,10 +1128,12 @@ document.querySelector('#production-filter-group')?.addEventListener('change', e
   productionFilterGroup = event.target.value;
   productionFilterFront = '';
   renderProductionFilters();
+  saveProductionFilters();
   renderProductionItems();
 });
 document.querySelector('#production-filter-front')?.addEventListener('change', event => {
   productionFilterFront = event.target.value;
+  saveProductionFilters();
   renderProductionItems();
 });
 document.querySelector('#production-entry-form')?.addEventListener('submit', submitProductionEntry);
