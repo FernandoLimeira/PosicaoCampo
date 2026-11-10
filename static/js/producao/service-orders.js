@@ -120,100 +120,61 @@ function serviceOrderCellText(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? formatIsoDateBr(value) : String(value ?? '');
 }
 
-// Cartão da O.S. com o resumo e a tabela de todas as colunas do arquivo (uma linha por talhão).
-// Detalhe compacto (cabe na tela, sem rolagem): as colunas do arquivo que se repetem
-// em todas as linhas da O.S. aparecem uma vez; o que muda por linha (o talhão) vira etiqueta.
-function serviceOrderCardHtml(order) {
-  const rows = order.rows || [];
-  const columns = order.columns?.length ? order.columns : Object.keys(rows[0] || {});
-  const header = `<header>
-      <div><strong>O.S. ${escapeHtml(order.number)}</strong><small>${escapeHtml(serviceOrderOperationLabel(order))}</small></div>
-      ${order.matches ? '<span>Confere com o lançamento</span>' : ''}
-    </header>`;
-  if (!rows.length) {
-    return `<article class="production-order-card${order.matches ? ' is-match' : ''}">${header}
-      <dl>
-        <div><dt>Setor / seção</dt><dd>${escapeHtml(order.sector)}${order.section ? ` / ${escapeHtml(order.section)}` : ''}</dd></div>
-        <div><dt>Centro de custo</dt><dd>${escapeHtml(order.cost_center || '-')}</dd></div>
-        <div><dt>Abertura</dt><dd>${escapeHtml(serviceOrderDate(order.opened_on))}</dd></div>
-        <div><dt>Talhões</dt><dd>${escapeHtml(serviceOrderPlotsLabel(order))}</dd></div>
-      </dl></article>`;
-  }
-  const constant = columns.filter(name => rows.every(row => (row[name] ?? '') === (rows[0][name] ?? '')));
-  const varying = columns.filter(name => !constant.includes(name));
-  const plotColumn = varying.find(name => /talh/i.test(name)) || varying[0];
-  const others = varying.filter(name => name !== plotColumn);
-  return `<article class="production-order-card${order.matches ? ' is-match' : ''}">${header}
-    <dl class="production-order-fields">
-      ${constant.map(name => `<div><dt>${escapeHtml(name)}</dt><dd>${escapeHtml(serviceOrderCellText(rows[0][name]) || '-')}</dd></div>`).join('')}
-    </dl>
-    <div class="production-order-plots">
-      <span class="production-order-plots-title">${escapeHtml(plotColumn || 'Linhas')} · ${rows.length} ${rows.length === 1 ? 'linha' : 'linhas'}</span>
-      <div class="production-order-plot-list">
-        ${rows.map(row => `<span class="production-order-plot"${others.length ? ` title="${escapeHtml(others.map(name => `${name}: ${serviceOrderCellText(row[name])}`).join(' · '))}"` : ''}>
-          ${escapeHtml(plotColumn ? serviceOrderCellText(row[plotColumn]) : '-')}${others.length ? `<small>${escapeHtml(others.map(name => serviceOrderCellText(row[name])).join(' · '))}</small>` : ''}
-        </span>`).join('')}
-      </div>
-    </div>
-  </article>`;
+// Popup "O.S. abertas do setor": todas as O.S. numa tabela só (sem etapas nem paginação).
+// Cada linha é uma O.S.; as colunas do arquivo aparecem com nomes amigáveis e os
+// talhões viram etiquetas. Colunas novas que vierem no arquivo entram no fim da tabela.
+const SERVICE_ORDER_COLUMN_LABELS = {
+  CHAVE: 'Chave', NO_OS: 'Nº O.S.', SETOR: 'Setor', SECAO: 'Seção', OPERACAO: 'Operação',
+  TALHAO: 'Talhões', CCUSTO: 'Centro de custo', CCUSTO_TRATOS: 'Descrição', DT_ABERTURA_OS: 'Abertura'
+};
+
+function serviceOrderColumnValue(order, column) {
+  const values = [...new Set((order.rows || []).map(row => serviceOrderCellText(row[column])).filter(Boolean))];
+  return values.join(', ') || '-';
 }
 
-// Com mais de uma O.S. no setor, o popup mostra uma O.S. por etapa: as O.S. ficam no
-// topo e basta clicar para trocar (sem paginação). Com uma só, mostra direto.
-let serviceOrderSteps = { orders: [], index: 0 };
-
-function renderServiceOrderStep() {
-  const body = document.querySelector('#production-order-modal-body');
-  if (!body) return;
-  const { orders, index } = serviceOrderSteps;
-  if (!orders.length) {
-    body.innerHTML = '<p class="production-empty">Nenhuma O.S. aberta para este setor.</p>';
-    return;
-  }
-  if (orders.length === 1) {
-    body.innerHTML = serviceOrderCardHtml(orders[0]);
-    return;
-  }
-  const order = orders[index];
-  body.innerHTML = `
-    <nav class="production-order-steps" aria-label="O.S. do setor">
-      ${orders.map((item, position) => `<button type="button" class="production-order-step${position === index ? ' is-current' : ''}${item.matches ? ' is-match' : ''}"
-        data-order-step="${position}" aria-current="${position === index ? 'step' : 'false'}">
-        <span class="production-order-step-number">${position + 1}</span>
-        <span class="production-order-step-label"><strong>O.S. ${escapeHtml(item.number)}</strong><small>${escapeHtml(item.operation || '-')}${item.matches ? ' · confere' : ''}</small></span>
-      </button>`).join('')}
-    </nav>
-    ${serviceOrderCardHtml(order)}`;
-  body.querySelector('.production-order-step.is-current')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+function serviceOrdersTableHtml(orders) {
+  const known = new Set(Object.keys(SERVICE_ORDER_COLUMN_LABELS));
+  const extras = [...new Set(orders.flatMap(order => order.columns || []))].filter(name => !known.has(String(name).toUpperCase()));
+  const sections = [...new Set(orders.map(order => order.section).filter(Boolean))].sort(compareFrontLabels);
+  const operations = [...new Set(orders.map(order => order.operation).filter(Boolean))].sort(compareFrontLabels);
+  const matches = orders.filter(order => order.matches).length;
+  const summary = [
+    `<span><b>${orders.length}</b> ${orders.length === 1 ? 'O.S. aberta' : 'O.S. abertas'}</span>`,
+    operations.length ? `<span>Operações <b>${escapeHtml(operations.join(', '))}</b></span>` : '',
+    sections.length ? `<span>${sections.length === 1 ? 'Seção' : 'Seções'} <b>${escapeHtml(sections.join(', '))}</b></span>` : '',
+    matches ? `<span class="is-match"><b>${matches}</b> ${matches === 1 ? 'confere' : 'conferem'} com o lançamento</span>` : ''
+  ].filter(Boolean).join('');
+  return `<div class="production-order-summary">${summary}</div>
+    <div class="production-order-table-wrap"><table class="production-order-table">
+      <thead><tr>
+        <th>Nº O.S.</th><th>Operação</th><th>Seção</th><th>Centro de custo</th><th>Abertura</th><th>Chave</th>
+        ${extras.map(name => `<th>${escapeHtml(name)}</th>`).join('')}
+        <th>Talhões</th>
+      </tr></thead>
+      <tbody>${orders.map(order => `<tr class="${order.matches ? 'is-match' : ''}">
+        <td><strong>${escapeHtml(order.number)}</strong>${order.matches ? '<span class="production-order-match">confere</span>' : ''}</td>
+        <td><div class="production-order-operation"><strong>${escapeHtml(order.operation || '-')}</strong><small>${escapeHtml(order.operation_name || '')}</small></div></td>
+        <td>${escapeHtml(order.section || '-')}</td>
+        <td>${escapeHtml(order.cost_center || '-')}</td>
+        <td>${escapeHtml(serviceOrderDate(order.opened_on))}</td>
+        <td>${escapeHtml(order.key || serviceOrderColumnValue(order, 'CHAVE'))}</td>
+        ${extras.map(name => `<td>${escapeHtml(serviceOrderColumnValue(order, name))}</td>`).join('')}
+        <td><div class="production-order-plot-list">${(order.plots || []).map(plot =>
+          `<span class="production-order-plot">${escapeHtml(plot)}</span>`).join('') || '-'}</div></td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
 }
 
 function showServiceOrdersModal(contextText, orders) {
+  const body = document.querySelector('#production-order-modal-body');
   const context = document.querySelector('#production-order-modal-context');
-  if (context) {
-    const count = orders.length > 1 ? ` · ${orders.length} O.S. abertas` : '';
-    context.textContent = `${contextText}${count}`;
-  }
-  serviceOrderSteps = { orders, index: 0 };
-  renderServiceOrderStep();
+  if (!body) return;
+  if (context) context.textContent = contextText;
+  body.innerHTML = orders.length ? serviceOrdersTableHtml(orders)
+    : '<p class="production-empty">Nenhuma O.S. aberta para este setor.</p>';
   openModal('production-order-modal');
 }
-
-document.querySelector('#production-order-modal-body')?.addEventListener('click', event => {
-  const button = event.target.closest('[data-order-step]');
-  if (!button || button.disabled) return;
-  const next = Number(button.dataset.orderStep);
-  if (next < 0 || next >= serviceOrderSteps.orders.length) return;
-  serviceOrderSteps.index = next;
-  renderServiceOrderStep();
-});
-document.querySelector('#production-order-modal')?.addEventListener('keydown', event => {
-  if (serviceOrderSteps.orders.length < 2 || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
-  if (event.target.closest('input, select, textarea')) return;
-  const next = serviceOrderSteps.index + (event.key === 'ArrowRight' ? 1 : -1);
-  if (next < 0 || next >= serviceOrderSteps.orders.length) return;
-  serviceOrderSteps.index = next;
-  renderServiceOrderStep();
-});
 
 // "Ver" da tabela de lançamentos: todas as O.S. abertas do setor do lançamento.
 function openProductionItemOrders(itemId) {
@@ -228,7 +189,7 @@ function openProductionItemOrders(itemId) {
 // "Ver setor" da aba Ordem de serviço.
 function openSectorOrders(sector) {
   const orders = (serviceOrdersData?.orders || []).filter(order => order.sector === sector);
-  showServiceOrdersModal(`Setor ${sector} · ${orders.length} ${orders.length === 1 ? 'O.S. aberta' : 'O.S. abertas'}`, orders);
+  showServiceOrdersModal(`Setor ${sector}`, orders);
 }
 
 document.querySelector('#production-orders-body')?.addEventListener('click', event => {

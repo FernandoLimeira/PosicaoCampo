@@ -325,6 +325,47 @@ function statusBadge(status) {
   return `<span class="production-status-badge ${config.className}">${escapeHtml(config.name)}</span>`;
 }
 
+// Coluna Operação: código(s) da operação em execução na frente.
+function productionOperationCell(entry) {
+  const codes = String(entry?.operation || '').split(/[,;+]/).map(code => code.trim()).filter(Boolean);
+  return codes.length
+    ? `<div class="production-operation-codes">${codes.map(code => `<span>${escapeHtml(code)}</span>`).join('')}</div>`
+    : '<span class="production-os-state is-empty">-</span>';
+}
+
+// Campo "Operação em execução" do popup de editar: um código por campo, "+" para mais.
+let productionEntryOperations = [''];
+
+function renderEntryOperations() {
+  const container = document.querySelector('#production-entry-operations');
+  if (!container) return;
+  container.innerHTML = productionEntryOperations.map((value, index) => `<div class="production-sheet-operation">
+      <input data-entry-op="${index}" value="${escapeHtml(value)}" list="production-entry-operation-list" maxlength="40"
+        autocomplete="off" inputmode="numeric" placeholder="Cód." aria-label="Operação ${index + 1}" />
+      ${index > 0 ? `<button class="production-sheet-op-remove" type="button" data-entry-op-remove="${index}" aria-label="Remover operação ${index + 1}">×</button>` : ''}
+    </div>`).join('') + `<button class="production-sheet-op-add" type="button" data-entry-op-add title="Adicionar outra operação"
+      aria-label="Adicionar operação" ${productionEntryOperations.length >= 10 ? 'disabled' : ''}>+</button>`;
+}
+
+// Sugestões: operações das O.S. abertas do setor (o campo continua livre para digitar).
+async function loadEntryOperationSuggestions(unit, sector) {
+  const list = document.querySelector('#production-entry-operation-list');
+  if (!list || !sector) return;
+  try {
+    const data = await apiRequest(`/api/production/service-orders?unit=${encodeURIComponent(unit)}&search=${encodeURIComponent(sector)}`);
+    const seen = new Set();
+    list.innerHTML = (data?.orders || [])
+      .filter(order => String(order.sector).trim() === String(sector).trim() && !seen.has(order.operation) && seen.add(order.operation))
+      .map(order => `<option value="${escapeHtml(order.operation)}">${escapeHtml(order.operation_name || '')}</option>`).join('');
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function productionEntryOperationsValue() {
+  return [...new Set(productionEntryOperations.map(value => value.trim()).filter(Boolean))].join(', ');
+}
+
 // Coluna O.S.: "OK" quando há O.S. do setor para a operação do lançamento; "Sem O.S." quando não há.
 function serviceOrderCell(item) {
   const order = item.service_order || {};
@@ -382,6 +423,7 @@ function renderProductionItems(data) {
       <td class="production-cell-number">${escapeHtml(entry.section || '-')}</td>
       <td class="production-cell-farm">${escapeHtml(entry.farm || '-')}</td>
       <td><div class="production-status-cell">${statusBadge(entry.status)}${current ? '' : `<small class="production-pending-note">${escapeHtml(updatedDetail)}</small>`}</div></td>
+      <td>${productionOperationCell(entry)}</td>
       <td>${serviceOrderCell(item)}</td>
       <td><div class="production-observation${observation ? '' : ' is-empty'}">${escapeHtml(observation || '-')}</div></td>
       <td><div class="production-observation${changes ? '' : ' is-empty'}">${escapeHtml(changes || '-')}</div></td>
@@ -585,6 +627,8 @@ function setProductionEntryEditMode(isEditing) {
   if (kicker) kicker.textContent = isEditing ? 'Editar frente' : 'Produção Agrícola';
   const subtitle = document.querySelector('#production-modal-subtitle');
   if (subtitle) subtitle.hidden = !isEditing;
+  const operationsField = document.querySelector('#production-entry-operations-field');
+  if (operationsField) operationsField.hidden = !isEditing;
   const sectorTitle = document.querySelector('#production-sector-section-title');
   if (sectorTitle) sectorTitle.textContent = isEditing ? 'Setor da frente' : 'Setores da frente';
   // Na edição, o formulário fica em duas colunas: setor/status e anotações.
@@ -657,6 +701,10 @@ function openEditProductionItem(itemId) {
   section.innerHTML = `<option value="${escapeHtml(entry.section || '')}">${escapeHtml(entry.section || 'Sem seção')}</option>`;
   section.value = entry.section || '';
   setProductionEntryEditMode(true);
+  productionEntryOperations = String(entry.operation || '').split(/[,;+]/).map(code => code.trim()).filter(Boolean);
+  if (!productionEntryOperations.length) productionEntryOperations = [''];
+  renderEntryOperations();
+  loadEntryOperationSuggestions(currentProductionUnit(), entry.sector);
   // O nome da frente em edição fica em destaque no topo do popup.
   document.querySelector('#production-modal-title').textContent = item.service_name || 'Frente';
   const subtitle = document.querySelector('#production-modal-subtitle');
@@ -706,7 +754,8 @@ async function submitProductionEntry(event) {
   }
   if (itemId) Object.assign(payload, sectors[0], {
     observation: document.querySelector('#production-observation-input')?.value.trim() || '',
-    changes: document.querySelector('#production-changes-input')?.value.trim() || ''
+    changes: document.querySelector('#production-changes-input')?.value.trim() || '',
+    operation: productionEntryOperationsValue()
   });
   else payload.sectors = sectors;
   try {
@@ -871,6 +920,22 @@ document.querySelector('#production-entry-form')?.addEventListener('keydown', ev
   if (event.target.closest('button')) return;
   event.preventDefault();
   event.currentTarget.requestSubmit();
+});
+
+const productionEntryOperationsBox = document.querySelector('#production-entry-operations');
+productionEntryOperationsBox?.addEventListener('input', event => {
+  const index = event.target.dataset?.entryOp;
+  if (index !== undefined) productionEntryOperations[Number(index)] = event.target.value;
+});
+productionEntryOperationsBox?.addEventListener('click', event => {
+  const add = event.target.closest('[data-entry-op-add]');
+  const remove = event.target.closest('[data-entry-op-remove]');
+  if (!add && !remove) return;
+  event.preventDefault();
+  if (add) productionEntryOperations.push('');
+  else productionEntryOperations.splice(Number(remove.dataset.entryOpRemove), 1);
+  renderEntryOperations();
+  if (add) productionEntryOperationsBox.querySelector(`[data-entry-op="${productionEntryOperations.length - 1}"]`)?.focus();
 });
 
 document.querySelector('#production-items-body')?.addEventListener('click', event => {

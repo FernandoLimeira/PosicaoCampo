@@ -59,6 +59,7 @@
             <th>Seção</th>
             <th>Fazenda</th>
             <th>Status</th>
+            <th>Operação</th>
             <th>O.S.</th>
             <th>Observação</th>
             <th>Mudança</th>
@@ -420,6 +421,11 @@
             <span>Status do setor</span>
             <div id="production-status-options" class="production-status-options"></div>
           </label>
+          <div id="production-entry-operations-field" class="field production-entry-operations-field" hidden>
+            <span>Operação em execução <small>(código da O.S.; use + para mais de uma)</small></span>
+            <div id="production-entry-operations" class="production-sheet-operations"></div>
+            <datalist id="production-entry-operation-list"></datalist>
+          </div>
           </div>
           </div>
         </section>
