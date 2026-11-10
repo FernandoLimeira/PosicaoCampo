@@ -12,7 +12,6 @@ from collections import defaultdict
 from bisect import bisect_left, bisect_right
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from io import BytesIO
 from pathlib import Path
 import math
 import re

@@ -1,7 +1,7 @@
 ARQUIVOS ALTERADOS — SACAROSE COM TAMANHO PADRÃO
 
 Alterado apenas:
-- static/js/export.js
+- static/js/reports-export/sacarose-export.js (antes static/js/export.js)
 
 Ajuste aplicado:
 - a imagem da Sacarose passou a ser gerada em tamanho padrão menor para facilitar o envio por e-mail;

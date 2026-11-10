@@ -6,7 +6,6 @@ atualização diária mantém histórico separado.
 
 from __future__ import annotations
 
-import re
 import sqlite3
 import time
 import uuid
@@ -14,7 +13,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from .constants import ALLOWED_UNIT_CODES, UNIT_DEFINITIONS
+from .constants import ALLOWED_UNIT_CODES
 from .storage import auth_connection, connection, validate_actor
 
 MODULE_KEY = "production"

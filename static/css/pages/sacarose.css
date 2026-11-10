@@ -150,3 +150,6 @@
 .image-toggle { justify-content: flex-start; }
 }
 .sacarose-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+
+/* Unidade com alterações locais ainda não salvas (marcada também com "•" no rótulo). */
+.report-unit-button.has-unsaved-changes { color: #fff; box-shadow: inset 3px 0 0 #f2b84b; }
