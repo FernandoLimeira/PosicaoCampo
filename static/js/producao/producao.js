@@ -960,8 +960,8 @@ document.addEventListener('report-unit-change', async event => {
   }
   try {
     await refreshProductionPage(requested);
-    const configPane = document.querySelector('#production-config-pane');
-    if (configPane && !configPane.hidden) {
+    // Na página Cadastros, as frentes listadas dependem da unidade.
+    if (typeof productionCatalogPageActive === 'function' && productionCatalogPageActive() && canConfigureProduction()) {
       await loadProductionConfigCatalog();
       clearFrontConfigForm();
     }

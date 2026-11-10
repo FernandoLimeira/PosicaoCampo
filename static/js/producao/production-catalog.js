@@ -17,9 +17,7 @@ function operationFrontOptions(selected = '') {
 function renderProductionOperations() {
   const list = document.querySelector('#production-operations-list');
   if (!list) return;
-  const term = String(document.querySelector('#production-operation-search')?.value || '').trim().toLocaleLowerCase('pt-BR');
-  const visible = productionOperations.filter(item => !term
-    || [item.code, item.name, item.front_name].some(value => String(value || '').toLocaleLowerCase('pt-BR').includes(term)));
+  const visible = productionOperations;
   const editable = canConfigureProduction();
   list.innerHTML = visible.map(item => `
     <div class="production-config-list-item ${item.is_active ? '' : 'is-inactive'}">
@@ -31,8 +29,7 @@ function renderProductionOperations() {
         <button type="button" data-operation-action="edit" data-operation-id="${item.id}">Editar</button>
         <button class="is-delete" type="button" data-operation-action="delete" data-operation-id="${item.id}">Apagar</button>
       </div>` : ''}
-    </div>`).join('') || `<div class="production-empty"><span>${productionOperations.length
-      ? 'Nenhuma operação encontrada nesta busca.' : 'Nenhuma operação cadastrada. Importe as O.S. ou cadastre manualmente.'}</span></div>`;
+    </div>`).join('') || '<div class="production-empty"><span>Nenhuma operação cadastrada. Importe as O.S. ou cadastre manualmente.</span></div>';
 }
 
 async function loadProductionOperations() {
@@ -113,7 +110,8 @@ async function initializeProductionCatalogPage() {
   const readonly = document.querySelector('#production-catalog-readonly');
   if (readonly) readonly.hidden = editable;
   // Sem a configuração global, a página só consulta: os formulários ficam ocultos.
-  document.querySelectorAll('#production-catalog-panel .production-config-editor').forEach(editor => { editor.hidden = !editable; });
+  document.querySelectorAll('#production-catalog-panel .production-config-editor, #production-catalog-panel .catalog-new')
+    .forEach(element => { element.hidden = !editable; });
   document.querySelector('#production-catalog-panel')?.classList.toggle('is-readonly', !editable);
   const tasks = [loadProductionOperations()];
   if (editable) {
@@ -137,15 +135,92 @@ async function initializeProductionCatalogPage() {
 
 document.querySelector('#production-operation-form')?.addEventListener('submit', submitProductionOperation);
 document.querySelector('#production-operation-clear')?.addEventListener('click', () => clearOperationForm());
-document.querySelector('#production-operation-search')?.addEventListener('input', renderProductionOperations);
 document.querySelector('#production-operations-list')?.addEventListener('click', event => {
   const button = event.target.closest('[data-operation-action]');
   if (!button) return;
   if (button.dataset.operationAction === 'edit') editProductionOperation(button.dataset.operationId);
   if (button.dataset.operationAction === 'delete') deleteProductionOperation(button.dataset.operationId);
 });
+// ---- Abas, contadores, busca e botão "Novo" -------------------------------
+const CATALOG_TAB_KEY = 'posicao-campo-production-catalog-tab';
+const CATALOG_NEW_ACTIONS = {
+  groups: () => clearGroupConfigForm({ keepOpen: true }),
+  fronts: () => clearFrontConfigForm({ keepOpen: true }),
+  operations: () => clearOperationForm({ keepOpen: true }),
+  status: () => clearStatusConfigForm({ keepOpen: true })
+};
+
+function selectCatalogTab(tab) {
+  if (!document.querySelector(`[data-catalog-section="${tab}"]`)) tab = 'groups';
+  document.querySelectorAll('[data-catalog-tab]').forEach(button => {
+    const active = button.dataset.catalogTab === tab;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+  document.querySelectorAll('[data-catalog-section]').forEach(section => { section.hidden = section.dataset.catalogSection !== tab; });
+  try { localStorage.setItem(CATALOG_TAB_KEY, tab); } catch (_) { /* preferência opcional */ }
+}
+
+// Busca simples sobre os itens já desenhados de cada lista.
+function applyCatalogSearch(key) {
+  const term = String(document.querySelector(`[data-catalog-search="${key}"]`)?.value || '').trim().toLocaleLowerCase('pt-BR');
+  const list = document.querySelector(`[data-catalog-list="${key}"]`);
+  if (!list) return;
+  let visible = 0;
+  list.querySelectorAll('.production-config-list-item').forEach(item => {
+    const match = !term || item.textContent.toLocaleLowerCase('pt-BR').includes(term);
+    item.hidden = !match;
+    if (match) visible += 1;
+  });
+  let empty = list.querySelector('.catalog-search-empty');
+  if (term && !visible && list.querySelector('.production-config-list-item')) {
+    if (!empty) {
+      empty = document.createElement('div');
+      empty.className = 'production-empty catalog-search-empty';
+      empty.textContent = 'Nada encontrado nesta busca.';
+      list.appendChild(empty);
+    }
+  } else {
+    empty?.remove();
+  }
+}
+
+function updateCatalogCount(key) {
+  const count = document.querySelector(`[data-catalog-count="${key}"]`);
+  const list = document.querySelector(`[data-catalog-list="${key}"]`);
+  if (count && list) count.textContent = String(list.querySelectorAll('.production-config-list-item').length);
+}
+
 if (productionCatalogPageActive()) {
   document.addEventListener('production-page-ready', initializeProductionCatalogPage);
-  // Troca de unidade: as frentes listadas dependem da unidade.
-  document.addEventListener('report-unit-change', () => window.setTimeout(initializeProductionCatalogPage, 300));
+  let savedTab = 'groups';
+  try { savedTab = localStorage.getItem(CATALOG_TAB_KEY) || 'groups'; } catch (_) { /* sem armazenamento */ }
+  selectCatalogTab(savedTab);
+  document.querySelectorAll('[data-catalog-tab]').forEach(button => {
+    button.addEventListener('click', () => selectCatalogTab(button.dataset.catalogTab));
+  });
+  document.querySelectorAll('[data-catalog-search]').forEach(input => {
+    input.addEventListener('input', () => applyCatalogSearch(input.dataset.catalogSearch));
+  });
+  document.querySelectorAll('[data-catalog-new]').forEach(button => {
+    button.addEventListener('click', () => {
+      const key = button.dataset.catalogNew;
+      CATALOG_NEW_ACTIONS[key]?.();
+      const editor = button.closest('[data-catalog-section]')?.querySelector('.catalog-editor');
+      if (editor) editor.open = true;
+      editor?.querySelector('input:not([type="hidden"]), select')?.focus();
+    });
+  });
+  // "Cancelar" fecha o formulário em todas as abas (na frente, o botão antigo só limpava).
+  document.querySelector('#production-front-clear')?.addEventListener('click', () => {
+    const editor = document.querySelector('#production-front-editor');
+    if (editor) editor.open = false;
+  });
+  // Contador e busca acompanham cada redesenho das listas.
+  if (typeof MutationObserver === 'function') {
+    document.querySelectorAll('[data-catalog-list]').forEach(list => {
+      const key = list.dataset.catalogList;
+      new MutationObserver(() => { updateCatalogCount(key); applyCatalogSearch(key); }).observe(list, { childList: true });
+    });
+  }
 }
