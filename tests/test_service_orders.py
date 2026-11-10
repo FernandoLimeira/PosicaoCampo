@@ -222,6 +222,37 @@ class ServiceOrderTests(unittest.TestCase):
         self.assertEqual({o["number"]: o["matches"] for o in order["orders"]},
                          {"330097": True, "331158": True, "331999": False})
 
+    def test_operations_catalog_crud_and_import_fill(self):
+        with self.assertRaises(PermissionError):
+            service_orders.save_operation(self.user["id"], {"code": "338", "name": "Plantio"})
+        created = service_orders.save_operation(self.admin["id"], {
+            "code": "0338", "name": "PLANTIO MEIOSI", "service_front_id": self.front["id"], "position": 2})
+        self.assertEqual((created["code"], created["front_name"], created["in_use"]), ("0338", "Preparo de solo", False))
+        with self.assertRaisesRegex(ValueError, "já está cadastrada"):
+            service_orders.save_operation(self.admin["id"], {"code": "338", "name": "Outra"})
+        # A importação acrescenta só as operações que faltam, com a descrição do arquivo.
+        service_orders.import_service_orders(self.admin["id"], "PPT", [
+            {"number": "1", "sector": "4", "operation": "338", "operation_name": "NÃO SOBRESCREVE"},
+            {"number": "2", "sector": "4", "operation": "457", "operation_name": "TRATOS PLANTIO"},
+        ])
+        listing = service_orders.list_operations(self.user["id"])
+        self.assertFalse(listing["can_configure"])
+        self.assertEqual({item["code"]: item["name"] for item in listing["operations"]},
+                         {"0338": "PLANTIO MEIOSI", "457": "TRATOS PLANTIO"})
+        # Operação usada em lançamento não é apagada; pode ser inativada.
+        self._launch("4")
+        item_id = production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"][0]["id"]
+        production.save_items_sheet(self.user["id"], {"unit_code": "PPT", "work_date": "2026-11-10", "rows": [
+            {"id": item_id, "service_front_id": self.front["id"], "sector": "4", "status": self.status, "operation": "338"}]})
+        with self.assertRaisesRegex(ValueError, "Inative"):
+            service_orders.delete_operation(self.admin["id"], created["id"])
+        service_orders.save_operation(self.admin["id"], {"code": "338", "name": "PLANTIO MEIOSI", "is_active": False},
+                                      operation_id=created["id"])
+        self.assertEqual([item["code"] for item in service_orders.list_operations(self.admin["id"])["operations"]], ["457"])
+        other = next(item for item in listing["operations"] if item["code"] == "457")
+        service_orders.delete_operation(self.admin["id"], other["id"])
+        self.assertEqual(service_orders.list_operations(self.admin["id"])["operations"], [])
+
     def test_codes_are_compared_without_leading_zeros(self):
         self.assertEqual(service_orders.sector_key("0663"), service_orders.sector_key("663.0"))
         self.assertEqual(service_orders.operation_key("0338 — TRATOS PLANTIO"), "338")

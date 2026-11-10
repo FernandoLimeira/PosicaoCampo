@@ -520,6 +520,7 @@ def delete_service_front(user_id: int, front_id: int) -> None:
         if int(user_items or 0) > 0 or int(daily_entries or 0) > 0:
             raise ValueError("Não é possível apagar esta frente/serviço porque ela já foi usada em lançamentos. O histórico foi preservado.")
         conn.execute("DELETE FROM production_service_front_units WHERE service_front_id=?", (front_id,))
+        conn.execute("UPDATE production_operations SET service_front_id=NULL WHERE service_front_id=?", (front_id,))
         conn.execute("DELETE FROM production_service_fronts WHERE id=?", (front_id,))
 
 

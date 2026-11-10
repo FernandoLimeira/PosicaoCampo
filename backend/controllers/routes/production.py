@@ -1,7 +1,13 @@
 """Produção Agrícola: acesso, status, catálogo, opções de setor e apontamentos diários."""
 from http import HTTPStatus
 
-from ...models.service_orders import import_service_orders, list_service_orders
+from ...models.service_orders import (
+    delete_operation,
+    import_service_orders,
+    list_operations,
+    list_service_orders,
+    save_operation,
+)
 from ...services.service_order_import import MAX_SERVICE_ORDER_UPLOAD_BYTES, parse_service_order_file
 from ..http import _multipart_file
 from ...models.production import (
@@ -53,6 +59,30 @@ def handle(req):
             return req.json(HTTPStatus.OK, {"ok": True, **result, "sheet": parsed["sheet"]})
 
         return req.guarded(import_orders, bad_request=ValueError)
+
+    if path == "/api/production/operations":
+        if not user:
+            return req.unauthorized()
+        if method == "GET":
+            return req.guarded(lambda: req.json(HTTPStatus.OK, list_operations(
+                user["id"], include_inactive=req.param("include_inactive", "0") == "1")))
+        if method == "POST":
+            return req.guarded(lambda: req.json(HTTPStatus.CREATED, {
+                "ok": True, "operation": save_operation(user["id"], req.body()),
+            }))
+
+    if path.startswith("/api/production/operations/") and method in {"PUT", "DELETE"}:
+        if not user:
+            return req.unauthorized()
+
+        def operation():
+            operation_id = _last_id(path)
+            if method == "PUT":
+                return req.json(HTTPStatus.OK, {"ok": True, "operation": save_operation(user["id"], req.body(), operation_id=operation_id)})
+            delete_operation(user["id"], operation_id)
+            return req.json(HTTPStatus.OK, {"ok": True})
+
+        return req.guarded(operation, bad_request=(ValueError, TypeError))
 
     if path == "/api/production/access" and method == "GET":
         if not user:

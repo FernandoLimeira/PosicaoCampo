@@ -319,10 +319,6 @@
 
 
 /* ===== Modelo novo da Produção: abas, barra da tabela, coluna O.S. ===== */
-.production-tabs { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid #dce9e0; border-radius: 12px; background: #fff; box-shadow: var(--data-shadow); align-self: flex-start; }
-.production-tab { min-height: 34px; padding: 0 16px; border: 0; border-radius: 9px; background: transparent; color: #557064; font-size: 12px; font-weight: 800; cursor: pointer; transition: background-color .15s ease, color .15s ease; }
-.production-tab:hover { background: #f0f7f3; color: #1f5a3c; }
-.production-tab.is-active { background: var(--green); color: #fff; box-shadow: 0 4px 10px rgba(32, 100, 79, .18); }
 .production-tab-panel { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .production-tab-panel[hidden] { display: none; }
 
@@ -375,8 +371,6 @@
 .production-order-card dd { margin: 2px 0 0; color: #26402f; font-size: 12px; overflow-wrap: anywhere; }
 
 @media (max-width: 620px) {
-  .production-tabs { align-self: stretch; }
-  .production-tab { flex: 1 1 0; }
   .production-toolbar-actions { width: 100%; }
   .production-toolbar-actions button { flex: 1 1 0; }
   .production-order-card dl { grid-template-columns: 1fr; }
@@ -477,3 +471,57 @@
 .production-sheet-op-add:disabled { opacity: .4; cursor: default; }
 .production-sheet-op-remove { border: 1px solid #efc6ca; background: #fff; color: #a63c47; }
 .production-sheet-op-remove:hover { background: var(--red-soft); }
+
+/* Botão "Ver" das O.S. como ícone de olho. */
+.production-os-view.is-icon { width: 30px; min-height: 28px; padding: 0; display: inline-grid; place-items: center; }
+.production-os-view.is-icon svg { width: 16px; height: 16px; }
+
+
+/* ===== Popup de editar frente (mais simples, em duas colunas) ===== */
+.production-modal-heading { min-width: 0; }
+.production-modal-heading h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.production-modal-subtitle { margin: 5px 0 0; color: #5d7166; font-size: 12px; }
+.production-modal-subtitle[hidden] { display: none; }
+.production-entry-form.is-editing { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start; }
+.production-entry-form.is-editing .production-form-section { height: 100%; }
+.production-entry-form.is-editing .production-sector-row-heading { display: none; }
+.production-entry-form.is-editing .production-location-grid { grid-template-columns: minmax(0, .8fr) minmax(0, .8fr) minmax(0, 1.4fr); }
+#production-entry-notes { display: grid; gap: 12px; align-content: start; }
+#production-entry-notes[hidden] { display: none; }
+#production-entry-notes textarea { min-height: 96px; resize: vertical; }
+@media (max-width: 760px) {
+  .production-entry-form.is-editing { grid-template-columns: 1fr; }
+  .production-entry-form.is-editing .production-location-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* ===== Página Cadastros ===== */
+.production-catalog-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.production-catalog-panel[hidden] { display: none; }
+.production-catalog-panel > .production-access-message { grid-column: 1 / -1; }
+.production-catalog-panel .production-config-pane { padding: 0; overflow: visible; }
+.production-catalog-panel #production-config-pane { grid-column: 1 / -1; order: -1; }
+.production-catalog-panel .production-config-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.production-catalog-panel .production-config-card { background: #fff; box-shadow: var(--data-shadow); }
+.production-catalog-panel .production-config-list { max-height: 360px; }
+.production-catalog-panel.is-readonly .production-config-list-actions { display: none; }
+.production-operation-active { display: flex; align-items: center; gap: 6px; color: #3e5b48; font-size: 11px; font-weight: 700; }
+.production-operation-active input { width: 16px; height: 16px; min-height: 0; }
+.production-operation-search { display: block; margin-top: 12px; }
+.production-operation-search input { width: 100%; min-height: 34px; padding: 5px 10px; border: 1px solid #cfddd3; border-radius: 6px; background: #fff; font: inherit; }
+@media (max-width: 900px) {
+  .production-catalog-panel, .production-catalog-panel .production-config-grid { grid-template-columns: 1fr; }
+}
+.production-entry-form.is-editing .production-status-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* Status do setor: barra seletora simples com a cor do status. */
+.production-status-options, .production-entry-form.is-editing .production-status-options { display: block; }
+.production-status-select {
+  width: 100%; min-height: 40px; padding: 0 12px 0 14px;
+  border: 1px solid #d3e0d9; border-left: 5px solid #9aa79f; border-radius: 9px;
+  background-color: #fff; color: #1f3a2c; font: inherit; font-size: 13px; font-weight: 700;
+}
+.production-status-select.is-active { border-left-color: #2c8764; }
+.production-status-select.is-wet { border-left-color: #d5a326; }
+.production-status-select.is-stopped { border-left-color: #c9434e; }
+.production-status-select:focus-visible { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px rgba(44, 135, 100, .15); }
+.production-status-field { margin-top: 12px; }

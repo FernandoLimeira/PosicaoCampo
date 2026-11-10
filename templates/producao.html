@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Produção Agrícola · Posição de Campo{% endblock %}
+{% block title %}{% if page == 'service_orders' %}Ordem de serviço{% elif page == 'production_catalog' %}Cadastros{% else %}Produção Agrícola{% endif %} · Posição de Campo{% endblock %}
 {% block styles %}
   <link rel="stylesheet" href="/css/pages/producao.css?v={{ asset_version }}-front-notes" />
 {% endblock %}
@@ -8,8 +8,8 @@
 <section class="production-page" aria-labelledby="production-title">
   <header class="module-standard-header production-page-header">
     <div>
-      <span class="production-kicker">Atualização operacional</span>
-      <h1 id="production-title">Produção Agrícola</h1>
+      <span class="production-kicker">{% if page in ('service_orders', 'production_catalog') %}Produção Agrícola{% else %}Atualização operacional{% endif %}</span>
+      <h1 id="production-title">{% if page == 'service_orders' %}Ordem de serviço{% elif page == 'production_catalog' %}Cadastros{% else %}Produção Agrícola{% endif %}</h1>
     </div>
     <div class="production-page-actions">
       <div class="production-current-context">
@@ -20,14 +20,10 @@
     </div>
   </header>
 
-  <nav class="production-tabs" role="tablist" aria-label="Seções da Produção Agrícola">
-    <button id="production-tab-entries" class="production-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="production-entries-panel" data-production-tab="entries">Lançamentos</button>
-    <button id="production-tab-orders" class="production-tab" type="button" role="tab" aria-selected="false" aria-controls="production-orders-panel" data-production-tab="orders">Ordem de serviço</button>
-  </nav>
-
   <div id="production-access-message" class="production-access-message" hidden></div>
 
-  <div id="production-entries-panel" class="production-tab-panel" role="tabpanel" aria-labelledby="production-tab-entries">
+  {# Lançamentos (/producao) e Ordem de serviço (/producao/ordens-servico) usam a mesma página. #}
+  <div id="production-entries-panel" class="production-tab-panel"{% if page in ('service_orders', 'production_catalog') %} hidden{% endif %}>
   <section id="production-summary" class="production-summary" aria-label="Resumo dos status"></section>
 
   <section class="production-table-card" aria-labelledby="production-table-title">
@@ -79,7 +75,7 @@
   </section>
   </div>
 
-  <div id="production-orders-panel" class="production-tab-panel" role="tabpanel" aria-labelledby="production-tab-orders" hidden>
+  <div id="production-orders-panel" class="production-tab-panel"{% if page != 'service_orders' %} hidden{% endif %}>
     <section id="production-orders-import" class="production-orders-import" hidden>
       <div>
         <span class="production-kicker">Importação</span>
@@ -120,6 +116,119 @@
         <strong>Nenhuma ordem de serviço importada.</strong>
         <span>Importe o arquivo de O.S. para que a coluna O.S. dos lançamentos mostre “OK” ou “Sem O.S.”.</span>
       </div>
+    </section>
+  </div>
+  <div id="production-catalog-panel" class="production-tab-panel production-catalog-panel"{% if page != 'production_catalog' %} hidden{% endif %}>
+    <p id="production-catalog-readonly" class="production-access-message" hidden>Somente quem tem a configuração global da Produção pode alterar os cadastros.</p>
+    <div id="production-status-config-pane" class="production-config-pane production-status-config-pane">
+      <div class="production-config-heading">
+        <div>
+          <h3>Status da Produção</h3>
+          <p>Defina os status disponíveis no preenchimento.</p>
+        </div>
+      </div>
+
+      <section class="production-config-card production-status-config-card">
+        <div class="production-config-card-title"><strong>Status</strong><span>Nome, cor e ordem de exibição</span></div>
+        <details id="production-status-editor" class="production-config-editor">
+          <summary class="production-config-editor-summary">
+            <span id="production-status-editor-title">Novo status</span>
+            <span class="production-config-editor-hint">Clique para preencher</span>
+          </summary>
+          <form id="production-status-form" class="production-config-form production-config-form-collapsible">
+            <input id="production-status-id" type="hidden" />
+            <label class="field"><span>Nome</span><input id="production-status-name" type="text" maxlength="80" autocomplete="off" required placeholder="Ex.: Em atividade" /></label>
+            <label class="field"><span>Cor</span><select id="production-status-style" required><option value="active">Verde</option><option value="wet">Amarelo</option><option value="waiting">Cinza</option><option value="stopped">Vermelho</option></select></label>
+            <label class="field"><span>Ordem</span><input id="production-status-position" type="number" min="0" max="9999" inputmode="numeric" /></label>
+            <div class="production-config-form-actions">
+              <button class="production-secondary-button" type="button" id="production-status-clear">Cancelar</button>
+              <button class="production-primary-button" type="submit" id="production-status-submit">Adicionar status</button>
+            </div>
+          </form>
+        </details>
+        <div id="production-status-list" class="production-config-list"></div>
+      </section>
+    </div>
+
+    <div id="production-config-pane" class="production-config-pane">
+      <div class="production-config-heading">
+        <div>
+          <h3>Grupos e frentes de serviço</h3>
+          <p>Cadastre, edite ou inative itens sem alterar o histórico já lançado.</p>
+        </div>
+      </div>
+
+      <div class="production-config-grid">
+        <section class="production-config-card">
+          <div class="production-config-card-title"><strong>Grupos</strong><span>Ex.: Preparo e Plantio, Fertirrigação</span></div>
+          <details id="production-group-editor" class="production-config-editor">
+            <summary class="production-config-editor-summary">
+              <span id="production-group-editor-title">Adicionar grupo</span>
+              <span class="production-config-editor-hint">Nome e ordem</span>
+            </summary>
+            <form id="production-group-form" class="production-config-form production-config-form-collapsible">
+              <input id="production-group-id" type="hidden" />
+              <label class="field"><span>Nome</span><input id="production-group-name" type="text" maxlength="80" placeholder="Ex.: Preparo e Plantio" autocomplete="off" required /></label>
+              <label class="field"><span>Ordem</span><input id="production-group-position" type="number" min="0" max="9999" inputmode="numeric" /></label>
+              <div class="production-config-form-actions">
+                <button class="production-secondary-button" type="button" id="production-group-clear">Cancelar</button>
+                <button class="production-primary-button" type="submit" id="production-group-submit">Adicionar grupo</button>
+              </div>
+            </form>
+          </details>
+          <div id="production-groups-list" class="production-config-list"></div>
+        </section>
+
+        <section class="production-config-card">
+          <div class="production-config-card-title"><strong>Frentes / serviços</strong><span>Use o mesmo nome para vincular uma frente existente a esta unidade.</span></div>
+          <details id="production-front-editor" class="production-config-editor">
+            <summary class="production-config-editor-summary">
+              <span id="production-front-editor-title">Nova frente / serviço</span>
+              <span class="production-config-editor-hint">Clique para preencher</span>
+            </summary>
+            <form id="production-front-form" class="production-config-form production-config-form-collapsible">
+              <input id="production-config-front-id" type="hidden" />
+              <label class="field"><span>Nome</span><input id="production-config-front-name" type="text" maxlength="80" required /></label>
+              <label class="field"><span>Grupo</span><select id="production-config-front-group" required></select></label>
+              <label class="field"><span>Tipo de exibição</span><select id="production-config-front-style"><option value="operation">Operação / serviço</option><option value="front">Frente operacional</option></select></label>
+              <label class="field"><span>Ordem</span><input id="production-config-front-position" type="number" min="0" max="9999" value="0" /></label>
+              <input id="production-config-unit-input" type="hidden" />
+              <div class="production-config-form-actions">
+                <button class="production-secondary-button" type="button" id="production-front-clear">Nova</button>
+                <button class="production-primary-button" type="submit">Salvar frente</button>
+              </div>
+            </form>
+          </details>
+          <div id="production-fronts-list" class="production-config-list"></div>
+        </section>
+      </div>
+    </div>
+
+
+    <section class="production-config-card production-operations-card">
+      <div class="production-config-card-title"><strong>Operações</strong><span>Código da O.S., descrição e frente/serviço. As novas do arquivo de O.S. entram automaticamente.</span></div>
+      <details id="production-operation-editor" class="production-config-editor">
+        <summary class="production-config-editor-summary">
+          <span id="production-operation-editor-title">Nova operação</span>
+          <span class="production-config-editor-hint">Clique para preencher</span>
+        </summary>
+        <form id="production-operation-form" class="production-config-form production-config-form-collapsible">
+          <input id="production-operation-id" type="hidden" />
+          <label class="field"><span>Código</span><input id="production-operation-code" type="text" maxlength="40" autocomplete="off" required placeholder="Ex.: 338" /></label>
+          <label class="field"><span>Descrição</span><input id="production-operation-name" type="text" maxlength="160" autocomplete="off" required placeholder="Ex.: PLANTIO MEIOSI" /></label>
+          <label class="field"><span>Frente / serviço</span><select id="production-operation-front"><option value="">Sem vínculo</option></select></label>
+          <label class="field"><span>Ordem</span><input id="production-operation-position" type="number" min="0" max="9999" value="0" /></label>
+          <label class="production-operation-active"><input id="production-operation-active" type="checkbox" checked /> Ativa</label>
+          <div class="production-config-form-actions">
+            <button class="production-secondary-button" type="button" id="production-operation-clear">Cancelar</button>
+            <button class="production-primary-button" type="submit" id="production-operation-submit">Adicionar operação</button>
+          </div>
+        </form>
+      </details>
+      <label class="production-operation-search" for="production-operation-search">
+        <input id="production-operation-search" type="search" autocomplete="off" placeholder="Buscar código, descrição ou frente" />
+      </label>
+      <div id="production-operations-list" class="production-config-list"></div>
     </section>
   </div>
 </section>
@@ -226,12 +335,13 @@
 <div id="production-entry-modal" class="modal-backdrop" hidden>
   <section class="editor-modal production-editor-modal" role="dialog" aria-modal="true" aria-labelledby="production-modal-title">
     <header class="modal-header production-modal-header">
-      <div>
-        <span class="modal-kicker">Produção Agrícola</span>
+      <div class="production-modal-heading">
+        <span id="production-modal-kicker" class="modal-kicker">Produção Agrícola</span>
         <h2 id="production-modal-title">Adicionar frente</h2>
+        <p id="production-modal-subtitle" class="production-modal-subtitle" hidden></p>
       </div>
       <div class="production-modal-header-actions">
-        <button id="production-config-toggle" class="production-config-toggle" type="button" hidden>Configurar frentes</button>
+        <a id="production-config-toggle" class="production-config-toggle" href="/producao/cadastros" hidden>Cadastros</a>
         <button class="modal-close" type="button" data-close-modal="production-entry-modal" aria-label="Fechar">×</button>
       </div>
     </header>
@@ -269,11 +379,11 @@
         <section class="production-form-section">
           <div class="production-form-section-heading">
             <div>
-              <span>Localização</span>
-              <strong>Setores da frente</strong>
+              <span>Localização e status</span>
+              <strong id="production-sector-section-title">Setores da frente</strong>
             </div>
             <div class="production-sector-actions">
-              <button id="production-status-config-toggle" class="production-inline-text-button" type="button" hidden>Configurar status</button>
+              <a id="production-status-config-toggle" class="production-inline-text-button" href="/producao/cadastros" hidden>Configurar status</a>
               <button id="production-add-sector" class="production-secondary-button" type="button">+ Adicionar setor</button>
             </div>
           </div>
@@ -301,111 +411,31 @@
               <input id="production-farm-input" data-sector-field="farm" type="text" maxlength="160" autocomplete="off" placeholder="Nome da fazenda" />
             </label>
           </div>
-          <fieldset class="production-status-field">
-            <legend>Status do setor</legend>
+          <label class="field production-status-field">
+            <span>Status do setor</span>
             <div id="production-status-options" class="production-status-options"></div>
-          </fieldset>
+          </label>
           </div>
           </div>
         </section>
 
         <section id="production-entry-notes" class="production-form-section production-form-section-compact" hidden>
+          <div class="production-form-section-heading">
+            <div>
+              <span>Anotações</span>
+              <strong>Observação e mudança</strong>
+            </div>
+          </div>
           <label class="field" for="production-observation-input">
             <span>Observação <small>(opcional)</small></span>
-            <textarea id="production-observation-input" rows="3" maxlength="2000" placeholder="Observação operacional da frente"></textarea>
+            <textarea id="production-observation-input" rows="4" maxlength="2000" placeholder="Ex.: parada no pátio do setor 396"></textarea>
           </label>
           <label class="field" for="production-changes-input">
-            <span>Mudanças <small>(opcional)</small></span>
-            <textarea id="production-changes-input" rows="3" maxlength="2000" placeholder="Mudanças desta frente"></textarea>
+            <span>Mudança <small>(opcional)</small></span>
+            <textarea id="production-changes-input" rows="4" maxlength="2000" placeholder="Ex.: muda para o setor 2210 à tarde"></textarea>
           </label>
         </section>
       </form>
-    </div>
-
-    <div id="production-status-config-pane" class="production-config-pane production-status-config-pane" hidden>
-      <div class="production-config-heading">
-        <div>
-          <h3>Status da Produção</h3>
-          <p>Defina os status disponíveis no preenchimento.</p>
-        </div>
-        <button id="production-status-config-back" class="production-secondary-button" type="button">Voltar ao preenchimento</button>
-      </div>
-
-      <section class="production-config-card production-status-config-card">
-        <div class="production-config-card-title"><strong>Status</strong><span>Nome, cor e ordem de exibição</span></div>
-        <details id="production-status-editor" class="production-config-editor">
-          <summary class="production-config-editor-summary">
-            <span id="production-status-editor-title">Novo status</span>
-            <span class="production-config-editor-hint">Clique para preencher</span>
-          </summary>
-          <form id="production-status-form" class="production-config-form production-config-form-collapsible">
-            <input id="production-status-id" type="hidden" />
-            <label class="field"><span>Nome</span><input id="production-status-name" type="text" maxlength="80" autocomplete="off" required placeholder="Ex.: Em atividade" /></label>
-            <label class="field"><span>Cor</span><select id="production-status-style" required><option value="active">Verde</option><option value="wet">Amarelo</option><option value="waiting">Cinza</option><option value="stopped">Vermelho</option></select></label>
-            <label class="field"><span>Ordem</span><input id="production-status-position" type="number" min="0" max="9999" inputmode="numeric" /></label>
-            <div class="production-config-form-actions">
-              <button class="production-secondary-button" type="button" id="production-status-clear">Cancelar</button>
-              <button class="production-primary-button" type="submit" id="production-status-submit">Adicionar status</button>
-            </div>
-          </form>
-        </details>
-        <div id="production-status-list" class="production-config-list"></div>
-      </section>
-    </div>
-
-    <div id="production-config-pane" class="production-config-pane" hidden>
-      <div class="production-config-heading">
-        <div>
-          <h3>Grupos e frentes de serviço</h3>
-          <p>Cadastre, edite ou inative itens sem alterar o histórico já lançado.</p>
-        </div>
-        <button id="production-config-back" class="production-secondary-button" type="button">Voltar ao preenchimento</button>
-      </div>
-
-      <div class="production-config-grid">
-        <section class="production-config-card">
-          <div class="production-config-card-title"><strong>Grupos</strong><span>Ex.: Preparo e Plantio, Fertirrigação</span></div>
-          <details id="production-group-editor" class="production-config-editor">
-            <summary class="production-config-editor-summary">
-              <span id="production-group-editor-title">Adicionar grupo</span>
-              <span class="production-config-editor-hint">Nome e ordem</span>
-            </summary>
-            <form id="production-group-form" class="production-config-form production-config-form-collapsible">
-              <input id="production-group-id" type="hidden" />
-              <label class="field"><span>Nome</span><input id="production-group-name" type="text" maxlength="80" placeholder="Ex.: Preparo e Plantio" autocomplete="off" required /></label>
-              <label class="field"><span>Ordem</span><input id="production-group-position" type="number" min="0" max="9999" inputmode="numeric" /></label>
-              <div class="production-config-form-actions">
-                <button class="production-secondary-button" type="button" id="production-group-clear">Cancelar</button>
-                <button class="production-primary-button" type="submit" id="production-group-submit">Adicionar grupo</button>
-              </div>
-            </form>
-          </details>
-          <div id="production-groups-list" class="production-config-list"></div>
-        </section>
-
-        <section class="production-config-card">
-          <div class="production-config-card-title"><strong>Frentes / serviços</strong><span>Use o mesmo nome para vincular uma frente existente a esta unidade.</span></div>
-          <details id="production-front-editor" class="production-config-editor">
-            <summary class="production-config-editor-summary">
-              <span id="production-front-editor-title">Nova frente / serviço</span>
-              <span class="production-config-editor-hint">Clique para preencher</span>
-            </summary>
-            <form id="production-front-form" class="production-config-form production-config-form-collapsible">
-              <input id="production-config-front-id" type="hidden" />
-              <label class="field"><span>Nome</span><input id="production-config-front-name" type="text" maxlength="80" required /></label>
-              <label class="field"><span>Grupo</span><select id="production-config-front-group" required></select></label>
-              <label class="field"><span>Tipo de exibição</span><select id="production-config-front-style"><option value="operation">Operação / serviço</option><option value="front">Frente operacional</option></select></label>
-              <label class="field"><span>Ordem</span><input id="production-config-front-position" type="number" min="0" max="9999" value="0" /></label>
-              <input id="production-config-unit-input" type="hidden" />
-              <div class="production-config-form-actions">
-                <button class="production-secondary-button" type="button" id="production-front-clear">Nova</button>
-                <button class="production-primary-button" type="submit">Salvar frente</button>
-              </div>
-            </form>
-          </details>
-          <div id="production-fronts-list" class="production-config-list"></div>
-        </section>
-      </div>
     </div>
 
     <footer id="production-entry-footer" class="modal-footer">
@@ -428,4 +458,5 @@
   <script src="/js/producao/producao.js?v={{ asset_version }}-front-notes"></script>
   <script src="/js/producao/service-orders.js?v={{ asset_version }}"></script>
   <script src="/js/producao/production-sheet.js?v={{ asset_version }}"></script>
+  <script src="/js/producao/production-catalog.js?v={{ asset_version }}"></script>
 {% endblock %}

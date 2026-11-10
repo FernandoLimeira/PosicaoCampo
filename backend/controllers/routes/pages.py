@@ -13,6 +13,8 @@ PAGE_ROUTES = {
     "/": ("index.html", "dashboard"),
     "/sacarose": ("sacarose.html", "sacarose"),
     "/producao": ("producao.html", "production"),
+    "/producao/ordens-servico": ("producao.html", "service_orders"),
+    "/producao/cadastros": ("producao.html", "production_catalog"),
     "/setores": ("setores.html", "sectors"),
     "/relatorios": ("relatorios.html", "reports"),
     "/retornos": ("retornos.html", "returns"),
@@ -44,10 +46,10 @@ def handle(req):
             return _redirect(start_response, "/login")
         if path in {"/usuarios", "/usuarios/cadastro"} and not user_can(user, "users", "view"):
             return req.error(HTTPStatus.FORBIDDEN, "Sem acesso ao módulo Usuários.")
-        if path == "/producao" and not user.get("production_access", {}).get("enabled"):
+        if path in {"/producao", "/producao/ordens-servico", "/producao/cadastros"} and not user.get("production_access", {}).get("enabled"):
             return req.error(HTTPStatus.FORBIDDEN, "Você não possui acesso à Produção Agrícola.")
         page_key = PAGE_ROUTES[path][1]
-        if page_key not in {"production", "users"} and not user_can(user, page_key):
+        if page_key not in {"production", "service_orders", "production_catalog", "users"} and not user_can(user, page_key):
             return req.error(HTTPStatus.FORBIDDEN, "Você não possui acesso a este módulo.")
         if path == "/usuarios/cadastro":
             return _redirect(start_response, "/usuarios?novo=1")

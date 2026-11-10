@@ -32,7 +32,7 @@
         <button id="ctt-toggle" class="nav-link nav-reports-toggle{% if page in ['dashboard', 'sacarose'] %} is-active{% endif %}" type="button" aria-expanded="false" aria-controls="ctt-flyout">{{ icon('dashboard') }}<span>CTT</span></button>
         {% endif %}
         {% if user.role == 'admin' or (user.production_access is defined and user.production_access.enabled) %}
-        <button id="production-toggle" class="nav-link nav-reports-toggle{% if page == 'production' %} is-active{% endif %}" type="button" aria-expanded="false" aria-controls="production-flyout">{{ icon('production') }}<span>Produção Agrícola</span></button>
+        <button id="production-toggle" class="nav-link nav-reports-toggle{% if page in ('production', 'service_orders', 'production_catalog') %} is-active{% endif %}" type="button" aria-expanded="false" aria-controls="production-flyout">{{ icon('production') }}<span>Produção Agrícola</span></button>
         {% endif %}
         {% if user.module_access.emission.view %}
         <a class="nav-link{% if page == 'emission' %} is-active{% endif %}" href="/emitir-posicao-global"{% if page == 'emission' %} aria-current="page"{% endif %}>{{ icon('emission') }}<span>Emissão Global</span></a>
@@ -89,6 +89,8 @@
       <div class="nav-report-heading"><strong>Produção Agrícola</strong></div>
       <div class="nav-report-items">
         <a class="nav-link{% if page == 'production' %} is-active{% endif %}" href="/producao" data-unit-context{% if page == 'production' %} aria-current="page"{% endif %}>{{ icon('production') }}<span>Frentes e serviços</span></a>
+        <a class="nav-link{% if page == 'service_orders' %} is-active{% endif %}" href="/producao/ordens-servico" data-unit-context{% if page == 'service_orders' %} aria-current="page"{% endif %}>{{ icon('service-orders') }}<span>Ordem de serviço</span></a>
+        <a class="nav-link{% if page == 'production_catalog' %} is-active{% endif %}" href="/producao/cadastros" data-unit-context{% if page == 'production_catalog' %} aria-current="page"{% endif %}>{{ icon('catalog') }}<span>Cadastros</span></a>
       </div>
     </nav>
     {% endif %}

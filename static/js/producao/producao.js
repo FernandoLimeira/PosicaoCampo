@@ -233,16 +233,17 @@ function statusMeta(code) {
   };
 }
 
+// Status do setor numa barra seletora simples (select), com a cor do status escolhido.
 function renderStatusOptions(selectedCode = selectedStatus(), container = document.querySelector('#production-status-options')) {
   if (!container) return;
-  container.innerHTML = productionStatuses.map(status => {
-    const style = PRODUCTION_STATUS_STYLES[status.style_key] || PRODUCTION_STATUS_STYLES.waiting;
-    const checked = status.code === selectedCode ? ' checked' : '';
-    return `<label class="production-status-option ${style.className}"><input type="checkbox" data-production-status value="${escapeHtml(status.code)}"${checked} /><span>${escapeHtml(status.name)}</span></label>`;
-  }).join('');
-  if (!container.innerHTML) {
+  if (!productionStatuses.length) {
     container.innerHTML = '<div class="production-empty"><span>Nenhum status configurado.</span></div>';
+    return;
   }
+  const selected = productionStatuses.some(status => status.code === selectedCode) ? selectedCode : productionStatuses[0].code;
+  container.innerHTML = `<select class="production-status-select ${statusMeta(selected).className}" data-production-status-select aria-label="Status do setor">${
+    productionStatuses.map(status => `<option value="${escapeHtml(status.code)}" ${status.code === selected ? 'selected' : ''}>${escapeHtml(status.name)}</option>`).join('')
+  }</select>`;
 }
 
 function refreshProductionSectorStatuses() {
@@ -334,8 +335,9 @@ function serviceOrderCell(item) {
     ? '<span class="production-os-state is-ok">OK</span>'
     : '<span class="production-os-state is-missing">Sem O.S.</span>';
   // "Ver" aparece sempre que o setor tem O.S. abertas (mesmo de outra operação).
-  const view = order.orders?.length ? `<button class="production-os-view" type="button" data-production-action="orders" data-item-id="${item.id}"
-      aria-label="Ver O.S. do setor ${escapeHtml(item.entry?.sector || '')}">Ver</button>` : '';
+  const label = `Ver O.S. do setor ${escapeHtml(item.entry?.sector || '')}`;
+  const view = order.orders?.length ? `<button class="production-os-view is-icon" type="button" data-production-action="orders" data-item-id="${item.id}"
+      title="${label}" aria-label="${label}">${typeof SERVICE_ORDER_EYE_ICON === 'string' ? SERVICE_ORDER_EYE_ICON : 'Ver'}</button>` : '';
   return `<div class="production-os">${state}${view}</div>`;
 }
 
@@ -438,12 +440,15 @@ function renderEntryFronts(selectedFrontId = null, fallbackItem = null) {
 }
 
 function setSelectedStatus(value, root = document) {
-  root.querySelectorAll('[data-production-status]').forEach(input => {
-    input.checked = input.value === value;
+  root.querySelectorAll('[data-production-status-select]').forEach(select => {
+    if ([...select.options].some(option => option.value === value)) select.value = value;
+    select.className = `production-status-select ${statusMeta(select.value).className}`;
   });
 }
 
 function selectedStatus(root = document) {
+  const select = root.querySelector('[data-production-status-select]');
+  if (select?.value) return select.value;
   return root.querySelector('[data-production-status]:checked')?.value || '';
 }
 
@@ -539,8 +544,6 @@ function syncFarmFromSection(row = document) {
 
 function showEntryPane() {
   document.querySelector('#production-entry-pane').hidden = false;
-  document.querySelector('#production-config-pane').hidden = true;
-  document.querySelector('#production-status-config-pane').hidden = true;
   document.querySelector('#production-entry-footer').hidden = false;
 
   const editingItemId = productionEditingItemId;
@@ -553,44 +556,13 @@ function showEntryPane() {
   if (modalTitle) modalTitle.textContent = editingItemId ? 'Editar frente' : 'Adicionar frente';
 }
 
-async function showConfigPane() {
-  if (!canConfigureProduction()) return;
-  document.querySelector('#production-entry-pane').hidden = true;
-  document.querySelector('#production-config-pane').hidden = false;
-  document.querySelector('#production-status-config-pane').hidden = true;
-  document.querySelector('#production-entry-footer').hidden = true;
-
-  const configButton = document.querySelector('#production-config-toggle');
-  if (configButton) configButton.hidden = true;
-  const statusConfigButton = document.querySelector('#production-status-config-toggle');
-  if (statusConfigButton) statusConfigButton.hidden = true;
-
-  const modalTitle = document.querySelector('#production-modal-title');
-  if (modalTitle) modalTitle.textContent = 'Configuração';
-
-  setProductionConfigUnit(selectedNavbarProductionUnit());
-  await loadProductionConfigCatalog();
-  clearGroupConfigForm();
-  clearFrontConfigForm();
+// Grupos, frentes, status e operações ficam na página Cadastros (menu lateral).
+function showConfigPane() {
+  if (canConfigureProduction()) window.location.href = '/producao/cadastros';
 }
 
-async function showStatusConfigPane() {
-  if (!canConfigureProduction()) return;
-  document.querySelector('#production-entry-pane').hidden = true;
-  document.querySelector('#production-config-pane').hidden = true;
-  document.querySelector('#production-status-config-pane').hidden = false;
-  document.querySelector('#production-entry-footer').hidden = true;
-
-  const configButton = document.querySelector('#production-config-toggle');
-  if (configButton) configButton.hidden = true;
-  const statusConfigButton = document.querySelector('#production-status-config-toggle');
-  if (statusConfigButton) statusConfigButton.hidden = true;
-
-  const modalTitle = document.querySelector('#production-modal-title');
-  if (modalTitle) modalTitle.textContent = 'Configuração de status';
-
-  await loadProductionConfigStatuses();
-  clearStatusConfigForm();
+function showStatusConfigPane() {
+  showConfigPane();
 }
 
 function setProductionEntryEditMode(isEditing) {
@@ -608,6 +580,14 @@ function setProductionEntryEditMode(isEditing) {
 
   const modalTitle = document.querySelector('#production-modal-title');
   if (modalTitle) modalTitle.textContent = isEditing ? 'Editar frente' : 'Adicionar frente';
+  const kicker = document.querySelector('#production-modal-kicker');
+  if (kicker) kicker.textContent = isEditing ? 'Editar frente' : 'Produção Agrícola';
+  const subtitle = document.querySelector('#production-modal-subtitle');
+  if (subtitle) subtitle.hidden = !isEditing;
+  const sectorTitle = document.querySelector('#production-sector-section-title');
+  if (sectorTitle) sectorTitle.textContent = isEditing ? 'Setor da frente' : 'Setores da frente';
+  // Na edição, o formulário fica em duas colunas: setor/status e anotações.
+  document.querySelector('#production-entry-form')?.classList?.toggle('is-editing', Boolean(isEditing));
 
   const submit = document.querySelector('#production-entry-submit');
   if (submit) submit.textContent = isEditing ? 'Atualizar' : 'Adicionar';
@@ -676,8 +656,16 @@ function openEditProductionItem(itemId) {
   section.innerHTML = `<option value="${escapeHtml(entry.section || '')}">${escapeHtml(entry.section || 'Sem seção')}</option>`;
   section.value = entry.section || '';
   setProductionEntryEditMode(true);
+  // O nome da frente em edição fica em destaque no topo do popup.
+  document.querySelector('#production-modal-title').textContent = item.service_name || 'Frente';
+  const subtitle = document.querySelector('#production-modal-subtitle');
+  if (subtitle) {
+    subtitle.textContent = [productionUnitLabel(currentProductionUnit()), item.group_name,
+      entry.sector ? `Setor ${entry.sector}${entry.section ? ` / Seção ${entry.section}` : ''}` : '',
+      item.owner_name ? `Analista: ${item.owner_name}` : ''].filter(Boolean).join(' · ');
+  }
   if (!item.is_own) {
-    document.querySelector('#production-modal-title').textContent = 'Atualizar frente';
+    document.querySelector('#production-modal-kicker').textContent = 'Atualizar frente';
     document.querySelector('#production-entry-submit').textContent = 'Salvar atualização';
   }
   openModal('production-entry-modal');
@@ -812,6 +800,7 @@ async function initializeProductionPage() {
     restoreProductionFilters(unit);
     await refreshProductionPage(unit, { keepFilters: true });
     updateProductionAccessMessage();
+    if (typeof CustomEvent === 'function') document.dispatchEvent(new CustomEvent('production-page-ready', { detail: { unit } }));
   } catch (error) {
     console.error(error);
     if (accessMessage) {
@@ -872,9 +861,7 @@ document.querySelector('#production-sector-rows')?.addEventListener('change', ev
   if (!row) return;
   if (event.target.matches('[data-sector-field="sector"]')) resolveSectorFromBase(row);
   if (event.target.matches('[data-sector-field="section"]')) syncFarmFromSection(row);
-  if (event.target.matches('[data-production-status]') && event.target.checked) {
-    setSelectedStatus(event.target.value, row);
-  }
+  if (event.target.matches('[data-production-status-select]')) setSelectedStatus(event.target.value, row);
 });
 
 document.querySelector('#production-entry-form')?.addEventListener('keydown', event => {
@@ -894,13 +881,9 @@ document.querySelector('#production-items-body')?.addEventListener('click', even
   if (button.dataset.productionAction === 'orders') openProductionItemOrders(itemId);
 });
 
-document.querySelector('#production-config-toggle')?.addEventListener('click', showConfigPane);
 
-document.querySelector('#production-config-back')?.addEventListener('click', showEntryPane);
 
-document.querySelector('#production-status-config-toggle')?.addEventListener('click', showStatusConfigPane);
 
-document.querySelector('#production-status-config-back')?.addEventListener('click', showEntryPane);
 
 document.querySelector('#production-status-form')?.addEventListener('submit', submitProductionStatus);
 

@@ -65,7 +65,7 @@ exatamente quais exceções trata, mantendo os códigos de status anteriores.
 | `users.py` | usuários, credenciais, sessões e administração de contas |
 | `module_access.py` | catálogo de módulos e permissões |
 | `production.py` | Produção Agrícola |
-| `service_orders.py` | Ordens de Serviço da Produção (importação por unidade e situação OK / Sem O.S. dos lançamentos) |
+| `service_orders.py` | Ordens de Serviço da Produção (importação por unidade e situação OK / Sem O.S. dos lançamentos) e cadastro de operações |
 | `units.py` | posição por unidade, versão, histórico e espelhamento na Sacarose |
 | `sectors.py` | base de setores |
 | `sacarose.py` | posições da Sacarose |

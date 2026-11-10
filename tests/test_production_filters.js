@@ -81,7 +81,9 @@ context.openEditProductionItem(2);
 assert.equal(vm.runInContext('productionEditingItemId', context), 2);
 assert.equal(element('#production-item-id').value, '2');
 assert.match(fs.readFileSync(path.join(__dirname, '../templates/producao.html'), 'utf8'), /id="production-item-id"\s+type="hidden"/);
-assert.equal(element('#production-modal-title').textContent, 'Atualizar frente');
+assert.equal(element('#production-modal-kicker').textContent, 'Atualizar frente');
+// O título do popup de edição mostra o nome da frente.
+assert.equal(element('#production-modal-title').textContent, vm.runInContext('findProductionItem(2).service_name', context));
 assert.equal(element('#production-observation-input').value, 'Observação anterior');
 assert.equal(element('#production-changes-input').value, 'Mudança anterior');
 

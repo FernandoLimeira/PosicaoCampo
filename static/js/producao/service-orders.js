@@ -4,21 +4,12 @@ let serviceOrdersData = null;
 let serviceOrdersLoadedUnit = '';
 let serviceOrdersSearchTimer = null;
 
-function activeProductionTab() {
-  return document.querySelector('[data-production-tab].is-active')?.dataset.productionTab || 'entries';
-}
+// Ícone de olho usado nos botões "Ver" das O.S.
+const SERVICE_ORDER_EYE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 
-function selectProductionTab(tab) {
-  document.querySelectorAll('[data-production-tab]').forEach(button => {
-    const active = button.dataset.productionTab === tab;
-    button.classList.toggle('is-active', active);
-    button.setAttribute('aria-selected', String(active));
-  });
-  const entries = document.querySelector('#production-entries-panel');
-  const orders = document.querySelector('#production-orders-panel');
-  if (entries) entries.hidden = tab !== 'entries';
-  if (orders) orders.hidden = tab !== 'orders';
-  if (tab === 'orders') loadServiceOrders();
+// A página /producao/ordens-servico (menu lateral) mostra o painel de O.S.
+function serviceOrdersPageActive() {
+  return String(globalThis.location?.pathname || '').startsWith('/producao/ordens-servico');
 }
 
 function serviceOrderOperationLabel(order) {
@@ -50,7 +41,8 @@ function renderServiceOrders() {
       <td class="production-cell-number">${escapeHtml(order.cost_center || '-')}</td>
       <td><span class="production-os-plots" title="${escapeHtml((order.plots || []).join(', '))}">${escapeHtml(serviceOrderPlotsLabel(order))}</span></td>
       <td>${escapeHtml(serviceOrderDate(order.opened_on))}</td>
-      <td><button class="production-os-view" type="button" data-order-sector="${escapeHtml(order.sector)}">Ver setor</button></td>
+      <td><button class="production-os-view is-icon" type="button" data-order-sector="${escapeHtml(order.sector)}"
+        title="Ver O.S. do setor ${escapeHtml(order.sector)}" aria-label="Ver O.S. do setor ${escapeHtml(order.sector)}">${SERVICE_ORDER_EYE_ICON}</button></td>
     </tr>`).join('');
   if (empty) {
     empty.hidden = data.orders.length > 0;
@@ -176,9 +168,6 @@ function openSectorOrders(sector) {
   showServiceOrdersModal(`Setor ${sector} · ${orders.length} ${orders.length === 1 ? 'O.S. aberta' : 'O.S. abertas'}`, orders);
 }
 
-document.querySelectorAll('[data-production-tab]').forEach(button => {
-  button.addEventListener('click', () => selectProductionTab(button.dataset.productionTab));
-});
 document.querySelector('#production-orders-body')?.addEventListener('click', event => {
   const button = event.target.closest('[data-order-sector]');
   if (button) openSectorOrders(button.dataset.orderSector);
@@ -196,5 +185,6 @@ document.querySelector('#production-orders-search')?.addEventListener('input', (
 document.addEventListener('report-unit-change', () => {
   serviceOrdersData = null;
   serviceOrdersLoadedUnit = '';
-  if (activeProductionTab() === 'orders') window.setTimeout(() => loadServiceOrders({ force: true }), 0);
+  if (serviceOrdersPageActive()) window.setTimeout(() => loadServiceOrders({ force: true }), 0);
 });
+if (serviceOrdersPageActive()) loadServiceOrders();

@@ -7,6 +7,7 @@ let productionSheetRows = [];
 let productionSheetSequence = 0;
 let productionSheetOrders = new Map();
 let productionSheetUnit = '';
+let productionSheetCatalog = new Map(); // código -> operação do cadastro (descrição e frente)
 
 function sheetSectorKey(value) {
   const text = String(value ?? '').trim();
@@ -57,14 +58,21 @@ function productionSheetDirty() {
   return productionSheetRows.some(row => (row.id ? sheetRowChanged(row) : true));
 }
 
-// Operações das O.S. abertas do setor (código — descrição), sem repetir.
-function sheetOperationsFor(sector) {
+// Operações das O.S. abertas do setor (código — descrição), sem repetir. A descrição
+// vem do cadastro de operações; as ligadas à frente da linha aparecem primeiro.
+function sheetOperationsFor(sector, frontId = '') {
   const operations = new Map();
   (productionSheetOrders.get(sheetSectorKey(sector)) || []).forEach(order => {
     const key = sheetOperationKey(order.operation);
-    if (!operations.has(key)) operations.set(key, { key, label: [order.operation, order.operation_name].filter(Boolean).join(' — ') });
+    if (operations.has(key)) return;
+    const catalog = productionSheetCatalog.get(key);
+    const name = catalog?.name || order.operation_name;
+    operations.set(key, {
+      key, label: [order.operation, name].filter(Boolean).join(' — '),
+      linked: Boolean(frontId && catalog?.service_front_id && String(catalog.service_front_id) === String(frontId))
+    });
   });
-  return [...operations.values()].sort((a, b) => compareFrontLabels(a.key, b.key));
+  return [...operations.values()].sort((a, b) => Number(b.linked) - Number(a.linked) || compareFrontLabels(a.key, b.key));
 }
 
 // Todas as operações escolhidas precisam ter O.S. no setor.
@@ -96,11 +104,11 @@ function sheetFrontOptions(row) {
 function sheetOperationOptions(row, index) {
   const value = row.operations[index] || '';
   const taken = new Set(row.operations.filter((item, position) => item && position !== index).map(sheetOperationKey));
-  const operations = sheetOperationsFor(row.sector).filter(item => !taken.has(item.key));
+  const operations = sheetOperationsFor(row.sector, row.frontId).filter(item => !taken.has(item.key));
   const current = value ? sheetOperationKey(value) : '';
   const extra = current && !operations.some(item => item.key === current)
-    ? `<option value="${escapeHtml(value)}" selected>${escapeHtml(value)} (sem O.S.)</option>` : '';
-  const placeholder = operations.length ? 'Selecione' : (row.sector.trim() ? 'Sem O.S. no setor' : 'Informe o setor');
+    ? `<option value="${escapeHtml(value)}" selected>${escapeHtml(value)}</option>` : '';
+  const placeholder = row.sector.trim() ? 'Selecione' : 'Informe o setor';
   return `<option value="">${placeholder}</option>${extra}${operations.map(item =>
     `<option value="${escapeHtml(item.key)}" ${item.key === current ? 'selected' : ''}>${escapeHtml(item.label)}</option>`).join('')}`;
 }
@@ -116,7 +124,8 @@ function sheetRowVisible(row) {
 function sheetRowHtml(row) {
   const style = statusMeta(row.status).className;
   const orderState = sheetOrderState(row);
-  const stateLabel = orderState === 'ok' ? 'O.S. OK' : orderState === 'missing' ? 'Sem O.S.' : '';
+  // No popup só aparece a confirmação "O.S. OK"; "Sem O.S." fica na tabela e no detalhe.
+  const stateLabel = orderState === 'ok' && row.operations.some(Boolean) ? 'O.S. OK' : '';
   return `<tr data-sheet-row="${row.key}" class="${row.removed ? 'is-removed' : ''} ${sheetRowChanged(row) && !row.removed ? 'is-changed' : ''}">
     <td><div class="production-sheet-front ${style}">
       <select data-sheet-field="frontId" aria-label="Frente" ${row.removed ? 'disabled' : ''}>${sheetFrontOptions(row)}</select></div></td>
@@ -175,6 +184,13 @@ function renderSheetFilters() {
 
 async function loadProductionSheetOrders(unit) {
   productionSheetOrders = new Map();
+  productionSheetCatalog = new Map();
+  try {
+    const catalog = await apiRequest('/api/production/operations');
+    (catalog?.operations || []).forEach(item => productionSheetCatalog.set(sheetOperationKey(item.code), item));
+  } catch (error) {
+    console.error(error);
+  }
   try {
     const data = await apiRequest(`/api/production/service-orders?unit=${encodeURIComponent(unit)}`);
     (data?.orders || []).forEach(order => {
@@ -309,8 +325,7 @@ document.querySelector('#production-sheet-configure')?.addEventListener('click',
   })) return;
   productionSheetRows = [];
   closeModal('production-sheet-modal');
-  await openNewProductionItem();
-  await showConfigPane();
+  showConfigPane();
 });
 document.querySelector('#production-sheet-group')?.addEventListener('change', () => { renderSheetFilters(); renderProductionSheet(); });
 document.querySelector('#production-sheet-front')?.addEventListener('change', renderProductionSheet);

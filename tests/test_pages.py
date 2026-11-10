@@ -443,7 +443,7 @@ class PageTests(unittest.TestCase):
                                  "sacarose/sacarose.js"],
             "/producao": core + ["producao/production-consolidation.js", "producao/production-config.js",
                                  "producao/producao.js", "producao/service-orders.js",
-                                 "producao/production-sheet.js"],
+                                 "producao/production-sheet.js", "producao/production-catalog.js"],
             "/emitir-posicao-global": core + [
                 "core/field-fronts.js", "reports-export/shared-drawing.js", "reports-export/field-report-data.js",
                 "reports-export/global-report.js", "reports-export/sacarose-export.js",
@@ -489,6 +489,22 @@ class PageTests(unittest.TestCase):
             self.assertIn(marker, page["body"])
         self.assertNotIn('class="production-daily-card"', page["body"])
         self.assertIn('href="/producao"', page["body"])
+        # "Ordem de serviço" fica no menu lateral da Produção, com página própria.
+        self.assertIn('href="/producao/ordens-servico"', page["body"])
+        self.assertIn('id="production-orders-panel" class="production-tab-panel" hidden', page["body"])
+        orders_page = self.request("/producao/ordens-servico", cookie=cookie)
+        self.assertEqual(orders_page["status"], 200)
+        self.assertIn('id="production-entries-panel" class="production-tab-panel" hidden', orders_page["body"])
+        self.assertIn('aria-current="page"><svg', orders_page["body"].split('href="/producao/ordens-servico"', 1)[1][:200])
+        self.assertEqual(self.request("/producao/ordens-servico", role="member")["status"], 403)
+        # "Cadastros" (grupos, frentes, status e operações) também fica no menu da Produção.
+        self.assertIn('href="/producao/cadastros"', page["body"])
+        catalog_page = self.request("/producao/cadastros", cookie=cookie)
+        self.assertEqual(catalog_page["status"], 200)
+        self.assertIn('id="production-operation-form"', catalog_page["body"])
+        self.assertNotIn('id="production-catalog-panel" class="production-tab-panel production-catalog-panel" hidden', catalog_page["body"])
+        self.assertEqual(self.request("/producao/cadastros", role="member")["status"], 403)
+        self.assertEqual(self.request("/api/production/operations", role="member")["status"], 403)
 
         emission = self.request('/emitir-posicao-global', cookie=cookie)["body"]
         self.assertIn('id="emit-global-production"', emission)
