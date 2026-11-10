@@ -375,8 +375,9 @@ function serviceOrderCell(item) {
   if (!['ok', 'missing', 'no_operation'].includes(order.status)) {
     return '<div class="production-os"><span class="production-os-state is-empty">-</span></div>';
   }
+  // Sem operação: a coluna O.S. fica sem texto ("Sem operação" aparece só na coluna Operação).
   const state = order.status === 'ok' ? '<span class="production-os-state is-ok">OK</span>'
-    : order.status === 'no_operation' ? '<span class="production-os-state is-no-operation">Sem operação</span>'
+    : order.status === 'no_operation' ? ''
       : '<span class="production-os-state is-missing">Sem O.S.</span>';
   // "Ver" aparece sempre que o setor tem O.S. abertas (mesmo de outra operação).
   const label = `Ver O.S. do setor ${escapeHtml(item.entry?.sector || '')}`;
