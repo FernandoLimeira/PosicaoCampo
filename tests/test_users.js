@@ -107,6 +107,9 @@ function context(role = 'admin') {
     escapeHtml: value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;'),
     formatServerTimestamp: () => '06/10/2026',
   });
+  // Ícones compartilhados (core/format.js) usados nos botões da lista.
+  ctx.TRASH_ICON = '<svg></svg>';
+  ctx.PENCIL_ICON = '<svg></svg>';
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/usuarios/usuarios.js'), 'utf8'), ctx);
   return { ctx, elements, requests, productionUnits:production.rows, production, mockAccessForm, moduleViews, moduleEdits };
 }

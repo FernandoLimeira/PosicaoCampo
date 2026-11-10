@@ -53,7 +53,7 @@ function userItemHtml(user) {
         <button class="user-action ${canManageUsers() ? 'user-action-primary' : ''}" type="button" data-user-action="access" data-user-id="${escapeHtml(user.id)}" aria-label="${canManageUsers() ? 'Gerenciar' : 'Consultar'} acessos de ${escapeHtml(user.name || 'usuário')}">${canManageUsers() ? 'Gerenciar acessos' : 'Consultar acessos'}</button>
         ${canManageUsers() ? `<button class="user-action" type="button" data-user-action="toggle" data-user-id="${escapeHtml(user.id)}" data-active="${isActive ? 'true' : 'false'}">${isActive ? 'Desativar' : 'Ativar'}</button>
         <button class="user-action" type="button" data-user-action="password" data-user-id="${escapeHtml(user.id)}">Redefinir senha</button>
-        <button class="user-delete" type="button" data-user-action="delete" data-user-id="${escapeHtml(user.id)}">Excluir</button>
+        <button class="user-delete icon-delete-button" type="button" data-user-action="delete" data-user-id="${escapeHtml(user.id)}" title="Excluir" aria-label="Excluir ${escapeHtml(user.name || 'usuário')}">${TRASH_ICON}</button>
         ` : ''}
       </div>
       ${canManageUsers() ? `

@@ -859,3 +859,11 @@ a.nav-link { display: flex; }
   .confirm-dialog-actions { padding: 12px 18px; flex-direction: column-reverse; }
   .confirm-dialog-actions .modal-button { width: 100%; }
 }
+
+
+/* Botão "Editar" como ícone de lápis (todo o sistema). */
+.icon-edit-button { display: inline-grid; place-items: center; width: 32px; min-width: 32px; height: 30px; min-height: 30px; padding: 0 !important; }
+.icon-edit-button svg { width: 16px; height: 16px; }
+
+.icon-delete-button { display: inline-grid; place-items: center; width: 32px; min-width: 32px; height: 30px; min-height: 30px; padding: 0 !important; }
+.icon-delete-button svg { width: 16px; height: 16px; }

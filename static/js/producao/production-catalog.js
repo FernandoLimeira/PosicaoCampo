@@ -26,8 +26,8 @@ function renderProductionOperations() {
         <span>${escapeHtml(item.front_name || 'Sem frente vinculada')}${item.in_use ? ' · em uso' : ''}${item.is_active ? '' : ' · inativa'}</span>
       </div>
       ${editable ? `<div class="production-config-list-actions">
-        <button type="button" data-operation-action="edit" data-operation-id="${item.id}">Editar</button>
-        <button class="is-delete" type="button" data-operation-action="delete" data-operation-id="${item.id}">Apagar</button>
+        <button class="icon-edit-button" type="button" data-operation-action="edit" data-operation-id="${item.id}" title="Editar" aria-label="Editar operação ${escapeHtml(item.code)}">${PENCIL_ICON}</button>
+        <button class="is-delete icon-delete-button" type="button" data-operation-action="delete" data-operation-id="${item.id}" title="Apagar" aria-label="Apagar operação ${escapeHtml(item.code)}">${TRASH_ICON}</button>
       </div>` : ''}
     </div>`).join('') || '<div class="production-empty"><span>Nenhuma operação cadastrada. Importe as O.S. ou cadastre manualmente.</span></div>';
 }
@@ -110,7 +110,7 @@ async function initializeProductionCatalogPage() {
   const readonly = document.querySelector('#production-catalog-readonly');
   if (readonly) readonly.hidden = editable;
   // Sem a configuração global, a página só consulta: os formulários ficam ocultos.
-  document.querySelectorAll('#production-catalog-panel .production-config-editor, #production-catalog-panel .catalog-new')
+  document.querySelectorAll('.catalog-editor, #production-catalog-panel .catalog-new')
     .forEach(element => { element.hidden = !editable; });
   document.querySelector('#production-catalog-panel')?.classList.toggle('is-readonly', !editable);
   const tasks = [loadProductionOperations()];
@@ -143,6 +143,10 @@ document.querySelector('#production-operations-list')?.addEventListener('click',
 });
 // ---- Abas, contadores, busca e botão "Novo" -------------------------------
 const CATALOG_TAB_KEY = 'posicao-campo-production-catalog-tab';
+const CATALOG_EDITOR_IDS = {
+  groups: '#production-group-editor', fronts: '#production-front-editor',
+  operations: '#production-operation-editor', status: '#production-status-editor'
+};
 const CATALOG_NEW_ACTIONS = {
   groups: () => clearGroupConfigForm({ keepOpen: true }),
   fronts: () => clearFrontConfigForm({ keepOpen: true }),
@@ -206,9 +210,40 @@ if (productionCatalogPageActive()) {
     button.addEventListener('click', () => {
       const key = button.dataset.catalogNew;
       CATALOG_NEW_ACTIONS[key]?.();
-      const editor = button.closest('[data-catalog-section]')?.querySelector('.catalog-editor');
+      const editor = document.querySelector(CATALOG_EDITOR_IDS[key]);
       if (editor) editor.open = true;
       editor?.querySelector('input:not([type="hidden"]), select')?.focus();
+    });
+  });
+  // Formulários de "Novo"/"Editar" abrem como popup simples: fecha no ×, no Esc ou fora do quadro.
+  const CANCEL_BUTTONS = {
+    'production-group-editor': '#production-group-clear', 'production-front-editor': '#production-front-clear',
+    'production-operation-editor': '#production-operation-clear', 'production-status-editor': '#production-status-clear'
+  };
+  const closeCatalogEditor = editor => {
+    document.querySelector(CANCEL_BUTTONS[editor.id])?.click();
+    editor.open = false;
+  };
+  document.querySelectorAll('.catalog-editor').forEach(editor => {
+    // O popup fica direto no <body> para cobrir a tela inteira (fora das seções da página).
+    document.body.appendChild(editor);
+    const summary = editor.querySelector('summary');
+    summary?.setAttribute('role', 'heading');
+    summary?.addEventListener('click', event => event.preventDefault());
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'catalog-editor-close';
+    close.setAttribute('aria-label', 'Fechar');
+    close.textContent = '×';
+    close.addEventListener('click', event => { event.preventDefault(); closeCatalogEditor(editor); });
+    summary?.appendChild(close);
+    editor.addEventListener('mousedown', event => { if (event.target === editor) closeCatalogEditor(editor); });
+    editor.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeCatalogEditor(editor); }
+    });
+    editor.addEventListener('toggle', () => {
+      document.body.classList.toggle('modal-open', Boolean(document.querySelector('.catalog-editor[open]')));
+      if (editor.open) requestAnimationFrame(() => editor.querySelector('input:not([type="hidden"]), select')?.focus());
     });
   });
   // "Cancelar" fecha o formulário em todas as abas (na frente, o botão antigo só limpava).

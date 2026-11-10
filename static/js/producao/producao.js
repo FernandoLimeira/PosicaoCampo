@@ -368,8 +368,9 @@ function renderProductionItems(data) {
     const owner = entry.updated_by_name || item.owner_name || '';
     const actions = canFillProduction() ? `
       <div class="production-row-actions">
-        <button class="production-row-action" type="button" data-production-action="edit" data-item-id="${item.id}">${item.is_own ? 'Editar' : 'Atualizar'}</button>
-        <button class="production-row-action is-remove" type="button" data-production-action="remove" data-item-id="${item.id}">Remover</button>
+        <button class="production-row-action icon-edit-button" type="button" data-production-action="edit" data-item-id="${item.id}"
+          title="${item.is_own ? 'Editar' : 'Atualizar'}" aria-label="${item.is_own ? 'Editar' : 'Atualizar'} ${escapeHtml(item.service_name || 'frente')}">${PENCIL_ICON}</button>
+        <button class="production-row-action is-remove icon-delete-button" type="button" data-production-action="remove" data-item-id="${item.id}" title="Remover" aria-label="Remover ${escapeHtml(item.service_name || 'frente')}">${TRASH_ICON}</button>
       </div>` : '';
     const actionCell = canFillProduction() ? `<td>${actions}</td>` : '';
     const observation = String(entry.observation || '').trim();

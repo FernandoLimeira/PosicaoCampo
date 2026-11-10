@@ -146,7 +146,7 @@ function sheetRowHtml(row) {
     <td><input data-sheet-field="observation" value="${escapeHtml(row.observation)}" maxlength="2000" aria-label="Observação" ${row.removed ? 'disabled' : ''} /></td>
     <td>${row.removed
       ? '<button class="production-sheet-undo" type="button" data-sheet-action="undo">Desfazer</button>'
-      : '<button class="production-sheet-remove" type="button" data-sheet-action="remove">Excluir</button>'}</td>
+      : `<button class="production-sheet-remove icon-delete-button" type="button" data-sheet-action="remove" title="Excluir" aria-label="Excluir linha">${TRASH_ICON}</button>`}</td>
   </tr>`;
 }
 

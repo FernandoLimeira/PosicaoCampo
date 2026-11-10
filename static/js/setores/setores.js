@@ -84,8 +84,8 @@ function renderSectorBaseList() {
       </td>
       <td><span class="sector-base-source ${item.source === 'excel' ? 'is-excel' : 'is-manual'}">${escapeHtml(sectorBaseSourceLabel(item.source))}</span></td>
       <td class="sector-base-actions-cell">
-        ${canEditModule('sectors') ? `<button class="sector-base-action" type="button" data-sector-base-action="edit" data-sector="${escapeHtml(item.sector)}" data-section="${escapeHtml(item.section || '')}">Editar</button>
-        <button class="sector-base-action danger" type="button" data-sector-base-action="delete" data-sector="${escapeHtml(item.sector)}" data-section="${escapeHtml(item.section || '')}">Excluir</button>` : '<span aria-label="Somente consulta">—</span>'}
+        ${canEditModule('sectors') ? `<button class="sector-base-action icon-edit-button" type="button" data-sector-base-action="edit" data-sector="${escapeHtml(item.sector)}" data-section="${escapeHtml(item.section || '')}" title="Editar" aria-label="Editar setor ${escapeHtml(item.sector)}">${PENCIL_ICON}</button>
+        <button class="sector-base-action danger icon-delete-button" type="button" data-sector-base-action="delete" data-sector="${escapeHtml(item.sector)}" data-section="${escapeHtml(item.section || '')}" title="Excluir" aria-label="Excluir setor ${escapeHtml(item.sector)}">${TRASH_ICON}</button>` : '<span aria-label="Somente consulta">—</span>'}
       </td>
     </tr>
   `).join('');

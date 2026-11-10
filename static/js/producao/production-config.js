@@ -21,8 +21,8 @@ function renderProductionConfigLists() {
       <div class="production-config-list-item ${group.is_active ? '' : 'is-inactive'}">
         <div class="production-config-list-item-copy"><strong>${escapeHtml(group.name)}</strong><span>Ordem ${group.position}${group.is_active ? '' : ' · inativo'}</span></div>
         <div class="production-config-list-actions">
-          <button type="button" data-config-action="edit-group" data-group-id="${group.id}">Editar</button>
-          <button class="is-delete" type="button" data-config-action="delete-group" data-group-id="${group.id}" data-group-name="${escapeHtml(group.name)}">Apagar</button>
+          <button class="icon-edit-button" type="button" data-config-action="edit-group" data-group-id="${group.id}" title="Editar" aria-label="Editar grupo ${escapeHtml(group.name)}">${PENCIL_ICON}</button>
+          <button class="is-delete" type="button" data-config-action="delete-group" data-group-id="${group.id}" data-group-name="${escapeHtml(group.name)}" title="Apagar" aria-label="Apagar grupo ${escapeHtml(group.name)}">${TRASH_ICON}</button>
         </div>
       </div>`).join('') || '<div class="production-empty"><span>Nenhum grupo cadastrado.</span></div>';
   }
@@ -32,8 +32,8 @@ function renderProductionConfigLists() {
       <div class="production-config-list-item ${front.is_active ? '' : 'is-inactive'}">
         <div class="production-config-list-item-copy"><strong>${escapeHtml(front.name)}</strong><span>${escapeHtml(front.group_name)} · ${front.display_style === 'front' ? 'frente' : 'operação'}${front.is_active ? '' : ' · inativa'}</span></div>
         <div class="production-config-list-actions">
-          <button type="button" data-config-action="edit-front" data-front-id="${front.id}">Editar</button>
-          <button class="is-delete" type="button" data-config-action="delete-front" data-front-id="${front.id}" data-front-name="${escapeHtml(front.name)}">Apagar</button>
+          <button class="icon-edit-button" type="button" data-config-action="edit-front" data-front-id="${front.id}" title="Editar" aria-label="Editar frente ${escapeHtml(front.name)}">${PENCIL_ICON}</button>
+          <button class="is-delete" type="button" data-config-action="delete-front" data-front-id="${front.id}" data-front-name="${escapeHtml(front.name)}" title="Apagar" aria-label="Apagar frente ${escapeHtml(front.name)}">${TRASH_ICON}</button>
         </div>
       </div>`).join('') || '<div class="production-empty"><span>Nenhuma frente/serviço cadastrada nesta unidade.</span></div>';
   }
@@ -249,8 +249,8 @@ function renderProductionStatusConfigList() {
           <span>${style.label} · Ordem ${status.position}${status.is_active ? '' : ' · inativo'}</span>
         </div>
         <div class="production-config-list-actions">
-          <button type="button" data-status-action="edit" data-status-id="${status.id}">Editar</button>
-          <button class="is-delete" type="button" data-status-action="delete" data-status-id="${status.id}" data-status-name="${escapeHtml(status.name)}">Apagar</button>
+          <button class="icon-edit-button" type="button" data-status-action="edit" data-status-id="${status.id}" title="Editar" aria-label="Editar status ${escapeHtml(status.name)}">${PENCIL_ICON}</button>
+          <button class="is-delete" type="button" data-status-action="delete" data-status-id="${status.id}" data-status-name="${escapeHtml(status.name)}" title="Apagar" aria-label="Apagar status ${escapeHtml(status.name)}">${TRASH_ICON}</button>
         </div>
       </div>`;
   }).join('') || '<div class="production-empty"><span>Nenhum status cadastrado.</span></div>';
