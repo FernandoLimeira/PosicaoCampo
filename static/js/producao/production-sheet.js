@@ -241,8 +241,6 @@ async function openProductionSheet() {
   productionSheetUnit = unit;
   const label = document.querySelector('#production-sheet-unit');
   if (label) label.textContent = productionUnitLabel(unit).toLocaleUpperCase('pt-BR');
-  const configure = document.querySelector('#production-sheet-configure');
-  if (configure) configure.hidden = !canConfigureProduction();
   productionSheetRows = visibleProductionItems().map(sheetRowFromItem);
   if (!productionSheetRows.length) addProductionSheetRow({ render: false });
   renderSheetFilters();
@@ -348,16 +346,6 @@ async function confirmDiscardProductionSheet(event) {
 document.querySelector('#production-add-button')?.addEventListener('click', openProductionSheet);
 document.querySelector('#production-sheet-add')?.addEventListener('click', () => addProductionSheetRow());
 document.querySelector('#production-sheet-save')?.addEventListener('click', saveProductionSheet);
-document.querySelector('#production-sheet-configure')?.addEventListener('click', async () => {
-  if (productionSheetDirty() && !await askConfirmation({
-    kicker: 'Alterações não salvas', title: 'Sair sem salvar?', tone: 'warning',
-    message: 'Para configurar frentes, o popup será fechado e as alterações não salvas serão perdidas.',
-    confirmLabel: 'Configurar frentes', cancelLabel: 'Continuar editando'
-  })) return;
-  productionSheetRows = [];
-  closeModal('production-sheet-modal');
-  showConfigPane();
-});
 document.querySelector('#production-sheet-group')?.addEventListener('change', () => { renderSheetFilters(); renderProductionSheet(); });
 document.querySelector('#production-sheet-front')?.addEventListener('change', renderProductionSheet);
 

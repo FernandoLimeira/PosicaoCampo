@@ -701,3 +701,5 @@
 .production-entry-operations-field > span small { text-transform: none; font-weight: 500; }
 .production-entry-operations-field .production-sheet-operations { margin-top: 6px; }
 .production-entry-operations-field .production-sheet-operation input { min-height: 38px; }
+
+.production-os-state.is-no-operation { color: #a8680d; }

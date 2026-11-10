@@ -88,7 +88,7 @@ class ServiceOrderTests(unittest.TestCase):
     def test_launch_shows_ok_by_sector_and_operation_code(self):
         self._launch("1577")
         items = production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"]
-        self.assertEqual(items[0]["service_order"]["status"], "missing")
+        self.assertEqual(items[0]["service_order"]["status"], "no_operation")
 
         with self.assertRaises(PermissionError):
             service_orders.import_service_orders(self.user["id"], "PPT", [{"number": "1", "sector": "1577", "operation": "457"}])
@@ -99,11 +99,11 @@ class ServiceOrderTests(unittest.TestCase):
             {"number": "5503", "sector": "999", "operation": "338"},
         ], filename="ordens.xlsx")
         self.assertEqual((result["imported"], result["removed"]), (2, 0))
-        # Sem operação escolhida no popup: basta haver O.S. para o setor.
+        # Sem operação informada: "Sem operação", mesmo com O.S. no setor (o "Ver" mostra as O.S.).
         order = production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"][0]["service_order"]
-        self.assertEqual(order["status"], "ok")
+        self.assertEqual(order["status"], "no_operation")
         self.assertEqual(order["orders"][0]["plots"], ["1", "2"])
-        self.assertTrue(order["orders"][0]["matches"])
+        self.assertFalse(order["orders"][0]["matches"])
 
         item_id = production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"][0]["id"]
         for operation, expected in (("338", "missing"), ("457 — TRATOS PLANTIO", "ok")):
@@ -151,6 +151,9 @@ class ServiceOrderTests(unittest.TestCase):
         }, start_response))
         self.assertEqual(result["status"], 200, raw)
         self._launch("1577")
+        item_id = production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"][0]["id"]
+        production.save_items_sheet(self.user["id"], {"unit_code": "PPT", "work_date": "2026-11-10", "rows": [
+            {"id": item_id, "service_front_id": self.front["id"], "sector": "1577", "status": self.status, "operation": "361"}]})
         item = production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"][0]
         self.assertEqual(item["service_order"]["status"], "ok")
 
@@ -174,7 +177,7 @@ class ServiceOrderTests(unittest.TestCase):
         self.assertEqual(items["1577"]["entry"]["farm"], "EDSON BORGES")
         self.assertEqual(items["1577"]["entry"]["operation"], "361")
         self.assertEqual(items["1577"]["service_order"]["status"], "ok")
-        self.assertEqual(items["4702"]["service_order"]["status"], "missing")  # setor sem O.S.
+        self.assertEqual(items["4702"]["service_order"]["status"], "no_operation")  # sem operação informada
 
         # Linha sem "operation" mantém a operação anterior; exclusão e edição na mesma gravação.
         production.save_items_sheet(self.user["id"], {

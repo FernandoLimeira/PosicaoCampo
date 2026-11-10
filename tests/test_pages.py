@@ -489,6 +489,7 @@ class PageTests(unittest.TestCase):
             self.assertIn(marker, page["body"])
         self.assertNotIn('class="production-daily-card"', page["body"])
         self.assertNotIn('Configurar status', page["body"])  # status ficam só na página Cadastros
+        self.assertNotIn('Configurar nova frente', page["body"])  # frentes também
         self.assertIn('href="/producao"', page["body"])
         # "Ordem de serviço" fica no menu lateral da Produção, com página própria.
         self.assertIn('href="/producao/ordens-servico"', page["body"])

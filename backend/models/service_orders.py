@@ -6,7 +6,7 @@ da unidade). Cada O.S. tem setor, seção e o código da operação (ex.: 338).
 Coluna O.S. de um lançamento:
 - com operações escolhidas no popup (uma ou mais, "338, 457"): "OK" se cada
   código tem O.S. no setor;
-- sem operação escolhida: "OK" se existe qualquer O.S. para o setor;
+- sem operação informada: "Sem operação" (o "Ver" continua mostrando as O.S. do setor);
 - "Sem O.S." quando não existe. Quando o lançamento e a O.S. têm seção, ela também precisa coincidir.
 """
 from __future__ import annotations
@@ -174,12 +174,15 @@ def attach_service_order_status(conn: sqlite3.Connection, unit: str, items: list
         # Com várias operações, todas precisam ter O.S. no setor para ficar "OK".
         wanted = operation_keys(entry.get("operation"))
         covered = {operation_key(row["operation"]) for row in matching_rows}
-        complete = bool(matches) and all(key in covered for key in wanted)
+        complete = bool(wanted) and all(key in covered for key in wanted)
         sector_orders = [{**_order_payload(row), "matches": int(row["id"]) in matches} for row in sector_rows]
         sector_orders.sort(key=lambda order: (not order["matches"], natural_key(order["section"]),
                                               natural_key(order["operation"]), natural_key(order["number"])))
+        # Sem operação informada não há o que conferir: "Sem operação" (nunca "OK").
+        if not wanted:
+            sector_orders = [{**order, "matches": False} for order in sector_orders]
         item["service_order"] = {
-            "status": "ok" if complete else "missing",
+            "status": "no_operation" if not wanted else ("ok" if complete else "missing"),
             "missing_operations": [key for key in wanted if key not in covered],
             # Todas as O.S. abertas do setor; "matches" marca as que conferem com o lançamento.
             "orders": sector_orders,

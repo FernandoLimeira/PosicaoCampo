@@ -369,12 +369,12 @@ function productionEntryOperationsValue() {
 // Coluna O.S.: "OK" quando há O.S. do setor para a operação do lançamento; "Sem O.S." quando não há.
 function serviceOrderCell(item) {
   const order = item.service_order || {};
-  if (order.status !== 'ok' && order.status !== 'missing') {
+  if (!['ok', 'missing', 'no_operation'].includes(order.status)) {
     return '<div class="production-os"><span class="production-os-state is-empty">-</span></div>';
   }
-  const state = order.status === 'ok'
-    ? '<span class="production-os-state is-ok">OK</span>'
-    : '<span class="production-os-state is-missing">Sem O.S.</span>';
+  const state = order.status === 'ok' ? '<span class="production-os-state is-ok">OK</span>'
+    : order.status === 'no_operation' ? '<span class="production-os-state is-no-operation">Sem operação</span>'
+      : '<span class="production-os-state is-missing">Sem O.S.</span>';
   // "Ver" aparece sempre que o setor tem O.S. abertas (mesmo de outra operação).
   const label = `Ver O.S. do setor ${escapeHtml(item.entry?.sector || '')}`;
   const view = order.orders?.length ? `<button class="production-os-view is-icon" type="button" data-production-action="orders" data-item-id="${item.id}"
