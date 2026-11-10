@@ -158,8 +158,8 @@ function serviceOrderCardHtml(order) {
   </article>`;
 }
 
-// Com mais de uma O.S. no setor, o popup mostra uma O.S. por etapa: lista das O.S.
-// no topo (clicável) e Anterior/Próxima embaixo. Com uma só, mostra direto.
+// Com mais de uma O.S. no setor, o popup mostra uma O.S. por etapa: as O.S. ficam no
+// topo e basta clicar para trocar (sem paginação). Com uma só, mostra direto.
 let serviceOrderSteps = { orders: [], index: 0 };
 
 function renderServiceOrderStep() {
@@ -183,12 +183,7 @@ function renderServiceOrderStep() {
         <span class="production-order-step-label"><strong>O.S. ${escapeHtml(item.number)}</strong><small>${escapeHtml(item.operation || '-')}${item.matches ? ' · confere' : ''}</small></span>
       </button>`).join('')}
     </nav>
-    ${serviceOrderCardHtml(order)}
-    <div class="production-order-step-footer">
-      <button type="button" class="modal-button secondary" data-order-step="${index - 1}" ${index === 0 ? 'disabled' : ''}>Anterior</button>
-      <span>O.S. ${index + 1} de ${orders.length}</span>
-      <button type="button" class="modal-button save" data-order-step="${index + 1}" ${index === orders.length - 1 ? 'disabled' : ''}>Próxima</button>
-    </div>`;
+    ${serviceOrderCardHtml(order)}`;
   body.querySelector('.production-order-step.is-current')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
 }
 
