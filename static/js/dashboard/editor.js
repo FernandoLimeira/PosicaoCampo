@@ -302,21 +302,29 @@ function collectRainRows() {
 // Assistente de preenchimento: etapas, linhas dinâmicas, proteção contra descarte e gravação.
 function setupEditorEvents() {
   const editorModal = document.querySelector('#data-modal');
-  // O fechamento comum acontece em common.js; a captura evita descartes acidentais.
+  // O fechamento comum acontece em common.js; a captura evita descartes acidentais:
+  // o fechamento é interrompido e só acontece se o usuário confirmar o descarte.
+  const confirmDiscard = async event => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const discard = await askConfirmation({
+      kicker: 'Alterações não salvas',
+      title: 'Sair sem salvar?',
+      message: 'As alterações feitas nesta unidade ainda não foram salvas e serão perdidas.',
+      confirmLabel: 'Sair sem salvar',
+      cancelLabel: 'Continuar editando',
+      tone: 'warning'
+    });
+    if (discard) closeModal('data-modal');
+  };
   document.addEventListener('click', event => {
     const closeButton = event.target.closest('[data-close-modal="data-modal"]');
     if (!closeButton || editorModal?.hidden || !editorHasUnsavedChanges()) return;
-    if (!window.confirm('Existem alterações não salvas. Deseja sair sem salvar?')) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    }
+    confirmDiscard(event);
   }, true);
   document.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || editorModal?.hidden || !editorHasUnsavedChanges()) return;
-    if (!window.confirm('Existem alterações não salvas. Deseja sair sem salvar?')) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    }
+    if (event.key !== 'Escape' || isConfirmationOpen() || editorModal?.hidden || !editorHasUnsavedChanges()) return;
+    confirmDiscard(event);
   }, true);
   editorModal?.addEventListener('click', event => {
     const indicator = event.target.closest('[data-step-indicator]');

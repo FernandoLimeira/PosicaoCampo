@@ -9,10 +9,14 @@
   <div class="user-permission-section">
     <div class="user-module-grid">
       {% for module in modules if module.group == group %}
-      <div class="user-module-row" data-module-row="{{ module.key }}">
-        <div class="user-module-description"><strong>{{ module.name }}</strong><small>{{ module.description }}</small></div>
+      <div class="user-module-row{% if module.key == 'sectors_purge' %} is-sensitive{% endif %}" data-module-row="{{ module.key }}">
+        <div class="user-module-description">
+          <strong>{{ module.name }}{% if module.key == 'sectors_purge' %} <em class="user-module-badge">Ação sensível</em>{% endif %}</strong>
+          <small>{{ module.description }}</small>
+          {% if module.key == 'sectors_purge' %}<small class="user-module-lock-hint">Libere “Consultar” e “Editar” do Cadastro de Setores para habilitar.</small>{% endif %}
+        </div>
         <div class="user-module-controls">
-          <label><input type="checkbox" data-module-view="{{ module.key }}" {% if module.key != 'users' %}checked{% endif %} /><span>Consultar</span></label>
+          <label><input type="checkbox" data-module-view="{{ module.key }}" {% if module.key not in ('users', 'sectors_purge') %}checked{% endif %} /><span>{% if module.key == 'sectors_purge' %}Permitir{% else %}Consultar{% endif %}</span></label>
           {% if module.edit %}<label><input type="checkbox" data-module-edit="{{ module.key }}" {% if module.key != 'users' %}checked{% endif %} /><span>{% if module.key == 'users' %}Gerenciar{% else %}Editar{% endif %}</span></label>{% endif %}
         </div>
       </div>
@@ -24,6 +28,15 @@
 {% endmacro %}
 
 {% macro permission_fields(mode) %}
+{% set permission_icons = {
+  'reports': '<path d="M5 20V10"/><path d="M12 20V4"/><path d="M19 20v-7"/>',
+  'ctt': '<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14"/><path d="M15 6v14"/>',
+  'production': '<path d="M12 21V11"/><path d="M12 11c0-4 3-7 8-7 0 5-3 8-8 7z"/><path d="M12 14c0-3-2.5-5.5-7-5.5 0 4 2.5 6.5 7 5.5z"/>',
+  'emission': '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
+  'sectors': '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+  'history': '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/>',
+  'users': '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M21.5 20a6.5 6.5 0 0 0-4-6"/>'
+} %}
 {% set groups = [
   ('reports', 'Relatório', 'Produtividade e mudanças de área'),
   ('ctt', 'CTT', 'Sacarose e Posição de Campo'),
@@ -39,7 +52,8 @@
     <nav class="user-permission-nav" aria-label="Configuração por módulo">
       {% for key, name, caption in groups %}
       <button type="button" data-permission-target="{{ key }}" aria-pressed="{{ 'true' if key == 'reports' else 'false' }}" class="user-permission-nav-item{% if key == 'reports' %} is-active{% endif %}">
-        <span>{{ name }}</span><small data-permission-count="{{ key }}">{% if key == 'emission' %}Liberado{% else %}Configurar{% endif %}</small>
+        <span class="user-permission-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">{{ permission_icons[key]|safe }}</svg></span>
+        <span class="user-permission-nav-label">{{ name }}</span><small data-permission-count="{{ key }}">{% if key == 'emission' %}Liberado{% else %}Configurar{% endif %}</small>
       </button>
       {% endfor %}
     </nav>

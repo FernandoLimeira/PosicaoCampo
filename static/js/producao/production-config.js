@@ -186,7 +186,12 @@ async function submitConfigFront(event) {
 
 async function deleteConfigGroup(groupId, groupName = '') {
   const label = groupName ? ` “${groupName}”` : '';
-  if (!window.confirm(`Apagar o grupo${label}? Essa ação só é permitida quando não existem frentes/serviços vinculados.`)) return;
+  if (!await askConfirmation({
+    kicker: 'Configuração da Produção',
+    title: `Apagar o grupo${label}?`,
+    message: 'Só é possível apagar grupos sem frentes/serviços vinculados.',
+    confirmLabel: 'Apagar grupo'
+  })) return;
   try {
     await apiRequest(`/api/production/catalog/groups/${groupId}`, { method: 'DELETE' });
     clearGroupConfigForm();
@@ -202,7 +207,12 @@ async function deleteConfigGroup(groupId, groupName = '') {
 
 async function deleteConfigFront(frontId, frontName = '') {
   const label = frontName ? ` “${frontName}”` : '';
-  if (!window.confirm(`Apagar a frente/serviço${label}? Itens que já possuem lançamentos não podem ser apagados para preservar o histórico.`)) return;
+  if (!await askConfirmation({
+    kicker: 'Configuração da Produção',
+    title: `Apagar a frente/serviço${label}?`,
+    message: 'Itens que já possuem lançamentos não podem ser apagados, para preservar o histórico.',
+    confirmLabel: 'Apagar frente'
+  })) return;
   try {
     await apiRequest(`/api/production/catalog/fronts/${frontId}`, { method: 'DELETE' });
     clearFrontConfigForm();
@@ -313,7 +323,12 @@ async function submitProductionStatus(event) {
 
 async function deleteProductionStatus(statusId, statusName = '') {
   const label = statusName ? ` “${statusName}”` : '';
-  if (!window.confirm(`Excluir o status${label} das opções de preenchimento? Os lançamentos e o histórico serão preservados.`)) return;
+  if (!await askConfirmation({
+    kicker: 'Configuração da Produção',
+    title: `Excluir o status${label}?`,
+    message: 'O status sai das opções de preenchimento. Os lançamentos e o histórico serão preservados.',
+    confirmLabel: 'Excluir status'
+  })) return;
   try {
     await apiRequest(`/api/production/statuses/${statusId}`, { method: 'DELETE' });
     clearStatusConfigForm();

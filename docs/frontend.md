@@ -190,7 +190,7 @@ Subpastas funcionam em `/css/`, `/js/` e `/assets/`, e a versão dos assets
 ### Ordem de carregamento
 
 `base.html` carrega o núcleo em todas as páginas autenticadas:
-`core/format.js` → `core/api.js` → `core/common.js`. Em seguida, o bloco
+`core/format.js` → `core/api.js` → `core/common.js` → `core/dialog.js`. Em seguida, o bloco
 `scripts` de cada página acrescenta:
 
 | Página | Scripts próprios, nesta ordem |
@@ -234,6 +234,9 @@ declaram funções e estado.
   `fetchSectorBase`. Cada página define seu `loadSectorBase`, que chama
   `fetchSectorBase` e redesenha a própria tela.
 - **Status de campo, unidade selecionada, modais e toast** (`core/common.js`).
+- **Confirmações** (`core/dialog.js`): `askConfirmation({ title, message, details, confirmLabel, tone, requireText })`
+  abre a janela de confirmação do sistema e devolve `Promise<boolean>`. Use no lugar de `window.confirm`;
+  `requireText` exige digitar uma palavra (ex.: `APAGAR`) antes de liberar o botão.
 
 Regra: dois scripts carregados na mesma página nunca declaram o mesmo nome
 global. `tests/test_page_scripts.js` confere a ordem dos templates com

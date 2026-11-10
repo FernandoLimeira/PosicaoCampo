@@ -28,6 +28,12 @@
                 <input id="sector-base-file" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" required />
                 <small id="sector-base-file-name">Nenhum arquivo selecionado</small>
               </label>
+              {% if user.module_access.sectors_purge.view %}
+              <label class="sector-base-replace-option" for="sector-base-replace">
+                <input id="sector-base-replace" type="checkbox" />
+                <span><strong>Substituir a base atual</strong><small>Apaga todos os setores antes de importar a planilha</small></span>
+              </label>
+              {% endif %}
               <button id="sector-base-import-button" class="modal-button save" type="submit">Importar Excel</button>
             </form>
           </section>
@@ -61,9 +67,17 @@
             <span>Buscar na base</span>
             <input id="sector-base-search" type="search" autocomplete="off" placeholder="Setor, seção ou fazenda" />
           </label>
-          <div class="sector-base-count-wrap">
-            <strong id="sector-base-count">0</strong>
-            <span>setores cadastrados</span>
+          <div class="sector-base-toolbar-side">
+            <div class="sector-base-count-wrap">
+              <strong id="sector-base-count">0</strong>
+              <span>setores cadastrados</span>
+            </div>
+            {% if user.module_access.sectors_purge.view %}
+            <button id="sector-base-purge" class="sector-base-purge-button" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg>
+              Apagar base
+            </button>
+            {% endif %}
           </div>
         </div>
 

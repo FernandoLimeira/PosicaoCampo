@@ -194,6 +194,44 @@
 
 .sector-base-count-wrap strong { color: #1c663a; font-size: 18px; }
 
+.sector-base-toolbar-side { display: flex; align-items: center; gap: 14px; }
+
+.sector-base-purge-button {
+  min-height: 34px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #efc6ca;
+  border-radius: var(--control-radius);
+  background: #fff;
+  color: #a63c47;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.sector-base-purge-button svg { width: 15px; height: 15px; }
+.sector-base-purge-button:hover:not(:disabled) { background: var(--red-soft); border-color: var(--red); }
+.sector-base-purge-button:disabled { opacity: .45; cursor: default; }
+
+.sector-base-import-form .sector-base-replace-option { grid-column: 1 / -1; order: 1; }
+.sector-base-replace-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 11px;
+  border: 1px dashed #e3c3c6;
+  border-radius: 10px;
+  background: #fffafa;
+  cursor: pointer;
+}
+.sector-base-replace-option input { width: 16px; height: 16px; min-height: 0; margin: 1px 0 0; padding: 0; flex: 0 0 auto; accent-color: var(--red); box-shadow: none; }
+.sector-base-replace-option span { display: flex; flex-direction: column; gap: 2px; }
+.sector-base-replace-option strong { color: #8f3540 !important; font-size: 11px !important; }
+.sector-base-replace-option small { font-size: 10px; }
+.sector-base-replace-option:has(input:checked) { border-style: solid; border-color: var(--red); background: var(--red-soft); }
+
 .sector-base-count-wrap span { font-size: 10px; }
 
 .sector-base-table-wrap {

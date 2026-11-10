@@ -749,7 +749,13 @@ function collectProductionSectors() {
 async function removeProductionItem(itemId) {
   const item = findProductionItem(itemId);
   if (!item || !canFillProduction()) return;
-  if (!window.confirm(`Remover o lançamento de ${item.service_name}, setor ${item.entry?.sector || '-'}, da unidade ${currentProductionUnit()}? O histórico será preservado.`)) return;
+  const confirmed = await askConfirmation({
+    kicker: 'Produção Agrícola',
+    title: 'Remover lançamento?',
+    message: `Remover o lançamento de ${item.service_name}, setor ${item.entry?.sector || '-'}, da unidade ${currentProductionUnit()}? O histórico será preservado.`,
+    confirmLabel: 'Remover'
+  });
+  if (!confirmed) return;
   try {
     await apiRequest(`/api/production/my-items/${itemId}`, { method: 'DELETE' });
   } catch (error) {

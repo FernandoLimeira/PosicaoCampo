@@ -141,7 +141,8 @@ def save_sector_base_item(
         "updated_by": row["updated_by_name"] or "-",
     }
 
-def import_sector_base_items(items: list[dict[str, Any]], user_id: int) -> dict[str, int]:
+def import_sector_base_items(items: list[dict[str, Any]], user_id: int, *, replace: bool = False) -> dict[str, int]:
+    """Importa a planilha. Com ``replace``, a base atual é apagada na mesma transação."""
     if not isinstance(items, list) or not items:
         raise ValueError("Nenhum setor válido foi encontrado na planilha.")
     if len(items) > 25_000:
@@ -165,6 +166,7 @@ def import_sector_base_items(items: list[dict[str, Any]], user_id: int) -> dict[
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         validate_actor(conn, user_id)
+        removed = conn.execute("DELETE FROM sector_base").rowcount if replace else 0
         for sector, section, description in normalized.values():
             exists = conn.execute(
                 "SELECT 1 FROM sector_base WHERE sector = ? COLLATE NOCASE AND section = ? COLLATE NOCASE",
@@ -192,7 +194,20 @@ def import_sector_base_items(items: list[dict[str, Any]], user_id: int) -> dict[
         "processed_rows": len(items),
         "created": created,
         "updated": updated,
+        "removed": removed,
+        "replaced": replace,
     }
+
+
+def clear_sector_base(user_id: int) -> int:
+    """Apaga toda a base de setores e devolve quantos registros foram removidos.
+
+    As posições da Sacarose guardam setor/seção como texto e não são afetadas.
+    """
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        validate_actor(conn, user_id)
+        return conn.execute("DELETE FROM sector_base").rowcount
 
 def delete_sector_base_item(sector: Any, section: Any, user_id: int | None = None) -> None:
     normalized_sector = _normalize_sector_code(sector)

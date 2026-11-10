@@ -27,6 +27,15 @@ function getSectorBasePageSize() {
   return Math.max(4, Math.min(10, fittedRows));
 }
 
+// Apagar/substituir a base inteira exige a permissão própria "Apagar base de setores".
+function canPurgeSectorBase() {
+  return currentUser?.role === 'admin' || Boolean(moduleAccess.sectors_purge?.view);
+}
+
+function sectorCountLabel(count) {
+  return `${count} ${count === 1 ? 'setor' : 'setores'}`;
+}
+
 function formatSectorBaseUpdatedAt(timestamp) {
   const value = Number(timestamp || 0);
   if (!value) return '-';
@@ -63,6 +72,8 @@ function renderSectorBaseList() {
   const visibleEnd = Math.min(startIndex + pageItems.length, filtered.length);
 
   if (count) count.textContent = String(sectorBaseItems.length);
+  const purgeButton = document.querySelector('#sector-base-purge');
+  if (purgeButton) purgeButton.disabled = sectorBaseItems.length === 0;
   tbody.innerHTML = pageItems.map(item => `
     <tr data-sector="${escapeHtml(item.sector)}" data-section="${escapeHtml(item.section || '')}">
       <td><strong>${escapeHtml(item.sector)}</strong></td>
@@ -191,13 +202,25 @@ async function importSectorBaseExcel(event) {
     return;
   }
 
+  const replace = canPurgeSectorBase() && Boolean(document.querySelector('#sector-base-replace')?.checked);
+  if (replace && !await askConfirmation({
+    kicker: 'Cadastro de setores',
+    title: 'Substituir a base de setores?',
+    message: `A base atual será apagada e trocada pelos setores da planilha “${file.name}”.`,
+    details: [
+      `${sectorCountLabel(sectorBaseItems.length)} cadastrados hoje serão removidos, inclusive os cadastrados manualmente.`,
+      'Se a planilha tiver algum erro, nada é apagado.'
+    ],
+    confirmLabel: 'Substituir base'
+  })) return;
+
   if (button) button.disabled = true;
   try {
     const formData = new FormData();
     formData.append('file', file, file.name);
     let payload;
     try {
-      payload = await apiRequest('/api/sector-base/import', { method: 'POST', body: formData });
+      payload = await apiRequest(`/api/sector-base/import${replace ? '?replace=1' : ''}`, { method: 'POST', body: formData });
     } catch (error) {
       // apiRequest já redireciona para o login quando a sessão expira.
       if (error.status === 401) return;
@@ -208,7 +231,11 @@ async function importSectorBaseExcel(event) {
     if (fileInput) fileInput.value = '';
     const fileName = document.querySelector('#sector-base-file-name');
     if (fileName) fileName.textContent = 'Nenhum arquivo selecionado';
-    showToast(`${payload.total || 0} setores processados · ${payload.created || 0} novos · ${payload.updated || 0} atualizados.`);
+    const replaceInput = document.querySelector('#sector-base-replace');
+    if (replaceInput) replaceInput.checked = false;
+    showToast(payload.replaced
+      ? `Base substituída: ${payload.removed || 0} removidos · ${payload.total || 0} importados.`
+      : `${payload.total || 0} setores processados · ${payload.created || 0} novos · ${payload.updated || 0} atualizados.`);
   } catch (error) {
     console.error(error);
     showToast(error.message || 'Não foi possível importar a base de setores.', true);
@@ -220,7 +247,13 @@ async function importSectorBaseExcel(event) {
 async function deleteSectorBaseItemFromList(sector, section = '') {
   if (!sector) return;
   const sectionLabel = section || '(sem seção)';
-  const accepted = window.confirm(`Excluir o setor ${sector} da seção ${sectionLabel}?`);
+  const item = getSectorBaseItem(sector, section);
+  const accepted = await askConfirmation({
+    kicker: 'Cadastro de setores',
+    title: `Excluir o setor ${sector}?`,
+    message: `O setor ${sector} da seção ${sectionLabel}${item?.description ? ` (${item.description})` : ''} será removido da base.`,
+    confirmLabel: 'Excluir setor'
+  });
   if (!accepted) return;
   try {
     const url = `/api/sector-base/${encodeURIComponent(sector)}?section=${encodeURIComponent(section)}`;
@@ -241,6 +274,43 @@ async function deleteSectorBaseItemFromList(sector, section = '') {
   }
 }
 
+async function purgeSectorBase() {
+  if (!canPurgeSectorBase()) return;
+  const total = sectorBaseItems.length;
+  if (!total) {
+    showToast('A base de setores já está vazia.');
+    return;
+  }
+  const accepted = await askConfirmation({
+    kicker: 'Cadastro de setores',
+    title: 'Apagar toda a base de setores?',
+    message: 'Esta ação não pode ser desfeita.',
+    details: [
+      `${sectorCountLabel(total)} serão removidos permanentemente.`,
+      'Ao digitar um setor nas frentes, o sistema deixa de sugerir seção e fazenda até uma nova importação.'
+    ],
+    confirmLabel: 'Apagar base',
+    requireText: 'APAGAR'
+  });
+  if (!accepted) return;
+  const button = document.querySelector('#sector-base-purge');
+  if (button) button.disabled = true;
+  try {
+    const payload = await apiRequest('/api/sector-base', { method: 'DELETE', body: JSON.stringify({ confirm: 'APAGAR' }) });
+    sectorBaseItems = [];
+    rebuildSectorBaseMap();
+    sectorBasePage = 1;
+    clearSectorBaseManualForm();
+    renderSectorBaseList();
+    showToast(`Base de setores apagada: ${sectorCountLabel(payload?.removed ?? total)} removidos.`);
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || 'Não foi possível apagar a base de setores.', true);
+    await loadSectorBase({ render: true }).catch(() => {});
+  }
+}
+
+  document.querySelector('#sector-base-purge')?.addEventListener('click', purgeSectorBase);
   document.querySelector('#sector-base-search')?.addEventListener('input', () => {
     sectorBasePage = 1;
     renderSectorBaseList();

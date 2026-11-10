@@ -177,3 +177,128 @@
   .user-unit-add-control select { flex: 1; min-width: 0; }
   .user-access-modal .modal-footer-actions { display: grid; grid-template-columns: 1fr 1fr; }
 }
+
+
+/* ===== Popup de permissões (repaginado) ===== */
+.user-access-modal .modal-header { align-items: center; justify-content: flex-start; }
+.user-access-modal .modal-header .modal-close { margin-left: auto; }
+.user-access-avatar {
+  width: 48px; height: 48px; flex: 0 0 48px;
+  display: grid; place-items: center;
+  border-radius: 15px;
+  color: #fff; font-size: 16px; font-weight: 850; letter-spacing: .5px;
+  background: linear-gradient(135deg, #2c8764, #1f5f63);
+  box-shadow: 0 6px 16px rgba(32, 100, 79, .25);
+}
+.user-access-avatar:empty { display: none; }
+.user-access-modal-heading { min-width: 0; }
+
+/* Menu de módulos com ícone e contador em pílula. */
+.user-permission-workspace { grid-template-columns: 240px minmax(0, 1fr); gap: 16px; }
+.user-permission-sidebar { padding: 10px; border-radius: 16px; background: #f5f9f7; }
+.user-permission-nav-title { margin: 6px 8px 12px; text-transform: uppercase; letter-spacing: .7px; font-size: 10px; color: #4f6a5b; }
+.user-permission-nav-title small { text-transform: none; letter-spacing: 0; }
+.user-permission-nav { gap: 3px; }
+.user-permission-nav-item {
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 10px; min-height: 46px; padding: 7px 9px;
+  border-radius: 11px;
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.user-permission-nav-icon {
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border-radius: 9px;
+  color: #4d6b5b; background: #fff;
+  border: 1px solid #e0ebe5;
+}
+.user-permission-nav-icon svg { width: 16px; height: 16px; }
+.user-permission-nav-item .user-permission-nav-label { font-size: 12px; font-weight: 750; color: #3a5446; }
+.user-permission-nav-item small {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 9px; font-weight: 800;
+  color: #1f6a45; background: #e2f3ea;
+}
+.user-permission-nav-item small.is-empty { color: #7d8b84; background: #edf1ef; }
+.user-permission-nav-item:hover { background: #fff; }
+.user-permission-nav-item.is-active { background: #fff; border-color: #cfe6da; box-shadow: 0 6px 16px rgba(32, 105, 80, .09); }
+.user-permission-nav-item.is-active .user-permission-nav-icon { color: #fff; background: var(--green); border-color: var(--green); }
+.user-permission-nav-item.is-active .user-permission-nav-label { color: #12452e; }
+
+/* Painel do módulo. */
+.user-permission-panel { border-radius: 16px; }
+.user-panel-heading { padding: 18px 22px 16px; background: linear-gradient(180deg, #fbfdfc, #fff); }
+.user-panel-heading h3 { font-size: 18px; letter-spacing: -.2px; color: #183126; }
+.user-module-grid { gap: 8px; }
+.user-module-row {
+  padding: 14px 16px;
+  border-radius: 13px;
+  background: #fff;
+  border-color: #e2ece7;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.user-module-row:hover { border-color: #c7e0d3; box-shadow: 0 4px 12px rgba(32, 105, 80, .06); }
+.user-module-description strong { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.user-module-description small { font-size: 11px; }
+.user-module-controls { gap: 8px; }
+
+/* Caixas de seleção viram chaves liga/desliga (mesmos inputs, só o visual muda). */
+.user-module-controls label,
+.user-production-access .user-unit-operations label {
+  gap: 8px; padding: 6px 10px 6px 7px;
+  border: 1px solid #e2ece7; border-radius: 999px;
+  background: #f8fbf9;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.user-module-controls label:has(input:checked),
+.user-production-access .user-unit-operations label:has(input:checked) { background: #ecf7f1; border-color: #c4e3d2; color: #175a3a; }
+.user-module-controls label:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+.user-module-controls input[type="checkbox"],
+.user-production-access input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none;
+  position: relative;
+  width: 32px; height: 18px;
+  border-radius: 999px;
+  background: #cfdad5;
+  cursor: inherit;
+  transition: background-color .18s ease;
+}
+.user-module-controls input[type="checkbox"]::before,
+.user-production-access input[type="checkbox"]::before {
+  content: "";
+  position: absolute; top: 2px; left: 2px;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(17, 50, 40, .25);
+  transition: transform .18s ease;
+}
+.user-module-controls input[type="checkbox"]:checked,
+.user-production-access input[type="checkbox"]:checked { background: var(--green); }
+.user-module-controls input[type="checkbox"]:checked::before,
+.user-production-access input[type="checkbox"]:checked::before { transform: translateX(14px); }
+.user-module-controls input[type="checkbox"]:focus-visible,
+.user-production-access input[type="checkbox"]:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+
+/* Permissão sensível (apagar a base de setores). */
+.user-module-badge {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 9px; font-style: normal; font-weight: 800; letter-spacing: .3px; text-transform: uppercase;
+  color: #a63c47; background: var(--red-soft);
+}
+.user-module-row.is-sensitive { border-color: #f0d3d6; background: linear-gradient(90deg, #fffafa, #fff 60%); box-shadow: inset 3px 0 0 var(--red); }
+.user-module-row.is-sensitive .user-module-controls label:has(input:checked) { background: var(--red-soft); border-color: #efc6ca; color: #8f3540; }
+.user-module-row.is-sensitive .user-module-controls input[type="checkbox"]:checked { background: var(--red); }
+.user-module-lock-hint { display: none; color: #a0646b !important; font-weight: 650; }
+.user-module-row.is-locked .user-module-lock-hint { display: block; }
+
+@media (max-width: 680px) {
+  .user-access-avatar { width: 40px; height: 40px; flex-basis: 40px; border-radius: 12px; font-size: 14px; }
+  .user-module-controls label { padding: 5px 9px 5px 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .user-module-controls input[type="checkbox"], .user-module-controls input[type="checkbox"]::before,
+  .user-production-access input[type="checkbox"], .user-production-access input[type="checkbox"]::before { transition: none; }
+}

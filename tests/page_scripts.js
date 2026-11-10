@@ -8,7 +8,7 @@ const vm = require('node:vm');
 const JS_DIR = path.join(__dirname, '../static/js');
 
 // Carregados por templates/base.html em todas as páginas autenticadas.
-const BASE_SCRIPTS = ['core/format.js', 'core/api.js', 'core/common.js'];
+const BASE_SCRIPTS = ['core/format.js', 'core/api.js', 'core/common.js', 'core/dialog.js'];
 
 const PAGE_SCRIPTS = {
   '/': [...BASE_SCRIPTS, 'core/field-fronts.js', 'core/sector-base.js',

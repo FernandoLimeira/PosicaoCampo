@@ -44,6 +44,8 @@ const escapeHtmlStub = context.escapeHtml;
 loadScripts(context, ['core/format.js', ...pageScripts('/producao')],
   source => source.replace(/initializeProductionPage\(\);\s*$/, ''));
 context.escapeHtml = escapeHtmlStub;
+// A janela de confirmação do sistema (core/dialog.js) precisa de DOM real; aqui só registra o texto.
+context.askConfirmation = async options => { confirmations.push(`${options.title} ${options.message}`); return true; };
 
 vm.runInContext(`
   productionAccess = { enabled: true, units: ['NRD'], permissions: { fill: true } };

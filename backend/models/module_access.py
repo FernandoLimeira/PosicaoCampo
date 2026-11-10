@@ -19,10 +19,13 @@ MODULES = (
     {"key": "sacarose", "name": "Sacarose", "description": "Consultar e atualizar indicadores de sacarose.", "edit": True, "group": "CTT"},
     {"key": "emission", "name": "Emissão Global", "description": "Emissão consolidada liberada para todos os analistas.", "edit": False, "group": "Emissão Global"},
     {"key": "sectors", "name": "Cadastro de Setores", "description": "Consultar, cadastrar, importar e excluir setores.", "edit": True, "group": "Cadastro de Setores"},
+    {"key": "sectors_purge", "name": "Apagar base de setores", "description": "Apagar toda a base ou substituí-la ao importar o Excel. Requer a edição do cadastro.", "edit": False, "group": "Cadastro de Setores"},
     {"key": "history", "name": "Histórico", "description": "Consultar o registro de alterações.", "edit": False, "group": "Histórico"},
     {"key": "users", "name": "Usuários", "description": "Consultar contas ou administrar cadastros e acessos.", "edit": True, "group": "Usuários"},
 )
 MODULE_BY_KEY = {module["key"]: module for module in MODULES}
+# Módulos que podem faltar no payload (integrações antigas); ausentes valem como negados.
+OPTIONAL_MODULE_KEYS = {"users", "sectors_purge"}
 # Módulos que existiam antes da personalização de acessos. Somente para eles
 # vale o acesso legado (ver e editar, exceto Usuários); é gravado de forma
 # explícita por materialize_legacy_module_access. Qualquer módulo novo começa
@@ -67,7 +70,7 @@ def landing_page(modules: dict, production_enabled: bool) -> str:
 def normalize_module_access(payload: Any) -> dict[str, dict[str, bool]] | None:
     if payload is None:
         return None  # Compatibilidade com integrações antigas.
-    if not isinstance(payload, dict) or not set(payload).issubset(MODULE_BY_KEY) or set(payload) - {"users"} != set(MODULE_BY_KEY) - {"users"}:
+    if not isinstance(payload, dict) or not set(payload).issubset(MODULE_BY_KEY) or set(payload) - OPTIONAL_MODULE_KEYS != set(MODULE_BY_KEY) - OPTIONAL_MODULE_KEYS:
         raise ValueError("Envie as permissões de todos os módulos.")
     result = {}
     for key, spec in MODULE_BY_KEY.items():
@@ -77,6 +80,9 @@ def normalize_module_access(payload: Any) -> dict[str, dict[str, bool]] | None:
         if entry["edit"] and (not entry["view"] or not spec["edit"]):
             raise ValueError(f"Edição incompatível com o acesso: {spec['name']}.")
         result[key] = {"view": True if key == "emission" else entry["view"], "edit": entry["edit"]}
+    # Apagar a base depende da edição do cadastro; sem ela, a permissão é descartada.
+    if not result["sectors"]["edit"]:
+        result["sectors_purge"]["view"] = False
     return result
 
 
@@ -105,6 +111,8 @@ def module_access_from_conn(conn, user_id: int, *, role: str) -> dict[str, dict[
         view = bool(row["can_view"]) if row is not None else False
         edit = bool(row["can_fill"]) if row is not None else False
         result[key] = {"view": True if key == "emission" else view, "edit": view and edit and spec["edit"]}
+    # Apagar a base só vale enquanto o usuário também puder editar o cadastro.
+    result["sectors_purge"]["view"] = result["sectors_purge"]["view"] and result["sectors"]["edit"]
     return result
 
 
@@ -234,6 +242,8 @@ def required_permission(path: str, method: str):
         return (("sectors", "sacarose") if method == "GET" else ("sectors",), "edit" if method == "POST" else "view")
     if path == "/api/sector-base/import" and method == "POST":
         return (("sectors",), "edit")
+    if path == "/api/sector-base" and method == "DELETE":
+        return (("sectors_purge",), "view")
     if path.startswith("/api/sector-base/") and method == "DELETE":
         return (("sectors",), "edit")
     if path.startswith("/api/return-analysis/"):

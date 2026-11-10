@@ -46,7 +46,8 @@ function userItemHtml(user) {
   if (isAdmin && !isCurrent) return '';
   const isActive = user.is_active !== false;
   const roleLabel = { admin: 'Administrador', coordinator: 'Coordenador', analyst: 'Analista', user: 'Usuário padrão' }[user.role] || 'Usuário padrão';
-  const visibleModules = Object.values(user.module_access || {}).filter(access => access?.view).length;
+  const visibleModules = Object.entries(user.module_access || {})
+    .filter(([key, access]) => access?.view && !(key in DEPENDENT_MODULE_PERMISSIONS)).length;
   const actions = !isCurrent && !isAdmin ? `
       <div class="user-actions">
         <button class="user-action ${canManageUsers() ? 'user-action-primary' : ''}" type="button" data-user-action="access" data-user-id="${escapeHtml(user.id)}" aria-label="${canManageUsers() ? 'Gerenciar' : 'Consultar'} acessos de ${escapeHtml(user.name || 'usuário')}">${canManageUsers() ? 'Gerenciar acessos' : 'Consultar acessos'}</button>
@@ -127,11 +128,26 @@ function applyModuleAccess(root, access) {
   syncModuleAccessDisabled(root);
 }
 
+// Permissões que dependem de outra: só podem ser marcadas com a principal liberada.
+const DEPENDENT_MODULE_PERMISSIONS = { sectors_purge: 'sectors' };
+
 function syncModuleAccessDisabled(root) {
   if (!root) return;
   root.querySelectorAll('[data-module-view]').forEach(view => {
     const edit = root.querySelector(`[data-module-edit="${view.dataset.moduleView}"]`);
     if (edit) edit.disabled = !view.checked;
+  });
+  Object.entries(DEPENDENT_MODULE_PERMISSIONS).forEach(([key, parent]) => {
+    const dependent = root.querySelector(`[data-module-view="${key}"]`);
+    if (!dependent) return;
+    const parentView = root.querySelector(`[data-module-view="${parent}"]`);
+    const parentEdit = root.querySelector(`[data-module-edit="${parent}"]`);
+    const allowed = Boolean(parentView?.checked && parentEdit?.checked);
+    // Gestores delegados não podem conceder o que não possuem (o servidor também valida).
+    const ownsIt = currentUser?.role === 'admin' || Boolean(moduleAccess[key]?.view);
+    dependent.disabled = !allowed || !ownsIt;
+    if (!allowed) dependent.checked = false;
+    dependent.closest('[data-module-row]')?.classList.toggle('is-locked', !allowed);
   });
 }
 
@@ -155,6 +171,10 @@ function selectPermissionPanel(root, key = 'reports') {
 function updatePermissionSummaries(root) {
   const workspace = root?.querySelector('[data-permission-workspace]');
   if (!workspace) return;
+  // Depois de atualizar os textos, marca os módulos sem acesso para o visual em cinza.
+  requestAnimationFrame(() => workspace.querySelectorAll('[data-permission-count]').forEach(label => {
+    label.classList.toggle('is-empty', label.textContent.trim() === 'Sem acesso');
+  }));
   workspace.querySelectorAll('[data-permission-count]').forEach(label => {
     const key = label.dataset.permissionCount;
     if (key === 'emission') { label.textContent = 'Liberado'; return; }
@@ -309,7 +329,7 @@ function resetCreateUserForm(form) {
   // iniciam com os próprios limites, sem possibilidade de escalada.
   form.querySelectorAll('[data-module-view]').forEach(view => {
     const key = view.dataset.moduleView;
-    if (key === 'users') view.checked = false;
+    if (key === 'users' || key in DEPENDENT_MODULE_PERMISSIONS) view.checked = false;
     else if (currentUser?.role !== 'admin' && typeof moduleAccess !== 'undefined') view.checked = Boolean(moduleAccess[key]?.view);
     const edit = form.querySelector(`[data-module-edit="${key}"]`);
     if (edit && (key === 'users' || currentUser?.role !== 'admin')) {
@@ -426,7 +446,12 @@ async function deleteUserFromList(button) {
   if (!Number.isInteger(userId) || userId <= 0) return;
   const item = button.closest('.user-list-item');
   const name = item?.querySelector('strong')?.textContent?.replace(' · conectado', '') || 'este usuário';
-  if (!window.confirm(`Excluir ${name}?`)) return;
+  if (!await askConfirmation({
+    kicker: 'Gerenciamento de usuários',
+    title: `Excluir ${name}?`,
+    message: 'A conta será removida e a pessoa perderá o acesso ao sistema. Esta ação não pode ser desfeita.',
+    confirmLabel: 'Excluir usuário'
+  })) return;
   button.disabled = true;
   try {
     await apiRequest(`/api/users/${userId}`, { method: 'DELETE' });
@@ -528,7 +553,10 @@ async function openAccessModal(button) {
   const save = document.querySelector('#user-access-save');
   if (!userId || !item || !modal || !form || !loading || !save) return;
   const requestId = ++accessRequestId;
-  document.querySelector('#user-access-modal-name').textContent = item.querySelector('.user-list-copy strong')?.textContent || 'usuário';
+  const userName = (item.querySelector('.user-list-copy strong')?.textContent || 'usuário').replace(' · conectado', '');
+  document.querySelector('#user-access-modal-name').textContent = userName;
+  const avatar = document.querySelector('#user-access-modal-avatar');
+  if (avatar) avatar.textContent = userName.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toLocaleUpperCase('pt-BR') || '?';
   document.querySelector('#user-access-status').textContent = '';
   form.dataset.userAccessForm = String(userId);
   form.hidden = true;
@@ -616,7 +644,7 @@ for (const selector of ['#quick-user-form', '#user-access-form']) {
   const form = document.querySelector(selector);
   form?.addEventListener('change', event => {
     if (event.target.matches('[data-production-access-enabled]')) syncProductionAccessDisabled(form);
-    if (event.target.matches('[data-module-view]')) syncModuleAccessDisabled(form);
+    if (event.target.matches('[data-module-view], [data-module-edit]')) syncModuleAccessDisabled(form);
     if (event.target.matches('[data-permission-picker]')) selectPermissionPanel(form, event.target.value);
     updatePermissionSummaries(form);
   });

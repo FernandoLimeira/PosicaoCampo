@@ -435,7 +435,7 @@ class PageTests(unittest.TestCase):
 
     def test_script_dependencies_and_styles_are_scoped(self):
         # Mesma ordem de tests/page_scripts.js (conferida também por tests/test_page_scripts.js).
-        core = ["core/format.js", "core/api.js", "core/common.js"]
+        core = ["core/format.js", "core/api.js", "core/common.js", "core/dialog.js"]
         expected = {
             "/": core + ["core/field-fronts.js", "core/sector-base.js", "dashboard/dashboard.js",
                          "dashboard/field-notes.js", "dashboard/editor.js", "dashboard/app.js"],
@@ -853,6 +853,69 @@ class PageTests(unittest.TestCase):
         for path in ("/templates/base.html", "/base.html", "/css/../../backend/config.py", "/css/../js/core/common.js"):
             self.assertEqual(self.request(path, role="admin")["status"], 404, path)
 
+
+    def _restore_sector_base_after_test(self):
+        """Os testes que apagam a base restauram os setores usados pelos demais testes."""
+        from backend.models.sectors import clear_sector_base
+        snapshot = [(item["sector"], item["section"], item["description"]) for item in self.db.list_sector_base()]
+
+        def restore():
+            clear_sector_base(self.admin["id"])
+            for sector, section, description in snapshot:
+                self.db.save_sector_base_item(sector, section, description, self.admin["id"])
+        self.addCleanup(restore)
+        return len(snapshot)
+
+    def test_sector_base_purge_requires_its_own_permission(self):
+        from backend.models.module_access import MODULES, normalize_module_access
+        existing = self._restore_sector_base_after_test()
+        self.db.save_sector_base_item("7001", "1", "FAZENDA A", self.admin["id"])
+        self.db.save_sector_base_item("7002", "1", "FAZENDA B", self.admin["id"])
+        # O membro edita o cadastro (acesso legado), mas não recebeu "Apagar base".
+        self.assertEqual(self.request('/api/sector-base', role='member', method='DELETE', body={'confirm': 'APAGAR'})['status'], 403)
+        blocked = self.request('/api/sector-base/import', role='member', method='POST',
+                               overrides={'QUERY_STRING': 'replace=1'})
+        self.assertEqual(blocked['status'], 403)
+        self.assertNotIn('sector-base-purge', self.request('/setores', role='member')['body'])
+        self.assertEqual(len(self.db.list_sector_base()), existing + 2)
+
+        # Sem a edição do cadastro, a permissão de apagar é descartada.
+        modules = {item['key']: {'view': True, 'edit': False} for item in MODULES}
+        modules['sectors_purge'] = {'view': True, 'edit': False}
+        self.assertFalse(normalize_module_access(modules)['sectors_purge']['view'])
+        # Integrações antigas que não enviam a chave continuam aceitas (negada).
+        legacy = {key: value for key, value in modules.items() if key != 'sectors_purge'}
+        self.assertFalse(normalize_module_access(legacy)['sectors_purge']['view'])
+
+        modules['sectors'] = {'view': True, 'edit': True}
+        purger = self.db.create_user('Purger', 'Test-password-42', role='analyst', module_access=modules)
+        cookie = f"{config.SESSION_COOKIE}={self.db.create_session(purger['id'])}"
+        self.assertIn('id="sector-base-purge"', self.request('/setores', cookie=cookie)['body'])
+        missing = self.request('/api/sector-base', cookie=cookie, method='DELETE', body={})
+        self.assertEqual(missing['status'], 400)
+        self.assertIn('APAGAR', json.loads(missing['body'])['error'])
+        self.assertEqual(len(self.db.list_sector_base()), existing + 2)
+        done = self.request('/api/sector-base', cookie=cookie, method='DELETE', body={'confirm': 'apagar'})
+        self.assertEqual(done['status'], 200, done['body'])
+        self.assertEqual(json.loads(done['body'])['removed'], existing + 2)
+        self.assertEqual(self.db.list_sector_base(), [])
+
+    def test_sector_base_import_can_replace_the_whole_base(self):
+        from backend.models.sectors import import_sector_base_items
+        existing = self._restore_sector_base_after_test()
+        self.db.save_sector_base_item("8001", "1", "MANUAL ANTIGO", self.admin["id"])
+        self.db.save_sector_base_item("8002", "1", "OUTRO", self.admin["id"])
+        merged = import_sector_base_items([{"sector": "8002", "section": "1", "description": "NOVO"}], self.admin["id"])
+        self.assertEqual((merged["removed"], merged["replaced"]), (0, False))
+        self.assertEqual(len(self.db.list_sector_base()), existing + 2)
+        replaced = import_sector_base_items([{"sector": "9001", "section": "2", "description": "SÓ ESTE"}],
+                                            self.admin["id"], replace=True)
+        self.assertEqual((replaced["removed"], replaced["created"], replaced["replaced"]), (existing + 2, 1, True))
+        self.assertEqual([item["sector"] for item in self.db.list_sector_base()], ["9001"])
+        # Planilha inválida não apaga nada.
+        with self.assertRaises(ValueError):
+            import_sector_base_items([{"sector": "", "section": "", "description": ""}], self.admin["id"], replace=True)
+        self.assertEqual([item["sector"] for item in self.db.list_sector_base()], ["9001"])
 
     def test_module_permissions_enforced_on_pages_and_direct_api_calls(self):
         from backend.models.module_access import MODULES

@@ -3,7 +3,9 @@ import logging
 from http import HTTPStatus
 from urllib.parse import unquote
 
+from ...models.module_access import user_can
 from ...models.sectors import (
+    clear_sector_base,
     delete_sector_base_item,
     import_sector_base_items,
     list_sector_base,
@@ -45,10 +47,13 @@ def handle(req):
     if path == "/api/sector-base/import" and method == "POST":
         if not user:
             return req.unauthorized()
+        replace = req.param("replace") == "1"
+        if replace and not user_can(user, "sectors_purge"):
+            return req.error(HTTPStatus.FORBIDDEN, "Sem permissão para substituir a base de setores.")
         try:
             filename, file_bytes = _multipart_file(req.environ, max_file_bytes=MAX_SECTOR_BASE_UPLOAD_BYTES)
             parsed = parse_sector_base_excel_details(file_bytes, filename)
-            result = import_sector_base_items(parsed["items"], user["id"])
+            result = import_sector_base_items(parsed["items"], user["id"], replace=replace)
             return req.json(
                 HTTPStatus.OK,
                 {
@@ -67,6 +72,20 @@ def handle(req):
         except Exception:
             logger.exception("Erro ao importar base de setores")
             return req.error(HTTPStatus.INTERNAL_SERVER_ERROR, "Não foi possível importar a base de setores.")
+
+    if path == "/api/sector-base" and method == "DELETE":
+        if not user:
+            return req.unauthorized()
+
+        def purge():
+            # Confirmação explícita no corpo evita apagar a base por uma chamada acidental.
+            if str(req.body().get("confirm") or "").strip().upper() != "APAGAR":
+                raise ValueError("Digite APAGAR para confirmar a exclusão de toda a base.")
+            removed = clear_sector_base(user["id"])
+            logger.info("Base de setores apagada por usuário %s (%s registros)", user["id"], removed)
+            return req.json(HTTPStatus.OK, {"ok": True, "removed": removed})
+
+        return req.guarded(purge, bad_request=ValueError, forbidden=False)
 
     if path.startswith("/api/sector-base/") and method == "DELETE":
         if not user:
