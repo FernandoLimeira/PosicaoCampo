@@ -1,6 +1,7 @@
 // Popup "Atualização de Status Operacional": todas as frentes da unidade em
 // linhas editáveis (frente, seção, setor, status, operação e observação).
-// A frente vem do cadastro do sistema; a operação vem das O.S. abertas do setor.
+// A frente vem do cadastro do sistema; as operações vêm das O.S. abertas do setor
+// (o botão "+" acrescenta outra operação quando o setor tem mais de uma O.S.).
 // Ao salvar, só as linhas novas ou alteradas e as excluídas são enviadas.
 let productionSheetRows = [];
 let productionSheetSequence = 0;
@@ -17,6 +18,15 @@ function sheetOperationKey(value) {
   return match ? String(Number.parseInt(match[1], 10)) : String(value ?? '').trim().toLocaleLowerCase('pt-BR');
 }
 
+function sheetSplitOperations(value) {
+  const parts = String(value || '').split(/[,;+]/).map(part => part.trim()).filter(Boolean);
+  return parts.length ? [...new Set(parts)] : [''];
+}
+
+function sheetOperationsValue(row) {
+  return [...new Set(row.operations.map(value => value.trim()).filter(Boolean))].join(', ');
+}
+
 function sheetFronts() {
   return groupsForEntry().flatMap(group => (group.fronts || [])
     .filter(front => front.is_active !== false)
@@ -29,14 +39,14 @@ function sheetRowFromItem(item) {
     key: `row-${++productionSheetSequence}`, id: item.id, groupId: item.group_id,
     frontId: String(item.service_front_id), frontName: item.service_name,
     section: entry.section || '', sector: entry.sector || '', status: entry.status || defaultStatusCode(),
-    operation: entry.operation || '', observation: entry.observation || '', farm: entry.farm || '', removed: false
+    operations: sheetSplitOperations(entry.operation), observation: entry.observation || '', farm: entry.farm || '', removed: false
   };
   row.original = sheetSnapshot(row);
   return row;
 }
 
 function sheetSnapshot(row) {
-  return JSON.stringify([row.frontId, row.section.trim(), row.sector.trim(), row.status, row.operation, row.observation.trim()]);
+  return JSON.stringify([row.frontId, row.section.trim(), row.sector.trim(), row.status, sheetOperationsValue(row), row.observation.trim()]);
 }
 
 function sheetRowChanged(row) {
@@ -57,12 +67,14 @@ function sheetOperationsFor(sector) {
   return [...operations.values()].sort((a, b) => compareFrontLabels(a.key, b.key));
 }
 
+// Todas as operações escolhidas precisam ter O.S. no setor.
 function sheetOrderState(row) {
   if (!row.sector.trim()) return '';
   const orders = productionSheetOrders.get(sheetSectorKey(row.sector)) || [];
   if (!orders.length) return 'missing';
-  if (!row.operation) return 'ok';
-  return orders.some(order => sheetOperationKey(order.operation) === sheetOperationKey(row.operation)) ? 'ok' : 'missing';
+  const available = new Set(orders.map(order => sheetOperationKey(order.operation)));
+  const wanted = row.operations.filter(Boolean).map(sheetOperationKey);
+  return wanted.every(key => available.has(key)) ? 'ok' : 'missing';
 }
 
 function sheetFrontOptions(row) {
@@ -81,11 +93,13 @@ function sheetFrontOptions(row) {
   ).join('');
 }
 
-function sheetOperationOptions(row) {
-  const operations = sheetOperationsFor(row.sector);
-  const current = row.operation ? sheetOperationKey(row.operation) : '';
+function sheetOperationOptions(row, index) {
+  const value = row.operations[index] || '';
+  const taken = new Set(row.operations.filter((item, position) => item && position !== index).map(sheetOperationKey));
+  const operations = sheetOperationsFor(row.sector).filter(item => !taken.has(item.key));
+  const current = value ? sheetOperationKey(value) : '';
   const extra = current && !operations.some(item => item.key === current)
-    ? `<option value="${escapeHtml(row.operation)}" selected>${escapeHtml(row.operation)} (sem O.S.)</option>` : '';
+    ? `<option value="${escapeHtml(value)}" selected>${escapeHtml(value)} (sem O.S.)</option>` : '';
   const placeholder = operations.length ? 'Selecione' : (row.sector.trim() ? 'Sem O.S. no setor' : 'Informe o setor');
   return `<option value="">${placeholder}</option>${extra}${operations.map(item =>
     `<option value="${escapeHtml(item.key)}" ${item.key === current ? 'selected' : ''}>${escapeHtml(item.label)}</option>`).join('')}`;
@@ -110,9 +124,16 @@ function sheetRowHtml(row) {
     <td><input data-sheet-field="sector" value="${escapeHtml(row.sector)}" maxlength="32" aria-label="Setor" ${row.removed ? 'disabled' : ''} /></td>
     <td><select data-sheet-field="status" aria-label="Status" ${row.removed ? 'disabled' : ''}>${productionStatuses.map(status =>
       `<option value="${escapeHtml(status.code)}" ${status.code === row.status ? 'selected' : ''}>${escapeHtml(status.name)}</option>`).join('')}</select></td>
-    <td><div class="production-sheet-operation">
-      <select data-sheet-field="operation" aria-label="Operação" ${row.removed ? 'disabled' : ''}>${sheetOperationOptions(row)}</select>
-      ${stateLabel ? `<span class="production-sheet-os is-${orderState}" title="${stateLabel}">${stateLabel}</span>` : ''}</div></td>
+    <td><div class="production-sheet-operations">
+      ${row.operations.map((_, index) => `<div class="production-sheet-operation">
+        <select data-sheet-op="${index}" aria-label="Operação ${index + 1}" ${row.removed ? 'disabled' : ''}>${sheetOperationOptions(row, index)}</select>
+        ${index > 0 && !row.removed ? `<button class="production-sheet-op-remove" type="button" data-sheet-action="remove-op" data-op-index="${index}" aria-label="Remover operação ${index + 1}">×</button>` : ''}
+      </div>`).join('')}
+      <div class="production-sheet-op-footer">
+        ${row.removed ? '' : `<button class="production-sheet-op-add" type="button" data-sheet-action="add-op"
+          title="Adicionar outra operação neste setor" aria-label="Adicionar operação" ${row.operations.length >= 10 ? 'disabled' : ''}>+</button>`}
+        ${stateLabel ? `<span class="production-sheet-os is-${orderState}" title="${stateLabel}">${stateLabel}</span>` : ''}
+      </div></div></td>
     <td><input data-sheet-field="observation" value="${escapeHtml(row.observation)}" maxlength="2000" aria-label="Observação" ${row.removed ? 'disabled' : ''} /></td>
     <td>${row.removed
       ? '<button class="production-sheet-undo" type="button" data-sheet-action="undo">Desfazer</button>'
@@ -191,7 +212,7 @@ function addProductionSheetRow({ render = true } = {}) {
   productionSheetRows.unshift({
     key: `row-${++productionSheetSequence}`, id: null, groupId: front?.group_id ?? null,
     frontId: front ? String(front.id) : '', frontName: front?.name || '', section: '', sector: '',
-    status: defaultStatusCode(), operation: '', observation: '', farm: '', removed: false, original: ''
+    status: defaultStatusCode(), operations: [''], observation: '', farm: '', removed: false, original: ''
   });
   if (!render) return;
   renderProductionSheet();
@@ -236,7 +257,7 @@ async function saveProductionSheet() {
           const sameLocation = row.id && entry.sector === row.sector.trim() && (entry.section || '') === row.section.trim();
           return {
             id: row.id, service_front_id: Number(row.frontId), sector: row.sector.trim(), section: row.section.trim(),
-            status: row.status, operation: row.operation, observation: row.observation.trim(),
+            status: row.status, operation: sheetOperationsValue(row), observation: row.observation.trim(),
             // Setor/seção alterados: o servidor busca a fazenda na base de setores.
             farm: sameLocation ? (entry.farm || '') : ''
           };
@@ -304,13 +325,22 @@ productionSheetBody?.addEventListener('input', event => {
   updateProductionSheetStatus();
 });
 productionSheetBody?.addEventListener('change', event => {
+  if (event.target.dataset.sheetOp !== undefined) {
+    const row = findSheetRow(event.target);
+    if (!row) return;
+    row.operations[Number(event.target.dataset.sheetOp)] = event.target.value;
+    const tr = event.target.closest('tr');
+    if (tr) tr.outerHTML = sheetRowHtml(row);
+    updateProductionSheetStatus();
+    return;
+  }
   const field = event.target.dataset.sheetField;
   const row = field && findSheetRow(event.target);
   if (!row) return;
   row[field] = event.target.value;
   if (field === 'frontId') row.frontName = event.target.selectedOptions?.[0]?.textContent || '';
   // Setor e status mudam as opções de operação, o aviso de O.S. e a cor da linha.
-  if (['sector', 'status', 'frontId', 'operation'].includes(field)) {
+  if (['sector', 'status', 'frontId'].includes(field)) {
     const tr = event.target.closest('tr');
     if (tr) {
       tr.outerHTML = sheetRowHtml(row);
@@ -323,6 +353,17 @@ productionSheetBody?.addEventListener('click', event => {
   const action = event.target.closest('[data-sheet-action]')?.dataset.sheetAction;
   const row = action && findSheetRow(event.target);
   if (!row) return;
+  if (action === 'add-op' || action === 'remove-op') {
+    if (action === 'add-op') row.operations.push('');
+    else row.operations.splice(Number(event.target.closest('[data-op-index]').dataset.opIndex), 1);
+    const tr = event.target.closest('tr');
+    if (tr) tr.outerHTML = sheetRowHtml(row);
+    if (action === 'add-op') {
+      document.querySelector(`[data-sheet-row="${row.key}"] [data-sheet-op="${row.operations.length - 1}"]`)?.focus();
+    }
+    updateProductionSheetStatus();
+    return;
+  }
   if (action === 'remove' && !row.id) productionSheetRows = productionSheetRows.filter(item => item !== row);
   else row.removed = action === 'remove';
   renderProductionSheet();

@@ -464,3 +464,16 @@
   .production-sheet-footer > p { text-align: left; }
   .production-sheet-toolbar-actions { width: 100%; justify-content: space-between; }
 }
+
+/* Várias operações no mesmo setor (botão "+"). */
+.production-sheet-operations { display: flex; flex-direction: column; gap: 4px; }
+.production-sheet-op-footer { display: flex; align-items: center; gap: 6px; }
+.production-sheet-op-add, .production-sheet-op-remove {
+  width: 26px; height: 26px; flex: 0 0 26px; display: grid; place-items: center; padding: 0;
+  border-radius: 7px; font-size: 15px; font-weight: 800; line-height: 1; cursor: pointer;
+}
+.production-sheet-op-add { border: 1px solid #c6ddce; background: #f0f7f2; color: #246139; }
+.production-sheet-op-add:hover:not(:disabled) { border-color: var(--green); background: #e1f0e6; }
+.production-sheet-op-add:disabled { opacity: .4; cursor: default; }
+.production-sheet-op-remove { border: 1px solid #efc6ca; background: #fff; color: #a63c47; }
+.production-sheet-op-remove:hover { background: var(--red-soft); }

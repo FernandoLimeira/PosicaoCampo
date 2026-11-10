@@ -166,7 +166,7 @@ function openProductionItemOrders(itemId) {
   if (!item) return;
   const entry = item.entry || {};
   const section = entry.section ? ` / Seção ${entry.section}` : '';
-  const operation = entry.operation ? ` · Operação ${entry.operation}` : '';
+  const operation = entry.operation ? ` · ${entry.operation.includes(',') ? 'Operações' : 'Operação'} ${entry.operation}` : '';
   showServiceOrdersModal(`${item.service_name} · Setor ${entry.sector || '-'}${section}${operation}`, item.service_order?.orders || []);
 }
 

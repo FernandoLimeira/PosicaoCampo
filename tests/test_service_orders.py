@@ -199,6 +199,29 @@ class ServiceOrderTests(unittest.TestCase):
         unchanged = production.list_my_items(self.user["id"], "PPT", "2026-11-12", scope="all")["items"]
         self.assertEqual(unchanged[0]["entry"]["work_date"], "2026-11-11")
 
+    def test_several_operations_need_an_order_each(self):
+        self._launch("4")
+        item_id = production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"][0]["id"]
+        service_orders.import_service_orders(self.admin["id"], "PPT", [
+            {"number": "330097", "sector": "4", "section": "1", "operation": "457"},
+        ])
+        production.save_items_sheet(self.user["id"], {"unit_code": "PPT", "work_date": "2026-11-10", "rows": [
+            {"id": item_id, "service_front_id": self.front["id"], "sector": "4", "section": "1", "status": self.status,
+             "operation": "457, 338, 457"}]})
+        item = production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"][0]
+        self.assertEqual(item["entry"]["operation"], "457, 338")
+        self.assertEqual(item["service_order"]["status"], "missing")
+        self.assertEqual(item["service_order"]["missing_operations"], ["338"])
+        service_orders.import_service_orders(self.admin["id"], "PPT", [
+            {"number": "330097", "sector": "4", "section": "1", "operation": "457"},
+            {"number": "331158", "sector": "4", "section": "1", "operation": "338"},
+            {"number": "331999", "sector": "4", "section": "1", "operation": "396"},
+        ])
+        order = production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"][0]["service_order"]
+        self.assertEqual(order["status"], "ok")
+        self.assertEqual({o["number"]: o["matches"] for o in order["orders"]},
+                         {"330097": True, "331158": True, "331999": False})
+
     def test_codes_are_compared_without_leading_zeros(self):
         self.assertEqual(service_orders.sector_key("0663"), service_orders.sector_key("663.0"))
         self.assertEqual(service_orders.operation_key("0338 — TRATOS PLANTIO"), "338")
