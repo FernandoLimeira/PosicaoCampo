@@ -505,6 +505,12 @@ class PageTests(unittest.TestCase):
         self.assertNotIn('id="production-catalog-panel" class="production-tab-panel production-catalog-panel" hidden', catalog_page["body"])
         self.assertEqual(self.request("/producao/cadastros", role="member")["status"], 403)
         self.assertEqual(self.request("/api/production/operations", role="member")["status"], 403)
+        # Lista de setores cadastrados para o campo Setor do popup (só com acesso à Produção).
+        sectors = self.request("/api/production/sector-base", cookie=cookie, overrides={"QUERY_STRING": "unit=NRD"})
+        self.assertEqual(sectors["status"], 200)
+        self.assertTrue(any(item["sector"] == "101" for item in json.loads(sectors["body"])["items"]))
+        self.assertEqual(self.request("/api/production/sector-base", role="member",
+                                      overrides={"QUERY_STRING": "unit=NRD"})["status"], 403)
 
         emission = self.request('/emitir-posicao-global', cookie=cookie)["body"]
         self.assertIn('id="emit-global-production"', emission)

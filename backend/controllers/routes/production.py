@@ -18,6 +18,7 @@ from ...models.production import (
     get_user_access as get_production_user_access,
     list_catalog as list_production_catalog,
     list_my_items as list_production_my_items,
+    list_sector_base_entries as list_production_sector_base,
     list_sector_options as list_production_sector_options,
     list_statuses as list_production_statuses,
     remove_my_item as remove_production_my_item,
@@ -193,6 +194,13 @@ def handle(req):
             return req.json(HTTPStatus.OK, {"ok": True})
 
         return req.guarded(remove_front)
+
+    if path == "/api/production/sector-base" and method == "GET":
+        if not user:
+            return req.unauthorized()
+        return req.guarded(lambda: req.json(HTTPStatus.OK, {
+            "items": list_production_sector_base(user["id"], req.param("unit", "")),
+        }), bad_request=ValueError)
 
     if path == "/api/production/sector-options" and method == "GET":
         if not user:

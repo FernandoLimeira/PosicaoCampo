@@ -618,3 +618,37 @@
 .production-page { display: flex; flex-direction: column; gap: 16px; }
 .production-page > [hidden] { display: none !important; }
 .production-summary { margin: 0; }
+
+
+/* Popup de O.S. em etapas (uma O.S. por vez quando o setor tem várias). */
+.production-order-steps { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.production-order-step {
+  display: flex; align-items: center; gap: 10px; flex: 0 0 auto;
+  padding: 8px 14px 8px 8px; border: 1px solid var(--data-border); border-radius: 12px;
+  background: #fff; color: #3c5648; text-align: left; cursor: pointer;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.production-order-step:hover { border-color: #b9d8c7; }
+.production-order-step-number { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: #edf4f0; font-size: 12px; font-weight: 800; }
+.production-order-step-label { display: flex; flex-direction: column; gap: 1px; }
+.production-order-step-label strong { font-size: 12px; color: #1d3a2b; white-space: nowrap; }
+.production-order-step-label small { font-size: 10px; color: #6f8077; white-space: nowrap; }
+.production-order-step.is-match .production-order-step-number { background: #d9f0e3; color: #18733b; }
+.production-order-step.is-current { border-color: var(--green); background: #f1f9f5; box-shadow: 0 0 0 3px rgba(44, 135, 100, .12); }
+.production-order-step.is-current .production-order-step-number { background: var(--green); color: #fff; }
+.production-order-step-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 4px; }
+.production-order-step-footer span { color: #5d7166; font-size: 12px; font-weight: 700; }
+
+
+/* Operações em linha: campos de código lado a lado com o "+" no fim. */
+.production-sheet-operations { flex-direction: row !important; flex-wrap: wrap; align-items: center; gap: 6px; }
+.production-sheet-operations .production-sheet-operation { flex: 0 1 96px; min-width: 76px; display: flex; align-items: center; gap: 4px; }
+.production-sheet-operations .production-sheet-operation input { width: 100%; min-width: 0; text-align: center; font-weight: 700; }
+.production-sheet-operations .production-sheet-op-add { flex: 0 0 30px; width: 30px; height: 30px; }
+.production-sheet-operations .production-sheet-operation { flex: 0 1 68px; min-width: 58px; }
+.production-sheet-operations .production-sheet-operation:has(.production-sheet-op-remove) { flex-basis: 92px; }
+.production-sheet-table td:nth-child(5) { width: 23%; }
+.production-sheet-table td:nth-child(6) { width: auto; }
+
+/* Coluna Seção do popup só no Polo MS (PST e RBR). */
+.production-sheet-table:not(.shows-section) .production-sheet-section-cell { display: none; }

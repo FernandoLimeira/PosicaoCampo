@@ -629,6 +629,18 @@ def save_service_front(user_id: int, payload: Any, *, front_id: int | None = Non
     return {**result, "linked_existing": True} if linked_existing else result
 
 
+def list_sector_base_entries(user_id: int, unit_code: Any) -> list[dict[str, str]]:
+    """Setores cadastrados (setor, seção e fazenda) para a lista do popup da Produção."""
+    unit = _normalize_unit(unit_code)
+    with connection() as conn:
+        _require_access(conn, user_id, unit=unit)
+        rows = conn.execute("SELECT sector,section,description FROM sector_base").fetchall()
+    from ..services.front_identifiers import natural_key
+    items = [{"sector": row["sector"], "section": row["section"] or "", "farm": row["description"] or ""} for row in rows]
+    items.sort(key=lambda item: (natural_key(item["sector"]), natural_key(item["section"])))
+    return items
+
+
 def list_sector_options(user_id: int, unit_code: Any, sector: Any) -> list[dict[str, str]]:
     unit = _normalize_unit(unit_code)
     cleaned_sector = _clean_text(sector, "o setor", 32, required=True)

@@ -142,15 +142,67 @@ function serviceOrderCardHtml(order) {
   </article>`;
 }
 
-function showServiceOrdersModal(contextText, orders) {
+// Com mais de uma O.S. no setor, o popup mostra uma O.S. por etapa: lista das O.S.
+// no topo (clicável) e Anterior/Próxima embaixo. Com uma só, mostra direto.
+let serviceOrderSteps = { orders: [], index: 0 };
+
+function renderServiceOrderStep() {
   const body = document.querySelector('#production-order-modal-body');
-  const context = document.querySelector('#production-order-modal-context');
   if (!body) return;
-  if (context) context.textContent = contextText;
-  body.innerHTML = orders.map(serviceOrderCardHtml).join('')
-    || '<p class="production-empty">Nenhuma O.S. aberta para este setor.</p>';
+  const { orders, index } = serviceOrderSteps;
+  if (!orders.length) {
+    body.innerHTML = '<p class="production-empty">Nenhuma O.S. aberta para este setor.</p>';
+    return;
+  }
+  if (orders.length === 1) {
+    body.innerHTML = serviceOrderCardHtml(orders[0]);
+    return;
+  }
+  const order = orders[index];
+  body.innerHTML = `
+    <nav class="production-order-steps" aria-label="O.S. do setor">
+      ${orders.map((item, position) => `<button type="button" class="production-order-step${position === index ? ' is-current' : ''}${item.matches ? ' is-match' : ''}"
+        data-order-step="${position}" aria-current="${position === index ? 'step' : 'false'}">
+        <span class="production-order-step-number">${position + 1}</span>
+        <span class="production-order-step-label"><strong>O.S. ${escapeHtml(item.number)}</strong><small>${escapeHtml(item.operation || '-')}${item.matches ? ' · confere' : ''}</small></span>
+      </button>`).join('')}
+    </nav>
+    ${serviceOrderCardHtml(order)}
+    <div class="production-order-step-footer">
+      <button type="button" class="modal-button secondary" data-order-step="${index - 1}" ${index === 0 ? 'disabled' : ''}>Anterior</button>
+      <span>O.S. ${index + 1} de ${orders.length}</span>
+      <button type="button" class="modal-button save" data-order-step="${index + 1}" ${index === orders.length - 1 ? 'disabled' : ''}>Próxima</button>
+    </div>`;
+  body.querySelector('.production-order-step.is-current')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+}
+
+function showServiceOrdersModal(contextText, orders) {
+  const context = document.querySelector('#production-order-modal-context');
+  if (context) {
+    const count = orders.length > 1 ? ` · ${orders.length} O.S. abertas` : '';
+    context.textContent = `${contextText}${count}`;
+  }
+  serviceOrderSteps = { orders, index: 0 };
+  renderServiceOrderStep();
   openModal('production-order-modal');
 }
+
+document.querySelector('#production-order-modal-body')?.addEventListener('click', event => {
+  const button = event.target.closest('[data-order-step]');
+  if (!button || button.disabled) return;
+  const next = Number(button.dataset.orderStep);
+  if (next < 0 || next >= serviceOrderSteps.orders.length) return;
+  serviceOrderSteps.index = next;
+  renderServiceOrderStep();
+});
+document.querySelector('#production-order-modal')?.addEventListener('keydown', event => {
+  if (serviceOrderSteps.orders.length < 2 || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+  if (event.target.closest('input, select, textarea')) return;
+  const next = serviceOrderSteps.index + (event.key === 'ArrowRight' ? 1 : -1);
+  if (next < 0 || next >= serviceOrderSteps.orders.length) return;
+  serviceOrderSteps.index = next;
+  renderServiceOrderStep();
+});
 
 // "Ver" da tabela de lançamentos: todas as O.S. abertas do setor do lançamento.
 function openProductionItemOrders(itemId) {
