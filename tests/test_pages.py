@@ -480,7 +480,7 @@ class PageTests(unittest.TestCase):
         self.assertEqual(page["status"], 200)
         for marker in (
             'id="production-entry-modal"', 'id="production-entry-form"', 'id="production-item-id"',
-            'id="production-status-options"', 'id="production-status-config-toggle"',
+            'id="production-status-options"',
             'id="production-status-config-pane"', 'id="production-config-pane"',
             'id="production-front-form"', 'id="production-items-body"',
             'id="production-rain-button"', 'id="production-rain-modal"',
@@ -488,6 +488,7 @@ class PageTests(unittest.TestCase):
         ):
             self.assertIn(marker, page["body"])
         self.assertNotIn('class="production-daily-card"', page["body"])
+        self.assertNotIn('Configurar status', page["body"])  # status ficam só na página Cadastros
         self.assertIn('href="/producao"', page["body"])
         # "Ordem de serviço" fica no menu lateral da Produção, com página própria.
         self.assertIn('href="/producao/ordens-servico"', page["body"])

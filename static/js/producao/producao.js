@@ -592,8 +592,6 @@ function showEntryPane() {
   const editingItemId = productionEditingItemId;
   const configButton = document.querySelector('#production-config-toggle');
   if (configButton) configButton.hidden = Boolean(editingItemId) || !canConfigureProduction();
-  const statusConfigButton = document.querySelector('#production-status-config-toggle');
-  if (statusConfigButton) statusConfigButton.hidden = !canConfigureProduction();
 
   const modalTitle = document.querySelector('#production-modal-title');
   if (modalTitle) modalTitle.textContent = editingItemId ? 'Editar frente' : 'Adicionar frente';
@@ -618,8 +616,6 @@ function setProductionEntryEditMode(isEditing) {
 
   const configButton = document.querySelector('#production-config-toggle');
   if (configButton) configButton.hidden = Boolean(isEditing) || !canConfigureProduction();
-  const statusConfigButton = document.querySelector('#production-status-config-toggle');
-  if (statusConfigButton) statusConfigButton.hidden = !canConfigureProduction();
 
   const modalTitle = document.querySelector('#production-modal-title');
   if (modalTitle) modalTitle.textContent = isEditing ? 'Editar frente' : 'Adicionar frente';
