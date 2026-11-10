@@ -652,3 +652,20 @@
 
 /* Coluna Seção do popup só no Polo MS (PST e RBR). */
 .production-sheet-table:not(.shows-section) .production-sheet-section-cell { display: none; }
+
+
+/* Detalhe da O.S. limitado à tela: sem tabela rolável, campos uma vez e talhões em etiquetas. */
+.production-order-modal { max-height: calc(100dvh - 32px); }
+.production-order-modal-body { overflow-y: auto; scrollbar-width: none; }
+.production-order-modal-body::-webkit-scrollbar { display: none; }
+.production-order-fields { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) !important; }
+.production-order-fields dt { letter-spacing: .3px; }
+.production-order-plots { padding: 12px 16px 16px; border-top: 1px solid var(--line); }
+.production-order-plots-title { display: block; margin-bottom: 8px; color: #7a8981; font-size: 9px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+.production-order-plot-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.production-order-plot {
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+  min-width: 38px; padding: 5px 9px; border: 1px solid #cfe6da; border-radius: 9px;
+  background: #f3faf6; color: #1d4a31; font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.production-order-plot small { color: #6f8077; font-size: 9px; font-weight: 600; }

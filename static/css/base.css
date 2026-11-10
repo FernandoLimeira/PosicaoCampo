@@ -867,3 +867,14 @@ a.nav-link { display: flex; }
 
 .icon-delete-button { display: inline-grid; place-items: center; width: 32px; min-width: 32px; height: 30px; min-height: 30px; padding: 0 !important; }
 .icon-delete-button svg { width: 16px; height: 16px; }
+
+
+/* Cores próprias dos ícones de ação (diferentes do verde do sistema):
+   visualizar = azul, editar = laranja, excluir = vermelho. */
+button.production-os-view.is-icon { border-color: #bcd3f2 !important; background: #eef4fd !important; color: #2462b8 !important; }
+button.production-os-view.is-icon:hover { border-color: #2462b8 !important; background: #dfeafb !important; }
+button.icon-edit-button { border: 1px solid #f1d2a6 !important; background: #fff6ea !important; color: #b9650c !important; }
+button.icon-edit-button:hover { border-color: #b9650c !important; background: #ffecd2 !important; }
+button.icon-delete-button { border: 1px solid #f0c4c8 !important; background: #fff3f4 !important; color: #c0303d !important; }
+button.icon-delete-button:hover { border-color: #c0303d !important; background: #fde3e6 !important; }
+button.icon-edit-button, button.icon-delete-button, button.production-os-view.is-icon { border-radius: 8px !important; }

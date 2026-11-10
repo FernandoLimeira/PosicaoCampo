@@ -121,24 +121,40 @@ function serviceOrderCellText(value) {
 }
 
 // Cartão da O.S. com o resumo e a tabela de todas as colunas do arquivo (uma linha por talhão).
+// Detalhe compacto (cabe na tela, sem rolagem): as colunas do arquivo que se repetem
+// em todas as linhas da O.S. aparecem uma vez; o que muda por linha (o talhão) vira etiqueta.
 function serviceOrderCardHtml(order) {
   const rows = order.rows || [];
   const columns = order.columns?.length ? order.columns : Object.keys(rows[0] || {});
-  return `<article class="production-order-card${order.matches ? ' is-match' : ''}">
-    <header>
+  const header = `<header>
       <div><strong>O.S. ${escapeHtml(order.number)}</strong><small>${escapeHtml(serviceOrderOperationLabel(order))}</small></div>
       ${order.matches ? '<span>Confere com o lançamento</span>' : ''}
-    </header>
-    <dl>
-      <div><dt>Setor / seção</dt><dd>${escapeHtml(order.sector)}${order.section ? ` / ${escapeHtml(order.section)}` : ''}</dd></div>
-      <div><dt>Centro de custo</dt><dd>${escapeHtml(order.cost_center || '-')}</dd></div>
-      <div><dt>Abertura</dt><dd>${escapeHtml(serviceOrderDate(order.opened_on))}</dd></div>
-      <div><dt>Talhões</dt><dd>${escapeHtml(serviceOrderPlotsLabel(order))}</dd></div>
+    </header>`;
+  if (!rows.length) {
+    return `<article class="production-order-card${order.matches ? ' is-match' : ''}">${header}
+      <dl>
+        <div><dt>Setor / seção</dt><dd>${escapeHtml(order.sector)}${order.section ? ` / ${escapeHtml(order.section)}` : ''}</dd></div>
+        <div><dt>Centro de custo</dt><dd>${escapeHtml(order.cost_center || '-')}</dd></div>
+        <div><dt>Abertura</dt><dd>${escapeHtml(serviceOrderDate(order.opened_on))}</dd></div>
+        <div><dt>Talhões</dt><dd>${escapeHtml(serviceOrderPlotsLabel(order))}</dd></div>
+      </dl></article>`;
+  }
+  const constant = columns.filter(name => rows.every(row => (row[name] ?? '') === (rows[0][name] ?? '')));
+  const varying = columns.filter(name => !constant.includes(name));
+  const plotColumn = varying.find(name => /talh/i.test(name)) || varying[0];
+  const others = varying.filter(name => name !== plotColumn);
+  return `<article class="production-order-card${order.matches ? ' is-match' : ''}">${header}
+    <dl class="production-order-fields">
+      ${constant.map(name => `<div><dt>${escapeHtml(name)}</dt><dd>${escapeHtml(serviceOrderCellText(rows[0][name]) || '-')}</dd></div>`).join('')}
     </dl>
-    ${rows.length ? `<div class="production-order-rows"><table>
-      <thead><tr>${columns.map(name => `<th>${escapeHtml(name)}</th>`).join('')}</tr></thead>
-      <tbody>${rows.map(row => `<tr>${columns.map(name => `<td>${escapeHtml(serviceOrderCellText(row[name]))}</td>`).join('')}</tr>`).join('')}</tbody>
-    </table></div>` : ''}
+    <div class="production-order-plots">
+      <span class="production-order-plots-title">${escapeHtml(plotColumn || 'Linhas')} · ${rows.length} ${rows.length === 1 ? 'linha' : 'linhas'}</span>
+      <div class="production-order-plot-list">
+        ${rows.map(row => `<span class="production-order-plot"${others.length ? ` title="${escapeHtml(others.map(name => `${name}: ${serviceOrderCellText(row[name])}`).join(' · '))}"` : ''}>
+          ${escapeHtml(plotColumn ? serviceOrderCellText(row[plotColumn]) : '-')}${others.length ? `<small>${escapeHtml(others.map(name => serviceOrderCellText(row[name])).join(' · '))}</small>` : ''}
+        </span>`).join('')}
+      </div>
+    </div>
   </article>`;
 }
 
