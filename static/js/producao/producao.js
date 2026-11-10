@@ -330,7 +330,7 @@ function productionOperationCell(entry) {
   const codes = String(entry?.operation || '').split(/[,;+]/).map(code => code.trim()).filter(Boolean);
   return codes.length
     ? `<div class="production-operation-codes">${codes.map(code => `<span>${escapeHtml(code)}</span>`).join('')}</div>`
-    : '<span class="production-os-state is-empty">-</span>';
+    : '<span class="production-os-state is-no-operation">Sem operação</span>';
 }
 
 // Campo "Operação em execução" do popup de editar: um código por campo, "+" para mais.
@@ -368,7 +368,10 @@ function productionEntryOperationsValue() {
 
 // Coluna O.S.: "OK" quando há O.S. do setor para a operação do lançamento; "Sem O.S." quando não há.
 function serviceOrderCell(item) {
-  const order = item.service_order || {};
+  const order = { ...(item.service_order || {}) };
+  // Sem operação informada no lançamento nunca aparece como "OK" (decidido também aqui na tela).
+  const hasOperation = String(item.entry?.operation || '').trim() !== '';
+  if (item.entry?.sector && !hasOperation) order.status = 'no_operation';
   if (!['ok', 'missing', 'no_operation'].includes(order.status)) {
     return '<div class="production-os"><span class="production-os-state is-empty">-</span></div>';
   }
