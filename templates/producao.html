@@ -17,13 +17,17 @@
         <strong id="production-current-unit">-</strong>
         <small id="production-current-date">-</small>
       </div>
-      <button id="production-rain-button" class="production-secondary-button" type="button" hidden>Informar chuva</button>
-      <button id="production-add-button" class="production-primary-button" type="button">Adicionar frente</button>
     </div>
   </header>
 
+  <nav class="production-tabs" role="tablist" aria-label="Seções da Produção Agrícola">
+    <button id="production-tab-entries" class="production-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="production-entries-panel" data-production-tab="entries">Lançamentos</button>
+    <button id="production-tab-orders" class="production-tab" type="button" role="tab" aria-selected="false" aria-controls="production-orders-panel" data-production-tab="orders">Ordem de serviço</button>
+  </nav>
+
   <div id="production-access-message" class="production-access-message" hidden></div>
 
+  <div id="production-entries-panel" class="production-tab-panel" role="tabpanel" aria-labelledby="production-tab-entries">
   <section id="production-summary" class="production-summary" aria-label="Resumo dos status"></section>
 
   <section class="production-table-card" aria-labelledby="production-table-title">
@@ -36,27 +40,33 @@
         <p id="production-list-status" aria-live="polite"></p>
       </div>
     </div>
-    <div id="production-filters" class="production-filters" hidden>
-      <label for="production-filter-group">Grupo
-        <select id="production-filter-group"><option value="">Todos os grupos</option></select>
-      </label>
-      <label for="production-filter-front">Frente / serviço
-        <select id="production-filter-front"><option value="">Todas as frentes</option></select>
-      </label>
+    <div class="production-toolbar">
+      <div id="production-filters" class="production-filters" hidden>
+        <label for="production-filter-group">Grupo
+          <select id="production-filter-group"><option value="">Todos os grupos</option></select>
+        </label>
+        <label for="production-filter-front">Frente / serviço
+          <select id="production-filter-front"><option value="">Todas as frentes</option></select>
+        </label>
+      </div>
+      <div class="production-toolbar-actions">
+        <button id="production-rain-button" class="production-secondary-button" type="button" hidden>Informar chuva</button>
+        <button id="production-add-button" class="production-primary-button" type="button">Adicionar frente</button>
+      </div>
     </div>
     <div class="production-table-wrap">
       <table class="production-table">
         <thead>
           <tr>
-            <th>Grupo</th>
             <th>Frente / serviço</th>
-            <th id="production-owner-heading">Analista</th>
             <th>Setor</th>
+            <th>Seção</th>
             <th>Fazenda</th>
             <th>Status</th>
-            <th>Observações</th>
-            <th>Atualização</th>
-            <th id="production-actions-heading"></th>
+            <th>O.S.</th>
+            <th>Observação</th>
+            <th>Mudança</th>
+            <th id="production-actions-heading" aria-label="Ações"></th>
           </tr>
         </thead>
         <tbody id="production-items-body"></tbody>
@@ -67,10 +77,124 @@
       <span>Use “Adicionar frente” para montar sua lista de trabalho desta unidade.</span>
     </div>
   </section>
+  </div>
+
+  <div id="production-orders-panel" class="production-tab-panel" role="tabpanel" aria-labelledby="production-tab-orders" hidden>
+    <section id="production-orders-import" class="production-orders-import" hidden>
+      <div>
+        <span class="production-kicker">Importação</span>
+        <h2>Importar ordens de serviço</h2>
+        <p>O arquivo substitui as O.S. da unidade selecionada. Colunas obrigatórias: NO_OS, SETOR e OPERACAO.</p>
+      </div>
+      <form id="production-orders-form" class="production-orders-form">
+        <label class="production-orders-file" for="production-orders-file">
+          <input id="production-orders-file" type="file" accept=".xlsx,.xlsm" required />
+          <span id="production-orders-file-name">Nenhum arquivo selecionado</span>
+        </label>
+        <button id="production-orders-submit" class="production-primary-button" type="submit">Importar O.S.</button>
+      </form>
+    </section>
+
+    <section class="production-table-card" aria-labelledby="production-orders-title">
+      <div class="production-table-heading">
+        <div>
+          <span>Ordem de serviço</span>
+          <h2 id="production-orders-title">Ordens de serviço da unidade</h2>
+        </div>
+        <p id="production-orders-meta" aria-live="polite"></p>
+      </div>
+      <div class="production-toolbar">
+        <label class="production-orders-search" for="production-orders-search">Buscar
+          <input id="production-orders-search" type="search" autocomplete="off" placeholder="O.S., setor, operação ou centro de custo" />
+        </label>
+      </div>
+      <div class="production-table-wrap">
+        <table class="production-table production-orders-table">
+          <thead>
+            <tr><th>O.S.</th><th>Setor</th><th>Seção</th><th>Operação</th><th>C. custo</th><th>Talhões</th><th>Abertura</th><th aria-label="Detalhes"></th></tr>
+          </thead>
+          <tbody id="production-orders-body"></tbody>
+        </table>
+      </div>
+      <div id="production-orders-empty" class="production-empty" hidden>
+        <strong>Nenhuma ordem de serviço importada.</strong>
+        <span>Importe o arquivo de O.S. para que a coluna O.S. dos lançamentos mostre “OK” ou “Sem O.S.”.</span>
+      </div>
+    </section>
+  </div>
 </section>
 {% endblock %}
 
 {% block modals %}
+<div id="production-sheet-modal" class="modal-backdrop" hidden>
+  <section class="editor-modal production-sheet-modal" role="dialog" aria-modal="true" aria-labelledby="production-sheet-title">
+    <header class="modal-header production-sheet-header">
+      <div>
+        <h2 id="production-sheet-title">Atualização de Status Operacional</h2>
+        <p class="production-sheet-unit"><span>Unidade em edição</span><strong id="production-sheet-unit">-</strong></p>
+      </div>
+      <button class="modal-close" type="button" data-close-modal="production-sheet-modal" aria-label="Fechar">×</button>
+    </header>
+    <div class="production-sheet-body">
+      <div class="production-sheet-card">
+        <div class="production-sheet-toolbar">
+          <div class="production-filters">
+            <label for="production-sheet-group">Grupo
+              <select id="production-sheet-group"><option value="">Todos os grupos</option></select>
+            </label>
+            <label for="production-sheet-front">Frente / serviço
+              <select id="production-sheet-front"><option value="">Todas as frentes</option></select>
+            </label>
+          </div>
+          <div class="production-sheet-toolbar-actions">
+            <button id="production-sheet-configure" class="production-sheet-link" type="button" hidden>Configurar nova frente</button>
+            <button id="production-sheet-add" class="production-primary-button" type="button">Adicionar frente</button>
+          </div>
+        </div>
+        <div class="production-sheet-table-wrap">
+          <table class="production-sheet-table">
+            <thead>
+              <tr>
+                <th>Frente</th>
+                <th>Seção</th>
+                <th>Setor</th>
+                <th>Status</th>
+                <th>Operação</th>
+                <th>Observação</th>
+                <th aria-label="Excluir"></th>
+              </tr>
+            </thead>
+            <tbody id="production-sheet-rows"></tbody>
+          </table>
+          <p id="production-sheet-empty" class="production-empty" hidden>Nenhuma frente nesta unidade. Use “Adicionar frente”.</p>
+        </div>
+      </div>
+    </div>
+    <footer class="modal-footer production-sheet-footer">
+      {% if user.module_access.dashboard.view %}<a id="production-sheet-field-link" class="modal-button secondary" href="/">Posição de Campo</a>{% else %}<span></span>{% endif %}
+      <p id="production-sheet-status" aria-live="polite">Revise antes de salvar.</p>
+      <div class="modal-footer-actions">
+        <button id="production-sheet-save" class="modal-button save" type="button">Salvar</button>
+        <button class="modal-button secondary" type="button" data-close-modal="production-sheet-modal">Cancelar</button>
+      </div>
+    </footer>
+  </section>
+</div>
+
+<div id="production-order-modal" class="modal-backdrop" hidden>
+  <section class="editor-modal production-order-modal" role="dialog" aria-modal="true" aria-labelledby="production-order-modal-title">
+    <header class="modal-header production-modal-header">
+      <div>
+        <span class="modal-kicker">Ordem de serviço</span>
+        <h2 id="production-order-modal-title">O.S. abertas do setor</h2>
+        <p id="production-order-modal-context" class="production-order-modal-context"></p>
+      </div>
+      <button class="modal-close" type="button" data-close-modal="production-order-modal" aria-label="Fechar">×</button>
+    </header>
+    <div id="production-order-modal-body" class="production-order-modal-body"></div>
+  </section>
+</div>
+
 <div id="production-rain-modal" class="modal-backdrop" hidden>
   <section class="editor-modal production-rain-modal" role="dialog" aria-modal="true" aria-labelledby="production-daily-title">
     <header class="modal-header production-modal-header">
@@ -302,4 +426,6 @@
   <script src="/js/producao/production-consolidation.js?v={{ asset_version }}"></script>
   <script src="/js/producao/production-config.js?v={{ asset_version }}"></script>
   <script src="/js/producao/producao.js?v={{ asset_version }}-front-notes"></script>
+  <script src="/js/producao/service-orders.js?v={{ asset_version }}"></script>
+  <script src="/js/producao/production-sheet.js?v={{ asset_version }}"></script>
 {% endblock %}

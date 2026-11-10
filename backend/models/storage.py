@@ -21,6 +21,7 @@ CORE_DATA_TABLES = (
 PRODUCTION_TABLES = (
     "production_statuses", "production_status_history", "production_groups", "production_service_fronts", "production_service_front_units",
     "production_user_items", "production_daily_entries", "production_daily_summaries",
+    "production_service_orders",
 )
 DATA_TABLES = CORE_DATA_TABLES + ("return_analysis_soil_wet", "field_front_notes") + PRODUCTION_TABLES
 USER_REFERENCES = (
@@ -35,6 +36,7 @@ OPTIONAL_USER_REFERENCES = (
     ("production_daily_entries", "owner_user_id"), ("production_daily_entries", "created_by"),
     ("production_daily_entries", "updated_by"),
     ("production_daily_summaries", "updated_by"),
+    ("production_service_orders", "imported_by"),
 )
 ALL_USER_REFERENCES = USER_REFERENCES + OPTIONAL_USER_REFERENCES
 _INIT_LOCK = threading.Lock()
@@ -370,6 +372,7 @@ def _create_production_tables(conn):
             status TEXT NOT NULL,
             observation TEXT NOT NULL DEFAULT '',
             changes TEXT NOT NULL DEFAULT '',
+            operation TEXT NOT NULL DEFAULT '',
             created_by INTEGER,
             updated_by INTEGER,
             created_at INTEGER NOT NULL,
@@ -391,6 +394,27 @@ def _create_production_tables(conn):
             PRIMARY KEY (unit_code, work_date)
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS main.production_service_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            unit_code TEXT NOT NULL COLLATE NOCASE,
+            order_number TEXT NOT NULL,
+            sector TEXT NOT NULL,
+            sector_key TEXT NOT NULL,
+            section TEXT NOT NULL DEFAULT '',
+            operation TEXT NOT NULL DEFAULT '',
+            operation_key TEXT NOT NULL DEFAULT '',
+            operation_name TEXT NOT NULL DEFAULT '',
+            cost_center TEXT NOT NULL DEFAULT '',
+            plots TEXT NOT NULL DEFAULT '',
+            opened_on TEXT NOT NULL DEFAULT '',
+            details_json TEXT NOT NULL DEFAULT '{}',
+            import_file TEXT NOT NULL DEFAULT '',
+            imported_by INTEGER,
+            imported_at INTEGER NOT NULL
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS main.idx_production_service_orders_unit_sector ON production_service_orders(unit_code, sector_key)",
         "CREATE INDEX IF NOT EXISTS main.idx_production_front_units_unit ON production_service_front_units(unit_code, service_front_id)",
         "CREATE INDEX IF NOT EXISTS main.idx_production_user_items_owner_unit ON production_user_items(owner_user_id, unit_code, is_active, position, id)",
         "CREATE INDEX IF NOT EXISTS main.idx_production_daily_unit_date ON production_daily_entries(unit_code, work_date)",
@@ -454,6 +478,9 @@ def _upgrade_operational_schema(conn):
     entry_columns = {row[1] for row in conn.execute("PRAGMA main.table_info(production_daily_entries)")}
     if "changes" not in entry_columns:
         conn.execute("ALTER TABLE main.production_daily_entries ADD COLUMN changes TEXT NOT NULL DEFAULT ''")
+    if "operation" not in entry_columns:
+        # Operação informada no popup; usada para conferir a O.S. do setor.
+        conn.execute("ALTER TABLE main.production_daily_entries ADD COLUMN operation TEXT NOT NULL DEFAULT ''")
     columns = {row[1]: row for row in conn.execute("PRAGMA main.table_info(return_analysis_soil_wet)")}
     sector_column = columns.get("sector")
     if sector_column and int(sector_column[3] or 0):
@@ -756,6 +783,7 @@ CREATE TABLE IF NOT EXISTS production_daily_entries (
     status TEXT NOT NULL,
     observation TEXT NOT NULL DEFAULT '',
     changes TEXT NOT NULL DEFAULT '',
+    operation TEXT NOT NULL DEFAULT '',
     created_by INTEGER,
     updated_by INTEGER,
     created_at INTEGER NOT NULL,
@@ -774,6 +802,25 @@ CREATE TABLE IF NOT EXISTS production_daily_summaries (
     updated_by INTEGER,
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (unit_code, work_date)
+);
+
+CREATE TABLE IF NOT EXISTS production_service_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    unit_code TEXT NOT NULL COLLATE NOCASE,
+    order_number TEXT NOT NULL,
+    sector TEXT NOT NULL,
+    sector_key TEXT NOT NULL,
+    section TEXT NOT NULL DEFAULT '',
+    operation TEXT NOT NULL DEFAULT '',
+    operation_key TEXT NOT NULL DEFAULT '',
+    operation_name TEXT NOT NULL DEFAULT '',
+    cost_center TEXT NOT NULL DEFAULT '',
+    plots TEXT NOT NULL DEFAULT '',
+    opened_on TEXT NOT NULL DEFAULT '',
+    details_json TEXT NOT NULL DEFAULT '{}',
+    import_file TEXT NOT NULL DEFAULT '',
+    imported_by INTEGER,
+    imported_at INTEGER NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS auth.idx_sessions_token_hash ON sessions(token_hash);

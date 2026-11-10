@@ -666,6 +666,7 @@ def _entry_payload(row: sqlite3.Row | None) -> dict[str, Any] | None:
         "id": int(row["id"]), "work_date": row["work_date"], "sector": row["sector"] or "",
         "section": row["section"] or "", "farm": row["farm"] or "", "status": row["status"],
         "observation": row["observation"] or "", "changes": row["changes"] or "",
+        "operation": row["operation"] if "operation" in row.keys() and row["operation"] else "",
         "updated_at": int(row["updated_at"] or 0),
         "updated_by": row["updated_by"], "updated_by_name": row["updated_by_name"] or "Usuário removido",
     }
@@ -730,6 +731,9 @@ def list_my_items(user_id: int, unit_code: Any, work_date: Any, *, scope: str = 
                 "catalog_active": bool(row["service_active"]) and bool(row["group_active"]),
                 "entry": entry, "is_current_day": bool(entry and entry["work_date"] == selected_date),
             })
+        # Import local: service_orders importa este módulo.
+        from .service_orders import attach_service_order_status
+        attach_service_order_status(conn, unit, items)
         return {
             "unit": unit, "work_date": selected_date, "scope": normalized_scope, "items": items,
             "permissions": {"view": True, "fill": bool(access["can_fill"]), "configure": access["can_configure"], "summary": access["can_summary"]},
@@ -818,7 +822,20 @@ def _normalize_entry_data(payload: dict[str, Any]) -> dict[str, str]:
         "status": _normalize_status(payload.get("status")),
         "observation": _clean_text(payload.get("observation"), "a observação", 2000),
         "changes": _clean_text(payload.get("changes"), "as mudanças", 2000),
+        "operation": _normalize_operations(payload.get("operation")),
     }
+
+
+def _normalize_operations(value: Any) -> str:
+    """Uma ou mais operações ("338, 457"), sem repetição, no máximo 10."""
+    parts = []
+    for part in re.split(r"[,;+]", str(value or "")):
+        text = part.strip()
+        if text and text.casefold() not in {item.casefold() for item in parts}:
+            parts.append(text)
+    if len(parts) > 10:
+        raise ValueError("Informe no máximo 10 operações por lançamento.")
+    return _clean_text(", ".join(parts), "a operação", 160)
 
 
 def _active_front_entries(conn: sqlite3.Connection, unit: str, front_id: int, work_date: str | None = None):
@@ -894,16 +911,7 @@ def _save_my_items(user_id: int, payload: Any, sectors: list[Any], *, item_id: i
             if item_id is not None and matching_ids and item_id not in matching_ids:
                 raise ValueError(f"O setor {entry['sector']} já está cadastrado nesta frente. Edite o lançamento existente.")
             target_id = item_id if item_id is not None else next(iter(matching_ids), None)
-            if target_id is not None and any(field not in source for field in ("observation", "changes")):
-                previous = conn.execute(
-                    """SELECT observation,changes FROM production_daily_entries
-                       WHERE user_item_id=? AND work_date<=? ORDER BY work_date DESC,id DESC LIMIT 1""",
-                    (target_id, entry["work_date"]),
-                ).fetchone()
-                if previous:
-                    for field in ("observation", "changes"):
-                        if field not in source:
-                            entry[field] = previous[field] or ""
+            _keep_previous_fields(conn, target_id, entry, source)
             saved_id = _save_my_item(conn, user_id, unit, front_id, front, entry, now, item_id=target_id)
             item_ids.append(saved_id)
             # Personal copies left by older releases must not remain as active positions.
@@ -913,6 +921,104 @@ def _save_my_items(user_id: int, payload: Any, sectors: list[Any], *, item_id: i
     result = list_my_items(user_id, unit, entries[0]["work_date"], scope="all")
     by_id = {item["id"]: item for item in result["items"]}
     return [by_id[saved_id] for saved_id in item_ids]
+
+
+PRESERVED_ENTRY_FIELDS = ("observation", "changes", "operation")
+
+
+def _keep_previous_fields(conn: sqlite3.Connection, target_id: int | None, entry: dict[str, str], source: dict) -> None:
+    """Campos não enviados mantêm o valor do último registro do lançamento."""
+    missing = [field for field in PRESERVED_ENTRY_FIELDS if field not in source]
+    if target_id is None or not missing:
+        return
+    previous = conn.execute(
+        """SELECT observation,changes,operation FROM production_daily_entries
+           WHERE user_item_id=? AND work_date<=? ORDER BY work_date DESC,id DESC LIMIT 1""",
+        (target_id, entry["work_date"]),
+    ).fetchone()
+    if previous:
+        for field in missing:
+            entry[field] = previous[field] or ""
+
+
+def save_items_sheet(user_id: int, payload: Any) -> dict[str, Any]:
+    """Grava a planilha do popup (várias frentes da unidade) numa única transação.
+
+    ``rows`` traz só as linhas novas ou alteradas; ``removed`` os lançamentos excluídos.
+    Linha sem fazenda usa a fazenda da base de setores (setor + seção).
+    """
+    if not isinstance(payload, dict):
+        raise ValueError("Dados da atualização inválidos.")
+    unit = _normalize_unit(payload.get("unit_code"))
+    work_date = _normalize_work_date(payload.get("work_date"))
+    rows = payload.get("rows") or []
+    removed = payload.get("removed") or []
+    if not isinstance(rows, list) or not isinstance(removed, list) or len(rows) > 300 or len(removed) > 300:
+        raise ValueError("Dados da atualização inválidos.")
+    if not rows and not removed:
+        raise ValueError("Nenhuma alteração para salvar.")
+    try:
+        removed_ids = {int(value) for value in removed}
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Lançamento removido inválido.") from exc
+
+    prepared = []
+    seen = set()
+    for index, row in enumerate(rows, 1):
+        if not isinstance(row, dict):
+            raise ValueError(f"Linha {index}: dados inválidos.")
+        try:
+            front_id = int(row.get("service_front_id"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Linha {index}: selecione a frente.") from exc
+        try:
+            entry = _normalize_entry_data({**row, "work_date": work_date})
+        except ValueError as exc:
+            raise ValueError(f"Linha {index}: {exc}") from exc
+        item_id = row.get("id")
+        item_id = int(item_id) if item_id not in (None, "") else None
+        if item_id in removed_ids:
+            raise ValueError(f"Linha {index}: o lançamento foi marcado para exclusão.")
+        key = (front_id, entry["sector"].upper())
+        if key in seen:
+            raise ValueError(f"Linha {index}: o setor {entry['sector']} está repetido para a mesma frente.")
+        seen.add(key)
+        prepared.append((index, front_id, item_id, entry, row))
+
+    now = int(time.time())
+    saved_ids = []
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _require_access(conn, user_id, permission="fill", unit=unit)
+        validate_actor(conn, user_id)
+        for item_id in removed_ids:
+            item = conn.execute(
+                "SELECT unit_code FROM production_user_items WHERE id=? AND is_active=1", (item_id,),
+            ).fetchone()
+            if not item or item["unit_code"] != unit:
+                raise ValueError("Lançamento removido não encontrado nesta unidade.")
+            _deactivate_items(conn, [item_id], now)
+        for index, front_id, item_id, entry, source in prepared:
+            try:
+                front = _catalog_front_for_unit(conn, front_id, unit, allow_inactive=item_id is not None)
+                entry["status"] = _validate_status_code(conn, entry["status"])
+            except ValueError as exc:
+                raise ValueError(f"Linha {index}: {exc}") from exc
+            matching_ids = [row["id"] for row in _active_front_entries(conn, unit, front_id, work_date)
+                            if row["sector"].strip().upper() == entry["sector"].upper() and row["id"] not in removed_ids]
+            if item_id is not None and matching_ids and item_id not in matching_ids:
+                raise ValueError(f"Linha {index}: o setor {entry['sector']} já está lançado nesta frente.")
+            target_id = item_id if item_id is not None else next(iter(matching_ids), None)
+            _keep_previous_fields(conn, target_id, entry, source)
+            if not entry["farm"]:
+                base = conn.execute(
+                    """SELECT description FROM sector_base WHERE sector=? COLLATE NOCASE
+                       ORDER BY (section=? COLLATE NOCASE) DESC, section COLLATE NOCASE LIMIT 1""",
+                    (entry["sector"], entry["section"]),
+                ).fetchone()
+                entry["farm"] = (base["description"] if base else "") or ""
+            saved_ids.append(_save_my_item(conn, user_id, unit, front_id, front, entry, now, item_id=target_id))
+    return {"saved": len(saved_ids), "removed": len(removed_ids), "item_ids": saved_ids}
 
 
 def _save_my_item(
@@ -951,20 +1057,21 @@ def _save_my_item(
         """
         INSERT INTO production_daily_entries(
             work_date,user_item_id,owner_user_id,unit_code,service_front_id,service_name,group_name,display_style,
-            sector,section,farm,status,observation,changes,created_by,updated_by,created_at,updated_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            sector,section,farm,status,observation,changes,operation,created_by,updated_by,created_at,updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(work_date,user_item_id) DO UPDATE SET
             unit_code=excluded.unit_code,
             service_front_id=excluded.service_front_id, service_name=excluded.service_name,
             group_name=excluded.group_name, display_style=excluded.display_style,
             sector=excluded.sector, section=excluded.section, farm=excluded.farm,
             status=excluded.status, observation=excluded.observation, changes=excluded.changes,
+            operation=excluded.operation,
             updated_by=excluded.updated_by, updated_at=excluded.updated_at
         """,
         (
             entry["work_date"], item_id, owner_id, unit, front_id, front["name"], front["group_name"], front["display_style"],
             entry["sector"], entry["section"], entry["farm"], entry["status"], entry["observation"], entry["changes"],
-            user_id, user_id, now, now,
+            entry.get("operation", ""), user_id, user_id, now, now,
         ),
     )
     return item_id

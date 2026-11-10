@@ -324,11 +324,25 @@ function statusBadge(status) {
   return `<span class="production-status-badge ${config.className}">${escapeHtml(config.name)}</span>`;
 }
 
+// Coluna O.S.: "OK" quando há O.S. do setor para a operação do lançamento; "Sem O.S." quando não há.
+function serviceOrderCell(item) {
+  const order = item.service_order || {};
+  if (order.status !== 'ok' && order.status !== 'missing') {
+    return '<div class="production-os"><span class="production-os-state is-empty">-</span></div>';
+  }
+  const state = order.status === 'ok'
+    ? '<span class="production-os-state is-ok">OK</span>'
+    : '<span class="production-os-state is-missing">Sem O.S.</span>';
+  // "Ver" aparece sempre que o setor tem O.S. abertas (mesmo de outra operação).
+  const view = order.orders?.length ? `<button class="production-os-view" type="button" data-production-action="orders" data-item-id="${item.id}"
+      aria-label="Ver O.S. do setor ${escapeHtml(item.entry?.sector || '')}">Ver</button>` : '';
+  return `<div class="production-os">${state}${view}</div>`;
+}
+
 function renderProductionItems(data) {
   const body = document.querySelector('#production-items-body');
   const empty = document.querySelector('#production-empty');
   const status = document.querySelector('#production-list-status');
-  const ownerHeading = document.querySelector('#production-owner-heading');
   const actionsHeading = document.querySelector('#production-actions-heading');
   const visibleItems = visibleProductionItems();
   if (!body) return;
@@ -342,32 +356,32 @@ function renderProductionItems(data) {
     updateProductionAccessMessage();
   }
 
-  if (ownerHeading) ownerHeading.hidden = false;
   if (actionsHeading) actionsHeading.hidden = !canFillProduction();
 
   body.innerHTML = visibleItems.map(item => {
     const entry = item.entry || {};
     const current = Boolean(item.is_current_day);
-    const updatedLabel = current ? 'Atualizado hoje' : (entry.work_date ? 'Último lançamento' : 'Sem atualização');
     const updatedDetail = entry.work_date ? `Último registro: ${formatIsoDateBr(entry.work_date)}` : 'Nenhum registro salvo';
     const styleLabel = item.display_style === 'front' ? 'Frente operacional' : 'Operação / serviço';
+    const owner = entry.updated_by_name || item.owner_name || '';
     const actions = canFillProduction() ? `
       <div class="production-row-actions">
         <button class="production-row-action" type="button" data-production-action="edit" data-item-id="${item.id}">${item.is_own ? 'Editar' : 'Atualizar'}</button>
         <button class="production-row-action is-remove" type="button" data-production-action="remove" data-item-id="${item.id}">Remover</button>
       </div>` : '';
     const actionCell = canFillProduction() ? `<td>${actions}</td>` : '';
-    const ownerCell = `<td><span class="production-owner-name">${escapeHtml(entry.updated_by_name || item.owner_name || '-')}</span></td>`;
     const observation = String(entry.observation || '').trim();
-    return `<tr>
-      <td>${escapeHtml(item.group_name || '-')}</td>
-      <td><div class="production-item-name"><strong>${escapeHtml(item.service_name || '-')}</strong><small>${escapeHtml(styleLabel)}</small></div></td>
-      ${ownerCell}
-      <td>${escapeHtml(entry.sector || '-')}</td>
-      <td>${escapeHtml(entry.farm || '-')}</td>
-      <td>${statusBadge(entry.status)}</td>
+    const changes = String(entry.changes || '').trim();
+    // Analista e data do último registro ficam sob o nome e o status (sem colunas próprias).
+    return `<tr class="${current ? '' : 'is-pending'}" title="${escapeHtml(item.group_name || '')}">
+      <td><div class="production-item-name"><strong>${escapeHtml(item.service_name || '-')}</strong><small>${escapeHtml(styleLabel)}${owner ? ` · ${escapeHtml(owner)}` : ''}</small></div></td>
+      <td class="production-cell-number">${escapeHtml(entry.sector || '-')}</td>
+      <td class="production-cell-number">${escapeHtml(entry.section || '-')}</td>
+      <td class="production-cell-farm">${escapeHtml(entry.farm || '-')}</td>
+      <td><div class="production-status-cell">${statusBadge(entry.status)}${current ? '' : `<small class="production-pending-note">${escapeHtml(updatedDetail)}</small>`}</div></td>
+      <td>${serviceOrderCell(item)}</td>
       <td><div class="production-observation${observation ? '' : ' is-empty'}">${escapeHtml(observation || '-')}</div></td>
-      <td><div class="production-update-state ${current ? '' : 'is-pending'}"><strong>${updatedLabel}</strong><small>${escapeHtml(updatedDetail)}</small></div></td>
+      <td><div class="production-observation${changes ? '' : ' is-empty'}">${escapeHtml(changes || '-')}</div></td>
       ${actionCell}
     </tr>`;
   }).join('');
@@ -811,7 +825,6 @@ async function initializeProductionPage() {
   }
 }
 
-document.querySelector('#production-add-button')?.addEventListener('click', openNewProductionItem);
 
 document.querySelector('#production-rain-button')?.addEventListener('click', async () => {
   try {
@@ -878,6 +891,7 @@ document.querySelector('#production-items-body')?.addEventListener('click', even
   const itemId = Number(button.dataset.itemId);
   if (button.dataset.productionAction === 'edit') openEditProductionItem(itemId);
   if (button.dataset.productionAction === 'remove') removeProductionItem(itemId);
+  if (button.dataset.productionAction === 'orders') openProductionItemOrders(itemId);
 });
 
 document.querySelector('#production-config-toggle')?.addEventListener('click', showConfigPane);

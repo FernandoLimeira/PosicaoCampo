@@ -1,6 +1,9 @@
 """Produção Agrícola: acesso, status, catálogo, opções de setor e apontamentos diários."""
 from http import HTTPStatus
 
+from ...models.service_orders import import_service_orders, list_service_orders
+from ...services.service_order_import import MAX_SERVICE_ORDER_UPLOAD_BYTES, parse_service_order_file
+from ..http import _multipart_file
 from ...models.production import (
     delete_group as delete_production_group,
     delete_service_front as delete_production_service_front,
@@ -15,6 +18,7 @@ from ...models.production import (
     save_daily_summary as save_production_daily_summary,
     save_group as save_production_group,
     save_my_item as save_production_my_item,
+    save_items_sheet as save_production_items_sheet,
     save_my_items as save_production_my_items,
     save_service_front as save_production_service_front,
     save_status as save_production_status,
@@ -29,6 +33,26 @@ def handle(req):
     path, method, user = req.path, req.method, req.user
     if not path.startswith("/api/production/"):
         return None
+
+    if path == "/api/production/service-orders" and method == "GET":
+        if not user:
+            return req.unauthorized()
+        return req.guarded(
+            lambda: req.json(HTTPStatus.OK, list_service_orders(user["id"], req.param("unit", ""), req.param("search"))),
+            bad_request=ValueError,
+        )
+
+    if path == "/api/production/service-orders/import" and method == "POST":
+        if not user:
+            return req.unauthorized()
+
+        def import_orders():
+            filename, file_bytes = _multipart_file(req.environ, max_file_bytes=MAX_SERVICE_ORDER_UPLOAD_BYTES)
+            parsed = parse_service_order_file(file_bytes, filename)
+            result = import_service_orders(user["id"], req.param("unit", ""), parsed["records"], filename=filename)
+            return req.json(HTTPStatus.OK, {"ok": True, **result, "sheet": parsed["sheet"]})
+
+        return req.guarded(import_orders, bad_request=ValueError)
 
     if path == "/api/production/access" and method == "GET":
         if not user:
@@ -183,6 +207,13 @@ def handle(req):
         response = req.guarded(my_items)
         if response is not None:
             return response
+
+    if path == "/api/production/my-items/sheet" and method == "POST":
+        if not user:
+            return req.unauthorized()
+        return req.guarded(lambda: req.json(HTTPStatus.OK, {
+            "ok": True, **save_production_items_sheet(user["id"], req.body()),
+        }))
 
     if path == "/api/production/my-items/batch" and method == "POST":
         if not user:

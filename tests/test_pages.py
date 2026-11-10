@@ -442,7 +442,8 @@ class PageTests(unittest.TestCase):
             "/sacarose": core + ["reports-export/shared-drawing.js", "reports-export/sacarose-export.js",
                                  "sacarose/sacarose.js"],
             "/producao": core + ["producao/production-consolidation.js", "producao/production-config.js",
-                                 "producao/producao.js"],
+                                 "producao/producao.js", "producao/service-orders.js",
+                                 "producao/production-sheet.js"],
             "/emitir-posicao-global": core + [
                 "core/field-fronts.js", "reports-export/shared-drawing.js", "reports-export/field-report-data.js",
                 "reports-export/global-report.js", "reports-export/sacarose-export.js",

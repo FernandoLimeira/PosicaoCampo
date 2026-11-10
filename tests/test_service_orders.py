@@ -1,0 +1,209 @@
+import io
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+from xml.sax.saxutils import escape
+from zipfile import ZipFile
+
+from backend import config
+from backend.models import database as db
+from backend.models import production
+from backend.models import service_orders
+from backend.services.service_order_import import parse_service_order_file
+
+
+def xlsx(rows):
+    data = io.BytesIO()
+    xml_rows = "".join('<row r="%d">%s</row>' % (number, "".join(
+        f'<c r="{chr(65 + index)}{number}" t="inlineStr"><is><t>{escape(str(value))}</t></is></c>'
+        for index, value in enumerate(values))) for number, values in enumerate(rows, 1))
+    with ZipFile(data, "w") as archive:
+        archive.writestr("[Content_Types].xml", '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>')
+        archive.writestr("xl/workbook.xml", '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="OS" sheetId="1" r:id="rId1"/></sheets></workbook>')
+        archive.writestr("xl/_rels/workbook.xml.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>')
+        archive.writestr("xl/worksheets/sheet1.xml", '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' + xml_rows + '</sheetData></worksheet>')
+    return data.getvalue()
+
+
+class ServiceOrderTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        root = Path(self.temporary.name)
+        for name, value in {
+            "DATA_DIR": root, "AUTH_DB_PATH": root / "usuarios.db",
+            "OPERATIONS_DB_PATH": root / "dados.db", "LEGACY_DB_PATH": root / "legacy.db",
+        }.items():
+            patcher = patch.object(config, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        db.init_db()
+        self.admin = db.create_or_update_admin("Admin", "Admin-pass-42")
+        self.user = db.create_user(
+            "Analista", "Analyst-pass-42", role="analyst", base_unit="PPT",
+            production_access={"enabled": True, "permissions": {"fill": True}, "units": ["PPT"]},
+        )
+        group = production.list_catalog(self.admin["id"], include_inactive=True)["groups"][0]
+        self.front = production.save_service_front(self.admin["id"], {
+            "name": "Preparo de solo", "group_id": group["id"], "display_style": "operation",
+            "position": 1, "units": ["PPT"], "is_active": True,
+        })
+        self.status = production.list_statuses(self.admin["id"])["statuses"][0]["code"]
+
+    def _launch(self, sector):
+        production.save_my_item(self.user["id"], {
+            "unit_code": "PPT", "service_front_id": self.front["id"], "work_date": "2026-11-10",
+            "sector": sector, "section": "", "farm": "", "status": self.status,
+        })
+
+    HEADER = ["CHAVE", "NO_OS", "SETOR", "SECAO", "OPERACAO", "TALHAO", "CCUSTO", "CCUSTO_TRATOS", "DT_ABERTURA_OS"]
+
+    def test_parser_groups_plots_of_the_same_order(self):
+        parsed = parse_service_order_file(xlsx([
+            self.HEADER,
+            ["4338", "331158", "4", "1", "338", "3", "305116", "PLANTIO MEIOSI", "46335"],
+            ["4338", "331158", "4", "1", "338", "10", "305116", "PLANTIO MEIOSI", "46335"],
+            ["4338", "331158", "4", "1", "338", "4", "305116", "PLANTIO MEIOSI", "46335"],
+            ["1577457", "331200", "1577", "2", "457", "1", "305117", "TRATOS PLANTIO", "46293"],
+            ["", "", "", "", "", "", "", "", ""],
+        ]), "ordens.xlsx")
+        self.assertEqual(parsed["rows_read"], 4)
+        first, second = parsed["records"]
+        self.assertEqual((first["number"], first["sector"], first["section"], first["operation"]), ("331158", "4", "1", "338"))
+        self.assertEqual(first["plots"], ["3", "4", "10"])
+        self.assertEqual((first["operation_name"], first["cost_center"], first["opened_on"]), ("PLANTIO MEIOSI", "305116", "2026-11-09"))
+        self.assertEqual(second["opened_on"], "2026-09-28")
+        # Todas as colunas do arquivo ficam guardadas, uma linha por talhão.
+        self.assertEqual(first["columns"], self.HEADER)
+        self.assertEqual(len(first["rows"]), 3)
+        self.assertEqual(first["rows"][0]["CHAVE"], "4338")
+        self.assertEqual(first["rows"][0]["DT_ABERTURA_OS"], "2026-11-09")
+        self.assertEqual(first["key"], "4338")
+        with self.assertRaisesRegex(ValueError, "colunas obrigatórias"):
+            parse_service_order_file(xlsx([["SETOR", "TALHAO"], ["1", "2"]]), "x.xlsx")
+        with self.assertRaisesRegex(ValueError, "XLSX"):
+            parse_service_order_file(b"<xml/>", "ordens.xml")
+
+    def test_launch_shows_ok_by_sector_and_operation_code(self):
+        self._launch("1577")
+        items = production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"]
+        self.assertEqual(items[0]["service_order"]["status"], "missing")
+
+        with self.assertRaises(PermissionError):
+            service_orders.import_service_orders(self.user["id"], "PPT", [{"number": "1", "sector": "1577", "operation": "457"}])
+
+        result = service_orders.import_service_orders(self.admin["id"], "PPT", [
+            {"number": "5501", "sector": "01577", "section": "2", "operation": "457", "operation_name": "TRATOS PLANTIO",
+             "plots": ["1", "2"]},
+            {"number": "5503", "sector": "999", "operation": "338"},
+        ], filename="ordens.xlsx")
+        self.assertEqual((result["imported"], result["removed"]), (2, 0))
+        # Sem operação escolhida no popup: basta haver O.S. para o setor.
+        order = production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"][0]["service_order"]
+        self.assertEqual(order["status"], "ok")
+        self.assertEqual(order["orders"][0]["plots"], ["1", "2"])
+        self.assertTrue(order["orders"][0]["matches"])
+
+        item_id = production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"][0]["id"]
+        for operation, expected in (("338", "missing"), ("457 — TRATOS PLANTIO", "ok")):
+            production.save_items_sheet(self.user["id"], {"unit_code": "PPT", "work_date": "2026-11-10", "rows": [
+                {"id": item_id, "service_front_id": self.front["id"], "sector": "1577", "section": "", "status": self.status,
+                 "operation": operation}]})
+            order = production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"][0]["service_order"]
+            self.assertEqual(order["status"], expected, operation)
+            # O detalhe sempre traz todas as O.S. do setor, marcando as que conferem.
+            self.assertEqual([(o["number"], o["matches"]) for o in order["orders"]], [("5501", expected == "ok")])
+
+        # Seção diferente da O.S. não confere.
+        production.save_items_sheet(self.user["id"], {"unit_code": "PPT", "work_date": "2026-11-10", "rows": [
+            {"id": item_id, "service_front_id": self.front["id"], "sector": "1577", "section": "3", "status": self.status,
+             "operation": "457"}]})
+        self.assertEqual(production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"][0]["service_order"]["status"], "missing")
+
+        again = service_orders.import_service_orders(self.admin["id"], "PPT", [
+            {"number": "6000", "sector": "1577", "operation": "361", "operation_name": "PREPARO DO SOLO"},
+        ])
+        self.assertEqual(again["removed"], 2)
+        listing = service_orders.list_service_orders(self.user["id"], "PPT", "preparo")
+        self.assertEqual([item["number"] for item in listing["orders"]], ["6000"])
+        self.assertFalse(listing["can_import"])
+        with self.assertRaises(PermissionError):
+            service_orders.list_service_orders(self.user["id"], "NRD")
+
+    def test_import_route_accepts_xlsx_upload(self):
+        from backend.app import application
+        file_bytes = xlsx([self.HEADER, ["1577361", "7001", "1577", "1", "361", "1", "305111", "PREPARO DO SOLO", "46335"]])
+        boundary = "os-upload"
+        body = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="ordens.xlsx"\r\n'
+                'Content-Type: application/octet-stream\r\n\r\n').encode() + file_bytes + f'\r\n--{boundary}--\r\n'.encode()
+        result = {}
+
+        def start_response(status, headers):
+            result["status"] = int(status.split()[0])
+
+        cookie = f"{config.SESSION_COOKIE}={db.create_session(self.admin['id'])}"
+        raw = b"".join(application({
+            "REQUEST_METHOD": "POST", "PATH_INFO": "/api/production/service-orders/import", "QUERY_STRING": "unit=PPT",
+            "CONTENT_TYPE": "multipart/form-data; boundary=" + boundary, "CONTENT_LENGTH": str(len(body)),
+            "wsgi.input": io.BytesIO(body), "wsgi.url_scheme": "https", "HTTP_HOST": "test.invalid",
+            "REMOTE_ADDR": "127.0.0.1", "HTTP_COOKIE": cookie,
+        }, start_response))
+        self.assertEqual(result["status"], 200, raw)
+        self._launch("1577")
+        item = production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"][0]
+        self.assertEqual(item["service_order"]["status"], "ok")
+
+    def test_popup_sheet_saves_rows_operation_and_removals_atomically(self):
+        db.save_sector_base_item("1577", "10", "EDSON BORGES", self.admin["id"])
+        service_orders.import_service_orders(self.admin["id"], "PPT", [
+            {"number": "8001", "sector": "1577", "section": "10", "operation": "361"},
+        ])
+        result = production.save_items_sheet(self.user["id"], {
+            "unit_code": "PPT", "work_date": "2026-11-10",
+            "rows": [
+                {"service_front_id": self.front["id"], "sector": "1577", "section": "10", "status": self.status,
+                 "operation": "361", "observation": "Ok"},
+                {"service_front_id": self.front["id"], "sector": "4702", "section": "", "status": self.status},
+            ],
+        })
+        self.assertEqual(result["saved"], 2)
+        items = {item["entry"]["sector"]: item for item in
+                 production.list_my_items(self.user["id"], "PPT", "2026-11-10", scope="all")["items"]}
+        # Fazenda vem da base de setores; a O.S. confere pela operação informada.
+        self.assertEqual(items["1577"]["entry"]["farm"], "EDSON BORGES")
+        self.assertEqual(items["1577"]["entry"]["operation"], "361")
+        self.assertEqual(items["1577"]["service_order"]["status"], "ok")
+        self.assertEqual(items["4702"]["service_order"]["status"], "missing")  # setor sem O.S.
+
+        # Linha sem "operation" mantém a operação anterior; exclusão e edição na mesma gravação.
+        production.save_items_sheet(self.user["id"], {
+            "unit_code": "PPT", "work_date": "2026-11-11",
+            "rows": [{"id": items["1577"]["id"], "service_front_id": self.front["id"], "sector": "1577",
+                      "section": "10", "status": self.status}],
+            "removed": [items["4702"]["id"]],
+        })
+        after = production.list_my_items(self.user["id"], "PPT", "2026-11-11", scope="all")["items"]
+        self.assertEqual([item["entry"]["sector"] for item in after], ["1577"])
+        self.assertEqual(after[0]["entry"]["operation"], "361")
+
+        # Erro em uma linha não grava nada.
+        with self.assertRaisesRegex(ValueError, "Linha 2"):
+            production.save_items_sheet(self.user["id"], {
+                "unit_code": "PPT", "work_date": "2026-11-12",
+                "rows": [
+                    {"id": after[0]["id"], "service_front_id": self.front["id"], "sector": "1577", "status": self.status},
+                    {"service_front_id": self.front["id"], "sector": "", "status": self.status},
+                ],
+            })
+        unchanged = production.list_my_items(self.user["id"], "PPT", "2026-11-12", scope="all")["items"]
+        self.assertEqual(unchanged[0]["entry"]["work_date"], "2026-11-11")
+
+    def test_codes_are_compared_without_leading_zeros(self):
+        self.assertEqual(service_orders.sector_key("0663"), service_orders.sector_key("663.0"))
+        self.assertEqual(service_orders.operation_key("0338 — TRATOS PLANTIO"), "338")
+        self.assertEqual(service_orders.operation_key(""), "")
+
+
+if __name__ == "__main__":
+    unittest.main()
