@@ -6,6 +6,7 @@ atualização diária mantém histórico separado.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import time
 import uuid
