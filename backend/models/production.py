@@ -14,7 +14,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from .database import ALLOWED_UNIT_CODES, UNIT_DEFINITIONS
+from .constants import ALLOWED_UNIT_CODES, UNIT_DEFINITIONS
 from .storage import auth_connection, connection, validate_actor
 
 MODULE_KEY = "production"
@@ -209,6 +209,7 @@ def save_user_access(user_id: int, payload: Any, *, actor_id: int) -> dict[str, 
     access = normalize_user_access(payload)
     with auth_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
+        # Import local: module_access depende deste módulo no nível superior.
         from .module_access import _validate_manager, validate_delegated_grants
         _validate_manager(conn, user_id, actor_id)
         target = conn.execute("SELECT role FROM users WHERE id=?", (user_id,)).fetchone()
@@ -596,6 +597,24 @@ def save_service_front(user_id: int, payload: Any, *, front_id: int | None = Non
                     )
             except sqlite3.IntegrityError as exc:
                 raise ValueError("Já existe uma frente/serviço com esse nome.") from exc
+            current_units = {
+                row["unit_code"] for row in conn.execute(
+                    "SELECT unit_code FROM production_service_front_units WHERE service_front_id=?", (front_id,),
+                )
+            }
+            removed_units = sorted(current_units - set(units))
+            if removed_units:
+                in_use = conn.execute(
+                    f"""SELECT DISTINCT unit_code FROM production_user_items
+                        WHERE service_front_id=? AND is_active=1
+                          AND unit_code IN ({",".join("?" for _ in removed_units)})""",
+                    (front_id, *removed_units),
+                ).fetchall()
+                if in_use:
+                    blocked = ", ".join(sorted(row["unit_code"] for row in in_use))
+                    raise ValueError(
+                        f"A frente/serviço possui lançamentos ativos em {blocked}. Remova-os antes de retirar a unidade."
+                    )
             conn.execute("DELETE FROM production_service_front_units WHERE service_front_id=?", (front_id,))
             conn.executemany(
                 "INSERT INTO production_service_front_units(service_front_id,unit_code) VALUES (?,?)",
@@ -761,6 +780,9 @@ def save_daily_summary(user_id: int, payload: Any) -> dict[str, Any]:
     selected_date = _normalize_work_date(payload.get("work_date"))
     rain_turn = _normalize_rain(payload.get("rain_turn_mm"), "Chuva do turno")
     rain_accumulated = _normalize_rain(payload.get("rain_accumulated_mm"), "Chuva acumulada")
+    # Só sobrescreve o que foi enviado: salvar apenas as mudanças não apaga a chuva.
+    rain_turn_provided = "rain_turn_mm" in payload
+    rain_accumulated_provided = "rain_accumulated_mm" in payload
     changes_provided = "changes" in payload
     changes = _clean_text(payload.get("changes"), "as mudanças", 2000)
     now = int(time.time())
@@ -773,11 +795,13 @@ def save_daily_summary(user_id: int, payload: Any) -> dict[str, Any]:
                 unit_code,work_date,rain_turn_mm,rain_accumulated_mm,changes,updated_by,updated_at
             ) VALUES (?,?,?,?,?,?,?)
             ON CONFLICT(unit_code,work_date) DO UPDATE SET
-                rain_turn_mm=excluded.rain_turn_mm,
-                rain_accumulated_mm=excluded.rain_accumulated_mm,
+                rain_turn_mm=CASE WHEN ? THEN excluded.rain_turn_mm ELSE production_daily_summaries.rain_turn_mm END,
+                rain_accumulated_mm=CASE WHEN ? THEN excluded.rain_accumulated_mm
+                                         ELSE production_daily_summaries.rain_accumulated_mm END,
                 changes=CASE WHEN ? THEN excluded.changes ELSE production_daily_summaries.changes END,
                 updated_by=excluded.updated_by,updated_at=excluded.updated_at""",
-            (unit, selected_date, rain_turn, rain_accumulated, changes, user_id, now, changes_provided),
+            (unit, selected_date, rain_turn, rain_accumulated, changes, user_id, now,
+             rain_turn_provided, rain_accumulated_provided, changes_provided),
         )
         row = conn.execute(
             "SELECT * FROM production_daily_summaries WHERE unit_code=? AND work_date=?",

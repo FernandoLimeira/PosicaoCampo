@@ -123,7 +123,8 @@ def _validate_pair(conn):
 
 def check_integrity(conn):
     for schema in ("main", "auth"):
-        result = [row[0] for row in conn.execute(f"PRAGMA {schema}.integrity_check")]
+        # quick_check é O(n) e não reconstrói índices: mantém o boot rápido com o volume crescendo.
+        result = [row[0] for row in conn.execute(f"PRAGMA {schema}.quick_check")]
         if result != ["ok"] or conn.execute(f"PRAGMA {schema}.foreign_key_check").fetchall():
             raise RuntimeError(f"Falha de integridade no banco {schema}.")
     for table, column in ALL_USER_REFERENCES:
@@ -200,9 +201,19 @@ def initialize_databases():
             raise RuntimeError("Os bancos de usuários, dados e legado devem ter caminhos diferentes.")
         for path in paths[:2]:
             path.parent.mkdir(parents=True, exist_ok=True)
+        operations_existed = config.OPERATIONS_DB_PATH.is_file() and config.OPERATIONS_DB_PATH.stat().st_size > 0
         conn = _open(config.OPERATIONS_DB_PATH, create=True)
         try:
-            conn.execute("ATTACH DATABASE ? AS auth", (str(config.AUTH_DB_PATH.resolve()),))
+            # Só cria usuarios.db quando nenhum dos dois existe: com apenas dados.db
+            # presente, abrir em modo rw falha em vez de deixar um arquivo vazio.
+            auth_mode = "rwc" if not config.AUTH_DB_PATH.exists() and not operations_existed else "rw"
+            try:
+                conn.execute("ATTACH DATABASE ? AS auth", (config.AUTH_DB_PATH.resolve().as_uri() + f"?mode={auth_mode}",))
+            except sqlite3.OperationalError as exc:
+                raise RuntimeError(
+                    "Os dois bancos não formam um par completo e compatível. "
+                    "Verifique usuarios.db e dados.db juntos."
+                ) from exc
             conn.execute("PRAGMA auth.synchronous = FULL")
             # Bloqueia os dois arquivos antes de ler schemas/metadados: outro
             # worker pode estar confirmando a primeira migração neste momento.
@@ -219,6 +230,7 @@ def initialize_databases():
             for statement in SCHEMA_SQL.split(";"):
                 if statement.strip():
                     conn.execute(statement)
+            # Import local: front_notes importa storage (connection) no nível superior.
             from .front_notes import initialize_front_notes
             initialize_front_notes(conn)
             legacy_layouts = _copy_legacy(conn) if config.LEGACY_DB_PATH.is_file() else False
@@ -418,6 +430,7 @@ def seed_production_defaults(conn):
 
 def _upgrade_operational_schema(conn):
     """Migrações idempotentes dos dados operacionais sem perder registros existentes."""
+    # Import local: front_notes importa storage (connection) no nível superior.
     from .front_notes import initialize_front_notes
     initialize_front_notes(conn)
     _create_return_soil_wet_table(conn)

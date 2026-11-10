@@ -1,97 +1,42 @@
-// Comportamento do layout base: sessão, HTTP, diálogos e notificações.
-function canonicalFieldFrontKey(value) {
-  return String(value ?? '').normalize('NFKC').trim().toUpperCase()
-    .replace(/^(?:(?:EQ(?:UIPE|UIPAMENTO)?|FRENTE|FRT|FT|F|CTT|CCT|PPT|NRD|RBR|PST)(?=[.\s:#-]|\d|$)[.\s:#-]*)+/, '')
-    .replace(/\s*[-–—|]\s*(?:SETOR|FAZENDA)\b.*$/, '')
-    .replace(/\s+/g, '').replace(/\d+/g, digits => String(Number(digits)));
-}
-
-function fieldFrontNumber(value) {
-  const key = canonicalFieldFrontKey(value);
-  const match = key.match(/^(\d+)([A-Z]*)$/);
-  return match ? match[1].padStart(2, '0') + match[2] : String(value ?? '').trim();
-}
-
-function standardizeFieldRainLabels(code, fronts, rain) {
-  const keys = new Set((Array.isArray(fronts) ? fronts : []).map(row => canonicalFieldFrontKey(row?.[0])));
-  const entries = Array.isArray(rain) ? rain : [];
-  const team = label => {
-    const match = String(label ?? '').trim().match(/^EQ(?:UIPE|UIPAMENTO)?[.\s:-]*0*(\d+)$/i);
-    const number = match ? Number(match[1]) : 0;
-    return number >= 3 && number <= 12 ? number : null;
-  };
-  const legacyNrd = String(code).toUpperCase() === 'NRD' && entries.some(row => Array.isArray(row) && (
-    (team(row[0]) !== null && !keys.has(String(team(row[0]))) && keys.has(String(team(row[0]) + 10))) ||
-    (/^FT[.\s:-]*0*8$/i.test(String(row[0]).trim()) && keys.has('8'))));
-  return entries.map(row => {
-    if (!Array.isArray(row) || !row.length) return row;
-    const number = legacyNrd ? team(row[0]) : null;
-    const key = number === null ? canonicalFieldFrontKey(row[0]) : String(number + 10);
-    return [/^\d+[A-Z]*$/.test(key) ? `FT ${fieldFrontNumber(key)}` : row[0], ...row.slice(1)];
-  });
-}
-
+// Comportamento do layout base: sessão, unidade selecionada, menu, diálogos e notificações.
+// Depende de core/format.js e core/api.js (carregados antes em base.html).
 let currentUser = document.body.dataset.userId ? {
   id: Number(document.body.dataset.userId),
   name: document.body.dataset.userName,
   role: document.body.dataset.userRole,
   base_unit: document.body.dataset.userBaseUnit || 'PPT'
 } : null;
-try { localStorage.removeItem('posicao-campo-v1-state'); } catch (_) { /* Cache legado indisponível. */ }
-const moduleAccess = JSON.parse(document.body.dataset.moduleAccess || '{}');
-function canEditModule(key) { return currentUser?.role === 'admin' || Boolean(moduleAccess[key]?.edit); }
-let toastTimer;
 
+try { localStorage.removeItem('posicao-campo-v1-state'); } catch (_) { /* Cache legado indisponível. */ }
+
+const moduleAccess = JSON.parse(document.body.dataset.moduleAccess || '{}');
+
+function canEditModule(key) { return currentUser?.role === 'admin' || Boolean(moduleAccess[key]?.edit); }
+
+let toastTimer;
 // O catálogo vem do mesmo arquivo usado pelo servidor, sem regras de status duplicadas.
 const fieldStatusOptions = JSON.parse(document.body.dataset.fieldStatuses || '[]');
+
 function fieldStatusKey(value) {
   return String(value || '').trim().toUpperCase().replace(/\s+/g, ' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
+
 const fieldStatusesByKey = new Map(fieldStatusOptions.flatMap(option =>
   [option.label, ...option.aliases].map(label => [fieldStatusKey(label), option])));
+
 function getFieldStatus(value) {
   const key = fieldStatusKey(value);
   return fieldStatusesByKey.get(key.includes('SOLO UMIDO') ? 'SOLO UMIDO' : key) || fieldStatusesByKey.get('MUDANCA');
 }
+
 function fieldUnitBorder(statuses) {
   const groups = statuses.map(status => getFieldStatus(status).group);
   if (!groups.length || groups.every(group => group === 'active')) return 'active';
   return groups.every(group => group !== 'active') ? 'critical' : 'attention';
 }
+
 function fieldStatusClass(status) {
   return `is-${getFieldStatus(status).group}`;
-}
-
-async function apiRequest(path, options = {}) {
-  const response = await fetch(path, {
-    ...options,
-    headers: {
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-      ...(options.headers || {})
-    }
-  });
-
-  let data = {};
-  try {
-    data = await response.json();
-  } catch (error) {
-    data = {};
-  }
-
-  if (response.status === 401) {
-    window.location.href = '/login';
-    const authError = new Error('Sessão expirada.');
-    authError.status = 401;
-    authError.payload = data;
-    throw authError;
-  }
-  if (!response.ok) {
-    const requestError = new Error(data.error || 'Erro de comunicação com o servidor.');
-    requestError.status = response.status;
-    requestError.payload = data;
-    throw requestError;
-  }
-  return data;
 }
 
 async function logout() {
@@ -105,6 +50,7 @@ async function logout() {
 }
 
 let sessionCheckInProgress = false;
+
 async function checkSessionStatus() {
   if (!currentUser || sessionCheckInProgress || document.visibilityState === 'hidden') return;
   sessionCheckInProgress = true;
@@ -115,19 +61,6 @@ async function checkSessionStatus() {
   } finally {
     sessionCheckInProgress = false;
   }
-}
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
-
-function greetingForHour(hour) {
-  return hour >= 5 && hour < 12 ? 'Bom dia!' : hour >= 12 && hour < 18 ? 'Boa tarde!' : 'Boa noite!';
 }
 
 function updateDateAndGreeting() {
@@ -147,12 +80,17 @@ const REPORT_UNIT_NAMES = { PPT: 'Paraguaçu Paulista', NRD: 'Narandiba', RBR: '
 const REPORT_UNIT_KEY = `posicao-campo-report-unit:${currentUser?.id || 'anonymous'}`;
 const baseUnit = REPORT_UNIT_NAMES[currentUser?.base_unit] ? currentUser.base_unit : 'PPT';
 let reportUnit = baseUnit;
+
 try { reportUnit = sessionStorage.getItem(REPORT_UNIT_KEY) || reportUnit; } catch (_) { /* Armazenamento opcional. */ }
+
 const requestedUnit = new URLSearchParams(window.location.search).get('unit')?.toUpperCase();
+
 // Abrir o sistema sem escolher uma unidade começa sempre na base da conta.
 // Links internos incluem a unidade atual e mantêm a navegação entre relatórios.
 if (new URL(window.location.href).pathname === '/' && !requestedUnit) reportUnit = baseUnit;
+
 if (REPORT_UNIT_NAMES[requestedUnit]) reportUnit = requestedUnit;
+
 if (!REPORT_UNIT_NAMES[reportUnit]) reportUnit = 'PPT';
 
 function getReportUnit() { return reportUnit; }
@@ -188,18 +126,10 @@ function matchesReportUnit(value, code = getReportUnit()) {
 }
 
 syncReportUnitContext();
+
 document.querySelectorAll('[data-report-unit]').forEach(button => {
   button.addEventListener('click', () => setReportUnit(button.dataset.reportUnit));
 });
-
-function compareFrontLabels(a, b) {
-  const left = String(a ?? '').trim();
-  const right = String(b ?? '').trim();
-  if (!left && !right) return 0;
-  if (!left) return 1;
-  if (!right) return -1;
-  return left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' });
-}
 
 const sidebarFlyouts = [];
 
@@ -258,11 +188,17 @@ function setupSidebarFlyout(toggleSelector, panelSelector) {
 }
 
 const reportsMenu = setupSidebarFlyout('#reports-toggle', '#reports-flyout');
+
 setupSidebarFlyout('#ctt-toggle', '#ctt-flyout');
+
 setupSidebarFlyout('#production-toggle', '#production-flyout');
+
 function positionReportsFlyout() { reportsMenu?.position(); }
+
 document.querySelector('.nav-actions')?.addEventListener('scroll', () => sidebarFlyouts.forEach(menu => menu.close()));
+
 window.addEventListener('resize', () => sidebarFlyouts.forEach(menu => menu.position()));
+
 window.addEventListener('scroll', () => sidebarFlyouts.forEach(menu => menu.close()));
 
 function openModal(id) {
@@ -296,30 +232,6 @@ function showToast(message, error = false) {
   toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
-function formatServerTimestamp(timestamp, timeZone) {
-  const numeric = Number(timestamp);
-  if (!Number.isFinite(numeric) || numeric <= 0) return '-';
-  return new Date(numeric * 1000).toLocaleString('pt-BR', {
-    ...(timeZone ? { timeZone } : {}),
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
-
-function downloadBlobFile(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 document.querySelector('#logout-button')?.addEventListener('click', logout);
   document.querySelectorAll('[data-close-modal]').forEach(button => {
     button.addEventListener('click', () => closeModal(button.dataset.closeModal));
@@ -332,9 +244,8 @@ document.querySelector('#logout-button')?.addEventListener('click', logout);
   });
 
 updateDateAndGreeting();
-if (currentUser) {
-  setInterval(checkSessionStatus, 30000);
-  window.addEventListener('focus', checkSessionStatus);
-  document.addEventListener('visibilitychange', checkSessionStatus);
-}
+
+// Detecta sessões revogadas; a verificação pausa enquanto a aba está oculta.
+if (currentUser) startVisiblePolling(checkSessionStatus, 30000);
+
 setInterval(updateDateAndGreeting, 1000);

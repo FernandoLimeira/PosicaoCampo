@@ -63,6 +63,9 @@ def _parse_time(value: Any) -> time | None:
     text = str(value or "").strip()
     if not text:
         return None
+    # O leitor XLSX entrega data+hora como "dd/mm/AAAA HH:MM:SS": usa só a hora.
+    if " " in text:
+        text = text.rsplit(" ", 1)[-1]
     for fmt in ("%H:%M:%S", "%H:%M", "%H:%M:%S.%f"):
         try:
             return datetime.strptime(text, fmt).time().replace(microsecond=0)

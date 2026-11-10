@@ -38,16 +38,9 @@ function returnUnitByCode(code) {
   return (returnLayoutsState.units || []).find(unit => unit.code === code) || null;
 }
 
-function returnFormatDate(value) {
-  if (!value) return '-';
-  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
-  return String(value);
-}
-
 function returnFormatPeriod(start, end) {
-  const first = returnFormatDate(start);
-  const last = returnFormatDate(end);
+  const first = formatIsoDateBr(start);
+  const last = formatIsoDateBr(end);
   return first === last ? first : `${first} a ${last}`;
 }
 
@@ -65,7 +58,7 @@ function returnDailyFrontCountText(daily, frontCode = '') {
     const text = selected
       ? `${selected.count} colhedora${Number(selected.count) === 1 ? '' : 's'}`
       : returnCountText(counts);
-    return `${returnFormatDate(day.date)}: ${text}`;
+    return `${formatIsoDateBr(day.date)}: ${text}`;
   }).join(' · ');
 }
 
@@ -195,11 +188,7 @@ async function importReturnSoilWetFile(file) {
   try {
     const formData = new FormData();
     formData.append('file', file, file.name);
-    const response = await fetch(`/api/return-analysis/soil-wet/import?unit=${encodeURIComponent(unitCode)}`, { method: 'POST', body: formData });
-    let payload = {};
-    try { payload = await response.json(); } catch (_) { payload = {}; }
-    if (response.status === 401) { window.location.href = '/login'; return; }
-    if (!response.ok) throw new Error(payload.error || 'Não foi possível importar os apontamentos.');
+    const payload = await apiRequest(`/api/return-analysis/soil-wet/import?unit=${encodeURIComponent(unitCode)}`, { method: 'POST', body: formData });
     if ((document.querySelector('#return-analysis-unit')?.value || getReportUnit()) !== unitCode) return;
     invalidateReturnAnalysis();
     const imported = payload.imported || {};
@@ -207,6 +196,9 @@ async function importReturnSoilWetFile(file) {
     renderReturnSoilWetSummary(payload.summary || { unit: unitCode, records: 0 });
     showToast(`Apontamentos atualizados: ${imported.inserted || 0} novos · ${imported.updated || 0} atualizados · ${imported.unchanged || 0} já existentes.`);
   } catch (error) {
+    // apiRequest já redireciona para o login quando a sessão expira.
+    if (error.status === 401) return;
+    if (error.status && !error.payload?.error) error.message = 'Não foi possível importar os apontamentos.';
     console.error(error);
     if ((document.querySelector('#return-analysis-unit')?.value || getReportUnit()) !== unitCode) return;
     setReturnSoilWetStatus(error.message || 'Não foi possível importar os apontamentos.', 'error');
@@ -469,14 +461,7 @@ async function processReturnAnalysis(event) {
     const formData = new FormData();
     formData.append('file', file, file.name);
     const query = new URLSearchParams({ unit: unitCode, front: frontCode, min_gap: String(minGap) });
-    const response = await fetch(`/api/return-analysis/analyze?${query.toString()}`, { method: 'POST', body: formData });
-    let payload = {};
-    try { payload = await response.json(); } catch (error) { payload = {}; }
-    if (response.status === 401) {
-      window.location.href = '/login';
-      return;
-    }
-    if (!response.ok) throw new Error(payload.error || 'Não foi possível processar a planilha.');
+    const payload = await apiRequest(`/api/return-analysis/analyze?${query.toString()}`, { method: 'POST', body: formData });
     if (getReportUnit() !== unitCode || epoch !== returnAnalysisEpoch) return;
     returnLastReport = payload.report || null;
     if (!returnLastReport || !payload.report_digest) throw new Error('A análise não retornou os dados para gerar a apresentação.');
@@ -488,6 +473,9 @@ async function processReturnAnalysis(event) {
       'success'
     );
   } catch (error) {
+    // apiRequest já redireciona para o login quando a sessão expira.
+    if (error.status === 401) return;
+    if (error.status && !error.payload?.error) error.message = 'Não foi possível processar a planilha.';
     console.error(error);
     if (epoch === returnAnalysisEpoch) returnSetStatus('#return-analysis-status', error.message || 'Não foi possível processar a planilha.', 'error');
   } finally {
@@ -536,17 +524,7 @@ async function generateReturnPresentation() {
     // Não baixe o relatório anterior se a seleção mudou durante a geração.
     if (epoch !== returnAnalysisEpoch || returnLastInput !== snapshot) return;
     const match = (response.headers.get('Content-Disposition') || '').match(/filename="([A-Za-z0-9._-]+\.pptx)"/);
-    const url = URL.createObjectURL(blob);
-    try {
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = match?.[1] || 'analise-mudancas-area.pptx';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } finally {
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    }
+    downloadBlobFile(blob, match?.[1] || 'analise-mudancas-area.pptx');
     returnSetStatus('#return-presentation-status', `Apresentação de ${snapshot.unitCode} / frente ${snapshot.frontCode} gerada.`, 'success');
     showToast('Apresentação gerada.');
   } catch (error) {
@@ -615,9 +593,9 @@ function renderReturnRows(report) {
       <td><strong>${escapeHtml(item.sector)}</strong></td>
       <td>${escapeHtml(returnSectorSectionText(item))}</td>
       <td>${escapeHtml(returnSectorFarmText(item))}</td>
-      <td>${escapeHtml(returnFormatDate(item.entry_date))}</td>
-      <td>${escapeHtml(returnFormatDate(item.exit_date))}</td>
-      <td>${escapeHtml(returnFormatDate(item.return_date))}</td>
+      <td>${escapeHtml(formatIsoDateBr(item.entry_date))}</td>
+      <td>${escapeHtml(formatIsoDateBr(item.exit_date))}</td>
+      <td>${escapeHtml(formatIsoDateBr(item.return_date))}</td>
       <td>${escapeHtml(item.days_out)}</td>
       <td>${escapeHtml((item.sectors_during_absence || []).length ? item.sectors_during_absence.join(', ') : 'Sem registro de outro setor')}</td>
       <td>${escapeHtml(returnSectorCoverageText(item.other_fronts_in_sector))}</td>
@@ -639,8 +617,8 @@ function renderPossibleSoilWetRows(report) {
       <td><strong>${escapeHtml(item.sector)}</strong></td>
       <td>${escapeHtml(returnSectorSectionText(item))}</td>
       <td>${escapeHtml(returnSectorFarmText(item))}</td>
-      <td>${escapeHtml(returnFormatDate(item.exit_date))}</td>
-      <td>${escapeHtml(returnFormatDate(item.return_date))}</td>
+      <td>${escapeHtml(formatIsoDateBr(item.exit_date))}</td>
+      <td>${escapeHtml(formatIsoDateBr(item.return_date))}</td>
       <td>${escapeHtml(item.days_out)}</td>
       <td>Sem registro da frente em outro setor</td>
       <td>${escapeHtml(returnSectorCoverageText(item.other_fronts_in_sector))}</td>
@@ -671,8 +649,8 @@ function renderConfirmedSoilWetRows(report) {
         <td>${escapeHtml(returnSectorSectionText(item))}</td>
         <td>${escapeHtml(returnSectorFarmText(item))}</td>
         <td>${escapeHtml(returnConfirmedSoilWetSectorText(item))}</td>
-        <td>${escapeHtml(returnFormatDate(item.exit_date))}</td>
-        <td>${escapeHtml(returnFormatDate(item.return_date))}</td>
+        <td>${escapeHtml(formatIsoDateBr(item.exit_date))}</td>
+        <td>${escapeHtml(formatIsoDateBr(item.return_date))}</td>
         <td><strong>${escapeHtml(item.days_out)} ${Number(item.days_out) === 1 ? 'dia' : 'dias'}</strong></td>
         <td>${escapeHtml(equipment.length ? equipment.join(', ') : '-')}</td>
         <td>${escapeHtml(`${majority} de ${fleetSize} · ${daysWithMajority}/${daysInGap} dias`)}</td>
@@ -736,7 +714,7 @@ function renderReturnTraceOptions(report) {
     returnTraceSelection.push(index);
     if (returnTraceSelection.length === 3) break;
   }
-  list.innerHTML = rows.map((item, index) => `<label><input type="checkbox" data-trace-index="${index}" ${returnTraceSelection.includes(index) ? 'checked' : ''} /><span>Setor ${escapeHtml(item.sector)} · ${escapeHtml(returnSectorFarmText(item))} · retorno em ${escapeHtml(returnFormatDate(item.return_date))} · ${escapeHtml(item.days_out)} dias fora</span></label>`).join('');
+  list.innerHTML = rows.map((item, index) => `<label><input type="checkbox" data-trace-index="${index}" ${returnTraceSelection.includes(index) ? 'checked' : ''} /><span>Setor ${escapeHtml(item.sector)} · ${escapeHtml(returnSectorFarmText(item))} · retorno em ${escapeHtml(formatIsoDateBr(item.return_date))} · ${escapeHtml(item.days_out)} dias fora</span></label>`).join('');
   options.hidden = !rows.length;
 }
 

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Sacarose · Posição de Campo{% endblock %}
 {% block styles %}
-  <link rel="stylesheet" href="/css/sacarose.css?v={{ asset_version }}" />
+  <link rel="stylesheet" href="/css/pages/sacarose.css?v={{ asset_version }}" />
 {% endblock %}
 
 {% block content %}
@@ -57,6 +57,7 @@
   </div>
 {% endblock %}
 {% block scripts %}
-  <script src="/js/export.js?v={{ asset_version }}"></script>
-  <script src="/js/sacarose.js?v={{ asset_version }}"></script>
+  <script src="/js/reports-export/shared-drawing.js?v={{ asset_version }}"></script>
+  <script src="/js/reports-export/sacarose-export.js?v={{ asset_version }}"></script>
+  <script src="/js/sacarose/sacarose.js?v={{ asset_version }}"></script>
 {% endblock %}

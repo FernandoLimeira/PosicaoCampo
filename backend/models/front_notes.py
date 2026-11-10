@@ -4,11 +4,11 @@ Os apontamentos só alimentam a observação oficial após revisão e salvamento
 no formulário da unidade. O registro original permanece no histórico.
 """
 import json
-import re
 import time
 
 from .storage import connection
 from .module_access import module_access_from_conn
+from ..services.front_identifiers import validated_position_front_key
 from ..services.operational_shifts import shift_at, shift_period
 
 UNIT_CODES = {'PPT', 'NRD', 'RBR', 'PST'}
@@ -28,11 +28,17 @@ def _unit(value):
     return code
 
 
-def _front_key(value):
-    name = str(value or '').strip()
-    if not name or len(name) > 12 or not re.fullmatch(r'[\w\-./ ]+', name, re.UNICODE):
-        raise ValueError('Identificação da frente inválida.')
-    return str(int(name)) if name.isdecimal() else name.casefold()
+# Valida e normaliza a frente; implementação única em services.front_identifiers.
+_front_key = validated_position_front_key
+
+
+def _safe_front_key(value):
+    """Chave da frente para comparação; linhas com identificação fora do padrão
+    da posição oficial são ignoradas em vez de bloquear a unidade inteira."""
+    try:
+        return _front_key(value)
+    except ValueError:
+        return None
 
 
 def initialize_front_notes(conn):
@@ -203,7 +209,7 @@ def append_front_note(payload, actor):
             raise ValueError('Unidade não cadastrada.')
         unit_payload = json.loads(official['data_json'])
         matches = [row for row in unit_payload.get('rows', [])
-                   if isinstance(row, list) and len(row) >= 2 and _front_key(row[0]) == key]
+                   if isinstance(row, list) and len(row) >= 2 and _safe_front_key(row[0]) == key]
         if not matches:
             raise ValueError('Frente não encontrada na posição oficial da unidade.')
         selected = next((row for row in matches if str(row[1]).strip() == requested_sector), None)

@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { loadScripts, pageScripts } = require('./page_scripts.js');
 
 async function main() {
   const elements = new Map();
@@ -33,13 +34,21 @@ async function main() {
       body: { appendChild() {} },
       createElement() { return { click() { downloads.push({href: this.href, filename: this.download}); }, remove() {} }; },
     },
-    window: { location: { href: '', search: '' } },
+    window: { location: { href: '', search: '' }, setTimeout(fn) { fn(); } },
     getReportUnit() { return selectedUnit; },
     escapeHtml(value) { return String(value ?? ''); }, showToast() {}, closeAllModals() {},
     apiRequest: async () => ({units: ['PPT', 'NRD', 'RBR', 'PST'].map(code => ({code, name: code, fronts: []}))}),
     fetch: async (url, options) => { requests.push({url, options}); return handler(url, options); },
   });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/return-analysis.js'), 'utf8'), ctx);
+  // Núcleo real de HTTP/formatação. Uploads (análise e importação) passam pelo
+  // apiRequest real até o fetch simulado; demais consultas e o escape continuam simulados.
+  const { escapeHtml, apiRequest: stubRequest } = ctx;
+  loadScripts(ctx, ['core/format.js', 'core/api.js']);
+  const realApiRequest = ctx.apiRequest;
+  ctx.escapeHtml = escapeHtml;
+  ctx.apiRequest = (url, options) => /^\/api\/return-analysis\/(analyze|soil-wet\/import)\b/.test(url)
+    ? realApiRequest(url, options) : stubRequest(url, options);
+  loadScripts(ctx, pageScripts('/retornos'));
   await new Promise(resolve => setImmediate(resolve));
   const button = element('#return-generate-presentation');
   assert.equal(button.disabled, true);

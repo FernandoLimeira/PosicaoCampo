@@ -1,3 +1,4 @@
+// Produção Agrícola: lançamentos do dia, filtros, chuva e inicialização da página.
 const PRODUCTION_STATUS_STYLES = {
   active: { className: 'is-active', label: 'Verde' },
   wet: { className: 'is-wet', label: 'Amarelo' },
@@ -14,12 +15,9 @@ const PRODUCTION_UNIT_NAMES = {
 
 let productionAccess = null;
 let productionCatalog = { groups: [] };
-let productionConfigCatalog = { groups: [] };
 let productionStatuses = [];
 let productionConfigStatuses = [];
 let productionArchivedStatuses = [];
-let productionEditingFrontUnits = [];
-let productionEditingFrontActive = true;
 let productionItems = [];
 let productionEditingItemId = null;
 let productionFilterGroup = '';
@@ -34,17 +32,8 @@ function isCurrentProductionRequest(unit, epoch) {
   return unit === currentProductionUnit() && epoch === productionPageEpoch;
 }
 
-function localIsoDate(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function formatProductionDate(value) {
-  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : String(value || '-');
-}
+// Mensagem para quando a gravação deu certo, mas a recarga da tela falhou.
+const PRODUCTION_REFRESH_WARNING = 'Os dados foram salvos, mas não foi possível atualizar a tela. Recarregue a página para ver a versão mais recente.';
 
 function allowedProductionUnits() {
   return Array.isArray(productionAccess?.units) ? productionAccess.units : [];
@@ -90,7 +79,7 @@ function setProductionContext(unit) {
   const label = document.querySelector('#production-current-unit');
   const date = document.querySelector('#production-current-date');
   if (label) label.textContent = productionUnitLabel(unit);
-  if (date) date.textContent = formatProductionDate(localIsoDate());
+  if (date) date.textContent = formatIsoDateBr(saoPauloIsoDate());
 }
 
 function setProductionEntryUnit(unit = selectedNavbarProductionUnit()) {
@@ -145,9 +134,9 @@ async function loadProductionStatuses({ includeInactive = false } = {}) {
 }
 
 async function loadProductionItems(unit, epoch = productionPageEpoch) {
-  const workDate = localIsoDate();
+  const workDate = saoPauloIsoDate();
   const data = await apiRequest(`/api/production/my-items?unit=${encodeURIComponent(unit)}&date=${encodeURIComponent(workDate)}&scope=all`);
-  if (!isCurrentProductionRequest(unit, epoch) || workDate !== localIsoDate()) return null;
+  if (!isCurrentProductionRequest(unit, epoch) || workDate !== saoPauloIsoDate()) return null;
   productionItems = Array.isArray(data.items) ? data.items : [];
   renderProductionFilters();
   saveProductionFilters(unit);
@@ -155,12 +144,12 @@ async function loadProductionItems(unit, epoch = productionPageEpoch) {
   return data;
 }
 
-async function loadProductionDailySummary(unit, epoch = productionPageEpoch) {
-  const workDate = localIsoDate();
+async function loadProductionDailySummary(unit, epoch = productionPageEpoch, fixedWorkDate = null) {
+  const workDate = fixedWorkDate || saoPauloIsoDate();
   const save = document.querySelector('#production-daily-save');
   if (save) save.disabled = true;
   const { summary } = await apiRequest(`/api/production/daily-summary?unit=${encodeURIComponent(unit)}&date=${workDate}`);
-  if (!isCurrentProductionRequest(unit, epoch) || workDate !== localIsoDate()) return;
+  if (!isCurrentProductionRequest(unit, epoch) || (!fixedWorkDate && workDate !== saoPauloIsoDate())) return;
   const fields = [
     ['#production-rain-turn', summary?.rain_turn_mm],
     ['#production-rain-accumulated', summary?.rain_accumulated_mm]
@@ -177,17 +166,22 @@ async function loadProductionDailySummary(unit, epoch = productionPageEpoch) {
   }
   const status = document.querySelector('#production-daily-status');
   if (status) status.textContent = summary?.updated_at
-    ? `Dados salvos para ${formatProductionDate(workDate)}.`
-    : `Sem dados salvos para ${formatProductionDate(workDate)}.`;
+    ? `Dados salvos para ${formatIsoDateBr(workDate)}.`
+    : `Sem dados salvos para ${formatIsoDateBr(workDate)}.`;
 }
+
+// Unidade e dia exibidos no modal de chuva; o envio usa esses valores mesmo após a virada do dia.
+let productionRainModalContext = null;
 
 async function openProductionRainModal() {
   if (!canEditProductionDailySummary()) return;
   const unit = currentProductionUnit();
+  const workDate = saoPauloIsoDate();
   const label = document.querySelector('#production-rain-unit');
   if (label) label.textContent = productionUnitLabel(unit);
-  await loadProductionDailySummary(unit);
+  await loadProductionDailySummary(unit, productionPageEpoch, workDate);
   if (unit !== currentProductionUnit()) return;
+  productionRainModalContext = { unit, workDate };
   openModal('production-rain-modal');
   document.querySelector('#production-rain-turn')?.focus();
 }
@@ -195,8 +189,7 @@ async function openProductionRainModal() {
 async function submitProductionDailySummary(event) {
   event.preventDefault();
   if (!canEditProductionDailySummary()) return;
-  const unit = currentProductionUnit();
-  const workDate = localIsoDate();
+  const { unit, workDate } = productionRainModalContext || { unit: currentProductionUnit(), workDate: saoPauloIsoDate() };
   const save = document.querySelector('#production-daily-save');
   const status = document.querySelector('#production-daily-status');
   const payload = {
@@ -208,13 +201,21 @@ async function submitProductionDailySummary(event) {
   if (status) status.textContent = 'Salvando dados do dia…';
   try {
     await apiRequest('/api/production/daily-summary', { method: 'PUT', body: JSON.stringify(payload) });
-    await loadProductionDailySummary(unit);
-    closeModal('production-rain-modal');
-    showToast('Dados da imagem salvos.');
   } catch (error) {
     console.error(error);
     if (status) status.textContent = error.message || 'Não foi possível salvar os dados do dia.';
     showToast(status?.textContent || 'Não foi possível salvar os dados do dia.', true);
+    if (save) save.disabled = false;
+    return;
+  }
+  closeModal('production-rain-modal');
+  productionRainModalContext = null;
+  showToast('Dados da imagem salvos.');
+  try {
+    await loadProductionDailySummary(unit, productionPageEpoch, workDate);
+  } catch (error) {
+    console.error(error);
+    showToast(PRODUCTION_REFRESH_WARNING, true);
   } finally {
     if (save) save.disabled = false;
   }
@@ -348,7 +349,7 @@ function renderProductionItems(data) {
     const entry = item.entry || {};
     const current = Boolean(item.is_current_day);
     const updatedLabel = current ? 'Atualizado hoje' : (entry.work_date ? 'Último lançamento' : 'Sem atualização');
-    const updatedDetail = entry.work_date ? `Último registro: ${formatProductionDate(entry.work_date)}` : 'Nenhum registro salvo';
+    const updatedDetail = entry.work_date ? `Último registro: ${formatIsoDateBr(entry.work_date)}` : 'Nenhum registro salvo';
     const styleLabel = item.display_style === 'front' ? 'Frente operacional' : 'Operação / serviço';
     const actions = canFillProduction() ? `
       <div class="production-row-actions">
@@ -611,7 +612,7 @@ function clearEntryForm(defaultUnit = selectedNavbarProductionUnit()) {
   // Mantém compatibilidade com abas que ainda usam o campo de identificação.
   const itemInput = document.querySelector('#production-item-id');
   if (itemInput) itemInput.value = '';
-  document.querySelector('#production-work-date').value = localIsoDate();
+  document.querySelector('#production-work-date').value = saoPauloIsoDate();
   setProductionEntryUnit(defaultUnit);
   renderEntryGroups();
   setSelectedStatus(defaultStatusCode());
@@ -648,7 +649,7 @@ function openEditProductionItem(itemId) {
   productionEditingItemId = Number(item.id);
   const itemInput = document.querySelector('#production-item-id');
   if (itemInput) itemInput.value = String(item.id);
-  document.querySelector('#production-work-date').value = localIsoDate();
+  document.querySelector('#production-work-date').value = saoPauloIsoDate();
   setProductionEntryUnit(currentProductionUnit());
   renderEntryGroups(item.group_id, item.service_front_id, item);
   document.querySelector('#production-sector-input').value = entry.sector || '';
@@ -688,7 +689,7 @@ async function submitProductionEntry(event) {
   const payload = {
     unit_code: unit,
     service_front_id: frontId,
-    work_date: localIsoDate()
+    work_date: saoPauloIsoDate()
   };
   let sectors;
   if (submit) submit.disabled = true;
@@ -710,12 +711,19 @@ async function submitProductionEntry(event) {
       method: itemId ? 'PUT' : 'POST',
       body: JSON.stringify(payload)
     });
-    closeModal('production-entry-modal');
-    showToast(itemId ? 'Frente atualizada.' : `${sectors.length} ${sectors.length === 1 ? 'setor salvo' : 'setores salvos'} na frente.`);
-    await refreshProductionPage(unit, { keepFilters: true });
   } catch (error) {
     console.error(error);
     showToast(error.message || 'Não foi possível salvar a frente.', true);
+    if (submit) submit.disabled = false;
+    return;
+  }
+  closeModal('production-entry-modal');
+  showToast(itemId ? 'Frente atualizada.' : `${sectors.length} ${sectors.length === 1 ? 'setor salvo' : 'setores salvos'} na frente.`);
+  try {
+    await refreshProductionPage(unit, { keepFilters: true });
+  } catch (error) {
+    console.error(error);
+    showToast(PRODUCTION_REFRESH_WARNING, true);
   } finally {
     if (submit) submit.disabled = false;
   }
@@ -744,11 +752,17 @@ async function removeProductionItem(itemId) {
   if (!window.confirm(`Remover o lançamento de ${item.service_name}, setor ${item.entry?.sector || '-'}, da unidade ${currentProductionUnit()}? O histórico será preservado.`)) return;
   try {
     await apiRequest(`/api/production/my-items/${itemId}`, { method: 'DELETE' });
-    showToast('Lançamento removido da unidade.');
-    await refreshProductionPage(currentProductionUnit(), { keepFilters: true });
   } catch (error) {
     console.error(error);
     showToast(error.message || 'Não foi possível remover a frente.', true);
+    return;
+  }
+  showToast('Lançamento removido da unidade.');
+  try {
+    await refreshProductionPage(currentProductionUnit(), { keepFilters: true });
+  } catch (error) {
+    console.error(error);
+    showToast('O lançamento foi removido, mas não foi possível atualizar a tela. Recarregue a página para ver a versão mais recente.', true);
   }
 }
 
@@ -768,330 +782,6 @@ async function refreshProductionPage(unit = currentProductionUnit(), { keepFilte
   } catch (error) {
     if (!isCurrentProductionRequest(unit, epoch)) return;
     throw error;
-  }
-}
-
-function renderConfigGroupOptions() {
-  const select = document.querySelector('#production-config-front-group');
-  if (!select) return;
-  const groups = Array.isArray(productionConfigCatalog.groups) ? productionConfigCatalog.groups : [];
-  select.innerHTML = groups.map(group => `<option value="${group.id}">${escapeHtml(group.name)}${group.is_active ? '' : ' · inativo'}</option>`).join('');
-}
-
-function renderProductionConfigLists() {
-  const groups = Array.isArray(productionConfigCatalog.groups) ? productionConfigCatalog.groups : [];
-  const groupList = document.querySelector('#production-groups-list');
-  const frontList = document.querySelector('#production-fronts-list');
-  renderConfigGroupOptions();
-  if (groupList) {
-    groupList.innerHTML = groups.map(group => `
-      <div class="production-config-list-item ${group.is_active ? '' : 'is-inactive'}">
-        <div class="production-config-list-item-copy"><strong>${escapeHtml(group.name)}</strong><span>Ordem ${group.position}${group.is_active ? '' : ' · inativo'}</span></div>
-        <div class="production-config-list-actions">
-          <button type="button" data-config-action="edit-group" data-group-id="${group.id}">Editar</button>
-          <button class="is-delete" type="button" data-config-action="delete-group" data-group-id="${group.id}" data-group-name="${escapeHtml(group.name)}">Apagar</button>
-        </div>
-      </div>`).join('') || '<div class="production-empty"><span>Nenhum grupo cadastrado.</span></div>';
-  }
-  if (frontList) {
-    const fronts = groups.flatMap(group => (group.fronts || []).map(front => ({ ...front, group_name: group.name })));
-    frontList.innerHTML = fronts.map(front => `
-      <div class="production-config-list-item ${front.is_active ? '' : 'is-inactive'}">
-        <div class="production-config-list-item-copy"><strong>${escapeHtml(front.name)}</strong><span>${escapeHtml(front.group_name)} · ${front.display_style === 'front' ? 'frente' : 'operação'}${front.is_active ? '' : ' · inativa'}</span></div>
-        <div class="production-config-list-actions">
-          <button type="button" data-config-action="edit-front" data-front-id="${front.id}">Editar</button>
-          <button class="is-delete" type="button" data-config-action="delete-front" data-front-id="${front.id}" data-front-name="${escapeHtml(front.name)}">Apagar</button>
-        </div>
-      </div>`).join('') || '<div class="production-empty"><span>Nenhuma frente/serviço cadastrada nesta unidade.</span></div>';
-  }
-}
-
-async function loadProductionConfigCatalog() {
-  const unit = setProductionConfigUnit(selectedNavbarProductionUnit());
-  productionConfigCatalog = await apiRequest(`/api/production/catalog?unit=${encodeURIComponent(unit)}&include_inactive=1`);
-  renderProductionConfigLists();
-}
-
-function nextGroupPosition() {
-  const groups = Array.isArray(productionConfigCatalog.groups) ? productionConfigCatalog.groups : [];
-  const highest = groups.reduce((max, group) => Math.max(max, Number(group.position) || 0), 0);
-  return String(highest + 1);
-}
-
-function setGroupConfigEditorMode(isEditing = false, open = false) {
-  const editor = document.querySelector('#production-group-editor');
-  const title = document.querySelector('#production-group-editor-title');
-  const hint = editor?.querySelector('.production-config-editor-hint');
-  const submit = document.querySelector('#production-group-submit');
-  const cancel = document.querySelector('#production-group-clear');
-  if (title) title.textContent = isEditing ? 'Editar grupo' : 'Adicionar grupo';
-  if (hint) hint.textContent = isEditing ? 'Alterando grupo selecionado' : 'Nome e ordem';
-  if (submit) submit.textContent = isEditing ? 'Salvar alterações' : 'Adicionar grupo';
-  if (cancel) cancel.textContent = isEditing ? 'Cancelar edição' : 'Cancelar';
-  if (editor && open) editor.open = true;
-}
-
-function clearGroupConfigForm({ keepOpen = false } = {}) {
-  const id = document.querySelector('#production-group-id');
-  const name = document.querySelector('#production-group-name');
-  const position = document.querySelector('#production-group-position');
-  if (id) id.value = '';
-  if (name) name.value = '';
-  if (position) position.value = '';
-  setGroupConfigEditorMode(false, keepOpen);
-}
-
-function setFrontConfigEditorMode(isEditing = false, open = false) {
-  const editor = document.querySelector('#production-front-editor');
-  const title = document.querySelector('#production-front-editor-title');
-  const hint = editor?.querySelector('.production-config-editor-hint');
-  if (title) title.textContent = isEditing ? 'Editar frente / serviço' : 'Nova frente / serviço';
-  if (hint) hint.textContent = isEditing ? 'Alterando cadastro selecionado' : 'Clique para preencher';
-  if (editor && open) editor.open = true;
-}
-
-function clearFrontConfigForm({ keepOpen = false } = {}) {
-  document.querySelector('#production-config-front-id').value = '';
-  document.querySelector('#production-config-front-name').value = '';
-  document.querySelector('#production-config-front-position').value = '0';
-  document.querySelector('#production-config-front-style').value = 'operation';
-  productionEditingFrontActive = true;
-  const unit = setProductionConfigUnit(selectedNavbarProductionUnit());
-  productionEditingFrontUnits = unit ? [unit] : [];
-  renderConfigGroupOptions();
-  setFrontConfigEditorMode(false, keepOpen);
-}
-
-function editConfigGroup(groupId) {
-  const group = (productionConfigCatalog.groups || []).find(item => Number(item.id) === Number(groupId));
-  if (!group) return;
-  document.querySelector('#production-group-id').value = String(group.id);
-  document.querySelector('#production-group-name').value = group.name;
-  document.querySelector('#production-group-position').value = String(group.position || 0);
-  setGroupConfigEditorMode(true, true);
-  document.querySelector('#production-group-name')?.focus();
-}
-
-function editConfigFront(frontId) {
-  const groups = productionConfigCatalog.groups || [];
-  const front = groups.flatMap(group => (group.fronts || []).map(item => ({ ...item, group_id: group.id }))).find(item => Number(item.id) === Number(frontId));
-  if (!front) return;
-  document.querySelector('#production-config-front-id').value = String(front.id);
-  document.querySelector('#production-config-front-name').value = front.name;
-  document.querySelector('#production-config-front-group').value = String(front.group_id);
-  document.querySelector('#production-config-front-style').value = front.display_style || 'operation';
-  document.querySelector('#production-config-front-position').value = String(front.position || 0);
-  productionEditingFrontActive = Boolean(front.is_active);
-  productionEditingFrontUnits = Array.isArray(front.units) ? [...front.units] : [];
-  const unit = setProductionConfigUnit(selectedNavbarProductionUnit());
-  if (unit && !productionEditingFrontUnits.includes(unit)) productionEditingFrontUnits.push(unit);
-  setFrontConfigEditorMode(true, true);
-  document.querySelector('#production-config-front-name')?.focus();
-}
-
-async function submitConfigGroup(event) {
-  event.preventDefault();
-  const id = Number(document.querySelector('#production-group-id')?.value || 0);
-  const existingGroup = id
-    ? (productionConfigCatalog.groups || []).find(item => Number(item.id) === id)
-    : null;
-  const payload = {
-    name: document.querySelector('#production-group-name')?.value.trim() || '',
-    position: Number(document.querySelector('#production-group-position')?.value || 0),
-    is_active: id ? Boolean(existingGroup?.is_active) : true
-  };
-  try {
-    await apiRequest(id ? `/api/production/catalog/groups/${id}` : '/api/production/catalog/groups', {
-      method: id ? 'PUT' : 'POST', body: JSON.stringify(payload)
-    });
-    clearGroupConfigForm();
-    const editor = document.querySelector('#production-group-editor');
-    if (editor) editor.open = false;
-    await loadProductionConfigCatalog();
-    await loadProductionCatalog(currentProductionUnit());
-    renderEntryGroups();
-    showToast('Grupo salvo.');
-  } catch (error) {
-    console.error(error);
-    showToast(error.message || 'Não foi possível salvar o grupo.', true);
-  }
-}
-
-async function submitConfigFront(event) {
-  event.preventDefault();
-  const id = Number(document.querySelector('#production-config-front-id')?.value || 0);
-  const unit = document.querySelector('#production-config-unit-input')?.value || selectedNavbarProductionUnit();
-  const units = id
-    ? Array.from(new Set([...(productionEditingFrontUnits || []), unit].filter(Boolean)))
-    : [unit].filter(Boolean);
-  const payload = {
-    name: document.querySelector('#production-config-front-name')?.value.trim() || '',
-    group_id: Number(document.querySelector('#production-config-front-group')?.value || 0),
-    display_style: document.querySelector('#production-config-front-style')?.value || 'operation',
-    position: Number(document.querySelector('#production-config-front-position')?.value || 0),
-    is_active: id ? productionEditingFrontActive : true,
-    units
-  };
-  try {
-    const saved = await apiRequest(id ? `/api/production/catalog/fronts/${id}` : '/api/production/catalog/fronts', {
-      method: id ? 'PUT' : 'POST', body: JSON.stringify(payload)
-    });
-    clearFrontConfigForm();
-    const editor = document.querySelector('#production-front-editor');
-    if (editor) editor.open = false;
-    await loadProductionConfigCatalog();
-    await loadProductionCatalog(currentProductionUnit());
-    renderEntryGroups();
-    showToast(saved.front?.linked_existing
-      ? 'Frente existente vinculada a esta unidade com o grupo e tipo originais. Os lançamentos permanecem separados.'
-      : 'Frente/serviço salva.');
-  } catch (error) {
-    console.error(error);
-    showToast(error.message || 'Não foi possível salvar a frente/serviço.', true);
-  }
-}
-
-async function deleteConfigGroup(groupId, groupName = '') {
-  const label = groupName ? ` “${groupName}”` : '';
-  if (!window.confirm(`Apagar o grupo${label}? Essa ação só é permitida quando não existem frentes/serviços vinculados.`)) return;
-  try {
-    await apiRequest(`/api/production/catalog/groups/${groupId}`, { method: 'DELETE' });
-    clearGroupConfigForm();
-    await loadProductionConfigCatalog();
-    await loadProductionCatalog(currentProductionUnit());
-    renderEntryGroups();
-    showToast('Grupo apagado.');
-  } catch (error) {
-    console.error(error);
-    showToast(error.message || 'Não foi possível apagar o grupo.', true);
-  }
-}
-
-async function deleteConfigFront(frontId, frontName = '') {
-  const label = frontName ? ` “${frontName}”` : '';
-  if (!window.confirm(`Apagar a frente/serviço${label}? Itens que já possuem lançamentos não podem ser apagados para preservar o histórico.`)) return;
-  try {
-    await apiRequest(`/api/production/catalog/fronts/${frontId}`, { method: 'DELETE' });
-    clearFrontConfigForm();
-    await loadProductionConfigCatalog();
-    await loadProductionCatalog(currentProductionUnit());
-    renderEntryGroups();
-    showToast('Frente/serviço apagada.');
-  } catch (error) {
-    console.error(error);
-    showToast(error.message || 'Não foi possível apagar a frente/serviço.', true);
-  }
-}
-
-async function loadProductionConfigStatuses() {
-  productionConfigStatuses = await loadProductionStatuses({ includeInactive: true });
-  renderProductionStatusConfigList();
-  return productionConfigStatuses;
-}
-
-function nextStatusPosition() {
-  const highest = productionConfigStatuses.reduce((max, status) => Math.max(max, Number(status.position) || 0), 0);
-  return String(highest + 1);
-}
-
-function renderProductionStatusConfigList() {
-  const list = document.querySelector('#production-status-list');
-  if (!list) return;
-  list.innerHTML = productionConfigStatuses.map(status => {
-    const style = PRODUCTION_STATUS_STYLES[status.style_key] || PRODUCTION_STATUS_STYLES.waiting;
-    return `
-      <div class="production-config-list-item ${status.is_active ? '' : 'is-inactive'}">
-        <div class="production-config-list-item-copy">
-          <strong><span class="production-status-dot ${style.className}" aria-hidden="true"></span>${escapeHtml(status.name)}</strong>
-          <span>${style.label} · Ordem ${status.position}${status.is_active ? '' : ' · inativo'}</span>
-        </div>
-        <div class="production-config-list-actions">
-          <button type="button" data-status-action="edit" data-status-id="${status.id}">Editar</button>
-          <button class="is-delete" type="button" data-status-action="delete" data-status-id="${status.id}" data-status-name="${escapeHtml(status.name)}">Apagar</button>
-        </div>
-      </div>`;
-  }).join('') || '<div class="production-empty"><span>Nenhum status cadastrado.</span></div>';
-}
-
-function setStatusConfigEditorMode(isEditing = false, open = false) {
-  const editor = document.querySelector('#production-status-editor');
-  const title = document.querySelector('#production-status-editor-title');
-  const hint = editor?.querySelector('.production-config-editor-hint');
-  const submit = document.querySelector('#production-status-submit');
-  const cancel = document.querySelector('#production-status-clear');
-  if (title) title.textContent = isEditing ? 'Editar status' : 'Novo status';
-  if (hint) hint.textContent = isEditing ? 'Alterando status selecionado' : 'Clique para preencher';
-  if (submit) submit.textContent = isEditing ? 'Salvar alterações' : 'Adicionar status';
-  if (cancel) cancel.textContent = isEditing ? 'Cancelar edição' : 'Cancelar';
-  if (editor && open) editor.open = true;
-}
-
-function clearStatusConfigForm({ keepOpen = false } = {}) {
-  const id = document.querySelector('#production-status-id');
-  const name = document.querySelector('#production-status-name');
-  const style = document.querySelector('#production-status-style');
-  const position = document.querySelector('#production-status-position');
-  if (id) id.value = '';
-  if (name) name.value = '';
-  if (style) style.value = 'active';
-  if (position) position.value = '';
-  setStatusConfigEditorMode(false, keepOpen);
-}
-
-function editProductionStatus(statusId) {
-  const status = productionConfigStatuses.find(item => Number(item.id) === Number(statusId));
-  if (!status) return;
-  document.querySelector('#production-status-id').value = String(status.id);
-  document.querySelector('#production-status-name').value = status.name;
-  document.querySelector('#production-status-style').value = status.style_key || 'waiting';
-  document.querySelector('#production-status-position').value = String(status.position || 0);
-  setStatusConfigEditorMode(true, true);
-  document.querySelector('#production-status-name')?.focus();
-}
-
-async function submitProductionStatus(event) {
-  event.preventDefault();
-  const id = Number(document.querySelector('#production-status-id')?.value || 0);
-  const existing = id ? productionConfigStatuses.find(item => Number(item.id) === id) : null;
-  const payload = {
-    name: document.querySelector('#production-status-name')?.value.trim() || '',
-    style_key: document.querySelector('#production-status-style')?.value || 'waiting',
-    position: Number(document.querySelector('#production-status-position')?.value || 0),
-    is_active: id ? Boolean(existing?.is_active) : true
-  };
-  try {
-    await apiRequest(id ? `/api/production/statuses/${id}` : '/api/production/statuses', {
-      method: id ? 'PUT' : 'POST',
-      body: JSON.stringify(payload)
-    });
-    clearStatusConfigForm();
-    const editor = document.querySelector('#production-status-editor');
-    if (editor) editor.open = false;
-    await loadProductionConfigStatuses();
-    await loadProductionStatuses();
-    refreshProductionSectorStatuses();
-    renderProductionItems({ permissions: productionAccess?.permissions || {} });
-    showToast('Status salvo.');
-  } catch (error) {
-    console.error(error);
-    showToast(error.message || 'Não foi possível salvar o status.', true);
-  }
-}
-
-async function deleteProductionStatus(statusId, statusName = '') {
-  const label = statusName ? ` “${statusName}”` : '';
-  if (!window.confirm(`Excluir o status${label} das opções de preenchimento? Os lançamentos e o histórico serão preservados.`)) return;
-  try {
-    await apiRequest(`/api/production/statuses/${statusId}`, { method: 'DELETE' });
-    clearStatusConfigForm();
-    await loadProductionConfigStatuses();
-    await loadProductionStatuses();
-    refreshProductionSectorStatuses();
-    renderProductionItems({ permissions: productionAccess?.permissions || {} });
-    showToast('Status apagado.');
-  } catch (error) {
-    console.error(error);
-    showToast(error.message || 'Não foi possível apagar o status.', true);
   }
 }
 
@@ -1116,6 +806,7 @@ async function initializeProductionPage() {
 }
 
 document.querySelector('#production-add-button')?.addEventListener('click', openNewProductionItem);
+
 document.querySelector('#production-rain-button')?.addEventListener('click', async () => {
   try {
     await openProductionRainModal();
@@ -1124,6 +815,7 @@ document.querySelector('#production-rain-button')?.addEventListener('click', asy
     showToast(error.message || 'Não foi possível carregar a chuva da unidade.', true);
   }
 });
+
 document.querySelector('#production-filter-group')?.addEventListener('change', event => {
   productionFilterGroup = event.target.value;
   productionFilterFront = '';
@@ -1131,15 +823,21 @@ document.querySelector('#production-filter-group')?.addEventListener('change', e
   saveProductionFilters();
   renderProductionItems();
 });
+
 document.querySelector('#production-filter-front')?.addEventListener('change', event => {
   productionFilterFront = event.target.value;
   saveProductionFilters();
   renderProductionItems();
 });
+
 document.querySelector('#production-entry-form')?.addEventListener('submit', submitProductionEntry);
+
 document.querySelector('#production-daily-form')?.addEventListener('submit', submitProductionDailySummary);
+
 document.querySelector('#production-group-input')?.addEventListener('change', () => renderEntryFronts());
+
 document.querySelector('#production-add-sector')?.addEventListener('click', addProductionSector);
+
 document.querySelector('#production-sector-rows')?.addEventListener('click', event => {
   const button = event.target.closest('[data-remove-sector]');
   if (!button) return;
@@ -1149,6 +847,7 @@ document.querySelector('#production-sector-rows')?.addEventListener('click', eve
   row.remove();
   updateProductionSectorRows();
 });
+
 document.querySelector('#production-sector-rows')?.addEventListener('change', event => {
   const row = event.target.closest('[data-production-sector-row]');
   if (!row) return;
@@ -1176,15 +875,21 @@ document.querySelector('#production-items-body')?.addEventListener('click', even
 });
 
 document.querySelector('#production-config-toggle')?.addEventListener('click', showConfigPane);
+
 document.querySelector('#production-config-back')?.addEventListener('click', showEntryPane);
+
 document.querySelector('#production-status-config-toggle')?.addEventListener('click', showStatusConfigPane);
+
 document.querySelector('#production-status-config-back')?.addEventListener('click', showEntryPane);
+
 document.querySelector('#production-status-form')?.addEventListener('submit', submitProductionStatus);
+
 document.querySelector('#production-status-clear')?.addEventListener('click', () => {
   clearStatusConfigForm();
   const editor = document.querySelector('#production-status-editor');
   if (editor) editor.open = false;
 });
+
 document.querySelector('#production-status-editor')?.addEventListener('toggle', event => {
   if (!event.currentTarget.open) return;
   const statusId = document.querySelector('#production-status-id')?.value || '';
@@ -1194,14 +899,18 @@ document.querySelector('#production-status-editor')?.addEventListener('toggle', 
   }
   requestAnimationFrame(() => document.querySelector('#production-status-name')?.focus());
 });
+
 document.querySelector('#production-status-list')?.addEventListener('click', event => {
   const button = event.target.closest('[data-status-action]');
   if (!button) return;
   if (button.dataset.statusAction === 'edit') editProductionStatus(Number(button.dataset.statusId));
   if (button.dataset.statusAction === 'delete') deleteProductionStatus(Number(button.dataset.statusId), button.dataset.statusName || '');
 });
+
 document.querySelector('#production-group-form')?.addEventListener('submit', submitConfigGroup);
+
 document.querySelector('#production-front-form')?.addEventListener('submit', submitConfigFront);
+
 document.querySelector('#production-group-clear')?.addEventListener('click', () => {
   clearGroupConfigForm();
   const editor = document.querySelector('#production-group-editor');
@@ -1217,16 +926,19 @@ document.querySelector('#production-group-editor')?.addEventListener('toggle', e
   }
   requestAnimationFrame(() => document.querySelector('#production-group-name')?.focus());
 });
+
 document.querySelector('#production-front-clear')?.addEventListener('click', () => {
   clearFrontConfigForm({ keepOpen: true });
   document.querySelector('#production-config-front-name')?.focus();
 });
+
 document.querySelector('#production-groups-list')?.addEventListener('click', event => {
   const button = event.target.closest('[data-config-action]');
   if (!button) return;
   if (button.dataset.configAction === 'edit-group') editConfigGroup(Number(button.dataset.groupId));
   if (button.dataset.configAction === 'delete-group') deleteConfigGroup(Number(button.dataset.groupId), button.dataset.groupName || '');
 });
+
 document.querySelector('#production-fronts-list')?.addEventListener('click', event => {
   const button = event.target.closest('[data-config-action]');
   if (!button) return;

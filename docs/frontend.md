@@ -38,29 +38,32 @@ Botões de ação e links com aparência de botão (`modal-button` e
 `excel-page-back`) compartilham a centralização horizontal e vertical em
 `base.css`. O alinhamento à esquerda dos itens da navegação lateral é preservado.
 
-`static/js/common.js` concentra sessão, requisições HTTP, escape de texto,
-diálogos e notificações. As páginas não precisam importar o JavaScript do
-painel nem conter elementos de outros módulos.
+O núcleo JavaScript (`static/js/core/`) concentra sessão, requisições HTTP,
+escape de texto, datas, diálogos e notificações. As páginas não precisam
+importar o JavaScript do painel nem conter elementos de outros módulos.
+A organização das pastas está descrita em "Organização de `static/js` e
+`static/css`", abaixo.
 
 ## Mapa de páginas
 
-| URL | Template | CSS específico | JavaScript específico |
+| URL | Template | CSS específico (`static/css/pages/`) | Pasta JavaScript (`static/js/`) |
 | --- | --- | --- | --- |
-| `/` | `index.html` | `dashboard.css` | `export.js`, `app.js` |
-| `/sacarose` | `sacarose.html` | `sacarose.css` | `export.js`, `sacarose.js` |
-| `/emitir-posicao-global` | `emissao.html` | `emissao.css` | `export.js`, `emissao.js` |
-| `/setores` | `setores.html` | `setores.css` | `setores.js` |
-| `/relatorios` | `relatorios.html` | `relatorios.css` | `relatorios.js` |
-| `/retornos` | `retornos.html` | `retornos.css` | `return-analysis.js` |
-| `/historico` | `historico.html` | `historico.css` | `historico.js` |
-| `/usuarios` | `usuarios.html` | `usuarios.css` | `usuarios.js` |
-| `/usuarios/cadastro` | `usuario_cadastro.html` | `usuarios.css` | `usuarios.js` |
-| `/login` | `login.html` | `auth.css` | `login.js` |
+| `/` | `index.html` | `dashboard.css` | `dashboard/` |
+| `/sacarose` | `sacarose.html` | `sacarose.css` | `sacarose/` + `reports-export/` |
+| `/emitir-posicao-global` | `emissao.html` | `emissao.css` | `emissao/` + `reports-export/` + `producao/` |
+| `/producao` | `producao.html` | `producao.css` | `producao/` |
+| `/setores` | `setores.html` | `setores.css` | `setores/` |
+| `/relatorios` | `relatorios.html` | `reports-common.css`, `relatorios.css` | `relatorios/` |
+| `/retornos` | `retornos.html` | `reports-common.css`, `retornos.css` | `retornos/` |
+| `/historico` | `historico.html` | `historico.css` | `historico/` |
+| `/usuarios` | `usuarios.html` | `usuarios.css` | `usuarios/` |
+| `/usuarios/cadastro` | `usuario_cadastro.html` | `usuarios.css` | `usuarios/` |
+| `/login` | `login.html` | `auth.css` (em `static/css/`) | `login.js` (na raiz de `static/js/`) |
 
 Relatórios e Retornos também compartilham `reports-common.css`, que contém
 seus componentes visuais reutilizados. Nenhum dos dois importa o CSS
-exclusivo do outro. `style.css` é somente um agregador de compatibilidade:
-os templates novos não o carregam.
+exclusivo do outro. O antigo agregador `style.css` foi removido: nenhum
+template o carregava.
 
 Essa é uma aplicação de múltiplas páginas: navegar entre módulos faz uma
 requisição de documento HTML, sem o antigo alternador de telas escondidas.
@@ -111,7 +114,7 @@ O recuo e o espaçamento do menu são centralizados nas variáveis CSS
 `--nav-item-inset` e `--nav-item-gap`. Unidade, primeiro botão, ícones,
 saudação e Sair compartilham a mesma coluna de alinhamento.
 
-`common.js` mantém a unidade em `?unit=PPT|NRD|RBR|PST` e no armazenamento
+`core/common.js` mantém a unidade em `?unit=PPT|NRD|RBR|PST` e no armazenamento
 da aba. O parâmetro válido na URL prevalece. O filtro permanece visível no
 menu com quatro botões (PPT, NRD, RBR e PST); mudar a unidade atualiza a tela sem recarregar, preservando rascunhos
 de Sacarose em memória. A análise de mudanças de área limpa o resultado
@@ -139,6 +142,108 @@ A saudação usa o horário do navegador: Bom dia entre 05h e 11h59, Boa tarde
 entre 12h e 17h59 e Boa noite entre 18h e 04h59. Relógio, data e saudação
 atualizam a cada segundo usando o horário do navegador, sem recarregar.
 
+## Organização de `static/js` e `static/css`
+
+Os scripts continuam **clássicos** (`<script src>`, sem módulos ES nem
+empacotador): cada arquivo declara funções e variáveis globais, e a ordem
+das tags nos templates define as dependências. Os testes carregam os mesmos
+arquivos em contextos `node:vm`, na mesma ordem.
+
+```text
+static/
+├── assets/                       imagens (login-field-sunrise-v1.png é público)
+├── css/
+│   ├── base.css                  layout, menu e componentes globais (público)
+│   ├── auth.css                  tela de login (público)
+│   └── pages/                    um arquivo por página
+│       ├── dashboard.css, emissao.css, historico.css, producao.css
+│       ├── reports-common.css, relatorios.css, retornos.css
+│       └── sacarose.css, setores.css, usuarios.css
+└── js/
+    ├── login.js                  tela de login (público, fica na raiz)
+    ├── core/                     núcleo compartilhado
+    │   ├── format.js             escapeHtml, datas de São Paulo, números, saudação
+    │   ├── api.js                apiRequest, downloadBlobFile, startVisiblePolling
+    │   ├── common.js             sessão, unidade, menu, modais, toast, status de campo
+    │   ├── field-fronts.js       chave/número das frentes e rótulos de chuva
+    │   └── sector-base.js        estado e índice da base de setores
+    ├── dashboard/                Posição de Campo (/)
+    │   ├── dashboard.js          estado das unidades, tabela de frentes e filtros
+    │   ├── field-notes.js        observações e modal de detalhes da frente
+    │   ├── editor.js             assistente "Preencher" (etapas, linhas, gravação)
+    │   └── app.js                setupEvents, initializeApp e atualização periódica
+    ├── reports-export/           geração das imagens PNG
+    │   ├── shared-drawing.js     primitivas de canvas, loadImageAsset, cabeçalho
+    │   ├── field-report-data.js  normalização das unidades, chuva por frente, ícones
+    │   ├── global-report.js      emissão global (quatro unidades)
+    │   ├── sacarose-export.js    imagem da Sacarose
+    ├── producao/                 production-consolidation.js, production-config.js,
+    │                             producao.js, production-export.js
+    └── sacarose/, setores/, relatorios/, retornos/, historico/, usuarios/, emissao/
+```
+
+`/css/base.css`, `/css/auth.css`, `/js/login.js` e as imagens públicas do
+login são servidos sem sessão; por isso continuam nos caminhos originais.
+Subpastas funcionam em `/css/`, `/js/` e `/assets/`, e a versão dos assets
+(`?v={{ asset_version }}`) considera todos os arquivos, inclusive em subpastas.
+
+### Ordem de carregamento
+
+`base.html` carrega o núcleo em todas as páginas autenticadas:
+`core/format.js` → `core/api.js` → `core/common.js`. Em seguida, o bloco
+`scripts` de cada página acrescenta:
+
+| Página | Scripts próprios, nesta ordem |
+| --- | --- |
+| `/` | `core/field-fronts.js`, `core/sector-base.js`, `dashboard/dashboard.js`, `dashboard/field-notes.js`, `dashboard/editor.js`, `dashboard/app.js` |
+| `/sacarose` | `reports-export/shared-drawing.js`, `reports-export/sacarose-export.js`, `sacarose/sacarose.js` |
+| `/producao` | `producao/production-consolidation.js`, `producao/production-config.js`, `producao/producao.js` |
+| `/emitir-posicao-global` | `core/field-fronts.js`, `reports-export/shared-drawing.js`, `reports-export/field-report-data.js`, `reports-export/global-report.js`, `reports-export/sacarose-export.js`, `producao/production-consolidation.js`¹, `producao/production-export.js`¹, `emissao/emissao.js` |
+| `/setores` | `core/sector-base.js`, `setores/setores.js` |
+| `/relatorios` | `relatorios/relatorios.js` |
+| `/retornos` | `retornos/return-analysis.js` |
+| `/historico` | `historico/historico.js` |
+| `/usuarios` | `usuarios/usuarios.js` |
+
+¹ Somente para administradores ou contas com acesso à Produção Agrícola.
+
+O último script de cada página liga os eventos e inicializa a tela
+(`dashboard/app.js` termina com `initializeApp();`, `producao/producao.js`
+com `initializeProductionPage();`). Os scripts anteriores da mesma pasta só
+declaram funções e estado.
+
+### Onde ficam os utilitários compartilhados
+
+- **Datas e números** (`core/format.js`): `saoPauloDateParts`,
+  `saoPauloIsoDate` (dia operacional AAAA-MM-DD), `formatIsoDateBr`
+  (AAAA-MM-DD → DD/MM/AAAA), `formatServerTimestamp`, `parseBrNumber`,
+  `greetingForHour`, `compareFrontLabels` e `escapeHtml`.
+- **HTTP** (`core/api.js`): `apiRequest` envia JSON ou `FormData`
+  (uploads), redireciona para o login em 401 e lança erros com `status` e
+  `payload`; `downloadBlobFile` baixa um `Blob`; `startVisiblePolling(tarefa, ms)`
+  repete a tarefa no intervalo, ao focar a janela e ao voltar para a aba,
+  e não executa enquanto `document.visibilityState === 'hidden'`. A sessão
+  (`/api/auth/me`) e as observações do painel (`/api/front-notes`) usam esse
+  agendador a cada 30 s.
+- **Frentes de campo** (`core/field-fronts.js`): `canonicalFieldFrontKey`,
+  `fieldFrontNumber` e `standardizeFieldRainLabels` (inclui a conversão do
+  cadastro legado de NRD). O painel e as imagens usam diretamente essas
+  funções, sem cópias locais.
+- **Base de setores** (`core/sector-base.js`): `sectorBaseItems`,
+  `getSectorBaseItems`, `getSectorBaseItem`, `rebuildSectorBaseMap` e
+  `fetchSectorBase`. Cada página define seu `loadSectorBase`, que chama
+  `fetchSectorBase` e redesenha a própria tela.
+- **Status de campo, unidade selecionada, modais e toast** (`core/common.js`).
+
+Regra: dois scripts carregados na mesma página nunca declaram o mesmo nome
+global. `tests/test_page_scripts.js` confere a ordem dos templates com
+`tests/page_scripts.js` e falha se houver nomes repetidos ou um arquivo de
+`static/js` que nenhuma página carrega. Um utilitário usado por mais de uma
+página deve ficar em `core/`.
+
+Os testes JavaScript carregam os scripts com `loadScripts(ctx, lista)` e
+`pageScripts('/rota')`, de `tests/page_scripts.js`, na mesma ordem das páginas.
+
 ## Renderização e acesso
 
 `backend/views/templates.py` configura Jinja2 com escape automático e gera o
@@ -159,7 +264,7 @@ Crie um template com a herança e os blocos necessários:
 {% extends "base.html" %}
 {% block title %}Novo módulo · Posição de Campo{% endblock %}
 {% block styles %}
-  <link rel="stylesheet" href="/css/novo-modulo.css?v={{ asset_version }}" />
+  <link rel="stylesheet" href="/css/pages/novo-modulo.css?v={{ asset_version }}" />
 {% endblock %}
 {% block content %}
   <section aria-labelledby="module-title">
@@ -167,13 +272,15 @@ Crie um template com a herança e os blocos necessários:
   </section>
 {% endblock %}
 {% block scripts %}
-  <script src="/js/novo-modulo.js?v={{ asset_version }}"></script>
+  <script src="/js/novo-modulo/novo-modulo.js?v={{ asset_version }}"></script>
 {% endblock %}
 ```
 
 Adicione sua URL em `PAGE_ROUTES`, seu link no menu de `base.html` e testes
-de acesso e renderização. Recursos específicos ficam em `static/css` e
-`static/js`. Para invalidar versões anteriores dos recursos no navegador,
+de acesso e renderização. Recursos específicos ficam em `static/css/pages/`
+e em uma pasta própria de `static/js/`; inclua a lista de scripts da página em
+`tests/page_scripts.js` e em `test_script_dependencies_and_styles_are_scoped`
+(`tests/test_pages.py`). Para invalidar versões anteriores dos recursos no navegador,
 atualize `ASSET_VERSION` em `backend/views/templates.py` ao publicar mudanças.
 
 ## Publicação e validação

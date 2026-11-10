@@ -1,11 +1,11 @@
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 const vm = require('node:vm');
 const { context } = require('./test_reports.js');
+const { loadScripts, pageScripts, withoutInitializeApp } = require('./page_scripts.js');
 
 async function main() {
   const { ctx } = context('?unit=PPT');
-  vm.runInContext(fs.readFileSync(require.resolve('../static/js/app.js'), 'utf8').replace(/initializeApp\(\);\s*$/, ''), ctx);
+  loadScripts(ctx, pageScripts('/'), withoutInitializeApp);
   ctx.refreshEditorSaveStatus = () => {};
   const messages = [];
   ctx.showToast = message => messages.push(message);

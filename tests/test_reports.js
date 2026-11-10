@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { BASE_SCRIPTS, EXPORT_SCRIPTS, loadScripts, pageScripts, withoutInitializeApp } = require('./page_scripts.js');
 
 function context(search = '?unit=PPT', stored = 'NRD', baseUnit = 'PPT', pathname = '/', userId = '7') {
   const elements = new Map();
@@ -46,13 +47,10 @@ function context(search = '?unit=PPT', stored = 'NRD', baseUnit = 'PPT', pathnam
       removeItem(key) { ctx.removedStorageKey = key; }
     },
   });
-  run(ctx, 'common.js');
+  loadScripts(ctx, BASE_SCRIPTS);
   return { ctx, elements, link };
 }
 
-function run(ctx, file, transform = source => source) {
-  vm.runInContext(transform(fs.readFileSync(path.join(__dirname, '../static/js', file), 'utf8')), ctx);
-}
 
 async function main() {
   const { ctx, elements, link } = context('?unit=rbr');
@@ -116,19 +114,19 @@ async function main() {
   assert.equal(context('', null, 'XYZ').ctx.getReportUnit(), 'PPT');
   assert.equal(context('', null, 'NRD', '/', '8').ctx.storageKey, 'posicao-campo-report-unit:8');
   assert.equal(ctx.storageKey, 'posicao-campo-report-unit:7');
-  run(ctx, 'app.js', source => source.replace(/initializeApp\(\);\s*$/, ''));
+  loadScripts(ctx, pageScripts('/'), withoutInitializeApp);
   ctx.renderDashboard();
-  assert.match(elements.get('#units-grid').innerHTML, /<strong>RBR<\/strong>/);
+  // O card não repete o código da unidade; a seleção aparece no rótulo da prévia.
+  assert.match(elements.get('#preview-unit-label').textContent, /RBR/);
   elements.get('[data-report-unit="PST"]').listeners.click();
   ctx.renderDashboard();
-  assert.match(elements.get('#units-grid').innerHTML, /<strong>PST<\/strong>/);
   assert.equal(elements.get('[data-report-unit="PST"]').attributes['aria-pressed'], 'true');
   assert.equal(elements.get('[data-report-unit="RBR"]').attributes['aria-pressed'], 'false');
   assert.equal(ctx.stored, 'PST');
   assert.equal(link.href, '/sacarose?unit=PST');
   assert.match(elements.get('#preview-unit-label').textContent, /PST/);
 
-  run(ctx, 'relatorios.js');
+  loadScripts(ctx, pageScripts('/relatorios'));
   const report = { performance_rows: [{ unit: 'PPT', front: '1' }, { unit: 'NRD', front: '1' }, { unit: '' }], timeline: [{ unit: 'PPT' }, { unit: 'NRD' }] };
   assert.equal(ctx.filterExcelPerformanceRows(report, { unit: 'PPT' }).length, 1);
   assert.equal(ctx.filterExcelTimeline(report, { unit: 'NRD' }).length, 1);
@@ -143,21 +141,22 @@ async function main() {
     const canvas = { width: 0, height: 0, getContext: () => fakeCtx, toBlob(callback) { callback({ width: this.width, height: this.height }); } };
     return canvas;
   };
-  run(standalone, 'export.js');
+  // Emissões sem o painel: só os scripts de emissão (global e Sacarose).
+  loadScripts(standalone, [...EXPORT_SCRIPTS, 'reports-export/sacarose-export.js']);
   standalone.loadReportUnitIconImage = async () => null;
-  standalone.loadReportTemplateImage = async () => ({ close() {} });
   standalone.loadSacaroseHeaderIconImage = async () => null;
-  standalone.drawUnitOnCanvas = (ctx, unit, layout) => drawn.push({ code: unit.code, layout });
+  // A emissão global carrega a arte de referência direto por loadImageAsset.
+  standalone.loadImageAsset = async () => ({ width: 4096, height: 2304, close() {} });
+  standalone.loadEmbeddedReportUnitSymbol = async () => null;
   standalone.drawSacaroseExportUnit = (ctx, code) => { drawn.push({ code }); return 200; };
   const unit = { code: 'NRD', name: 'Narandiba', rows: [['1', '10', 'green', 'EM ATIVIDADE']], rain: [] };
-  const image = await standalone.generateUnitReportImageBlob(unit);
-  assert.equal(image.width, 2176);
-  assert.deepEqual(drawn.map(item => item.code), ['NRD']);
-  drawn.length = 0;
   const global = ['PPT', 'NRD', 'RBR', 'PST'].map(code => ({ ...unit, code }));
+  // A emissão global usa o layout aprovado (900 px de referência, escala 2x)
+  // e desenha cada unidade em globalDrawCard.
+  standalone.globalDrawCard = (ctx, layout, unit) => drawn.push({ code: unit.code, layout });
   const globalImage = await standalone.generateReportImageBlob(global);
-  assert.equal(globalImage.width, 4096);
-  assert.deepEqual(drawn.map(item => item.code), ['PPT', 'NRD', 'RBR', 'PST']);
+  assert.equal(globalImage.width, 1800);
+  assert.deepEqual(drawn.map(item => item.code).sort(), ['NRD', 'PPT', 'PST', 'RBR']);
   await assert.rejects(standalone.generateReportImageBlob([unit]), /quatro unidades/);
   drawn.length = 0;
   await standalone.generateSacaroseReportImageBlob(['PPT'], { PPT: [{ front: '1', sector: '10' }], NRD: [{ front: '9', sector: '90' }] }, []);
@@ -165,11 +164,6 @@ async function main() {
   const rows = standalone.getSacaroseExportRows('PPT', { PPT: [{ front: '1', sector: '10', exclude_image: true }, { front: '2', sector: '20' }] }, [{ sector: '20', section: '1', description: 'Fazenda' }]);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].description, 'Fazenda');
-  const many = { ...unit, rows: Array.from({ length: 40 }, () => unit.rows[0]) };
-  await standalone.generateUnitReportImageBlob(many);
-  assert.equal(drawn.at(-1).layout.fullRows, true);
-  assert.equal(drawn.at(-1).layout.maxRows, 40);
-  assert(drawn.at(-1).layout.h > 900);
   console.log('OK: saudação, filtro compartilhado, isolamento de unidades e emissões HD.');
 }
 

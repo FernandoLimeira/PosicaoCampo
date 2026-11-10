@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Cadastro de setores · Posição de Campo{% endblock %}
 {% block styles %}
-  <link rel="stylesheet" href="/css/setores.css?v={{ asset_version }}" />
+  <link rel="stylesheet" href="/css/pages/setores.css?v={{ asset_version }}" />
 {% endblock %}
 
 {% block content %}
@@ -94,5 +94,6 @@
     </section>
 {% endblock %}
 {% block scripts %}
-  <script src="/js/setores.js?v={{ asset_version }}"></script>
+  <script src="/js/core/sector-base.js?v={{ asset_version }}"></script>
+  <script src="/js/setores/setores.js?v={{ asset_version }}"></script>
 {% endblock %}

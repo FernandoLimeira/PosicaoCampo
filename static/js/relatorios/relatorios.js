@@ -15,12 +15,6 @@ function formatReportPercent(value) {
   return `${numeric.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 }
 
-function formatReportDate(isoDate) {
-  if (!isoDate) return '-';
-  const [year, month, day] = String(isoDate).split('-');
-  return year && month && day ? `${day}/${month}/${year}` : String(isoDate);
-}
-
 function formatReportClock(isoDateTime) {
   if (!isoDateTime) return '-';
   const text = String(isoDateTime);
@@ -99,7 +93,7 @@ function populateExcelReportFilters(report) {
   setExcelFilterOptions('#excel-filter-front', fronts, item => item, item => item, 'Todas');
   setExcelFilterOptions('#excel-filter-operator', operators, 'operator_key', item => `${item.name}${item.code ? ` · ${item.code}` : ''}`, 'Todos');
   setExcelFilterOptions('#excel-filter-equipment', fleets, item => item.code || item.name || item.label, item => item.label || item.code || item.name, 'Todas');
-  setExcelFilterOptions('#excel-filter-date', dates, item => item, item => formatReportDate(item), 'Todas');
+  setExcelFilterOptions('#excel-filter-date', dates, item => item, item => formatIsoDateBr(item), 'Todas');
   ['#excel-filter-shift', '#excel-filter-team'].forEach(selector => {
     const select = document.querySelector(selector);
     if (select) select.value = '';
@@ -298,7 +292,7 @@ function buildShiftChangeOccurrences(events) {
       if (previous.shift === current.shift) continue;
       const gapSeconds = Math.max(0, Math.round((reportTimestamp(current.start) - reportTimestamp(previous.end)) / 1000));
       if (gapSeconds > 180) {
-        items.push(occurrenceItem('⚠', `Troca de turno durou ${formatReportDuration(gapSeconds)}, acima do limite de 3 minutos.`, `${formatReportDate(current.date)} · Turno ${previous.shift} → ${current.shift} · ${current.equipment_code || current.equipment_key}`, 'warning'));
+        items.push(occurrenceItem('⚠', `Troca de turno durou ${formatReportDuration(gapSeconds)}, acima do limite de 3 minutos.`, `${formatIsoDateBr(current.date)} · Turno ${previous.shift} → ${current.shift} · ${current.equipment_code || current.equipment_key}`, 'warning'));
       }
 
       const boundary = reportTimestamp(current.start);
@@ -313,7 +307,7 @@ function buildShiftChangeOccurrences(events) {
         if (onlyImproductive && reachesBoundary) {
           const total = afterProductive.reduce((sum, event) => sum + Number(event.seconds || 0), 0);
           const operations = [...new Set(afterProductive.map(event => event.operation).filter(Boolean))].join(', ');
-          items.push(occurrenceItem('⚠', `Na hora anterior à troca de turno, o equipamento saiu de atividade produtiva, entrou somente em atividade(s) improdutiva(s) (${operations || 'sem descrição'}) e permaneceu assim até a troca, totalizando ${formatReportDuration(total)} de parada improdutiva.`, `${formatReportDate(current.date)} · ${current.equipment_code || current.equipment_key}`, 'warning'));
+          items.push(occurrenceItem('⚠', `Na hora anterior à troca de turno, o equipamento saiu de atividade produtiva, entrou somente em atividade(s) improdutiva(s) (${operations || 'sem descrição'}) e permaneceu assim até a troca, totalizando ${formatReportDuration(total)} de parada improdutiva.`, `${formatIsoDateBr(current.date)} · ${current.equipment_code || current.equipment_key}`, 'warning'));
         }
       }
     }
@@ -334,7 +328,7 @@ function buildEventOccurrences(events) {
     const fleet = event.equipment_code || event.equipment_key || 'sem frota';
     items.push(occurrenceItem(
       categoryIcon(event.category),
-      `${formatReportDate(event.date)} · ${formatReportClock(event.start)}–${formatReportClock(event.end)} · ${event.operation || event.category_label || 'Atividade'} por ${formatReportDuration(seconds)}.`,
+      `${formatIsoDateBr(event.date)} · ${formatReportClock(event.start)}–${formatReportClock(event.end)} · ${event.operation || event.category_label || 'Atividade'} por ${formatReportDuration(seconds)}.`,
       `Turno ${event.shift} · Frota ${fleet}${operator}`,
       event.category === 'productive' ? 'positive' : (['maintenance', 'improductive'].includes(event.category) ? 'warning' : 'neutral')
     ));
@@ -447,8 +441,8 @@ function renderExcelReport(report) {
   const results = document.querySelector('#excel-report-results');
   if (!results) return;
   document.querySelector('#excel-meta-file').textContent = report.file || '-';
-  const start = formatReportDate(report.period?.start);
-  const end = formatReportDate(report.period?.end);
+  const start = formatIsoDateBr(report.period?.start);
+  const end = formatIsoDateBr(report.period?.end);
   document.querySelector('#excel-meta-period').textContent = start === end ? start : `${start} a ${end}`;
   document.querySelector('#excel-meta-scope').textContent = reportScopeText(report);
   document.querySelector('#excel-meta-counts').textContent = `${report.records || 0} registros · ${report.operators_count || 0} operadores · ${report.equipments_count || 0} frotas`;
@@ -545,20 +539,16 @@ async function processExcelReport(event) {
   try {
     const formData = new FormData();
     formData.append('file', file, file.name);
-    const response = await fetch('/api/reports/excel/analyze', { method: 'POST', body: formData });
-    let payload = {};
-    try { payload = await response.json(); } catch (error) { payload = {}; }
-    if (response.status === 401) {
-      window.location.href = '/login';
-      return;
-    }
-    if (!response.ok) throw new Error(payload.error || 'Não foi possível processar o arquivo importado.');
+    const payload = await apiRequest('/api/reports/excel/analyze', { method: 'POST', body: formData });
     renderExcelReport(payload.report || {});
     if (status) {
       status.className = 'excel-report-status is-success';
       status.textContent = `${excelFileTypeLabel(file)} processado: ${payload.report?.records || 0} registros válidos · ${payload.report?.operators_count || 0} operadores · ${payload.report?.equipments_count || 0} frotas.`;
     }
   } catch (error) {
+    // apiRequest já redireciona para o login quando a sessão expira.
+    if (error.status === 401) return;
+    if (error.status && !error.payload?.error) error.message = 'Não foi possível processar o arquivo importado.';
     console.error(error);
     if (status) {
       status.className = 'excel-report-status is-error';
@@ -589,7 +579,7 @@ function downloadExcelTimelineCsv() {
     return;
   }
   const headers = ['Data', 'Frente', 'Turno', 'Operador', 'Frota', 'Início', 'Fim', 'Operação', 'Classificação', 'Duração'];
-  const rows = excelFilteredTimeline.map(item => [formatReportDate(item.date), item.front, item.shift, item.operator_name, item.equipment_code || item.equipment_key || '', formatReportClock(item.start), formatReportClock(item.end), item.operation, item.category_label, formatReportDuration(item.seconds)]);
+  const rows = excelFilteredTimeline.map(item => [formatIsoDateBr(item.date), item.front, item.shift, item.operator_name, item.equipment_code || item.equipment_key || '', formatReportClock(item.start), formatReportClock(item.end), item.operation, item.category_label, formatReportDuration(item.seconds)]);
   const csv = '\uFEFF' + [headers, ...rows].map(row => row.map(csvReportValue).join(';')).join('\r\n');
   downloadBlobFile(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `Linha-do-Tempo-${excelReportData.period?.start || 'relatorio'}.csv`);
 }

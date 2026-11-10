@@ -7,6 +7,7 @@ registro explícito de cada módulo; negações nunca são representadas por DEL
 import time
 from typing import Any
 
+from .production import _access_from_conn, normalize_user_access, write_user_access
 from .storage import auth_connection
 
 # As chaves existentes são mantidas para preservar as permissões já gravadas.
@@ -22,6 +23,33 @@ MODULES = (
     {"key": "users", "name": "Usuários", "description": "Consultar contas ou administrar cadastros e acessos.", "edit": True, "group": "Usuários"},
 )
 MODULE_BY_KEY = {module["key"]: module for module in MODULES}
+# Módulos que existiam antes da personalização de acessos. Somente para eles
+# vale o acesso legado (ver e editar, exceto Usuários); é gravado de forma
+# explícita por materialize_legacy_module_access. Qualquer módulo novo começa
+# negado até ser liberado na tela de Usuários.
+LEGACY_MODULE_KEYS = ("reports", "returns", "dashboard", "sacarose", "emission", "sectors", "history", "users")
+
+
+def legacy_module_access() -> dict[str, dict[str, bool]]:
+    return {
+        key: {"view": key != "users", "edit": MODULE_BY_KEY[key]["edit"] and key != "users"}
+        for key in LEGACY_MODULE_KEYS
+    }
+
+
+def materialize_legacy_module_access(conn) -> None:
+    """Grava o acesso legado só onde não há registro (idempotente).
+
+    Registros existentes nunca são alterados: negações são sempre explícitas.
+    """
+    now = int(time.time())
+    for key, flags in legacy_module_access().items():
+        conn.execute(
+            """INSERT INTO user_module_permissions(user_id,module_key,can_view,can_fill,updated_at)
+               SELECT id,?,?,?,? FROM users WHERE role <> 'admin'
+               ON CONFLICT(user_id,module_key) DO NOTHING""",
+            (key, int(flags["view"]), int(flags["edit"]), now),
+        )
 MODULE_ROUTES = (
     ("dashboard", "/"), ("sacarose", "/sacarose"),
     ("reports", "/relatorios"), ("returns", "/retornos"),
@@ -73,9 +101,9 @@ def module_access_from_conn(conn, user_id: int, *, role: str) -> dict[str, dict[
     result = {}
     for key, spec in MODULE_BY_KEY.items():
         row = rows.get(key)
-        # Usuários legados sem configuração explícita continuam com os acessos anteriores.
-        view = bool(row["can_view"]) if row is not None else key != "users"
-        edit = bool(row["can_fill"]) if row is not None else (spec["edit"] and key != "users")
+        # Sem registro explícito, o acesso é negado (os legados foram gravados na inicialização).
+        view = bool(row["can_view"]) if row is not None else False
+        edit = bool(row["can_fill"]) if row is not None else False
         result[key] = {"view": True if key == "emission" else view, "edit": view and edit and spec["edit"]}
     return result
 
@@ -89,7 +117,6 @@ def get_module_access(user_id: int) -> dict[str, dict[str, bool]]:
 
 
 def get_full_user_access(user_id: int, *, actor_id: int) -> dict:
-    from .production import _access_from_conn
     with auth_connection() as conn:
         _validate_manager(conn, user_id, actor_id, action="view")
         row = conn.execute("SELECT role FROM users WHERE id=?", (user_id,)).fetchone()
@@ -126,7 +153,6 @@ def validate_delegated_grants(conn, actor_id: int, modules: dict, production: di
     for key, flags in modules.items():
         if (flags["view"] and not own[key]["view"]) or (flags["edit"] and not own[key]["edit"]):
             raise PermissionError("Não é possível conceder módulos acima de seus próprios acessos.")
-    from .production import _access_from_conn
     own_production = _access_from_conn(conn, actor_id, role=actor["role"])
     if production["enabled"]:
         if not own_production["enabled"]:
@@ -152,7 +178,6 @@ def validate_delegated_target(conn, actor_id: int, target_id: int) -> None:
     for key, flags in theirs.items():
         if any(flags[action] and not own[key][action] for action in ("view", "edit")):
             raise PermissionError("Esta conta possui acessos acima da sua autorização.")
-    from .production import _access_from_conn
     own_production = _access_from_conn(conn, actor_id, role=actor["role"])
     target_production = _access_from_conn(conn, target_id, role=target["role"])
     if target_production["permissions"]["configure"] and not own_production["permissions"]["configure"]:
@@ -164,7 +189,6 @@ def validate_delegated_target(conn, actor_id: int, target_id: int) -> None:
 
 
 def save_full_user_access(user_id: int, payload: Any, *, actor_id: int) -> dict:
-    from .production import normalize_user_access, write_user_access, _access_from_conn
     if not isinstance(payload, dict) or set(payload) != {"modules", "production"}:
         raise ValueError("Configuração dos acessos inválida.")
     modules = normalize_module_access(payload["modules"])

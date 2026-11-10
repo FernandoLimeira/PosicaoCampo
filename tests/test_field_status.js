@@ -1,14 +1,14 @@
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 const vm = require('node:vm');
 const { context } = require('./test_reports.js');
+const { EXPORT_SCRIPTS, loadScripts, pageScripts, withoutInitializeApp } = require('./page_scripts.js');
+const { loadDemoUnits } = require('./fixtures_units.js');
 
 async function main() {
   const { ctx } = context();
-  for (const name of ['app.js', 'export.js']) {
-    vm.runInContext(fs.readFileSync(require.resolve(`../static/js/${name}`), 'utf8')
-      .replace(/initializeApp\(\);\s*$/, ''), ctx);
-  }
+  // Painel + emissões da Posição de Campo (global e individual).
+  loadScripts(ctx, [...pageScripts('/'), ...EXPORT_SCRIPTS], withoutInitializeApp);
+  loadDemoUnits(vm, ctx);
   const catalog = JSON.parse(ctx.document.body.dataset.fieldStatuses);
   const source = { code: 'PPT', rows: catalog.map((item, index) =>
     [String(index + 1), '101', 'yellow', item.label, '145']), rain: [] };
@@ -61,7 +61,7 @@ async function main() {
   ctx.loadImageAsset = async () => null;
   ctx.loadEmbeddedReportUnitSymbol = async () => null;
   ctx.loadReportUnitIconImage = async () => null;
-  for (const generate of [() => ctx.generateUnitReportImageBlob(source),
+  for (const generate of [
     () => ctx.generateReportImageBlob(['PPT', 'NRD', 'RBR', 'PST'].map(code => ({ ...source, code })))]) {
     drawn.length = 0;
     const image = await generate();

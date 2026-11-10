@@ -103,7 +103,9 @@ class FrontNotesTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.add(**values)
         with storage.auth_connection() as conn:
-            conn.execute('INSERT INTO user_module_permissions(user_id,module_key,can_view,can_fill,updated_at) VALUES (?,?,?,?,?)',
+            # Usuários sem configuração recebem o acesso legado explícito; aqui ele é rebaixado.
+            conn.execute('INSERT INTO user_module_permissions(user_id,module_key,can_view,can_fill,updated_at) VALUES (?,?,?,?,?) '
+                         'ON CONFLICT(user_id,module_key) DO UPDATE SET can_view=excluded.can_view,can_fill=excluded.can_fill',
                          (self.analyst['id'], 'dashboard', 1, 0, 1))
         fake_admin = {**self.analyst, 'role': 'admin'}
         self.assertEqual(notes.list_front_notes('PPT', '01', fake_admin)['total'], 1)

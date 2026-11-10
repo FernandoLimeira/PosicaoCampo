@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Emissão global · Posição de Campo{% endblock %}
 {% block styles %}
-  <link rel="stylesheet" href="/css/emissao.css?v={{ asset_version }}" />
+  <link rel="stylesheet" href="/css/pages/emissao.css?v={{ asset_version }}" />
 {% endblock %}
 {% block content %}
 <section class="module-standard-page emission-page" aria-labelledby="emission-title">
@@ -52,10 +52,14 @@
 </section>
 {% endblock %}
 {% block scripts %}
-  <script src="/js/export.js?v={{ asset_version }}"></script>
+  <script src="/js/core/field-fronts.js?v={{ asset_version }}"></script>
+  <script src="/js/reports-export/shared-drawing.js?v={{ asset_version }}"></script>
+  <script src="/js/reports-export/field-report-data.js?v={{ asset_version }}"></script>
+  <script src="/js/reports-export/global-report.js?v={{ asset_version }}"></script>
+  <script src="/js/reports-export/sacarose-export.js?v={{ asset_version }}"></script>
   {% if user.role == 'admin' or (user.production_access is defined and user.production_access.enabled) %}
-  <script src="/js/production-consolidation.js?v={{ asset_version }}"></script>
-  <script src="/js/production-export.js?v={{ asset_version }}-prod-report-layout-v8"></script>
+  <script src="/js/producao/production-consolidation.js?v={{ asset_version }}"></script>
+  <script src="/js/producao/production-export.js?v={{ asset_version }}-prod-report-layout-v8"></script>
   {% endif %}
-  <script src="/js/emissao.js?v={{ asset_version }}-compact-cards"></script>
+  <script src="/js/emissao/emissao.js?v={{ asset_version }}-compact-cards"></script>
 {% endblock %}

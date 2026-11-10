@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Posição de Campo{% endblock %}
 {% block styles %}
-  <link rel="stylesheet" href="/css/dashboard.css?v={{ asset_version }}" />
+  <link rel="stylesheet" href="/css/pages/dashboard.css?v={{ asset_version }}" />
 {% endblock %}
 {% block content %}
 <div id="dashboard-view" class="app-view is-active" aria-hidden="false">
@@ -158,6 +158,10 @@
   </div>
 {% endblock %}
 {% block scripts %}
-  <script src="/js/export.js?v={{ asset_version }}"></script>
-  <script src="/js/app.js?v={{ asset_version }}"></script>
+  <script src="/js/core/field-fronts.js?v={{ asset_version }}"></script>
+  <script src="/js/core/sector-base.js?v={{ asset_version }}"></script>
+  <script src="/js/dashboard/dashboard.js?v={{ asset_version }}"></script>
+  <script src="/js/dashboard/field-notes.js?v={{ asset_version }}"></script>
+  <script src="/js/dashboard/editor.js?v={{ asset_version }}"></script>
+  <script src="/js/dashboard/app.js?v={{ asset_version }}"></script>
 {% endblock %}

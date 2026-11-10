@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Produção Agrícola · Posição de Campo{% endblock %}
 {% block styles %}
-  <link rel="stylesheet" href="/css/producao.css?v={{ asset_version }}-front-notes" />
+  <link rel="stylesheet" href="/css/pages/producao.css?v={{ asset_version }}-front-notes" />
 {% endblock %}
 
 {% block content %}
@@ -299,6 +299,7 @@
 {% endblock %}
 
 {% block scripts %}
-  <script src="/js/production-consolidation.js?v={{ asset_version }}"></script>
-  <script src="/js/producao.js?v={{ asset_version }}-front-notes"></script>
+  <script src="/js/producao/production-consolidation.js?v={{ asset_version }}"></script>
+  <script src="/js/producao/production-config.js?v={{ asset_version }}"></script>
+  <script src="/js/producao/producao.js?v={{ asset_version }}-front-notes"></script>
 {% endblock %}

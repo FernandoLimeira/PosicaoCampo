@@ -1,5 +1,5 @@
-let sectorBaseItems = [];
-let sectorBaseMap = new Map();
+// Cadastro de setores: listagem paginada, edição manual e importação da planilha.
+// O estado e a indexação da base ficam em core/sector-base.js.
 let sectorBasePage = 1;
 
 function getSectorBasePageSize() {
@@ -25,44 +25,6 @@ function getSectorBasePageSize() {
 
   const fittedRows = Math.floor((height - reservedHeight) / rowHeight);
   return Math.max(4, Math.min(10, fittedRows));
-}
-
-function normalizeSectorLookupKey(value) {
-  const text = String(value ?? '').trim();
-  if (!text) return '';
-  return /^-?\d+\.0+$/.test(text) ? text.split('.', 1)[0].toLocaleLowerCase('pt-BR') : text.toLocaleLowerCase('pt-BR');
-}
-
-function normalizeSectionLookupKey(value) {
-  return String(value ?? '').trim().toLocaleLowerCase('pt-BR');
-}
-
-function rebuildSectorBaseMap() {
-  sectorBaseMap = new Map();
-  sectorBaseItems.forEach(item => {
-    const key = normalizeSectorLookupKey(item?.sector);
-    if (!key) return;
-    if (!sectorBaseMap.has(key)) sectorBaseMap.set(key, []);
-    sectorBaseMap.get(key).push(item);
-  });
-
-  sectorBaseMap.forEach(items => {
-    items.sort((a, b) => compareFrontLabels(a?.section || '', b?.section || ''));
-  });
-}
-
-function getSectorBaseItems(value) {
-  return sectorBaseMap.get(normalizeSectorLookupKey(value)) || [];
-}
-
-function getSectorBaseItem(value, section = '') {
-  const items = getSectorBaseItems(value);
-  if (!items.length) return null;
-  const sectionKey = normalizeSectionLookupKey(section);
-  if (sectionKey) {
-    return items.find(item => normalizeSectionLookupKey(item?.section) === sectionKey) || null;
-  }
-  return items[0] || null;
 }
 
 function formatSectorBaseUpdatedAt(timestamp) {
@@ -111,7 +73,7 @@ function renderSectorBaseList() {
       </td>
       <td><span class="sector-base-source ${item.source === 'excel' ? 'is-excel' : 'is-manual'}">${escapeHtml(sectorBaseSourceLabel(item.source))}</span></td>
       <td class="sector-base-actions-cell">
-        ${canEditModule('sectors') ? `<button class="sector-base-action" type="button" data-sector-base-action="edit" data-sector="${escapeHtml(item.sector)}">Editar</button>
+        ${canEditModule('sectors') ? `<button class="sector-base-action" type="button" data-sector-base-action="edit" data-sector="${escapeHtml(item.sector)}" data-section="${escapeHtml(item.section || '')}">Editar</button>
         <button class="sector-base-action danger" type="button" data-sector-base-action="delete" data-sector="${escapeHtml(item.sector)}" data-section="${escapeHtml(item.section || '')}">Excluir</button>` : '<span aria-label="Somente consulta">—</span>'}
       </td>
     </tr>
@@ -125,9 +87,7 @@ function renderSectorBaseList() {
 }
 
 async function loadSectorBase({ render = true } = {}) {
-  const data = await apiRequest('/api/sector-base');
-  sectorBaseItems = Array.isArray(data?.items) ? data.items : [];
-  rebuildSectorBaseMap();
+  await fetchSectorBase();
   if (render) renderSectorBaseList();
   return sectorBaseItems;
 }
@@ -139,11 +99,12 @@ function clearSectorBaseManualForm() {
   if (title) title.textContent = 'Adicionar ou atualizar setor';
   const sectorInput = document.querySelector('#sector-base-sector');
   sectorInput?.removeAttribute('data-editing-sector');
+  sectorInput?.removeAttribute('data-editing-section');
   if (sectorInput) sectorInput.readOnly = false;
 }
 
-function editSectorBaseItem(sector) {
-  const item = getSectorBaseItem(sector);
+function editSectorBaseItem(sector, section = '') {
+  const item = getSectorBaseItem(sector, section);
   if (!item) return;
   const sectorInput = document.querySelector('#sector-base-sector');
   const sectionInput = document.querySelector('#sector-base-section');
@@ -151,6 +112,7 @@ function editSectorBaseItem(sector) {
   if (sectorInput) {
     sectorInput.value = item.sector || '';
     sectorInput.dataset.editingSector = item.sector || '';
+    sectorInput.dataset.editingSection = item.section || '';
     sectorInput.readOnly = true;
   }
   if (sectionInput) sectionInput.value = item.section || '';
@@ -167,8 +129,9 @@ async function saveSectorBaseManual(event) {
   const sector = document.querySelector('#sector-base-sector')?.value.trim() || '';
   const section = document.querySelector('#sector-base-section')?.value.trim() || '';
   const description = document.querySelector('#sector-base-description')?.value.trim() || '';
+  const editingSection = document.querySelector('#sector-base-sector')?.dataset.editingSection;
   if (!sector) {
-    showToast('Informe o setor.');
+    showToast('Informe o setor.', true);
     return;
   }
 
@@ -176,17 +139,30 @@ async function saveSectorBaseManual(event) {
   try {
     const payload = await apiRequest('/api/sector-base', {
       method: 'POST',
-      body: JSON.stringify({ sector, section, description })
+      body: JSON.stringify({
+        sector,
+        section,
+        description,
+        ...(editingSection !== undefined ? { original_section: editingSection } : {})
+      })
     });
     const saved = payload?.item;
     if (saved) {
       const key = normalizeSectorLookupKey(saved.sector);
-      const index = sectorBaseItems.findIndex(item => normalizeSectorLookupKey(item.sector) === key);
+      const matches = sectionValue => item => normalizeSectorLookupKey(item.sector) === key
+        && normalizeSectionLookupKey(item.section) === normalizeSectionLookupKey(sectionValue);
+      // Ao trocar a seção na edição, o servidor remove o registro original; reflete isso na lista.
+      if (editingSection !== undefined
+        && normalizeSectionLookupKey(editingSection) !== normalizeSectionLookupKey(saved.section)) {
+        sectorBaseItems = sectorBaseItems.filter(item => !matches(editingSection)(item));
+      }
+      const index = sectorBaseItems.findIndex(matches(saved.section));
       if (index >= 0) sectorBaseItems[index] = saved;
       else sectorBaseItems.push(saved);
-      sectorBaseItems.sort((a, b) => compareFrontLabels(a.sector, b.sector));
+      sectorBaseItems.sort((a, b) => compareFrontLabels(a.sector, b.sector)
+        || compareFrontLabels(a.section || '', b.section || ''));
       rebuildSectorBaseMap();
-          renderSectorBaseList();
+      renderSectorBaseList();
     } else {
       await loadSectorBase({ render: true });
     }
@@ -194,7 +170,7 @@ async function saveSectorBaseManual(event) {
     showToast(`Setor ${sector} salvo na base.`);
   } catch (error) {
     console.error(error);
-    showToast(error.message || 'Não foi possível salvar o setor.');
+    showToast(error.message || 'Não foi possível salvar o setor.', true);
   } finally {
     if (button) button.disabled = false;
   }
@@ -206,12 +182,12 @@ async function importSectorBaseExcel(event) {
   const button = document.querySelector('#sector-base-import-button');
   const file = fileInput?.files?.[0];
   if (!file) {
-    showToast('Selecione a planilha da base de setores.');
+    showToast('Selecione a planilha da base de setores.', true);
     return;
   }
   const lowerName = String(file.name || '').toLocaleLowerCase('pt-BR');
   if (!lowerName.endsWith('.xlsx') && !lowerName.endsWith('.xlsm')) {
-    showToast('Use um arquivo Excel XLSX ou XLSM.');
+    showToast('Use um arquivo Excel XLSX ou XLSM.', true);
     return;
   }
 
@@ -219,14 +195,15 @@ async function importSectorBaseExcel(event) {
   try {
     const formData = new FormData();
     formData.append('file', file, file.name);
-    const response = await fetch('/api/sector-base/import', { method: 'POST', body: formData });
-    let payload = {};
-    try { payload = await response.json(); } catch (error) { payload = {}; }
-    if (response.status === 401) {
-      window.location.href = '/login';
-      return;
+    let payload;
+    try {
+      payload = await apiRequest('/api/sector-base/import', { method: 'POST', body: formData });
+    } catch (error) {
+      // apiRequest já redireciona para o login quando a sessão expira.
+      if (error.status === 401) return;
+      if (error.status && !error.payload?.error) error.message = 'Não foi possível importar a planilha.';
+      throw error;
     }
-    if (!response.ok) throw new Error(payload.error || 'Não foi possível importar a planilha.');
     await loadSectorBase({ render: true });
     if (fileInput) fileInput.value = '';
     const fileName = document.querySelector('#sector-base-file-name');
@@ -234,7 +211,7 @@ async function importSectorBaseExcel(event) {
     showToast(`${payload.total || 0} setores processados · ${payload.created || 0} novos · ${payload.updated || 0} atualizados.`);
   } catch (error) {
     console.error(error);
-    showToast(error.message || 'Não foi possível importar a base de setores.');
+    showToast(error.message || 'Não foi possível importar a base de setores.', true);
   } finally {
     if (button) button.disabled = false;
   }
@@ -260,7 +237,7 @@ async function deleteSectorBaseItemFromList(sector, section = '') {
     showToast(`Setor ${sector} da seção ${sectionLabel} removido da base.`);
   } catch (error) {
     console.error(error);
-    showToast(error.message || 'Não foi possível excluir o setor.');
+    showToast(error.message || 'Não foi possível excluir o setor.', true);
   }
 }
 
@@ -298,9 +275,9 @@ async function deleteSectorBaseItemFromList(sector, section = '') {
     if (!button) return;
     const sector = button.dataset.sector || '';
     const section = button.dataset.section || '';
-    if (button.dataset.sectorBaseAction === 'edit') editSectorBaseItem(sector);
+    if (button.dataset.sectorBaseAction === 'edit') editSectorBaseItem(sector, section);
     if (button.dataset.sectorBaseAction === 'delete') deleteSectorBaseItemFromList(sector, section);
   });
 
 
-loadSectorBase().catch(error => showToast(error.message));
+loadSectorBase().catch(error => showToast(error.message || 'Não foi possível carregar a base de setores.', true));

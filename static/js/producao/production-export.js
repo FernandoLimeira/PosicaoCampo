@@ -28,16 +28,6 @@ const PRODUCTION_EXPORT_CARD = '#12252c';
 const PRODUCTION_EXPORT_TEXT = '#e9eef0';
 const PRODUCTION_EXPORT_MUTED = '#a6c4ce';
 
-function localProductionExportDate(date = new Date()) {
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 10);
-}
-
-function formatProductionExportDate(value) {
-  const parts = String(value || '').split('-');
-  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : '-';
-}
-
 function buildProductionExportPages(reports, limit = PRODUCTION_EXPORT_PAGE_LIMIT) {
   const byCode = new Map(reports.map(report => [report.code, report]));
   const ordered = PRODUCTION_EXPORT_UNITS.map(code => byCode.get(code) || { code, restricted: true, items: [] });
@@ -155,9 +145,10 @@ function productionExportBorderState(counts) {
 function productionExportRainText(summary) {
   const turn = summary?.rain_turn_mm;
   const accumulated = summary?.rain_accumulated_mm;
-  const hasRain = [turn, accumulated].some(value => value != null
-    && Number.isFinite(Number(String(value).replace(',', '.')))
-    && Number(String(value).replace(',', '.')) > 0);
+  const hasRain = [turn, accumulated].some(value => {
+    const number = parseBrNumber(value);
+    return Number.isFinite(number) && number > 0;
+  });
   if (!hasRain) return '';
   const format = value => value == null ? '—' : String(value).replace('.', ',');
   return `Chuva: turno ${format(turn)} mm | acumulado ${format(accumulated)} mm`;
@@ -211,7 +202,7 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
     const sector = item.entry?.sector || 'Sem setor';
     services.get(serviceName).push({ label: sector, state, pending: !item.is_current_day });
     const dated = item.is_current_day || !item.entry?.work_date
-      ? '' : ` (${formatProductionExportDate(item.entry.work_date)})`;
+      ? '' : ` (${formatIsoDateBr(item.entry.work_date)})`;
     const prefix = `${serviceName}${dated}: `;
     for (const [field, target] of [['observation', notes], ['changes', changes]]) {
       const value = item.entry?.[field]?.trim();
@@ -329,13 +320,12 @@ function drawProductionExportHeader(ctx, workDate, background, pageNumber, total
   ctx.fillStyle = rule;
   ctx.fillRect(0, 90, 1080, 4);
 
-  const hour = new Date().getHours();
-  const greeting = hour < 5 || hour >= 18 ? 'BOA NOITE!' : hour < 12 ? 'BOM DIA!' : 'BOA TARDE!';
+  const greeting = greetingForHour(saoPauloDateParts().hour).toUpperCase();
   productionExportText(ctx, greeting, 40, 65, 182, 'bold 28px Bahnschrift, "Arial Narrow", sans-serif');
   ctx.fillStyle = '#8ea2a5';
   ctx.fillRect(227, 29, 2, 41);
   productionExportCalendar(ctx, 252, 37);
-  productionExportText(ctx, formatProductionExportDate(workDate), 291, 65, 260,
+  productionExportText(ctx, formatIsoDateBr(workDate), 291, 65, 260,
     'bold 35px Bahnschrift, "Arial Narrow", sans-serif');
   if (totalPages > 1) productionExportText(ctx, `${pageNumber}/${totalPages}`, 989, 64, 55,
     'bold 21px Impact, "Arial Narrow", sans-serif', PRODUCTION_EXPORT_MUTED);

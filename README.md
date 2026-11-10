@@ -7,9 +7,16 @@ Projeto web interno para acompanhamento da posição operacional das unidades.
 O backend segue uma separação MVC adaptada a uma aplicação WSGI:
 
 - `backend/app.py`: composição e ponto de entrada WSGI;
-- `backend/controllers/`: requisições, respostas e rotas HTTP;
-- `backend/models/`: persistência SQLite e autenticação;
-- `backend/services/`: importações e análises de domínio;
+- `backend/controllers/`: despachante WSGI (`application_controller.py`),
+  utilitários HTTP (`http.py`), sessão/login (`auth.py`) e rotas por domínio
+  em `routes/`;
+- `backend/models/`: persistência SQLite por domínio (`users`, `units`,
+  `sectors`, `sacarose`, `returns`, `production`, `front_notes`,
+  `module_access`), com `constants.py` sem dependências e `database.py`
+  como fachada de compatibilidade e `init_db()`;
+- `backend/services/`: importações e análises de domínio, incluindo o leitor
+  XLSX compartilhado (`xlsx_reader.py`) e a normalização de frentes
+  (`front_identifiers.py`);
 - `backend/views/`: renderização dos templates Jinja2;
 - `templates/`: views HTML organizadas por página;
 - `static/`: CSS, JavaScript e imagens.
@@ -26,6 +33,8 @@ o login também o utiliza, sem exibir o menu autenticado.
 
 Consulte a [análise e organização do frontend](docs/frontend.md)
 para entender a separação, as rotas e como adicionar novas páginas.
+A organização do backend (módulos, responsabilidades e direção das
+dependências) está em [docs/arquitetura.md](docs/arquitetura.md).
 
 ## Bancos de dados
 
@@ -129,8 +138,8 @@ As URLs públicas `/css/`, `/js/` e `/assets/` continuam iguais.
 Na publicação, mova a pasta `data` existente junto da aplicação; não a
 substitua por uma pasta vazia. Encerre a versão antiga antes de iniciar a nova.
 
-Os antigos caminhos de importação do backend continuam disponíveis como módulos
-de compatibilidade. O ponto WSGI permanece:
+Os caminhos `backend.database` e `backend.security` continuam disponíveis como
+módulos de compatibilidade. O ponto WSGI permanece:
 
 ```python
 from backend.app import application

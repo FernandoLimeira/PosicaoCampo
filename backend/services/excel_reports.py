@@ -8,12 +8,22 @@ from __future__ import annotations
 from collections import defaultdict
 import csv
 from datetime import date, datetime, time, timedelta
-from io import BytesIO, StringIO
-from pathlib import PurePosixPath
-import re
-import unicodedata
-import zipfile
-import xml.etree.ElementTree as ET
+from io import StringIO
+
+from .front_identifiers import normalize_label
+from .xlsx_reader import (
+    XlsxLimits,
+    cell_styles,
+    corrupt_file_guard,
+    excel_serial_to_datetime,
+    first_sheet_path,
+    looks_like_date_format,
+    open_archive,
+    read_sheet_rows,
+    shared_strings,
+    typed_cell_value,
+    validate_archive,
+)
 
 
 MAX_EXCEL_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -34,16 +44,13 @@ class _WorksheetRow(list):
         self.source_line = source_line
 
 
-def _validate_xlsx_archive(archive: zipfile.ZipFile):
-    total = 0
-    for info in archive.infolist():
-        if info.flag_bits & 0x1:
-            raise ValueError("Planilhas Excel protegidas por senha não são suportadas.")
-        if info.file_size > MAX_XLSX_ENTRY_BYTES:
-            raise ValueError("A planilha possui um conteúdo interno grande demais para processar com segurança.")
-        total += info.file_size
-        if total > MAX_XLSX_UNCOMPRESSED_BYTES:
-            raise ValueError("A planilha expandida excede o limite seguro de processamento.")
+XLSX_LIMITS = XlsxLimits(
+    max_entry_bytes=MAX_XLSX_ENTRY_BYTES,
+    max_uncompressed_bytes=MAX_XLSX_UNCOMPRESSED_BYTES,
+    max_rows=MAX_REPORT_ROWS,
+    max_columns=MAX_XLSX_COLUMNS,
+    max_shared_strings=MAX_SHARED_STRINGS,
+)
 
 SHIFT_RANGES = (
     ("A", 0, 7 * 3600 + 20 * 60),
@@ -81,186 +88,32 @@ HEADER_ALIASES = {
     "speed": ("velocidade media",),
 }
 
-DATE_NUMFMT_IDS = set(range(14, 23)) | {27, 30, 36, 45, 46, 47, 50, 57}
-XML_MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
-XML_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-PKG_REL = "http://schemas.openxmlformats.org/package/2006/relationships"
-NS = {"m": XML_MAIN, "r": XML_REL}
-
-
-def _norm(value) -> str:
-    text = unicodedata.normalize("NFKD", str(value or ""))
-    text = "".join(char for char in text if not unicodedata.combining(char))
-    text = text.casefold().strip()
-    text = re.sub(r"[^a-z0-9]+", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
-
-
-
-def _excel_serial_to_datetime(value: float) -> datetime:
-    return datetime(1899, 12, 30) + timedelta(days=value)
-
-
-def _looks_like_date_format(fmt: str) -> bool:
-    if not fmt:
-        return False
-    cleaned = re.sub(r'"[^"]*"', "", fmt.casefold())
-    cleaned = re.sub(r"\\.", "", cleaned)
-    cleaned = re.sub(r"\[[^\]]+\]", "", cleaned)
-    return bool(re.search(r"(^|[^a-z])[dmyhs]+([^a-z]|$)", cleaned))
-
-
-def _xlsx_styles(archive: zipfile.ZipFile):
-    if "xl/styles.xml" not in archive.namelist():
-        return []
-    root = ET.fromstring(archive.read("xl/styles.xml"))
-    num_formats = {}
-    num_fmts = root.find(f"{{{XML_MAIN}}}numFmts")
-    if num_fmts is not None:
-        for item in num_fmts:
-            try:
-                num_formats[int(item.attrib.get("numFmtId", "0"))] = item.attrib.get("formatCode", "")
-            except ValueError:
-                continue
-    xfs = root.find(f"{{{XML_MAIN}}}cellXfs")
-    styles = []
-    if xfs is not None:
-        for xf in xfs:
-            try:
-                num_fmt_id = int(xf.attrib.get("numFmtId", "0"))
-            except ValueError:
-                num_fmt_id = 0
-            styles.append((num_fmt_id, num_formats.get(num_fmt_id, "")))
-    return styles
-
-
-def _shared_strings(archive: zipfile.ZipFile):
-    if "xl/sharedStrings.xml" not in archive.namelist():
-        return []
-    root = ET.fromstring(archive.read("xl/sharedStrings.xml"))
-    values = []
-    for si in root.findall("m:si", NS):
-        if len(values) >= MAX_SHARED_STRINGS:
-            raise ValueError("A planilha possui textos compartilhados demais para processar com segurança.")
-        pieces = [node.text or "" for node in si.findall(".//m:t", NS)]
-        values.append("".join(pieces))
-    return values
-
-
-def _first_sheet_path(archive: zipfile.ZipFile):
-    workbook = ET.fromstring(archive.read("xl/workbook.xml"))
-    sheets = workbook.find("m:sheets", NS)
-    if sheets is None or not list(sheets):
-        raise ValueError("A planilha não possui abas para processar.")
-    first_sheet = list(sheets)[0]
-    rel_id = first_sheet.attrib.get(f"{{{XML_REL}}}id")
-    if not rel_id:
-        return "xl/worksheets/sheet1.xml"
-
-    rels_path = "xl/_rels/workbook.xml.rels"
-    rels = ET.fromstring(archive.read(rels_path))
-    target = None
-    for rel in rels.findall(f"{{{PKG_REL}}}Relationship"):
-        if rel.attrib.get("Id") == rel_id:
-            target = rel.attrib.get("Target")
-            break
-    if not target:
-        return "xl/worksheets/sheet1.xml"
-    target_path = PurePosixPath("xl") / target
-    normalized = str(target_path)
-    while "/../" in normalized:
-        parts = []
-        for part in PurePosixPath(normalized).parts:
-            if part == "..":
-                if parts:
-                    parts.pop()
-            elif part != ".":
-                parts.append(part)
-        normalized = "/".join(parts)
-    return normalized
-
-
-def _column_index(cell_ref: str) -> int:
-    letters = re.match(r"[A-Z]+", cell_ref or "A")
-    value = 0
-    for char in (letters.group(0) if letters else "A"):
-        value = value * 26 + (ord(char) - 64)
-    return value - 1
+# Normalização e utilitários XLSX compartilhados (front_identifiers/xlsx_reader).
+_norm = normalize_label
+_excel_serial_to_datetime = excel_serial_to_datetime
+_looks_like_date_format = looks_like_date_format
 
 
 def _read_xlsx_rows(file_bytes: bytes):
-    try:
-        archive = zipfile.ZipFile(BytesIO(file_bytes))
-    except zipfile.BadZipFile as exc:
-        raise ValueError("O arquivo enviado não é uma planilha XLSX válida.") from exc
-
-    with archive:
-        _validate_xlsx_archive(archive)
+    archive = open_archive(file_bytes, "O arquivo enviado não é uma planilha XLSX válida.")
+    with archive, corrupt_file_guard():
+        validate_archive(archive, XLSX_LIMITS)
         required = {"xl/workbook.xml"}
         if not required.issubset(archive.namelist()):
             raise ValueError("Estrutura XLSX inválida ou incompleta.")
-        shared = _shared_strings(archive)
-        styles = _xlsx_styles(archive)
-        sheet_path = _first_sheet_path(archive)
+        shared = shared_strings(archive, MAX_SHARED_STRINGS)
+        styles = cell_styles(archive)
+        sheet_path = first_sheet_path(archive)
         if sheet_path not in archive.namelist():
             raise ValueError("Não foi possível localizar a primeira aba da planilha.")
-        root = ET.fromstring(archive.read(sheet_path))
         rows = []
-        for row_node in root.findall(".//m:sheetData/m:row", NS):
-            if len(rows) >= MAX_REPORT_ROWS:
-                raise ValueError(f"A planilha excede o limite de {MAX_REPORT_ROWS} linhas.")
-            cells = {}
-            max_col = -1
-            for cell in row_node.findall("m:c", NS):
-                ref = cell.attrib.get("r", "A1")
-                col = _column_index(ref)
-                if col >= MAX_XLSX_COLUMNS:
-                    raise ValueError(f"A planilha excede o limite de {MAX_XLSX_COLUMNS} colunas.")
-                max_col = max(max_col, col)
-                cell_type = cell.attrib.get("t", "n")
-                style_index = int(cell.attrib.get("s", "0") or 0)
-                value_node = cell.find("m:v", NS)
-                inline = cell.find("m:is", NS)
-                raw = value_node.text if value_node is not None else None
-
-                if cell_type == "s" and raw is not None:
-                    try:
-                        value = shared[int(raw)]
-                    except (ValueError, IndexError):
-                        value = raw
-                elif cell_type == "inlineStr" and inline is not None:
-                    value = "".join(node.text or "" for node in inline.findall(".//m:t", NS))
-                elif cell_type == "b":
-                    value = raw == "1"
-                elif cell_type in {"str", "e"}:
-                    value = raw or ""
-                elif raw is None:
-                    value = ""
-                else:
-                    try:
-                        numeric = float(raw)
-                    except ValueError:
-                        value = raw
-                    else:
-                        num_fmt_id, fmt = styles[style_index] if style_index < len(styles) else (0, "")
-                        if num_fmt_id in DATE_NUMFMT_IDS or _looks_like_date_format(fmt):
-                            dt = _excel_serial_to_datetime(numeric)
-                            if numeric < 1:
-                                value = dt.strftime("%H:%M:%S")
-                            elif abs(numeric - int(numeric)) < 1e-9:
-                                value = dt.strftime("%d/%m/%Y")
-                            else:
-                                value = dt.strftime("%d/%m/%Y %H:%M:%S")
-                        elif numeric.is_integer():
-                            value = str(int(numeric))
-                        else:
-                            value = str(numeric)
-                cells[col] = value
-            if max_col >= 0:
-                source_line = int(row_node.get("r", len(rows) + 1))
-                rows.append(_WorksheetRow([cells.get(index, "") for index in range(max_col + 1)], source_line))
+        for values, row_ref in read_sheet_rows(
+            archive, sheet_path, lambda cell: typed_cell_value(cell, shared, styles),
+            max_rows=MAX_REPORT_ROWS, max_columns=MAX_XLSX_COLUMNS, keep_empty_rows=False,
+        ):
+            source_line = int(row_ref if row_ref is not None else len(rows) + 1)
+            rows.append(_WorksheetRow(values, source_line))
     return rows
-
 
 
 def _read_csv_rows(file_bytes: bytes):
@@ -296,8 +149,9 @@ def _header_map(headers):
     mapping = {}
     for key, aliases in HEADER_ALIASES.items():
         for alias in aliases:
-            if alias in normalized:
-                mapping[key] = normalized[alias]
+            alias_key = _norm(alias)
+            if alias_key in normalized:
+                mapping[key] = normalized[alias_key]
                 break
     missing = [key for key in ("operator_name", "local_date", "start_time", "end_time", "operation_name", "operation_group") if key not in mapping]
     if missing:
@@ -330,8 +184,10 @@ def _parse_date(value):
             pass
     try:
         numeric = float(text.replace(",", "."))
+        if numeric < 1:
+            raise ValueError(text)
         return _excel_serial_to_datetime(numeric).date()
-    except ValueError as exc:
+    except (ValueError, OverflowError) as exc:
         raise ValueError(f"Data inválida: {text}") from exc
 
 
@@ -554,10 +410,19 @@ def analyze_excel_report(file_bytes: bytes, filename: str = "dados.csv"):
         start = datetime.combine(work_date, start_time)
         end = datetime.combine(work_date, end_time)
         if end < start:
+            # Só é virada de dia quando o início está na tarde/noite e o fim na
+            # madrugada/manhã; fim pouco antes do início é erro de apontamento.
+            if start_time.hour < 12 or end_time.hour >= 12:
+                invalid_rows += 1
+                continue
             end += timedelta(days=1)
         if end == start:
             invalid_rows += 1
             continue
+        # Dias de equipe contam pela data do apontamento: uma única noite que
+        # cruza a meia-noite não pode virar dois dias trabalhados.
+        record_day_iso = work_date.isoformat()
+        record_week_key = _iso_week_key(work_date)
 
         operation_name = str(_row_value(row, mapping, "operation_name", "Sem descrição")).strip() or "Sem descrição"
         operation_group = str(_row_value(row, mapping, "operation_group", "")).strip()
@@ -671,11 +536,11 @@ def analyze_excel_report(file_bytes: bytes, filename: str = "dados.csv"):
             front_operator["equipment_seconds"][equipment_key] += duration
             front_operator["shift_equipment_seconds"][shift][equipment_key] += duration
             front_operator["operations"][operation_name] += duration
-            front_operator["days"].add(segment_date_iso)
-            front_operator["week_days"][week_key].add(segment_date_iso)
+            front_operator["days"].add(record_day_iso)
+            front_operator["week_days"][record_week_key].add(record_day_iso)
 
             performance_key = (unit, front, operator_key, shift, equipment_key, segment_date_iso)
-            unit_team_days[(unit, front, operator_key, week_key)].add(segment_date_iso)
+            unit_team_days[(unit, front, operator_key, record_week_key)].add(record_day_iso)
             if performance_key not in performance_data:
                 performance_data[performance_key] = {
                     "front": front,
@@ -780,15 +645,12 @@ def analyze_excel_report(file_bytes: bytes, filename: str = "dados.csv"):
     front_rows = []
     front_operator_rows = []
     front_shift_rows = []
-    team_week_lookup = {}
     for front_name, front_item in sorted(front_data.items(), key=lambda item: item[0]):
         operator_payloads = []
         for operator_key, operator_item in front_item["operators"].items():
             payload = _front_operator_payload(operator_item)
             payload["operator_key"] = operator_key
             operator_payloads.append(payload)
-            for week in payload["weeks"]:
-                team_week_lookup[(front_name, operator_key, week["week"])] = bool(week["team_member"])
         operator_payloads.sort(key=lambda item: (not item["team_member"], -item["productive"], -item["utilization_pct"], item["name"]))
         team_members = [item for item in operator_payloads if item["team_member"] and not item["is_generic"]]
         occasional = [item for item in operator_payloads if not item["team_member"] and not item["is_generic"]]

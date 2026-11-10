@@ -22,7 +22,7 @@ document.querySelector('#emit-global-position')?.addEventListener('click', async
     if (ordered.some(unit => !unit)) throw new Error('Cadastre as quatro unidades antes de emitir a Posição de Campo.');
     status.textContent = 'Gerando imagem em alta definição…';
     const blob = await generateReportImageBlob(ordered);
-    downloadBlobFile(blob, `Posicao-de-Campo-Global-${new Date().toLocaleDateString('pt-BR').replaceAll('/', '-')}.png`);
+    downloadBlobFile(blob, `Posicao-de-Campo-Global-${saoPauloDateParts().isoDate.split('-').reverse().join('-')}.png`);
     status.textContent = 'Posição de Campo emitida com sucesso.';
   } catch (error) {
     status.textContent = error.message || 'Não foi possível emitir a Posição de Campo.';
@@ -47,7 +47,7 @@ document.querySelector('#emit-global-sacarose')?.addEventListener('click', async
     const sectors = Array.isArray(sectorPayload.items) ? sectorPayload.items : [];
     status.textContent = 'Gerando imagem em alta definição…';
     const blob = await generateSacaroseReportImageBlob(pole.units, positions, sectors);
-    downloadBlobFile(blob, `Sacarose-${pole.code}-${new Date().toLocaleDateString('pt-BR').replaceAll('/', '-')}.png`);
+    downloadBlobFile(blob, `Sacarose-${pole.code}-${saoPauloDateParts().isoDate.split('-').reverse().join('-')}.png`);
     status.textContent = `Sacarose do ${pole.label} emitida com sucesso.`;
   } catch (error) {
     status.textContent = error.message || 'Não foi possível emitir a Sacarose.';
@@ -67,7 +67,7 @@ document.querySelector('#emit-global-production')?.addEventListener('click', asy
     const units = ['PPT', 'NRD', 'RBR', 'PST'].filter(code => access?.enabled && access.units?.includes(code));
     if (!units.length) throw new Error('Nenhuma unidade está liberada para a Produção Agrícola.');
 
-    const workDate = localProductionExportDate();
+    const workDate = saoPauloIsoDate();
     const [statusPayload, ...unitPayloads] = await Promise.all([
       apiRequest('/api/production/statuses?include_inactive=1'),
       ...units.map(async code => {

@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { loadScripts, pageScripts } = require('./page_scripts.js');
 
 function setup() {
   let unit = 'PPT';
@@ -15,14 +16,14 @@ function setup() {
   };
   const context = vm.createContext({document, console, getReportUnit: () => unit,
     apiRequest(url) { return new Promise((resolve, reject) => pending.push({url, resolve, reject})); }});
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/producao.js'), 'utf8')
-    .replace(/initializeProductionPage\(\);\s*$/, ''), context);
+  loadScripts(context, ['core/format.js', ...pageScripts('/producao')],
+    source => source.replace(/initializeProductionPage\(\);\s*$/, ''));
   vm.runInContext(`productionAccess = {enabled: true, units: ['PPT','NRD'], permissions: {summary: true}};
     renderProductionFilters = () => {};
     renderProductionItems = () => {};
     renderStatusOptions = () => {};
     setProductionContext = () => {};
-    localIsoDate = () => '2026-10-23';`, context);
+    saoPauloIsoDate = () => '2026-10-23';`, context);
   return {context, pending, elements, select(value) { unit = value; },
     state() { return JSON.parse(vm.runInContext('JSON.stringify({productionItems, productionCatalog})', context)); }};
 }

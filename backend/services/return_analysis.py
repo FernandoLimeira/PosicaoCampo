@@ -16,9 +16,9 @@ from io import BytesIO
 from pathlib import Path
 import math
 import re
-import unicodedata
 from typing import Any
 
+from .front_identifiers import explicit_front_code, normalize_label
 from .excel_reports import (
     MAX_EXCEL_UPLOAD_BYTES,
     MAX_REPORT_ROWS,
@@ -48,28 +48,9 @@ HEADER_ALIASES = {
 }
 
 
-def _norm(value: Any) -> str:
-    text = unicodedata.normalize("NFKD", str(value or ""))
-    text = "".join(char for char in text if not unicodedata.combining(char))
-    text = text.casefold().strip()
-    text = re.sub(r"[^a-z0-9]+", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def _cut_order_front_code(value: Any, fronts: list[dict[str, Any]], unit_code: str = "") -> str | None:
-    """Resolve only an explicit source front, without guessing from arbitrary digits."""
-    text = str(value or "").strip()
-    if not text:
-        return None
-    matches = {front["code"] for front in fronts if _norm(text) in
-               {_norm(front["name"]), _norm(front["code"])}}
-    numeric_text = re.sub(r"^" + re.escape(unit_code) + r"\s+(?=frente\b)", "", text,
-                          flags=re.IGNORECASE) if unit_code else text
-    numeric = re.fullmatch(r"(?:frente\s*)?(\d+)(?:[.,]0+)?", numeric_text, re.IGNORECASE)
-    if numeric:
-        matches.update(front["code"] for front in fronts
-                       if front["code"].isdigit() and int(front["code"]) == int(numeric.group(1)))
-    return next(iter(matches)) if len(matches) == 1 else None
+# Normalização de textos/frentes compartilhada (services.front_identifiers).
+_norm = normalize_label
+_cut_order_front_code = explicit_front_code
 
 
 def _normalize_number(value: Any, *, integer: bool = False) -> int | float | None:
@@ -1250,7 +1231,7 @@ def analyze_return_rows(
         report_lines.append(f"1. Foram identificados {len(returns)} retornos reais de setor")
     if returns:
         report_lines.append(
-            f"2. Os retornos ocorreram nos setores {_join_pt([item['sector'] for item in returns])}."
+            f"2. Os retornos ocorreram nos setores {_join_pt(list(dict.fromkeys(item['sector'] for item in returns)))}."
         )
     else:
         report_lines.append("2. Não foram identificados setores com retorno real.")

@@ -170,7 +170,7 @@ class PageTests(unittest.TestCase):
         report = sample_report()
         overrides = {"QUERY_STRING": "unit=PPT&front=02&min_gap=1&digest=" + report_digest(report)}
         self.assertEqual(self.request("/api/return-analysis/presentation", method="POST")["status"], 401)
-        with patch("backend.controllers.application_controller._analyze_return_request", return_value=report) as analyze:
+        with patch("backend.controllers.routes.returns._analyze_return_request", return_value=report) as analyze:
             rejected = self.request("/api/return-analysis/presentation", method="POST", role="member", overrides={**overrides, "HTTP_ORIGIN": "https://untrusted.invalid"})
             self.assertEqual(rejected["status"], 403)
             analyze.assert_not_called()
@@ -186,7 +186,7 @@ class PageTests(unittest.TestCase):
                 self.assertTrue(response["body"].startswith(b"PK"))
             conflict = self.request("/api/return-analysis/presentation", method="POST", role="member", overrides={"QUERY_STRING": "digest=" + "0" * 64})
             self.assertEqual(conflict["status"], 409)
-            with patch("backend.controllers.application_controller.generate_return_presentation", side_effect=FileNotFoundError):
+            with patch("backend.controllers.routes.returns.generate_return_presentation", side_effect=FileNotFoundError):
                 missing_model = self.request("/api/return-analysis/presentation", method="POST", role="member", overrides=overrides)
                 self.assertEqual(missing_model["status"], 500)
                 self.assertIn("templates/presentations", missing_model["body"])
@@ -253,7 +253,7 @@ class PageTests(unittest.TestCase):
         import xml.etree.ElementTree as ET
         report = sample_report()
         query = "unit=PPT&front=02&min_gap=1&digest=" + report_digest(report)
-        with patch("backend.controllers.application_controller._analyze_return_request", return_value=report):
+        with patch("backend.controllers.routes.returns._analyze_return_request", return_value=report):
             for value, selected in (("none", []), ("0", [0])):
                 response = self.request("/api/return-analysis/presentation", method="POST", role="member",
                                         overrides={"QUERY_STRING": query + "&traces=" + value})
@@ -272,7 +272,7 @@ class PageTests(unittest.TestCase):
         many["returns_count"] = 7
         many["return_sectors_count"] = 7
         many_query = "unit=PPT&front=02&min_gap=1&digest=" + report_digest(many)
-        with patch("backend.controllers.application_controller._analyze_return_request", return_value=many):
+        with patch("backend.controllers.routes.returns._analyze_return_request", return_value=many):
             response = self.request("/api/return-analysis/presentation", method="POST", role="member",
                                     overrides={"QUERY_STRING": many_query + "&traces=0,1,2,3,4,5,6"})
             self.assertEqual(response["status"], 200, response["body"] if response["status"] != 200 else "")
@@ -285,7 +285,7 @@ class PageTests(unittest.TestCase):
         route = "/api/return-analysis/soil-wet/import"
         self.assertEqual(self.request("/api/return-analysis/soil-wet")["status"], 401)
         self.assertEqual(self.request(route, method="POST")["status"], 401)
-        with patch("backend.controllers.application_controller.parse_soil_wet_file") as parse:
+        with patch("backend.controllers.routes.returns.parse_soil_wet_file") as parse:
             self.assertEqual(self.request(route, method="POST", role="member", overrides={"HTTP_ORIGIN": "https://untrusted.invalid"})["status"], 403)
             parse.assert_not_called()
         self.assertEqual(self.request("/api/return-analysis/soil-wet", role="member", overrides={"QUERY_STRING": "unit=BAD"})["status"], 400)
@@ -335,7 +335,9 @@ class PageTests(unittest.TestCase):
             templates = root / "templates"
             static.mkdir()
             templates.mkdir()
-            script = static / "producao.js"
+            # Subpastas de static/js também entram na versão dos assets (rglob).
+            script = static / "js" / "producao" / "producao.js"
+            script.parent.mkdir(parents=True)
             template = templates / "producao.html"
             script.write_text("console.log(1)", encoding="utf-8")
             template.write_text('<input id="production-item-id">', encoding="utf-8")
@@ -348,10 +350,12 @@ class PageTests(unittest.TestCase):
                 template.write_text('<input id="production-item-id" type="hidden">', encoding="utf-8")
                 self.assertNotEqual(script_version, views.get_asset_version())
 
-    def test_sidebar_and_unit_selector_have_no_gradients(self):
+    def test_sidebar_background_comes_from_single_theme_token(self):
+        # O fundo do menu (degradê aprovado em "melhoria no visual") é definido
+        # só no token --nav-background; seletores do menu não criam degradês próprios.
         base = (config.STATIC_DIR / "css/base.css").read_text(encoding="utf-8")
-        dashboard = (config.STATIC_DIR / "css/dashboard.css").read_text(encoding="utf-8")
-        self.assertIn("--nav-background: #234f3d;", base)
+        dashboard = (config.STATIC_DIR / "css/pages/dashboard.css").read_text(encoding="utf-8")
+        self.assertRegex(base, r"--nav-background:\s*[^;]+;")
         self.assertRegex(base, r"\.app-navbar\s*\{[^}]*background:\s*var\(--nav-background\)")
         for selector, declarations in re.findall(r"([^{}]+)\{([^{}]*)\}", base + dashboard):
             if any(name in selector for name in (".app-navbar", ".nav-", ".unit-selector")):
@@ -406,7 +410,7 @@ class PageTests(unittest.TestCase):
         self.assertIn('id="create-user-button"', html)
 
     def test_trace_picker_resets_global_input_size_and_contains_long_content(self):
-        css = (config.STATIC_DIR / "css/retornos.css").read_text(encoding="utf-8")
+        css = (config.STATIC_DIR / "css/pages/retornos.css").read_text(encoding="utf-8")
 
         def declarations(selector):
             block = re.search(re.escape(selector) + r'\s*\{([^}]+)\}', css)
@@ -427,25 +431,33 @@ class PageTests(unittest.TestCase):
         self.assertIn('overflow-y: auto;', declarations('.return-trace-list'))
         self.assertIn('.return-trace-list { grid-template-columns: 1fr; }', css)
         page = self.request('/retornos', role='member')['body']
-        self.assertRegex(page, r'/css/retornos\.css\?v=[A-Za-z0-9_-]+')
+        self.assertRegex(page, r'/css/pages/retornos\.css\?v=[A-Za-z0-9_-]+')
 
     def test_script_dependencies_and_styles_are_scoped(self):
+        # Mesma ordem de tests/page_scripts.js (conferida também por tests/test_page_scripts.js).
+        core = ["core/format.js", "core/api.js", "core/common.js"]
         expected = {
-            "/": ["common.js", "export.js", "app.js"],
-            "/sacarose": ["common.js", "export.js", "sacarose.js"],
-            "/producao": ["common.js", "production-consolidation.js", "producao.js"],
-            "/emitir-posicao-global": ["common.js", "export.js", "production-consolidation.js", "production-export.js", "emissao.js"],
-            "/setores": ["common.js", "setores.js"],
-            "/relatorios": ["common.js", "relatorios.js"],
-            "/retornos": ["common.js", "return-analysis.js"],
-            "/historico": ["common.js", "historico.js"],
-            "/usuarios": ["common.js", "usuarios.js"],
+            "/": core + ["core/field-fronts.js", "core/sector-base.js", "dashboard/dashboard.js",
+                         "dashboard/field-notes.js", "dashboard/editor.js", "dashboard/app.js"],
+            "/sacarose": core + ["reports-export/shared-drawing.js", "reports-export/sacarose-export.js",
+                                 "sacarose/sacarose.js"],
+            "/producao": core + ["producao/production-consolidation.js", "producao/production-config.js",
+                                 "producao/producao.js"],
+            "/emitir-posicao-global": core + [
+                "core/field-fronts.js", "reports-export/shared-drawing.js", "reports-export/field-report-data.js",
+                "reports-export/global-report.js", "reports-export/sacarose-export.js",
+                "producao/production-consolidation.js", "producao/production-export.js", "emissao/emissao.js"],
+            "/setores": core + ["core/sector-base.js", "setores/setores.js"],
+            "/relatorios": core + ["relatorios/relatorios.js"],
+            "/retornos": core + ["retornos/return-analysis.js"],
+            "/historico": core + ["historico/historico.js"],
+            "/usuarios": core + ["usuarios/usuarios.js"],
         }
         for path, scripts in expected.items():
             with self.subTest(path=path):
                 parser = PageParser()
                 parser.feed(self.request(path, role="admin")["body"])
-                self.assertEqual([Path(asset).name for asset in parser.assets if asset.startswith("/js/")], scripts)
+                self.assertEqual([asset.removeprefix("/js/") for asset in parser.assets if asset.startswith("/js/")], scripts)
                 self.assertIn("/css/base.css", parser.assets)
                 self.assertNotIn("/css/style.css", parser.assets)
 
@@ -479,7 +491,7 @@ class PageTests(unittest.TestCase):
 
         emission = self.request('/emitir-posicao-global', cookie=cookie)["body"]
         self.assertIn('id="emit-global-production"', emission)
-        self.assertIn('/js/production-export.js', emission)
+        self.assertIn('/js/producao/production-export.js', emission)
 
         access = json.loads(self.request("/api/production/access", cookie=cookie)["body"])["access"]
         self.assertEqual(access["units"], ["PPT", "NRD"])
@@ -838,7 +850,7 @@ class PageTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;", html)
 
     def test_template_and_source_files_are_not_public(self):
-        for path in ("/templates/base.html", "/base.html", "/css/../../backend/config.py", "/css/../js/common.js"):
+        for path in ("/templates/base.html", "/base.html", "/css/../../backend/config.py", "/css/../js/core/common.js"):
             self.assertEqual(self.request(path, role="admin")["status"], 404, path)
 
 

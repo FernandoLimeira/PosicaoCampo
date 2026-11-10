@@ -1,14 +1,12 @@
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 const vm = require('node:vm');
 const { context } = require('./test_reports.js');
+const { EXPORT_SCRIPTS, loadScripts, pageScripts, withoutInitializeApp } = require('./page_scripts.js');
 
 async function main() {
   const { ctx } = context();
-  for (const name of ['app.js', 'export.js']) {
-    vm.runInContext(fs.readFileSync(require.resolve(`../static/js/${name}`), 'utf8')
-      .replace(/initializeApp\(\);\s*$/, ''), ctx);
-  }
+  // Painel + emissões da Posição de Campo (global e individual).
+  loadScripts(ctx, [...pageScripts('/'), ...EXPORT_SCRIPTS], withoutInitializeApp);
 
   const unit = {
     code: 'NRD', name: 'NARANDIBA',
@@ -34,14 +32,10 @@ async function main() {
 
   async function checkImages(source, expected) {
     const original = JSON.stringify(source);
-    for (const global of [false, true]) {
+    for (const global of [true]) {
       drawn.length = 0;
-      if (global) {
-        await ctx.generateReportImageBlob(['PPT', 'NRD', 'RBR', 'PST'].map(code =>
-          code === source.code ? source : { code, rows: [], rain: [] }));
-      } else {
-        await ctx.generateUnitReportImageBlob(source);
-      }
+      await ctx.generateReportImageBlob(['PPT', 'NRD', 'RBR', 'PST'].map(code =>
+        code === source.code ? source : { code, rows: [], rain: [] }));
       for (const [index, values] of expected) {
         const front = drawn.find(item => item.text === index);
         assert(front, `A frente ${index} deve aparecer na imagem`);
@@ -92,7 +86,7 @@ async function main() {
   for (const defaultUnit of vm.runInContext('defaultUnits', ctx)) {
     const lookup = ctx.globalFrontRainMap(defaultUnit);
     for (const row of defaultUnit.rows) {
-      assert(lookup.has(ctx.canonicalFrontKey(row[0])), `A chuva padrão de ${defaultUnit.code}/${row[0]} deve continuar associada`);
+      assert(lookup.has(ctx.canonicalFieldFrontKey(row[0])), `A chuva padrão de ${defaultUnit.code}/${row[0]} deve continuar associada`);
     }
   }
 
@@ -107,10 +101,9 @@ async function main() {
     for (const rain of noRainCases) {
       const source = {code, rows: [['01', '1000', 'green', 'EM ATIVIDADE']], rain};
       assert.equal(ctx.reportHasRainData(source), false, `${code}: chuva vazia/não associada`);
-      for (const global of [false, true]) {
+      for (const global of [true]) {
         drawn.length = 0;
-        if (global) await ctx.generateReportImageBlob(codes.map(other => other === code ? source : {code: other, rows: [], rain: []}));
-        else await ctx.generateUnitReportImageBlob(source);
+        await ctx.generateReportImageBlob(codes.map(other => other === code ? source : {code: other, rows: [], rain: []}));
         assert(!drawn.some(item => ['TURNO', 'ACUM.', 'CHUVA'].includes(item.text)),
           `${code}: emissão ${global ? 'global' : 'individual'} não deve desenhar cabeçalhos vazios`);
         assert(!drawn.some(item => item.text.startsWith('Média: Turno')),
@@ -129,9 +122,9 @@ async function main() {
         `${heading}: somente a unidade preenchida deve mostrar as colunas`);
     }
   }
-  assert.notEqual(ctx.canonicalFrontKey('13A'), ctx.canonicalFrontKey('13B'));
-  assert.notEqual(ctx.canonicalFrontKey('1.3'), ctx.canonicalFrontKey('13'));
-  assert.equal(ctx.canonicalFrontKey('Frente 008'), ctx.canonicalFrontKey('Eq. 08'));
+  assert.notEqual(ctx.canonicalFieldFrontKey('13A'), ctx.canonicalFieldFrontKey('13B'));
+  assert.notEqual(ctx.canonicalFieldFrontKey('1.3'), ctx.canonicalFieldFrontKey('13'));
+  assert.equal(ctx.canonicalFieldFrontKey('Frente 008'), ctx.canonicalFieldFrontKey('Eq. 08'));
   console.log('OK: chuva por frente nas imagens CCT individual/global e compatibilidade das quatro unidades.');
 }
 

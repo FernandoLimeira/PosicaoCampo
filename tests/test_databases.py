@@ -181,7 +181,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertIsNotNone(db.get_user_by_session(new_token))
         with storage.auth_connection() as conn:
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM sessions WHERE user_id=?", (member["id"],)).fetchone()[0], 1)
-        with patch.object(db, "new_session_token", return_value=admin_token), self.assertRaises(sqlite3.IntegrityError):
+        with patch("backend.models.users.new_session_token", return_value=admin_token), self.assertRaises(sqlite3.IntegrityError):
             db.create_session(member["id"])
         self.assertIsNotNone(db.get_user_by_session(new_token))
         self.assertIsNotNone(db.get_user_by_session(admin_token))

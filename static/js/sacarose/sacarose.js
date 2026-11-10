@@ -3,7 +3,9 @@ const UNIT_NAMES = { NRD: 'Narandiba', PPT: 'Paraguaçu Paulista', RBR: 'Rio Bri
 
 let activeUnit = getReportUnit();
 if (!UNIT_CODES.includes(activeUnit)) activeUnit = 'NRD';
-let units = {};
+let sacaroseUnits = {};
+// Última versão confirmada pelo servidor; serve para detectar edições pendentes por unidade.
+let savedUnits = {};
 let versions = {};
 let sectorBase = [];
 function normalizeKey(value) { return String(value || '').trim().toLocaleLowerCase('pt-BR'); }
@@ -59,14 +61,46 @@ function collectRows() {
   }));
 }
 
+function comparableRows(rows) {
+  return JSON.stringify((Array.isArray(rows) ? rows : []).map(item => ({
+    front: String(item?.front || '').trim(),
+    sector: String(item?.sector || '').trim(),
+    section: String(item?.section || '').trim(),
+    exclude_image: Boolean(item?.exclude_image)
+  })).filter(item => item.front || item.sector || item.section || item.exclude_image));
+}
+
+function hasUnsavedChanges(code) {
+  const rows = code === activeUnit ? collectRows() : sacaroseUnits[code];
+  return comparableRows(rows) !== comparableRows(savedUnits[code]);
+}
+
+// Sinaliza no cabeçalho e nos botões de unidade onde há edições ainda não salvas.
+function updateUnsavedIndicators() {
+  const pending = UNIT_CODES.filter(hasUnsavedChanges);
+  const pole = `${['RBR', 'PST'].includes(activeUnit) ? 'Polo MS' : 'Polo SP'} · ${activeUnit}`;
+  document.querySelector('#unit-pole').textContent = pending.length
+    ? `${pole} · alterações não salvas: ${pending.join(', ')}`
+    : pole;
+  document.querySelectorAll('[data-report-unit]').forEach(button => {
+    const code = button.dataset.reportUnit;
+    const dirty = pending.includes(code);
+    const label = button.querySelector('span') || button;
+    if (!button.dataset.baseTitle) button.dataset.baseTitle = button.getAttribute('title') || code;
+    label.textContent = dirty ? `${code}•` : code;
+    button.classList.toggle('has-unsaved-changes', dirty);
+    button.setAttribute('title', dirty ? `${button.dataset.baseTitle} · alterações não salvas` : button.dataset.baseTitle);
+  });
+}
+
 function renderUnit() {
-  document.querySelector('#unit-pole').textContent = `${['RBR', 'PST'].includes(activeUnit) ? 'Polo MS' : 'Polo SP'} · ${activeUnit}`;
   document.querySelector('#unit-title').textContent = UNIT_NAMES[activeUnit];
-  const rows = Array.isArray(units[activeUnit]) ? units[activeUnit] : [];
+  const rows = Array.isArray(sacaroseUnits[activeUnit]) ? sacaroseUnits[activeUnit] : [];
   document.querySelector('#sacarose-rows').innerHTML = rows.length ? rows.map(rowHtml).join('') : rowHtml();
   if (!canEditModule('sacarose')) document.querySelectorAll('#sacarose-rows input, #sacarose-rows select, #sacarose-rows button').forEach(input => { input.disabled = true; });
   history.replaceState(null, '', `/sacarose?unit=${activeUnit}`);
   setStatus('');
+  updateUnsavedIndicators();
 }
 
 function refreshRow(row) {
@@ -113,30 +147,48 @@ async function save(event) {
       method: 'POST',
       body: JSON.stringify({ units: { [savingUnit]: rows }, expected_versions: { [savingUnit]: versions[savingUnit]?.version ?? null } })
     });
-    units[savingUnit] = result.sacarose?.[savingUnit] || rows;
+    const savedRows = result.sacarose?.[savingUnit] || rows;
+    savedUnits[savingUnit] = savedRows;
+    sacaroseUnits[savingUnit] = savedRows;
     versions = result.meta || versions;
     if (activeUnit === savingUnit) { renderUnit(); setStatus('Alterações salvas.'); }
+    else updateUnsavedIndicators();
     showToast(`Sacarose ${savingUnit} salva e sincronizada.`);
   } catch (error) {
-    if (error.status === 409) await loadData().catch(() => {});
-    setStatus(error.message, true);
-    showToast(error.status === 409 ? 'Dados atualizados por outro usuário. Recarregamos a versão mais recente.' : error.message, true);
+    if (error.status === 409) {
+      // Atualiza versões e dados do servidor sem descartar o que o usuário digitou.
+      const reloaded = await loadData({ keepPendingEdits: true }).then(() => true, () => false);
+      const message = reloaded
+        ? `A Sacarose ${savingUnit} foi alterada por outro usuário. Suas alterações pendentes foram mantidas; revise-as antes de salvar novamente.`
+        : `A Sacarose ${savingUnit} foi alterada por outro usuário e não foi possível carregar a versão mais recente. Suas alterações pendentes foram mantidas; recarregue a página antes de salvar novamente.`;
+      setStatus(message, true);
+      showToast(message, true);
+    } else {
+      setStatus(error.message, true);
+      showToast(error.message, true);
+    }
   } finally { button.disabled = false; }
 }
 
-async function loadData() {
+async function loadData({ keepPendingEdits = false } = {}) {
+  let pendingUnits = {};
+  if (keepPendingEdits) {
+    sacaroseUnits[activeUnit] = collectRows();
+    pendingUnits = Object.fromEntries(UNIT_CODES.filter(hasUnsavedChanges).map(code => [code, sacaroseUnits[code]]));
+  }
   setStatus('Carregando…');
   const [unitPayload, sectorPayload, sacarosePayload] = await Promise.all([
     apiRequest('/api/units/meta'), apiRequest('/api/sector-base'), apiRequest('/api/sacarose')
   ]);
   versions = unitPayload.meta || {};
   sectorBase = Array.isArray(sectorPayload.items) ? sectorPayload.items : [];
-  units = sacarosePayload.units || {};
+  savedUnits = sacarosePayload.units || {};
+  sacaroseUnits = { ...savedUnits, ...pendingUnits };
   renderUnit();
 }
 
 document.addEventListener('report-unit-change', event => {
-  units[activeUnit] = collectRows();
+  sacaroseUnits[activeUnit] = collectRows();
   activeUnit = event.detail.unit;
   renderUnit();
 });
@@ -156,7 +208,7 @@ document.querySelector('#export-sacarose-unit').addEventListener('click', async 
       scale,
       transparentBackground
     });
-    const dateText = new Date().toLocaleDateString('pt-BR').replaceAll('/', '-');
+    const dateText = saoPauloDateParts().isoDate.split('-').reverse().join('-');
     const suffix = transparentBackground ? 'transparente' : 'padrao';
     downloadBlobFile(blob, `Sacarose-${code}-${suffix}-${dateText}.png`);
     showToast(`Imagem da Sacarose ${code} emitida.`);
@@ -169,13 +221,18 @@ document.querySelector('#add-row')?.addEventListener('click', () => {
 });
 document.querySelector('#sacarose-rows').addEventListener('click', event => {
   const button = event.target.closest('.remove-row');
-  if (button) button.closest('tr')?.remove();
+  if (button) {
+    button.closest('tr')?.remove();
+    updateUnsavedIndicators();
+  }
 });
 document.querySelector('#sacarose-rows').addEventListener('input', event => {
   if (event.target.matches('.sector-input')) refreshRow(event.target.closest('tr'));
+  updateUnsavedIndicators();
 });
 document.querySelector('#sacarose-rows').addEventListener('change', event => {
   if (event.target.matches('.section-select')) refreshRow(event.target.closest('tr'));
+  updateUnsavedIndicators();
 });
 document.querySelector('#sacarose-form').addEventListener('submit', save);
 

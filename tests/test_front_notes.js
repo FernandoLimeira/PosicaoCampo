@@ -1,12 +1,14 @@
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 const vm = require('node:vm');
 const { context } = require('./test_reports.js');
+const { loadScripts, pageScripts, withoutInitializeApp } = require('./page_scripts.js');
+const { loadDemoUnits } = require('./fixtures_units.js');
 
 function dashboard() {
   const fixture = context('?unit=PPT');
-  vm.runInContext(fs.readFileSync(require.resolve('../static/js/app.js'), 'utf8').replace(/initializeApp\(\);\s*$/, ''), fixture.ctx);
+  loadScripts(fixture.ctx, pageScripts('/'), withoutInitializeApp);
   vm.runInContext("moduleAccess.dashboard = { view: true, edit: true };", fixture.ctx);
+  loadDemoUnits(vm, fixture.ctx);
   fixture.ctx.document.querySelector('#units-grid').querySelectorAll = () => [];
   return fixture;
 }

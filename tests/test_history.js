@@ -1,11 +1,11 @@
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 const vm = require('node:vm');
 const { context } = require('./test_reports.js');
+const { loadScripts, pageScripts } = require('./page_scripts.js');
 
 async function main() {
   const { ctx, elements } = context('?unit=PPT');
-  vm.runInContext(fs.readFileSync(require.resolve('../static/js/historico.js'), 'utf8').replace(/loadHistory\(\);\s*$/, ''), ctx);
+  loadScripts(ctx, pageScripts('/historico'), source => source.replace(/loadHistory\(\);\s*$/, ''));
   const sample = { kind: 'front_note', unit_code: 'PPT', unit_name: 'Paraguaçu Paulista', front: '01',
     sector: '101', user_name: 'Analista <Teste>', text: 'Parada para manutenção.\nRetorno às 15h. <script>',
     created_at: 1700000000, highlighted: true, resolved_at: null };

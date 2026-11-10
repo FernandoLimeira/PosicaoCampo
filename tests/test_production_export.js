@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { loadScripts } = require('./page_scripts.js');
 
 const labels = [];
 const downloads = [];
@@ -76,12 +77,14 @@ const context = vm.createContext({
   }
 });
 
-for (const name of ['production-consolidation.js', 'production-export.js', 'emissao.js']) {
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js', name), 'utf8'), context);
-}
+// Helpers puros de data/número (core/format.js) e os scripts de produção da página de emissão.
+loadScripts(context, ['core/format.js', 'producao/production-consolidation.js', 'producao/production-export.js',
+  'emissao/emissao.js']);
 
 (async () => {
-  assert.equal(context.localProductionExportDate(new Date(2026, 9, 16)), '2026-10-16');
+  assert.equal(context.saoPauloIsoDate(new Date('2026-10-16T12:00:00-03:00')), '2026-10-16');
+  // 22h em São Paulo já é o dia seguinte em UTC; a emissão usa o dia operacional de São Paulo.
+  assert.equal(context.saoPauloIsoDate(new Date('2026-10-17T01:00:00Z')), '2026-10-16');
   assert.equal(context.buildProductionExportPages([{ code: 'PPT', items: Array(49).fill({}) }]).length, 2);
   const chunked = context.buildProductionExportPages([{
     code: 'PPT', items: Array(49).fill({}), summary: { changes: 'Mudança legada' }

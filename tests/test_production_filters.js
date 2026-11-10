@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { loadScripts, pageScripts } = require('./page_scripts.js');
 
 const elements = new Map();
 const modalEvents = [];
@@ -37,12 +38,12 @@ const context = vm.createContext({
       : {};
   }
 });
-const scripts = ['production-consolidation.js', 'producao.js'];
-for (const name of scripts) {
-  const source = fs.readFileSync(path.join(__dirname, '../static/js', name), 'utf8')
-    .replace(/initializeProductionPage\(\);\s*$/, '');
-  vm.runInContext(source, context);
-}
+// Helpers puros de data/número (core/format.js) e os scripts da página /producao.
+// O escapeHtml simulado acima continua valendo para as asserções deste teste.
+const escapeHtmlStub = context.escapeHtml;
+loadScripts(context, ['core/format.js', ...pageScripts('/producao')],
+  source => source.replace(/initializeProductionPage\(\);\s*$/, ''));
+context.escapeHtml = escapeHtmlStub;
 
 vm.runInContext(`
   productionAccess = { enabled: true, units: ['NRD'], permissions: { fill: true } };

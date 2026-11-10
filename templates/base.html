@@ -101,7 +101,12 @@
   {% endif %}
   {% block modals %}{% endblock %}
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  {% if user %}<script src="/js/common.js?v={{ asset_version }}"></script>{% endif %}
+  {% if user %}
+  {# Núcleo compartilhado por todas as páginas autenticadas, nesta ordem. #}
+  <script src="/js/core/format.js?v={{ asset_version }}"></script>
+  <script src="/js/core/api.js?v={{ asset_version }}"></script>
+  <script src="/js/core/common.js?v={{ asset_version }}"></script>
+  {% endif %}
   {% block scripts %}{% endblock %}
 </body>
 </html>
