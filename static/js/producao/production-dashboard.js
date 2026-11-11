@@ -75,7 +75,8 @@ function renderDashboardAlerts(items) {
   const alerts = DASHBOARD_ALERTS.map(alert => ({
     ...alert, count: items.filter(item => dashboardFlags(item)[alert.key]).length
   })).filter(alert => alert.count > 0);
-  if (productionPanelFilter && !alerts.some(alert => alert.key === productionPanelFilter)) productionPanelFilter = '';
+  // Durante a recarga (sem frentes) o filtro de alerta não é perdido.
+  if (items.length && productionPanelFilter && !alerts.some(alert => alert.key === productionPanelFilter)) productionPanelFilter = '';
   const total = items.length;
   const active = items.filter(item => statusMeta(item.entry?.status).className === 'is-active').length;
   const today = items.filter(item => item.is_current_day).length;
@@ -152,7 +153,8 @@ function renderProductionDashboard() {
   });
   const ordered = [...groups.values()].sort((a, b) => a.order - b.order);
   // Grupo escolhido; sem escolha válida, abre no grupo que mais precisa de atenção.
-  if (!ordered.some(group => String(group.id) === productionPanelGroup)) {
+  // Lista vazia (recarga depois de salvar): mantém o grupo para o painel voltar onde estava.
+  if (ordered.length && !ordered.some(group => String(group.id) === productionPanelGroup)) {
     const worst = [...ordered].sort((a, b) => dashboardProblemScore(b.items) - dashboardProblemScore(a.items) || a.order - b.order)[0];
     productionPanelGroup = worst ? String(worst.id) : '';
   }
