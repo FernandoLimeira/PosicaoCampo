@@ -34,7 +34,7 @@ function globalDrawText(ctx, value, x, y, maxWidth, font, color = GLOBAL_COLORS.
   ctx.restore();
 }
 
-function globalDrawReportHeader(ctx, art) {
+function globalDrawReportHeader(ctx, art, units = []) {
   ctx.drawImage(art, 0, 0, GLOBAL_REFERENCE_WIDTH, GLOBAL_REFERENCE_HEADER_END,
     0, 0, GLOBAL_REFERENCE_WIDTH, GLOBAL_REFERENCE_HEADER_END);
 
@@ -81,11 +81,16 @@ function globalDrawReportHeader(ctx, art) {
   globalDrawText(ctx, 'CTT', 30, 190, 310,
     'bold 64px Impact, "Roboto Condensed", "Arial Narrow", sans-serif', GLOBAL_COLORS.green);
 
-  // Usa os status de emissão do catálogo, agrupando os detalhes operacionais.
+  // Legenda só com os status usados em alguma frente das quatro unidades
+  // (ex.: "Solo úmido" só aparece se alguma frente estiver em solo úmido).
   ctx.save();
   ctx.fillStyle = GLOBAL_COLORS.background;
   ctx.fillRect(0, 257, GLOBAL_REFERENCE_WIDTH, 33);
-  const legendStatuses = [...new Set(fieldStatusOptions.map(status => status.image_status))];
+  const usedStatuses = new Set(units.flatMap(unit => (unit.rows || [])
+    .filter(row => String(row?.[0] || '').trim() || String(row?.[1] || '').trim())
+    .map(row => getFieldStatus(row[3]).image_status)));
+  const legendStatuses = [...new Set(fieldStatusOptions.map(status => status.image_status))]
+    .filter(status => usedStatuses.has(status));
   const legendColumnWidth = (GLOBAL_REFERENCE_WIDTH - 60) / Math.max(1, legendStatuses.length);
   legendStatuses.forEach((status, index) => {
     const x = 37 + index * legendColumnWidth;
@@ -344,7 +349,7 @@ async function globalGenerateApprovedImage(sourceUnits) {
     loadImageAsset(GLOBAL_REFERENCE_ART, 'Não foi possível carregar a imagem de referência da Posição de Campo.'),
     loadEmbeddedReportUnitSymbol()
   ]);
-  globalDrawReportHeader(ctx,art);
+  globalDrawReportHeader(ctx,art,ordered);
   ctx.fillStyle=GLOBAL_COLORS.background;
   ctx.fillRect(0,GLOBAL_REFERENCE_HEADER_END,GLOBAL_REFERENCE_WIDTH,footerY-GLOBAL_REFERENCE_HEADER_END);
   const layouts=[

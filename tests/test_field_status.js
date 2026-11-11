@@ -82,6 +82,12 @@ async function main() {
   assert(legend.every((item, index) => index === legend.length - 1
     || item.x + item.maxWidth < legend[index + 1].x), 'A legenda deve ficar alinhada sem sobreposição');
   assert(drawn.some(item => item.text === 'CTT' && item.color === '#80b82e'));
+
+  // A legenda mostra só os status usados em alguma frente (sem solo úmido, ele não aparece).
+  const onlyActive = { ...source, rows: source.rows.filter(row => ctx.getFieldStatus(row[3]).image_status === 'EM ATIVIDADE') };
+  drawn.length = 0;
+  await ctx.generateReportImageBlob(['PPT', 'NRD', 'RBR', 'PST'].map(code => ({ ...onlyActive, code })));
+  assert.deepEqual(drawn.filter(item => item.y === 270).map(item => item.text), ['Em atividade']);
   assert(!drawn.some(item => /mudança ou teste/i.test(item.text)));
 
   // Salvar em Ver usa a versão aberta e mantém observações, chuva, ATR e demais frentes/unidades.
