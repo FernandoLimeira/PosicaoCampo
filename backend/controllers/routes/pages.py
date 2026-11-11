@@ -25,6 +25,8 @@ PAGE_ROUTES = {
 PUBLIC_STATIC_FILES = {
     ("css", "base.css"),
     ("css", "auth.css"),
+    ("css", "base.dark.css"),
+    ("css", "auth.dark.css"),
     ("js", "login.js"),
     ("assets", "cornfield.svg"),
     ("assets", "login-field-sunrise-v1.png"),

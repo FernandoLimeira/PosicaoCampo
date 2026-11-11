@@ -378,26 +378,11 @@ function renderEntryOperations() {
   const container = document.querySelector('#production-entry-operations');
   if (!container) return;
   container.innerHTML = productionEntryOperations.map((value, index) => `<div class="production-sheet-operation">
-      <input data-entry-op="${index}" value="${escapeHtml(value)}" list="production-entry-operation-list" maxlength="40"
+      <input data-entry-op="${index}" value="${escapeHtml(value)}" maxlength="40"
         autocomplete="off" inputmode="numeric" placeholder="Cód." aria-label="Operação ${index + 1}" />
       ${index > 0 ? `<button class="production-sheet-op-remove" type="button" data-entry-op-remove="${index}" aria-label="Remover operação ${index + 1}">×</button>` : ''}
     </div>`).join('') + `<button class="production-sheet-op-add" type="button" data-entry-op-add title="Adicionar outra operação"
       aria-label="Adicionar operação" ${productionEntryOperations.length >= 10 ? 'disabled' : ''}>+</button>`;
-}
-
-// Sugestões: operações das O.S. abertas do setor (o campo continua livre para digitar).
-async function loadEntryOperationSuggestions(unit, sector) {
-  const list = document.querySelector('#production-entry-operation-list');
-  if (!list || !sector) return;
-  try {
-    const data = await apiRequest(`/api/production/service-orders?unit=${encodeURIComponent(unit)}&search=${encodeURIComponent(sector)}`);
-    const seen = new Set();
-    list.innerHTML = (data?.orders || [])
-      .filter(order => String(order.sector).trim() === String(sector).trim() && !seen.has(order.operation) && seen.add(order.operation))
-      .map(order => `<option value="${escapeHtml(order.operation)}">${escapeHtml(order.operation_name || '')}</option>`).join('');
-  } catch (error) {
-    console.error(error);
-  }
 }
 
 function productionEntryOperationsValue() {
@@ -744,7 +729,6 @@ function openEditProductionItem(itemId) {
   productionEntryOperations = splitProductionOperations(entry.operation);
   if (!productionEntryOperations.length) productionEntryOperations = [''];
   renderEntryOperations();
-  loadEntryOperationSuggestions(currentProductionUnit(), entry.sector);
   // O nome da frente em edição fica em destaque no topo do popup.
   document.querySelector('#production-modal-title').textContent = item.service_name || 'Frente';
   const subtitle = document.querySelector('#production-modal-subtitle');

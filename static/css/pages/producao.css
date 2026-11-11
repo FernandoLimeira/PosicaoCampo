@@ -893,3 +893,39 @@ button.pdash-tile:hover { transform: translateY(-1px); border-color: #b9d8c7; bo
 .production-orders-pagination-actions { display: flex; gap: 8px; }
 .production-orders-pagination button:disabled { opacity: .45; cursor: default; }
 .production-orders-table tbody tr { height: 41px; }
+
+
+/* ===== Popup "O.S. abertas do setor": visão gerencial curta ===== */
+.production-order-modal { width: min(720px, 100%) !important; }
+.production-order-modal-body { gap: 14px; padding: 16px 22px 20px; }
+.pos-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.pos-kpi { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border: 1px solid var(--data-border); border-radius: 12px; background: var(--data-alternate); }
+.pos-kpi b { color: #183126; font-size: 22px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.pos-kpi span { color: #5d7166; font-size: 11px; font-weight: 700; overflow-wrap: anywhere; }
+.pos-kpi.is-ok { border-color: #9fd2b4; background: var(--green-soft); }
+.pos-kpi.is-ok b { color: var(--green-strong); }
+.pos-kpi.is-missing { border-color: #efc1c6; background: var(--red-soft); }
+.pos-kpi.is-missing b, .pos-kpi.is-missing span { color: #a8434d; }
+.pos-kpi.is-neutral b { color: #7a8981; }
+.pos-ops { display: grid; gap: 10px; }
+.pos-op { border: 1px solid var(--data-border); border-radius: 12px; background: #fff; overflow: hidden; }
+.pos-op.is-match { border-color: #9fd2b4; box-shadow: inset 3px 0 0 var(--green); }
+.pos-op header { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: #f3f8f6; border-bottom: 1px solid var(--line); }
+.pos-op-code { min-width: 42px; padding: 3px 8px; border-radius: 8px; background: var(--data-header); color: #fff; font-size: 13px; text-align: center; font-variant-numeric: tabular-nums; }
+.pos-op.is-match .pos-op-code { background: var(--green); }
+.pos-op-name { flex: 1; min-width: 0; overflow: hidden; color: #1d3a2b; font-size: 13px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.pos-op-badge { padding: 2px 8px; border-radius: 999px; background: #d9f0e3; color: #18733b; font-size: 10px; font-style: normal; font-weight: 800; text-transform: uppercase; }
+.pos-op header small { color: #6f8077; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.pos-op ul { margin: 0; padding: 0; list-style: none; }
+.pos-op li { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; padding: 8px 14px; color: #4d6158; font-size: 12px; }
+.pos-op li + li { border-top: 1px solid #edf2ef; }
+.pos-op li strong { min-width: 96px; color: #183126; font-variant-numeric: tabular-nums; }
+.pos-os-plots { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+.pos-os-plots i { min-width: 26px; padding: 2px 6px; border: 1px solid #cfe6da; border-radius: 6px; background: #f3faf6; color: #1d4a31; font-size: 11px; font-style: normal; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
+.pos-os-plots i.is-more { border-style: dashed; background: #fff; color: #5d7166; }
+.pos-os-muted { margin-left: auto; color: #8a9891; font-size: 11px; }
+@media (max-width: 620px) {
+  .production-order-modal-body { padding: 12px; }
+  .pos-kpi b { font-size: 18px; }
+  .pos-os-plots, .pos-os-muted { margin-left: 0; width: 100%; }
+}

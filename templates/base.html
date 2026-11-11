@@ -4,10 +4,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#0b7a36" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#0b7a36" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#1b1b1b" media="(prefers-color-scheme: dark)" />
   <meta name="app-build" content="{{ asset_version }}" />
   <title>{% block title %}Posição de Campo{% endblock %}</title>
   <link rel="stylesheet" href="/css/base.css?v={{ asset_version }}" />
+  <link rel="stylesheet" href="/css/base.dark.css?v={{ asset_version }}" media="(prefers-color-scheme: dark)" />
   {% block styles %}{% endblock %}
 </head>
 <body data-page="{{ page }}" data-app-build="{{ asset_version }}" data-field-statuses="{{ field_statuses|tojson|forceescape }}"

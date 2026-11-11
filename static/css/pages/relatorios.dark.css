@@ -1,0 +1,40 @@
+/* Gerado por tools/build_dark_css.py a partir de pages/relatorios.css. Não edite: rode o script. */
+.excel-detail-header > div > span, .excel-filter-heading span { color: #999999; }
+.excel-detail-header p { color: #999999; }
+.excel-team-rule { border-left: 3px solid #c6ab3c; background: #2c2820; }
+.excel-team-rule strong { color: #e3d7a8; }
+.excel-filter-grid label > span { color: #a8a8a8; }
+.excel-filter-grid select { border: 1px solid #4a4a4a; background: #2a2a2a; color: #cccccc; }
+.excel-filter-grid select:focus { border-color: #30a65e; }
+.excel-filter-heading strong { color: #cdcdcd; }
+.excel-detail-header h3 { color: #d1d1d1; }
+.excel-browser-title { border-bottom: 1px solid #616161; }
+.excel-browser-title span { background: #1f1f1f; color: #aeaeae; }
+.excel-entity-copy strong { color: #cccccc; }
+.excel-entity-copy small { color: #999999; }
+.excel-entity-metric strong { color: #9cdeb7; }
+.excel-entity-metric small { color: #999999; }
+.excel-entity-chevron { color: #999999; }
+.excel-detail-header { border-bottom: 1px solid #424242; }
+.excel-detail-section { border-top: 1px solid #434343; }
+.excel-comparison-card.is-best { border-color: #4e5c53; background: #252525; }
+.excel-comparison-card.is-low { border-color: #514546; background: #282828; }
+.excel-comparison-card.is-empty > strong { color: #c0c0c0; }
+.excel-comparison-card-head span { color: #a1a1a1; }
+.excel-comparison-card-head b { color: #91d6ad; }
+.excel-comparison-card.is-low .excel-comparison-card-head b { color: #c36f77; }
+.excel-comparison-card h4 { color: #cfcfcf; }
+.excel-comparison-card p { color: #999999; }
+.excel-comparison-metrics span { background: #2a2a2a; border: 1px solid #424242; }
+.excel-comparison-metrics small { color: #999999; }
+.excel-comparison-metrics strong { color: #c0c0c0; }
+.excel-occurrence-item { border: 1px solid #444444; border-left: 4px solid #616161; background: #2a2a2a; }
+.excel-occurrence-item.is-positive { border-left-color: #32a45d; background: #282828; }
+.excel-occurrence-item.is-warning { border-left-color: #a78b31; background: #282828; }
+.excel-occurrence-item p { color: #c5c5c5; }
+.excel-occurrence-item small { color: #999999; }
+.excel-empty-state { color: #999999; }
+.excel-unclassified { border: 1px solid #524f45; background: #2c2820; color: #d9c189; }
+.excel-productivity-modal-header p { color: #999999; }
+.excel-productivity-modal-body { background: #292929; }
+.excel-productivity-modal .excel-detail-section { border: 1px solid #444444; background: #2a2a2a; }

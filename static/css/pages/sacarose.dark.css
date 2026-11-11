@@ -1,0 +1,32 @@
+/* Gerado por tools/build_dark_css.py a partir de pages/sacarose.css. Não edite: rode o script. */
+.card-footer p { color: #999999; }
+.save-status { color: #9dccb0; }
+.save-status.is-error { color: #d2616e; }
+.unit-tab { border: 1px solid #4a4a4a; color: #c0c0c0; background: #2a2a2a; }
+.unit-tab:hover { border-color: #616161; }
+.unit-tab.is-active { color: #ffffff; }
+.sacarose-card { background: #2a2a2a; }
+.card-header { border-bottom: 1px solid #444444; }
+.card-header h2 { color: #d9d9d9; }
+.card-footer { border-top: 1px solid #444444; background: #282828; }
+.sacarose-option-field { color: #a7a7a7; }
+.sacarose-option-field select { border: 1px solid #494949; color: #d8d8d8; background: #2a2a2a; }
+.sacarose-option-toggle { color: #a7a7a7; }
+.primary-button { color: #ffffff; }
+.secondary-button:hover { border-color: #505e54; }
+.sacarose-table input, .sacarose-table select { border: 1px solid #494949; color: #d8d8d8; background: #2a2a2a; }
+.sacarose-table input:focus, .sacarose-table select:focus { outline: 2px solid rgba(97, 97, 97, 0.333); border-color: #616161; }
+.lookup { color: #cdcdcd; }
+.lookup.is-muted { color: #999999; }
+.lookup.is-error { color: #cc6671; }
+.row-error .sector-input, .row-error .section-select { border-color: #605253; background: #282828; }
+.image-toggle { color: #9c9c9c; }
+.remove-row { border: 1px solid #4e4344; color: #cd6571; background: #2a2a2a; }
+.remove-row:hover { background: #2d2122; }
+.empty-row td { color: #999999; }
+@media (max-width: 760px) {
+  .sacarose-table tbody { background: #252525; }
+  .sacarose-table tr { border: 1px solid #454545; background: #2a2a2a; }
+  .sacarose-table td::before { color: #999999; }
+}
+.report-unit-button.has-unsaved-changes { color: #ffffff; box-shadow: inset 3px 0 0 #605b52; }

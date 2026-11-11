@@ -1,0 +1,11 @@
+/* Gerado por tools/build_dark_css.py a partir de pages/historico.css. Não edite: rode o script. */
+.history-pagination { border-top: 1px solid #434343; background: #2a2a2a; }
+.history-page-button:hover:not(:disabled) { border-color: #505e54; }
+.history-page-info { color: #999999; }
+.history-item-main strong { color: #dadada; }
+.history-item-main span, .history-item-meta span { color: #999999; }
+.history-item-meta strong { color: #a5ccb4; }
+.history-day-heading { color: #afafaf; }
+.history-item-occurrence { border-left: 3px solid #616161; }
+.history-occurrence-label { color: #999999; }
+.history-occurrence-content p { color: #c2c2c2; }

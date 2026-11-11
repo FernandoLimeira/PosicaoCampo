@@ -1,13 +1,11 @@
 // Popup "Atualização de Status Operacional": todas as frentes da unidade em
 // linhas editáveis (frente, seção, setor, status, operação e observação).
-// A frente vem do cadastro do sistema; as operações vêm das O.S. abertas do setor
-// (o botão "+" acrescenta outra operação quando o setor tem mais de uma O.S.).
+// A frente vem do cadastro do sistema; a operação é digitada (um código por campo,
+// o botão "+" acrescenta outra) e o sistema confere com as O.S. ao salvar.
 // Ao salvar, só as linhas novas ou alteradas e as excluídas são enviadas.
 let productionSheetRows = [];
 let productionSheetSequence = 0;
-let productionSheetOrders = new Map();
 let productionSheetUnit = '';
-let productionSheetCatalog = new Map(); // código -> operação do cadastro (descrição e frente)
 let productionSheetSectorBase = []; // setores cadastrados: { sector, section, farm }
 
 // Polo SP (PPT e NRD) trabalha só com setor; no Polo MS (PST e RBR) vários setores
@@ -57,16 +55,6 @@ function sheetSectionSuggestions() {
     .sort(compareFrontLabels).map(section => `<option value="${escapeHtml(section)}"></option>`).join('');
 }
 
-function sheetSectorKey(value) {
-  const text = String(value ?? '').trim();
-  return /^\d+(\.0+)?$/.test(text) ? String(Number.parseInt(text, 10)) : text.toLocaleLowerCase('pt-BR');
-}
-
-function sheetOperationKey(value) {
-  const match = String(value ?? '').match(/^\s*(\d+)/);
-  return match ? String(Number.parseInt(match[1], 10)) : String(value ?? '').trim().toLocaleLowerCase('pt-BR');
-}
-
 function sheetSplitOperations(value) {
   const parts = splitProductionOperations(value);
   return parts.length ? [...new Set(parts)] : [''];
@@ -113,23 +101,6 @@ function productionSheetDirty() {
   return productionSheetRows.some(row => (row.id ? sheetRowChanged(row) : true));
 }
 
-// Operações das O.S. abertas do setor (código — descrição), sem repetir. A descrição
-// vem do cadastro de operações; as ligadas à frente da linha aparecem primeiro.
-function sheetOperationsFor(sector, frontId = '') {
-  const operations = new Map();
-  (productionSheetOrders.get(sheetSectorKey(sector)) || []).forEach(order => {
-    const key = sheetOperationKey(order.operation);
-    if (operations.has(key)) return;
-    const catalog = productionSheetCatalog.get(key);
-    const name = catalog?.name || order.operation_name;
-    operations.set(key, {
-      key, label: [order.operation, name].filter(Boolean).join(' — '),
-      linked: Boolean(frontId && catalog?.service_front_id && String(catalog.service_front_id) === String(frontId))
-    });
-  });
-  return [...operations.values()].sort((a, b) => Number(b.linked) - Number(a.linked) || compareFrontLabels(a.key, b.key));
-}
-
 // Só as frentes do grupo escolhido no filtro do popup (sem grupo, o da própria linha).
 function sheetFrontOptions(row) {
   const allFronts = sheetFronts();
@@ -144,12 +115,6 @@ function sheetFrontOptions(row) {
     `<option value="${front.id}" ${String(front.id) === row.frontId ? 'selected' : ''}>${escapeHtml(front.name)}</option>`).join('');
 }
 
-// Sugestões (datalist) com as operações das O.S. do setor; o campo continua livre
-// para digitar uma operação sem cadastro: o sistema cruza com as O.S. ao salvar.
-function sheetOperationSuggestions(row) {
-  return sheetOperationsFor(row.sector, row.frontId)
-    .map(item => `<option value="${escapeHtml(item.key)}">${escapeHtml(item.label)}</option>`).join('');
-}
 
 function sheetRowVisible(row) {
   const group = document.querySelector('#production-sheet-group')?.value || '';
@@ -173,9 +138,8 @@ function sheetRowHtml(row) {
     <td><select data-sheet-field="status" aria-label="Status" ${row.removed ? 'disabled' : ''}>${productionStatuses.map(status =>
       `<option value="${escapeHtml(status.code)}" ${status.code === row.status ? 'selected' : ''}>${escapeHtml(status.name)}</option>`).join('')}</select></td>
     <td><div class="production-sheet-operations">
-      <datalist id="sheet-ops-${row.key}">${sheetOperationSuggestions(row)}</datalist>
       ${row.operations.map((value, index) => `<div class="production-sheet-operation">
-        <input data-sheet-op="${index}" value="${escapeHtml(value)}" list="sheet-ops-${row.key}" maxlength="40" autocomplete="off"
+        <input data-sheet-op="${index}" value="${escapeHtml(value)}" maxlength="40" autocomplete="off"
           inputmode="numeric" placeholder="Cód." title="Código da operação" aria-label="Operação ${index + 1}" ${row.removed ? 'disabled' : ''} />
         ${index > 0 && !row.removed ? `<button class="production-sheet-op-remove" type="button" data-sheet-action="remove-op" data-op-index="${index}" aria-label="Remover operação ${index + 1}">×</button>` : ''}
       </div>`).join('')}
@@ -229,41 +193,19 @@ function renderSheetFilters() {
   frontSelect.value = fronts.some(front => String(front.id) === frontValue) ? frontValue : '';
 }
 
-const productionSheetCache = { sectorBase: null, operations: null };
+const productionSheetCache = { sectorBase: null };
 
-async function loadProductionSheetOrders(unit) {
-  productionSheetOrders = new Map();
-  productionSheetCatalog = new Map();
+// Base de setores para a lista do campo Setor. A operação é digitada livre (sem lista);
+// o sistema confere com as O.S. ao salvar.
+async function loadProductionSheetSectorBase(unit) {
   resetSheetSectorLists();
-  const [base, catalog, orders] = await Promise.allSettled([
-    productionSheetCache.sectorBase || apiRequest(`/api/production/sector-base?unit=${encodeURIComponent(unit)}`),
-    productionSheetCache.operations || apiRequest('/api/production/operations?usage=0'),
-    apiRequest(`/api/production/service-orders?unit=${encodeURIComponent(unit)}&summary=1`)
-  ]);
-  if (base.status === 'fulfilled') {
-    productionSheetCache.sectorBase = base.value;
-    productionSheetSectorBase = Array.isArray(base.value?.items) ? base.value.items : [];
-  } else {
-    console.error(base.reason);
-    productionSheetSectorBase = [];
-  }
-  if (catalog.status === 'fulfilled') {
-    productionSheetCache.operations = catalog.value;
-    (catalog.value?.operations || []).forEach(item => productionSheetCatalog.set(sheetOperationKey(item.code), item));
-  } else {
-    console.error(catalog.reason);
-  }
   try {
-    if (orders.status === 'rejected') throw orders.reason;
-    const data = orders.value;
-    (data?.orders || []).forEach(order => {
-      const key = sheetSectorKey(order.sector);
-      if (!productionSheetOrders.has(key)) productionSheetOrders.set(key, []);
-      productionSheetOrders.get(key).push(order);
-    });
+    const base = productionSheetCache.sectorBase || await apiRequest(`/api/production/sector-base?unit=${encodeURIComponent(unit)}`);
+    productionSheetCache.sectorBase = base;
+    productionSheetSectorBase = Array.isArray(base?.items) ? base.items : [];
   } catch (error) {
     console.error(error);
-    showToast('Não foi possível carregar as O.S.; a operação pode ser preenchida depois.', true);
+    productionSheetSectorBase = [];
   }
 }
 
@@ -278,7 +220,7 @@ async function openProductionSheet() {
   renderSheetFilters();
   renderProductionSheet();
   openModal('production-sheet-modal');
-  await loadProductionSheetOrders(unit);
+  await loadProductionSheetSectorBase(unit);
   if (productionSheetUnit === unit) renderProductionSheet();
 }
 

@@ -145,86 +145,88 @@ async function importServiceOrders(event) {
   }
 }
 
-function serviceOrderCellText(value) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? formatIsoDateBr(value) : String(value ?? '');
+// Popup "O.S. abertas do setor": visão gerencial curta. No topo, poucos indicadores
+// (O.S., operações, talhões e, vindo de um lançamento, a conferência); abaixo, as O.S.
+// agrupadas por operação, uma linha curta por O.S. (número, seção, abertura e talhões).
+const SERVICE_ORDER_PLOTS_SHOWN = 8;
+
+function serviceOrderPlotsHtml(plots = []) {
+  if (!plots.length) return '<span class="pos-os-muted">Sem talhão</span>';
+  const shown = plots.slice(0, SERVICE_ORDER_PLOTS_SHOWN).map(plot => `<i>${escapeHtml(plot)}</i>`).join('');
+  const rest = plots.length - SERVICE_ORDER_PLOTS_SHOWN;
+  return `<span class="pos-os-plots" title="Talhões: ${escapeHtml(plots.join(', '))}">${shown}${rest > 0 ? `<i class="is-more">+${rest}</i>` : ''}</span>`;
 }
 
-// Popup "O.S. abertas do setor": todas as O.S. numa tabela só (sem etapas nem paginação).
-// Cada linha é uma O.S.; as colunas do arquivo aparecem com nomes amigáveis e os
-// talhões viram etiquetas. Colunas novas que vierem no arquivo entram no fim da tabela.
-const SERVICE_ORDER_COLUMN_LABELS = {
-  CHAVE: 'Chave', NO_OS: 'Nº O.S.', SETOR: 'Setor', SECAO: 'Seção', OPERACAO: 'Operação',
-  TALHAO: 'Talhões', CCUSTO: 'Centro de custo', CCUSTO_TRATOS: 'Descrição', DT_ABERTURA_OS: 'Abertura'
-};
-
-function serviceOrderColumnValue(order, column) {
-  const values = [...new Set((order.rows || []).map(row => serviceOrderCellText(row[column])).filter(Boolean))];
-  return values.join(', ') || '-';
+function serviceOrderKpi(label, value, tone = '') {
+  return `<div class="pos-kpi ${tone}"><b>${value}</b><span>${escapeHtml(label)}</span></div>`;
 }
 
-function serviceOrdersTableHtml(orders) {
-  const known = new Set(Object.keys(SERVICE_ORDER_COLUMN_LABELS));
-  const extras = [...new Set(orders.flatMap(order => order.columns || []))].filter(name => !known.has(String(name).toUpperCase()));
-  const sections = [...new Set(orders.map(order => order.section).filter(Boolean))].sort(compareFrontLabels);
-  const operations = [...new Set(orders.map(order => order.operation).filter(Boolean))].sort(compareFrontLabels);
-  const matches = orders.filter(order => order.matches).length;
-  const summary = [
-    `<span><b>${orders.length}</b> ${orders.length === 1 ? 'O.S. aberta' : 'O.S. abertas'}</span>`,
-    operations.length ? `<span>Operações <b>${escapeHtml(operations.join(', '))}</b></span>` : '',
-    sections.length ? `<span>${sections.length === 1 ? 'Seção' : 'Seções'} <b>${escapeHtml(sections.join(', '))}</b></span>` : '',
-    matches ? `<span class="is-match"><b>${matches}</b> ${matches === 1 ? 'confere' : 'conferem'} com o lançamento</span>` : ''
-  ].filter(Boolean).join('');
-  return `<div class="production-order-summary">${summary}</div>
-    <div class="production-order-table-wrap"><table class="production-order-table">
-      <thead><tr>
-        <th>Nº O.S.</th><th>Operação</th><th>Seção</th><th>Centro de custo</th><th>Abertura</th><th>Chave</th>
-        ${extras.map(name => `<th>${escapeHtml(name)}</th>`).join('')}
-        <th>Talhões</th>
-      </tr></thead>
-      <tbody>${orders.map(order => `<tr class="${order.matches ? 'is-match' : ''}">
-        <td><strong>${escapeHtml(order.number)}</strong>${order.matches ? '<span class="production-order-match">confere</span>' : ''}</td>
-        <td><div class="production-order-operation"><strong>${escapeHtml(order.operation || '-')}</strong><small>${escapeHtml(order.operation_name || '')}</small></div></td>
-        <td>${escapeHtml(order.section || '-')}</td>
-        <td>${escapeHtml(order.cost_center || '-')}</td>
-        <td>${escapeHtml(serviceOrderDate(order.opened_on))}</td>
-        <td>${escapeHtml(order.key || serviceOrderColumnValue(order, 'CHAVE'))}</td>
-        ${extras.map(name => `<td>${escapeHtml(serviceOrderColumnValue(order, name))}</td>`).join('')}
-        <td><div class="production-order-plot-list">${(order.plots || []).map(plot =>
-          `<span class="production-order-plot">${escapeHtml(plot)}</span>`).join('') || '-'}</div></td>
-      </tr>`).join('')}</tbody>
-    </table></div>`;
+function serviceOrdersPanelHtml(orders, { check = null } = {}) {
+  const groups = new Map();
+  orders.forEach(order => {
+    const key = order.operation || '-';
+    if (!groups.has(key)) groups.set(key, { code: key, name: order.operation_name || '', matches: false, orders: [] });
+    const group = groups.get(key);
+    group.orders.push(order);
+    group.matches = group.matches || Boolean(order.matches);
+    if (!group.name && order.operation_name) group.name = order.operation_name;
+  });
+  const ordered = [...groups.values()].sort((a, b) => Number(b.matches) - Number(a.matches) || compareFrontLabels(a.code, b.code));
+  const plots = new Set(orders.flatMap(order => (order.plots || []).map(plot => `${order.section}|${plot}`)));
+  const showSection = orders.some(order => order.section);
+
+  const kpis = [
+    serviceOrderKpi(orders.length === 1 ? 'O.S. aberta' : 'O.S. abertas', orders.length),
+    serviceOrderKpi(ordered.length === 1 ? 'operação' : 'operações', ordered.length),
+    serviceOrderKpi(plots.size === 1 ? 'talhão' : 'talhões', plots.size)
+  ];
+  if (check) {
+    kpis.push(check.missing.length
+      ? serviceOrderKpi(`sem O.S.: ${check.missing.join(', ')}`, 'Falta', 'is-missing')
+      : check.wanted ? serviceOrderKpi('conferência', 'OK', 'is-ok')
+        : serviceOrderKpi('lançamento sem operação', '—', 'is-neutral'));
+  }
+
+  const groupsHtml = ordered.map(group => `<section class="pos-op${group.matches ? ' is-match' : ''}">
+      <header>
+        <b class="pos-op-code">${escapeHtml(group.code)}</b>
+        <span class="pos-op-name">${escapeHtml(group.name || 'Operação')}</span>
+        ${group.matches ? '<em class="pos-op-badge">confere</em>' : ''}
+        <small>${group.orders.length} O.S.</small>
+      </header>
+      <ul>${group.orders.map(order => `<li>
+        <strong>O.S. ${escapeHtml(order.number)}</strong>
+        ${showSection ? `<span>Seção ${escapeHtml(order.section || '-')}</span>` : ''}
+        <span>${escapeHtml(serviceOrderDate(order.opened_on))}</span>
+        ${serviceOrderPlotsHtml(order.plots)}
+      </li>`).join('')}</ul>
+    </section>`).join('');
+
+  return `<div class="pos-kpis">${kpis.join('')}</div><div class="pos-ops">${groupsHtml}</div>`;
 }
 
-function showServiceOrdersModal(contextText, orders) {
+function showServiceOrdersModal(contextText, orders, options = {}) {
   const body = document.querySelector('#production-order-modal-body');
   const context = document.querySelector('#production-order-modal-context');
   if (!body) return;
   if (context) context.textContent = contextText;
-  body.innerHTML = orders.length ? serviceOrdersTableHtml(orders)
+  body.innerHTML = orders.length ? serviceOrdersPanelHtml(orders, options)
     : '<p class="production-empty">Nenhuma O.S. aberta para este setor.</p>';
   openModal('production-order-modal');
 }
 
 // "Ver" da tabela de lançamentos: todas as O.S. abertas do setor do lançamento.
-async function openProductionItemOrders(itemId) {
+// O resumo que vem com o lançamento já basta (sem nova consulta ao servidor).
+function openProductionItemOrders(itemId) {
   const item = findProductionItem(itemId);
   if (!item) return;
   const entry = item.entry || {};
   const section = entry.section ? ` / Seção ${entry.section}` : '';
-  const operation = entry.operation ? ` · ${entry.operation.includes(',') ? 'Operações' : 'Operação'} ${entry.operation}` : '';
-  const summaries = item.service_order?.orders || [];
-  let orders = summaries;
-  // O lançamento traz só o resumo das O.S.; as colunas do arquivo vêm aqui, no clique.
-  try {
-    const params = new URLSearchParams({ unit: currentProductionUnit(), search: entry.sector || '' });
-    const data = await apiRequest(`/api/production/service-orders?${params}`);
-    const full = new Map((data?.orders || []).map(order => [order.id, order]));
-    orders = summaries.map(order => ({ ...(full.get(order.id) || {}), ...order,
-      columns: full.get(order.id)?.columns || [], rows: full.get(order.id)?.rows || [] }));
-  } catch (error) {
-    console.error(error);
-  }
-  showServiceOrdersModal(`${item.service_name} · Setor ${entry.sector || '-'}${section}${operation}`, orders);
+  const codes = splitProductionOperations(entry.operation);
+  const operation = codes.length ? ` · ${codes.length > 1 ? 'Operações' : 'Operação'} ${codes.join(', ')}` : '';
+  const check = { wanted: codes.length > 0, missing: item.service_order?.missing_operations || [] };
+  showServiceOrdersModal(`${item.service_name} · Setor ${entry.sector || '-'}${section}${operation}`,
+    item.service_order?.orders || [], { check });
 }
 
 // "Ver setor" da aba Ordem de serviço.

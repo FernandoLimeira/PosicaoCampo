@@ -1,0 +1,26 @@
+/* Gerado por tools/build_dark_css.py a partir de pages/setores.css. Não edite: rode o script. */
+.sector-base-hint { color: #90c5a4; }
+.sector-base-header-note { color: #999999; }
+.sector-base-import-card strong, .sector-base-manual-card strong { color: #d9d9d9; }
+.sector-base-import-card small { color: #999999; }
+.sector-base-file-field > span { color: #999999; }
+.sector-base-file-field input { background: #2a2a2a; }
+.sector-base-file-field small { color: #999999; }
+.sector-base-search-field > span { color: #999999; }
+.sector-base-search-field input { background: #292929; }
+.sector-base-count-wrap { color: #999999; }
+.sector-base-count-wrap strong { color: #a1e5bd; }
+.sector-base-purge-button { border: 1px solid #4d4142; background: #2a2a2a; color: #c96973; }
+.sector-base-replace-option { border: 1px dashed #4f4344; background: #292929; }
+.sector-base-replace-option strong { color: #cd7782 !important; }
+.sector-base-table { background: #2a2a2a; }
+.sector-base-description { color: #d6d6d6; }
+.sector-base-table td small { color: #999999; }
+.sector-base-source { background: #242424; color: #a5dab7; }
+.sector-base-source.is-excel { background: #20242c; color: #6b95d0; }
+.sector-base-source.is-manual { background: #28241d; color: #e5cc96; }
+.sector-base-action.danger { color: #d0626a; border-color: #454545; background: #2a2a2a; }
+.sector-base-action.danger:hover { background: #2d2122; border-color: #524649; }
+.sector-base-pagination { color: #999999; }
+.sector-base-page-button:hover:not(:disabled) { border-color: #505e54; }
+.sector-base-empty { color: #999999; }

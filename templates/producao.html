@@ -2,6 +2,7 @@
 {% block title %}{% if page == 'service_orders' %}Ordem de serviço{% elif page == 'production_queries' %}Consultas SQL{% elif page == 'production_catalog' %}Cadastros{% else %}Produção Agrícola{% endif %} · Posição de Campo{% endblock %}
 {% block styles %}
   <link rel="stylesheet" href="/css/pages/producao.css?v={{ asset_version }}-front-notes" />
+  <link rel="stylesheet" href="/css/pages/producao.dark.css?v={{ asset_version }}-front-notes" media="(prefers-color-scheme: dark)" />
 {% endblock %}
 
 {% block content %}
@@ -281,7 +282,6 @@
     <form id="production-query-form" class="production-query-form">
       <input id="production-query-id" type="hidden" />
       <label class="field"><span>Nome</span><input id="production-query-name" type="text" maxlength="120" required placeholder="Ex.: O.S. abertas — Polo SP" autocomplete="off" /></label>
-      <label class="field"><span>Descrição <small>(opcional)</small></span><input id="production-query-description" type="text" maxlength="300" placeholder="Ex.: instâncias 201 e 204, O.S. abertas desde 01/01/2026" autocomplete="off" /></label>
       <label class="field"><span>Comando SQL</span><textarea id="production-query-sql" rows="16" maxlength="20000" required spellcheck="false" placeholder="SELECT ..."></textarea></label>
     </form>
     <footer class="modal-footer">
@@ -477,7 +477,6 @@
           <div id="production-entry-operations-field" class="field production-entry-operations-field" hidden>
             <span>Operação em execução <small>(código da O.S.; use + para mais de uma)</small></span>
             <div id="production-entry-operations" class="production-sheet-operations"></div>
-            <datalist id="production-entry-operation-list"></datalist>
           </div>
           </div>
           </div>

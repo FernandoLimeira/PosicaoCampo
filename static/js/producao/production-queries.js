@@ -23,7 +23,6 @@ function renderProductionQueries() {
       <div class="production-query-head">
         <div>
           <strong>${escapeHtml(query.name)}</strong>
-          ${query.description ? `<p>${escapeHtml(query.description)}</p>` : ''}
           <small>${lines} ${lines === 1 ? 'linha' : 'linhas'} · atualizada em ${escapeHtml(updated)} por ${escapeHtml(query.updated_by)}</small>
         </div>
         <div class="production-query-actions">
@@ -51,7 +50,6 @@ function openProductionQueryModal(query = null) {
   document.querySelector('#production-query-form')?.reset();
   document.querySelector('#production-query-id').value = query?.id || '';
   document.querySelector('#production-query-name').value = query?.name || '';
-  document.querySelector('#production-query-description').value = query?.description || '';
   document.querySelector('#production-query-sql').value = query?.sql || '';
   document.querySelector('#production-query-modal-title').textContent = query ? `Editar: ${query.name}` : 'Nova consulta';
   openModal('production-query-modal');
@@ -63,7 +61,6 @@ async function saveProductionQuery(event) {
   const button = document.querySelector('#production-query-save');
   const payload = {
     name: document.querySelector('#production-query-name').value.trim(),
-    description: document.querySelector('#production-query-description').value.trim(),
     sql: document.querySelector('#production-query-sql').value
   };
   if (button) button.disabled = true;

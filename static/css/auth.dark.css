@@ -1,0 +1,24 @@
+/* Gerado por tools/build_dark_css.py a partir de auth.css. Não edite: rode o script. */
+.auth-page { color: #e6e6e6; }
+.auth-panel { background: #272727; }
+.auth-heading p { color: #9ee7bb; }
+.auth-heading h1 { color: #e6e6e6; }
+.auth-heading > span { color: #a1a1a1; }
+.auth-field > label { color: #a7e7d5; }
+.auth-form input:not([type="checkbox"]) { border: 1px solid #464646; color: #aae4d0; background: rgba(42, 42, 42, 0.75); }
+.auth-form input:not([type="checkbox"]):focus { outline: 2px solid rgba(48, 166, 93, 0.15); border-color: #616161; }
+.auth-input-icon { color: #999999; }
+.auth-password-toggle { color: #b9b9b9; }
+.auth-password-toggle:hover { color: #9ee7bb; background: #232323; }
+.auth-password-toggle:focus-visible { outline: 2px solid #419567; }
+.auth-remember { color: #dadada; }
+.auth-remember input { accent-color: #2c965c; }
+.auth-remember-option small { color: #999999; }
+.auth-form #submit-button { border: 1px solid rgba(48, 166, 100, 0.18); color: #ffffff; background: linear-gradient(110deg, #3a9479, #2f938c); }
+.auth-form #submit-button:hover { background: linear-gradient(110deg, #348e76, #2d9593); }
+.auth-error { border: 1px solid #4f4345; color: #d86c7a; background: #2d2122; }
+.auth-visual { color: #ffffff; background: #3d3d3d; }
+.auth-visual::before { background: linear-gradient(180deg, transparent 38%, rgba(43, 43, 43, 0.12) 58%, rgba(43, 43, 43, 0.88) 100%); }
+.auth-field-contours { color: #75c297; }
+.auth-title-accent { background: linear-gradient(90deg, #51c891, #469e9d); }
+.auth-panel-leaves { opacity: .06; }

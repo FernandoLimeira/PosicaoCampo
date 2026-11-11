@@ -31,6 +31,12 @@ de área, Emissão global, Histórico e Usuários têm
 templates, CSS e JavaScript próprios. Todas essas páginas herdam o layout base;
 o login também o utiliza, sem exibir o menu autenticado.
 
+Modo escuro: segue a configuração do navegador/sistema (`prefers-color-scheme`),
+em tons de cinza escuro. Cada `X.css` tem um `X.dark.css` gerado, carregado só no
+modo escuro. Depois de mudar qualquer CSS, rode `python tools/build_dark_css.py`
+(o teste `tests/test_dark_css.py` falha se algum `.dark.css` ficar desatualizado).
+Ajustes manuais do tema escuro ficam em `OVERRIDES`, no próprio script.
+
 Consulte a [análise e organização do frontend](docs/frontend.md)
 para entender a separação, as rotas e como adicionar novas páginas.
 A organização do backend (módulos, responsabilidades e direção das

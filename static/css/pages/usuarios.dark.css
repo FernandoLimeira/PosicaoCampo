@@ -1,0 +1,99 @@
+/* Gerado por tools/build_dark_css.py a partir de pages/usuarios.css. Não edite: rode o script. */
+.users-search-field > span { color: #999999; }
+.users-search-field input { background: #292929; }
+.users-search-count { color: #999999; }
+.users-search-empty { color: #999999; }
+.user-list-item.is-disabled { background: #262626; }
+.user-list-copy strong { color: #dadada; }
+.user-list-copy span { color: #999999; }
+.user-list-copy .user-access-summary { color: #9fc7b2; }
+.user-role-badge { background: #222222; color: #aeaeae; }
+.user-role-badge.is-admin { background: #1c271f; color: #9de6b9; }
+.user-status-badge.is-active { background: #1c2720; color: #96e5b5; }
+.user-status-badge.is-disabled { background: #232323; color: #999999; }
+.user-action, .user-delete { background: #2a2a2a; }
+.user-action:hover { border-color: #505e54; }
+.user-action-primary { color: #ffffff; }
+.user-delete { color: #d4666e; }
+.user-delete:hover { background: #272727; border-color: #4c4141; }
+.user-password-form { border-top: 1px solid #434343; }
+.user-password-input { border: 1px solid #4a4a4a; background: #2a2a2a; color: #d9d9d9; }
+.user-password-input:focus { border-color: #30a65e; }
+.user-create-modal-description, .user-access-modal-description { color: #999999; }
+.user-access-modal-description strong { color: #d0d0d0; }
+.quick-user-form.user-create-form { background: #2a2a2a; }
+.access-loading { color: #999999; }
+.user-create-status, .user-access-status { color: #9de6b9; }
+.user-create-status.is-error, .user-access-status:not(:empty) { color: #d4666e; }
+.user-create-steps { border-bottom: 1px solid #434343; background: #272727; }
+.user-step { background: #2a2a2a; color: #999999; }
+.user-step:hover { border-color: #414d48; }
+.user-step.is-active { border-color: #47534d; background: #1d2821; }
+.user-step.is-active { color: #9fe7be; }
+.user-step-index { border: 1px solid #494949; color: #999999; background: #2a2a2a; }
+.user-step.is-active .user-step-index { background: #2c9655; border-color: #30a65e; color: #ffffff; }
+.user-step-divider { background: #2b3c2f; }
+.user-section-heading h3 { color: #d4d4d4; }
+.user-section-heading p { color: #999999; }
+.user-step-tip strong { color: #add8be; }
+.user-step-tip p { color: #999999; }
+.user-permission-nav-title { color: #cdcdcd; }
+.user-permission-nav-title small { color: #999999; }
+.user-permission-nav-item span { color: #a7a7a7; }
+.user-permission-nav-item small { color: #999999; }
+.user-permission-nav-item:hover { background: #232323; }
+.user-permission-nav-item.is-active { border-color: #424e46; background: #1d2820; }
+.user-permission-nav-item.is-active span { color: #a4e8bf; }
+.user-permission-nav-item.is-active small { color: #8bcb9f; }
+.user-permission-nav-item:focus-visible, .user-step:focus-visible { outline: 2px solid #30a65e; }
+.user-permission-panel { background: #2a2a2a; }
+.user-panel-heading { border-bottom: 1px solid #424242; }
+.user-panel-heading h3 { color: #cdcdcd; }
+.user-panel-heading p { color: #999999; }
+.user-access-hint { color: #9e9e9e; }
+.user-module-description strong { color: #d3d3d3; }
+.user-module-description small { color: #999999; }
+.user-module-controls label, .user-unit-operations label { color: #b8b8b8; }
+.user-module-controls input, .user-production-access input[type="checkbox"] { accent-color: #2c9655; }
+.user-emission-note { border: 1px solid #404b42; background: #242424; }
+.user-emission-note strong { color: #9fe7bc; }
+.user-emission-note span { color: #a0a0a0; }
+.user-production-toggle { background: #292929; border: 1px solid #444444; }
+.user-production-toggle strong { color: #cecece; }
+.user-production-toggle small { color: #999999; }
+.user-unit-toolbar strong { color: #c9c9c9; }
+.user-unit-toolbar p { color: #999999; }
+.user-unit-add-control select { border: 1px solid #484848; background: #2a2a2a; }
+.user-unit-add:hover:not(:disabled) { border-color: #505e54; }
+.user-unit-heading strong { color: #cbcbcb; }
+.user-unit-heading strong span { color: #9de6b9; }
+.user-unit-heading small { color: #999999; }
+.user-unit-heading button { color: #b47e7e; }
+.user-unit-view { color: #9de6b9; }
+.user-unit-empty { color: #999999; }
+@media (max-width: 680px) {
+  .user-permission-mobile-nav { color: #a0a0a0; }
+}
+.user-access-avatar { color: #ffffff; background: linear-gradient(135deg, #30926c, #2e8e94); }
+.user-permission-sidebar { background: #262626; }
+.user-permission-nav-title { color: #a8a8a8; }
+.user-permission-nav-icon { color: #a8a8a8; background: #2a2a2a; border: 1px solid #444444; }
+.user-permission-nav-item .user-permission-nav-label { color: #bdbdbd; }
+.user-permission-nav-item small { color: #9de2c0; background: #1b2520; }
+.user-permission-nav-item small.is-empty { color: #999999; background: #222222; }
+.user-permission-nav-item:hover { background: #2a2a2a; }
+.user-permission-nav-item.is-active { background: #2a2a2a; border-color: #414d47; }
+.user-permission-nav-item.is-active .user-permission-nav-icon { color: #ffffff; }
+.user-permission-nav-item.is-active .user-permission-nav-label { color: #a6e8ca; }
+.user-panel-heading { background: linear-gradient(180deg, #292929, #2a2a2a); }
+.user-panel-heading h3 { color: #e0e0e0; }
+.user-module-row { background: #2a2a2a; border-color: #434343; }
+.user-module-row:hover { border-color: #434f49; }
+.user-module-controls label, .user-production-access .user-unit-operations label { border: 1px solid #434343; background: #272727; }
+.user-module-controls label:has(input:checked), .user-production-access .user-unit-operations label:has(input:checked) { background: #232323; border-color: #434f48; color: #a6e8c8; }
+.user-module-controls input[type="checkbox"], .user-production-access input[type="checkbox"] { background: #363636; }
+.user-module-controls input[type="checkbox"]::before, .user-production-access input[type="checkbox"]::before { background: #2a2a2a; }
+.user-module-badge { color: #c96973; }
+.user-module-row.is-sensitive { border-color: #4a3f40; background: linear-gradient(90deg, #292929, #2a2a2a 60%); }
+.user-module-row.is-sensitive .user-module-controls label:has(input:checked) { border-color: #4d4142; color: #cd7782; }
+.user-module-lock-hint { color: #b18186 !important; }
