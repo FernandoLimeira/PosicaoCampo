@@ -276,6 +276,24 @@ class ServiceOrderTests(unittest.TestCase):
         service_orders.delete_sql_query(self.admin["id"], created["id"])
         self.assertEqual(service_orders.list_sql_queries(self.admin["id"])["queries"], [])
 
+    def test_audit_payload_summary_and_permission_details(self):
+        service_orders.import_service_orders(self.admin["id"], "PPT", [
+            {"number": "1", "sector": "4", "operation": "338", "columns": ["A"], "rows": [{"A": "x"}]},
+        ])
+        self._launch("4")
+        order = production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"][0]["service_order"]["orders"][0]
+        # O lançamento leva só o resumo; as linhas do arquivo vêm na consulta de O.S.
+        self.assertNotIn("rows", order)
+        self.assertEqual(service_orders.list_service_orders(self.user["id"], "PPT")["orders"][0]["rows"], [{"A": "x"}])
+        self.assertNotIn("rows", service_orders.list_service_orders(self.user["id"], "PPT", summary=True)["orders"][0])
+        # Operação inativa só aparece para quem configura.
+        created = service_orders.save_operation(self.admin["id"], {"code": "999", "name": "X", "is_active": False})
+        self.assertNotIn("999", [o["code"] for o in service_orders.list_operations(self.user["id"], include_inactive=True)["operations"]])
+        self.assertIn("999", [o["code"] for o in service_orders.list_operations(self.admin["id"], include_inactive=True)["operations"]])
+        service_orders.delete_operation(self.admin["id"], created["id"])
+        with self.assertRaisesRegex(ValueError, "0 e 9999"):
+            service_orders.save_sql_query(self.admin["id"], {"name": "Q", "sql": "SELECT 1", "position": 10 ** 30})
+
     def test_codes_are_compared_without_leading_zeros(self):
         self.assertEqual(service_orders.sector_key("0663"), service_orders.sector_key("663.0"))
         self.assertEqual(service_orders.operation_key("0338 — TRATOS PLANTIO"), "338")

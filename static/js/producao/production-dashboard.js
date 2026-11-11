@@ -205,15 +205,17 @@ function fitDashboardTiles() {
     dashboardTilesObserver = new ResizeObserver(() => fitDashboardTiles());
     dashboardTilesObserver.observe(cards);
   }
-  cards.querySelectorAll('.pdash-tiles').forEach(grid => {
+  const plans = [...cards.querySelectorAll('.pdash-tiles')].map(grid => {
     const quantity = Math.max(1, grid.children.length);
     const style = getComputedStyle(grid);
     const width = grid.clientWidth - parseFloat(style.paddingLeft || 0) - parseFloat(style.paddingRight || 0);
-    if (width <= 0) return;
+    if (width <= 0) return null;
     const gap = parseFloat(style.columnGap) || 10;
     const maxColumns = Math.max(1, Math.min(quantity, Math.floor((width + gap) / (DASHBOARD_TILE_MIN + gap))));
-    const rows = Math.ceil(quantity / maxColumns);
-    grid.style.setProperty('--tile-cols', String(Math.ceil(quantity / rows)));
+    return { grid, columns: String(Math.ceil(quantity / Math.ceil(quantity / maxColumns))) };
+  });
+  plans.forEach(plan => {
+    if (plan && plan.grid.style.getPropertyValue('--tile-cols') !== plan.columns) plan.grid.style.setProperty('--tile-cols', plan.columns);
   });
 }
 
@@ -260,4 +262,12 @@ document.querySelector('#production-group-cards')?.addEventListener('click', eve
 })();
 
 // Garantia além do ResizeObserver: refaz as colunas quando a janela muda de tamanho ou de zoom.
-globalThis.addEventListener?.('resize', () => { fitDashboardTiles(); if (typeof fitProductionSummaryColumns === 'function') fitProductionSummaryColumns(); });
+let dashboardResizeFrame = 0;
+globalThis.addEventListener?.('resize', () => {
+  if (dashboardResizeFrame) return;
+  dashboardResizeFrame = requestAnimationFrame(() => {
+    dashboardResizeFrame = 0;
+    fitDashboardTiles();
+    if (typeof fitProductionSummaryColumns === 'function') fitProductionSummaryColumns();
+  });
+});

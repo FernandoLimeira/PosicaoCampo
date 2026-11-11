@@ -686,7 +686,7 @@ def _entry_payload(row: sqlite3.Row | None) -> dict[str, Any] | None:
     }
 
 
-def list_my_items(user_id: int, unit_code: Any, work_date: Any, *, scope: str = "mine") -> dict[str, Any]:
+def list_my_items(user_id: int, unit_code: Any, work_date: Any, *, scope: str = "mine", with_orders: bool = True) -> dict[str, Any]:
     unit = _normalize_unit(unit_code)
     selected_date = _normalize_work_date(work_date)
     normalized_scope = str(scope or "mine").strip().lower()
@@ -746,8 +746,9 @@ def list_my_items(user_id: int, unit_code: Any, work_date: Any, *, scope: str = 
                 "entry": entry, "is_current_day": bool(entry and entry["work_date"] == selected_date),
             })
         # Import local: service_orders importa este módulo.
-        from .service_orders import attach_service_order_status
-        attach_service_order_status(conn, unit, items)
+        if with_orders:
+            from .service_orders import attach_service_order_status
+            attach_service_order_status(conn, unit, items)
         return {
             "unit": unit, "work_date": selected_date, "scope": normalized_scope, "items": items,
             "permissions": {"view": True, "fill": bool(access["can_fill"]), "configure": access["can_configure"], "summary": access["can_summary"]},
@@ -932,7 +933,7 @@ def _save_my_items(user_id: int, payload: Any, sectors: list[Any], *, item_id: i
             # Keep all entries, and never retire a copy with a later work date.
             duplicate_ids = [candidate for candidate in matching_ids if candidate != saved_id]
             _deactivate_items(conn, duplicate_ids, now, entry["work_date"])
-    result = list_my_items(user_id, unit, entries[0]["work_date"], scope="all")
+    result = list_my_items(user_id, unit, entries[0]["work_date"], scope="all", with_orders=False)
     by_id = {item["id"]: item for item in result["items"]}
     return [by_id[saved_id] for saved_id in item_ids]
 

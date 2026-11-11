@@ -323,7 +323,8 @@ function fitProductionSummaryColumns() {
   const gap = 10;
   const maxColumns = Math.max(1, Math.min(quantity, Math.floor((width + gap) / (PRODUCTION_SUMMARY_MIN_CARD + gap))));
   const rows = Math.ceil(quantity / maxColumns);
-  summary.style.setProperty('--summary-cols', String(Math.ceil(quantity / rows)));
+  const columns = String(Math.ceil(quantity / rows));
+  if (summary.style.getPropertyValue('--summary-cols') !== columns) summary.style.setProperty('--summary-cols', columns);
 }
 
 function renderProductionSummary() {

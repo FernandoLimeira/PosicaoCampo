@@ -147,13 +147,17 @@ def _page(start_response, template, *, user=None, page="login"):
     )
 
 
-def _file(start_response, path: Path):
+def _file(start_response, path: Path, *, versioned: bool = False):
     if not path.is_file():
         return _respond(start_response, HTTPStatus.NOT_FOUND, "Arquivo não encontrado.".encode("utf-8"))
     mime, _ = mimetypes.guess_type(str(path))
     data = path.read_bytes()
     content_type = f"{mime}; charset=utf-8" if (mime or "").startswith("text/") else (mime or "application/octet-stream")
-    cache_control = "no-store" if path.suffix in {".html", ".css", ".js"} else "public, max-age=3600"
+    if path.suffix in {".css", ".js"} and versioned:
+        # A URL leva ?v=<hash do conteúdo>: qualquer mudança gera outra URL.
+        cache_control = "public, max-age=31536000, immutable"
+    else:
+        cache_control = "no-store" if path.suffix in {".html", ".css", ".js"} else "public, max-age=3600"
     return _respond(
         start_response,
         HTTPStatus.OK,
@@ -202,7 +206,7 @@ class Request:
     def unauthorized(self):
         return self.error(HTTPStatus.UNAUTHORIZED, AUTH_REQUIRED_MESSAGE)
 
-    def guarded(self, action, *, bad_request=(ValueError, TypeError), forbidden=True):
+    def guarded(self, action, *, bad_request=(ValueError, TypeError, OverflowError), forbidden=True):
         """Executa ``action`` convertendo erros esperados em respostas JSON.
 
         ``PermissionError`` -> 403 (se ``forbidden``) e ``bad_request`` -> 400,

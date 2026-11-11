@@ -29,6 +29,8 @@ from .xlsx_reader import (
 MAX_SERVICE_ORDER_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_SERVICE_ORDER_ROWS = 100_000
 MAX_SERVICE_ORDERS = 25_000
+MAX_SERVICE_ORDER_COLUMNS = 60
+MAX_SERVICE_ORDER_CELLS = 1_500_000
 
 # Campo -> cabeçalhos aceitos (comparados sem acento, maiúsculas e pontuação).
 HEADER_ALIASES = {
@@ -91,7 +93,7 @@ def _parse_rows(rows):
     header_index, mapping = _find_header(rows)
     if header_index is None:
         return [], 0
-    header = [str(value or "").strip() for value in rows[header_index]]
+    header = [str(value or "").strip() for value in rows[header_index]][:MAX_SERVICE_ORDER_COLUMNS]
     columns = [name for name in header if name]
     date_column = mapping.get("opened_on")
     orders: dict[tuple, dict] = {}
@@ -101,6 +103,8 @@ def _parse_rows(rows):
         if not values["number"] or not values["sector"] or not values["operation"]:
             continue
         rows_read += 1
+        if rows_read * max(1, len(columns)) > MAX_SERVICE_ORDER_CELLS:
+            raise ValueError("O arquivo de O.S. é grande demais para uma importação.")
         key = (values["number"], values["sector"], values["section"], values["operation"])
         order = orders.setdefault(key, {
             "key": values["key"], "number": values["number"], "sector": values["sector"], "section": values["section"],

@@ -65,6 +65,6 @@ def handle(req):
         candidate = (STATIC_DIR / Path(*parts)).resolve()
         root = (STATIC_DIR / parts[0]).resolve()
         if root == candidate or root in candidate.parents:
-            return _file(start_response, candidate)
+            return _file(start_response, candidate, versioned=bool(req.param("v")))
 
     return _respond(start_response, HTTPStatus.NOT_FOUND, "Rota não encontrada.".encode("utf-8"))

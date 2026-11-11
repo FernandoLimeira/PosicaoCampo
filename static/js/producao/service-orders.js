@@ -206,13 +206,25 @@ function showServiceOrdersModal(contextText, orders) {
 }
 
 // "Ver" da tabela de lançamentos: todas as O.S. abertas do setor do lançamento.
-function openProductionItemOrders(itemId) {
+async function openProductionItemOrders(itemId) {
   const item = findProductionItem(itemId);
   if (!item) return;
   const entry = item.entry || {};
   const section = entry.section ? ` / Seção ${entry.section}` : '';
   const operation = entry.operation ? ` · ${entry.operation.includes(',') ? 'Operações' : 'Operação'} ${entry.operation}` : '';
-  showServiceOrdersModal(`${item.service_name} · Setor ${entry.sector || '-'}${section}${operation}`, item.service_order?.orders || []);
+  const summaries = item.service_order?.orders || [];
+  let orders = summaries;
+  // O lançamento traz só o resumo das O.S.; as colunas do arquivo vêm aqui, no clique.
+  try {
+    const params = new URLSearchParams({ unit: currentProductionUnit(), search: entry.sector || '' });
+    const data = await apiRequest(`/api/production/service-orders?${params}`);
+    const full = new Map((data?.orders || []).map(order => [order.id, order]));
+    orders = summaries.map(order => ({ ...(full.get(order.id) || {}), ...order,
+      columns: full.get(order.id)?.columns || [], rows: full.get(order.id)?.rows || [] }));
+  } catch (error) {
+    console.error(error);
+  }
+  showServiceOrdersModal(`${item.service_name} · Setor ${entry.sector || '-'}${section}${operation}`, orders);
 }
 
 // "Ver setor" da aba Ordem de serviço.

@@ -19,6 +19,7 @@ from typing import Any
 
 from ..services.front_identifiers import natural_key, normalize_label
 from .production import _normalize_unit, _require_access
+from .production import _require_configure as _require_production_configure
 from .storage import connection, validate_actor
 
 MAX_TEXT = 300
@@ -53,16 +54,20 @@ def _text(value: Any, limit: int = MAX_TEXT) -> str:
     return str(value or "").strip()[:limit]
 
 
-def _order_payload(row: sqlite3.Row) -> dict[str, Any]:
+def _order_payload(row: sqlite3.Row, *, full: bool = True) -> dict[str, Any]:
+    """Dados da O.S. ``full`` inclui todas as colunas do arquivo (uma linha por talhão);
+    o resumo (sem ``rows``/``columns``) basta para tabelas, conferência e sugestões."""
     details = json.loads(row["details_json"] or "{}")
-    return {
+    payload = {
         "id": int(row["id"]), "key": details.get("key", ""), "number": row["order_number"], "sector": row["sector"],
         "section": row["section"], "operation": row["operation"], "operation_name": row["operation_name"],
         "cost_center": row["cost_center"], "plots": [plot for plot in (row["plots"] or "").split(",") if plot],
         "opened_on": row["opened_on"],
-        # Todas as colunas do arquivo, uma linha por talhão.
-        "columns": details.get("columns", []), "rows": details.get("rows", []),
     }
+    if full:
+        payload["columns"] = details.get("columns", [])
+        payload["rows"] = details.get("rows", [])
+    return payload
 
 
 def import_service_orders(user_id: int, unit_code: Any, records: list[dict[str, Any]], *, filename: str = "") -> dict[str, Any]:
@@ -95,9 +100,8 @@ def import_service_orders(user_id: int, unit_code: Any, records: list[dict[str, 
     now = int(time.time())
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        access = _require_access(conn, user_id, unit=unit)
-        if not access["can_configure"]:
-            raise PermissionError("Somente quem tem a configuração global da Produção pode importar ordens de serviço.")
+        _require_access(conn, user_id, unit=unit)
+        _require_configure(conn, user_id)
         # Operações novas do arquivo entram no cadastro com a descrição (CCUSTO_TRATOS).
         for row in rows.values():
             code, key, name = row[5], row[6], row[7]
@@ -119,7 +123,9 @@ def import_service_orders(user_id: int, unit_code: Any, records: list[dict[str, 
     return {"unit": unit, "imported": len(rows), "removed": removed, "processed_rows": len(records)}
 
 
-def list_service_orders(user_id: int, unit_code: Any, search: Any = None) -> dict[str, Any]:
+def list_service_orders(user_id: int, unit_code: Any, search: Any = None, *, summary: bool = False) -> dict[str, Any]:
+    """O.S. da unidade. A busca é aplicada antes de ler o detalhe de cada O.S.;
+    ``summary`` devolve só o resumo (sem as linhas do arquivo)."""
     unit = _normalize_unit(unit_code)
     with connection() as conn:
         access = _require_access(conn, user_id, unit=unit)
@@ -130,12 +136,10 @@ def list_service_orders(user_id: int, unit_code: Any, search: Any = None) -> dic
                WHERE o.unit_code=? ORDER BY o.imported_at DESC LIMIT 1""",
             (unit,),
         ).fetchone()
-    orders = [_order_payload(row) for row in rows]
     term = normalize_label(search)
-    if term:
-        orders = [order for order in orders if term in normalize_label(" ".join([
-            order["number"], order["sector"], order["section"], order["operation"],
-            order["operation_name"], order["cost_center"]]))]
+    selected = [row for row in rows if not term or term in normalize_label(" ".join(str(row[field] or "") for field in (
+        "order_number", "sector", "section", "operation", "operation_name", "cost_center")))]
+    orders = [_order_payload(row, full=not summary) for row in selected]
     orders.sort(key=lambda order: (natural_key(order["sector"]), natural_key(order["section"]),
                                    natural_key(order["operation"]), natural_key(order["number"])))
     return {
@@ -163,6 +167,14 @@ def attach_service_order_status(conn: sqlite3.Connection, unit: str, items: list
     by_sector: dict[str, list[sqlite3.Row]] = {}
     for row in conn.execute("SELECT * FROM production_service_orders WHERE unit_code=?", (unit,)):
         by_sector.setdefault(row["sector_key"], []).append(row)
+    # Cada O.S. é lida uma vez; o lançamento leva só o resumo (o detalhe vem no "Ver").
+    summaries: dict[int, dict[str, Any]] = {}
+
+    def summary_of(row: sqlite3.Row) -> dict[str, Any]:
+        order_id = int(row["id"])
+        if order_id not in summaries:
+            summaries[order_id] = _order_payload(row, full=False)
+        return summaries[order_id]
     for item in items:
         entry = item.get("entry") or {}
         if not entry.get("sector"):
@@ -175,7 +187,7 @@ def attach_service_order_status(conn: sqlite3.Connection, unit: str, items: list
         wanted = operation_keys(entry.get("operation"))
         covered = {operation_key(row["operation"]) for row in matching_rows}
         complete = bool(wanted) and all(key in covered for key in wanted)
-        sector_orders = [{**_order_payload(row), "matches": int(row["id"]) in matches} for row in sector_rows]
+        sector_orders = [{**summary_of(row), "matches": int(row["id"]) in matches} for row in sector_rows]
         sector_orders.sort(key=lambda order: (not order["matches"], natural_key(order["section"]),
                                               natural_key(order["operation"]), natural_key(order["number"])))
         # Sem operação informada não há o que conferir: "Sem operação" (nunca "OK").
@@ -193,8 +205,18 @@ def attach_service_order_status(conn: sqlite3.Connection, unit: str, items: list
 # Cadastro de operações (código, descrição e frente/serviço a que pertence).
 # ---------------------------------------------------------------------------
 def _require_configure(conn: sqlite3.Connection, user_id: int) -> None:
-    if not _require_access(conn, user_id)["can_configure"]:
-        raise PermissionError("Somente quem tem a configuração global da Produção pode alterar os cadastros.")
+    """Cadastros, consultas e importação de O.S. seguem a regra de configuração da Produção."""
+    _require_production_configure(conn, user_id)
+
+
+def require_service_order_import(user_id: int, unit_code: Any) -> str:
+    """Confere a permissão de importar antes de ler o arquivo enviado (evita processar
+    planilhas de quem não pode importar)."""
+    unit = _normalize_unit(unit_code)
+    with connection() as conn:
+        _require_access(conn, user_id, unit=unit)
+        _require_configure(conn, user_id)
+    return unit
 
 
 def _operations_in_use(conn: sqlite3.Connection) -> set[str]:
@@ -213,15 +235,18 @@ def _operation_payload(row: sqlite3.Row, used: set[str]) -> dict[str, Any]:
     }
 
 
-def list_operations(user_id: int, *, include_inactive: bool = False) -> dict[str, Any]:
+def list_operations(user_id: int, *, include_inactive: bool = False, usage: bool = True) -> dict[str, Any]:
     with connection() as conn:
         access = _require_access(conn, user_id)
+        # Operações inativas só aparecem para quem configura (como no catálogo de frentes).
+        include_inactive = include_inactive and bool(access["can_configure"])
         where = "" if include_inactive else "WHERE o.is_active=1"
         rows = conn.execute(
             f"""SELECT o.*, f.name AS front_name FROM production_operations o
                 LEFT JOIN production_service_fronts f ON f.id=o.service_front_id {where}""",
         ).fetchall()
-        used = _operations_in_use(conn)
+        # "Em uso" percorre os lançamentos; quem só precisa da lista (popup) dispensa.
+        used = _operations_in_use(conn) if usage else set()
     operations = [_operation_payload(row, used) for row in rows]
     operations.sort(key=lambda item: (item["position"], natural_key(item["code"])))
     return {"operations": operations, "can_configure": bool(access["can_configure"])}
@@ -336,8 +361,10 @@ def save_sql_query(user_id: int, payload: Any, *, query_id: int | None = None) -
         raise ValueError("O comando SQL deve ter no máximo 20.000 caracteres.")
     try:
         position = int(payload.get("position") or 0)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("Ordem inválida.") from exc
+    if not 0 <= position <= 9999:
+        raise ValueError("A ordem deve ficar entre 0 e 9999.")
     now = int(time.time())
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")

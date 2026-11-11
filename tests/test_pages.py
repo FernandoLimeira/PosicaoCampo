@@ -898,6 +898,36 @@ class PageTests(unittest.TestCase):
         self.addCleanup(restore)
         return len(snapshot)
 
+    def test_audit_hardening_headers_cache_and_upload_permission(self):
+        # Importar O.S. sem a configuração da Produção é recusado antes de ler o arquivo.
+        with patch("backend.controllers.routes.production.parse_service_order_file") as parse:
+            refused = self.request("/api/production/service-orders/import", role="member", method="POST",
+                                   overrides={"QUERY_STRING": "unit=PPT"})
+            self.assertEqual(refused["status"], 403)
+            parse.assert_not_called()
+        # Identificador gigante é 400, não erro interno.
+        self.assertEqual(self.request("/api/production/operations/99999999999999999999999", role="admin",
+                                      method="DELETE")["status"], 400)
+        # JS/CSS com ?v= ficam em cache longo; sem versão, continuam sem cache.
+        versioned = self.request("/js/core/format.js", role="admin", overrides={"QUERY_STRING": "v=abc"})
+        self.assertEqual(versioned["headers"]["Cache-Control"], "public, max-age=31536000, immutable")
+        self.assertEqual(self.request("/js/core/format.js", role="admin")["headers"]["Cache-Control"], "no-store")
+        # Compressão gzip quando o navegador aceita.
+        import gzip as gzip_module
+        captured = {}
+        body = b"".join(self.application({
+            "REQUEST_METHOD": "GET", "PATH_INFO": "/js/core/format.js", "QUERY_STRING": "",
+            "CONTENT_LENGTH": "0", "wsgi.input": io.BytesIO(b""), "wsgi.url_scheme": "https",
+            "HTTP_HOST": "test.invalid", "REMOTE_ADDR": "127.0.0.1", "HTTP_COOKIE": self.cookies["admin"],
+            "HTTP_ACCEPT_ENCODING": "gzip, br",
+        }, lambda status, headers: captured.update(headers=dict(headers))))
+        self.assertEqual(captured["headers"].get("Content-Encoding"), "gzip")
+        self.assertIn(b"function escapeHtml", gzip_module.decompress(body))
+        # HSTS apenas em HTTPS (os testes simulam https).
+        self.assertIn("max-age=31536000", self.request("/login")["headers"].get("Strict-Transport-Security", ""))
+        self.assertNotIn("Strict-Transport-Security",
+                         self.request("/login", overrides={"wsgi.url_scheme": "http"})["headers"])
+
     def test_sector_base_purge_requires_its_own_permission(self):
         from backend.models.module_access import MODULES, normalize_module_access
         existing = self._restore_sector_base_after_test()

@@ -3,7 +3,7 @@ import threading
 import time
 
 from ..config import REMEMBER_SESSION_TTL_SECONDS, SESSION_COOKIE
-from ..models.module_access import get_module_access, landing_page
+from ..models.module_access import MODULES, get_module_access, landing_page
 from ..models.production import get_user_access as get_production_user_access
 from ..models.users import get_user_by_session
 from .http import _cookies, _request_is_https
@@ -80,6 +80,7 @@ def _session_user(environ):
         user["production_access"] = get_production_user_access(int(user["id"]))
         user["home_path"] = landing_page(user["module_access"], user["production_access"]["enabled"])
     except (ValueError, TypeError):
+        user["module_access"] = {item["key"]: {"view": False, "edit": False} for item in MODULES}
         user["production_access"] = {
             "enabled": False,
             "admin": False,

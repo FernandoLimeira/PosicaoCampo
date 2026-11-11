@@ -39,7 +39,7 @@ environment = Environment(
 
 def render_template(name: str, *, user=None, page="login") -> bytes:
     if user is not None and "module_access" not in user:
-        user = {**user, "module_access": {item["key"]: {"view": True, "edit": item["edit"]} for item in MODULES}}
+        user = {**user, "module_access": {item["key"]: {"view": False, "edit": False} for item in MODULES}}
     return environment.get_template(name).render(
         user=user, page=page, asset_version=get_asset_version(), modules=MODULES,
         field_statuses=FIELD_STATUSES,

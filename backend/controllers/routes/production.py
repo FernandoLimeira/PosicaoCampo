@@ -2,6 +2,7 @@
 from http import HTTPStatus
 
 from ...models.service_orders import (
+    require_service_order_import,
     delete_operation,
     delete_sql_query,
     list_sql_queries,
@@ -36,7 +37,10 @@ from ...models.production import (
 
 
 def _last_id(path):
-    return int(path.rsplit("/", 1)[-1])
+    value = int(path.rsplit("/", 1)[-1])
+    if not 0 < value < 2 ** 62:
+        raise ValueError("Identificador inválido.")
+    return value
 
 
 def handle(req):
@@ -48,7 +52,8 @@ def handle(req):
         if not user:
             return req.unauthorized()
         return req.guarded(
-            lambda: req.json(HTTPStatus.OK, list_service_orders(user["id"], req.param("unit", ""), req.param("search"))),
+            lambda: req.json(HTTPStatus.OK, list_service_orders(user["id"], req.param("unit", ""), req.param("search"),
+                                                                summary=req.param("summary") == "1")),
             bad_request=ValueError,
         )
 
@@ -57,6 +62,8 @@ def handle(req):
             return req.unauthorized()
 
         def import_orders():
+            # Permissão conferida antes de ler e processar o arquivo enviado.
+            require_service_order_import(user["id"], req.param("unit", ""))
             filename, file_bytes = _multipart_file(req.environ, max_file_bytes=MAX_SERVICE_ORDER_UPLOAD_BYTES)
             parsed = parse_service_order_file(file_bytes, filename)
             result = import_service_orders(user["id"], req.param("unit", ""), parsed["records"], filename=filename)
@@ -83,14 +90,15 @@ def handle(req):
             delete_sql_query(user["id"], query_id)
             return req.json(HTTPStatus.OK, {"ok": True})
 
-        return req.guarded(query, bad_request=(ValueError, TypeError))
+        return req.guarded(query, bad_request=(ValueError, TypeError, OverflowError))
 
     if path == "/api/production/operations":
         if not user:
             return req.unauthorized()
         if method == "GET":
             return req.guarded(lambda: req.json(HTTPStatus.OK, list_operations(
-                user["id"], include_inactive=req.param("include_inactive", "0") == "1")))
+                user["id"], include_inactive=req.param("include_inactive", "0") == "1",
+                usage=req.param("usage", "1") != "0")))
         if method == "POST":
             return req.guarded(lambda: req.json(HTTPStatus.CREATED, {
                 "ok": True, "operation": save_operation(user["id"], req.body()),
@@ -107,7 +115,7 @@ def handle(req):
             delete_operation(user["id"], operation_id)
             return req.json(HTTPStatus.OK, {"ok": True})
 
-        return req.guarded(operation, bad_request=(ValueError, TypeError))
+        return req.guarded(operation, bad_request=(ValueError, TypeError, OverflowError))
 
     if path == "/api/production/access" and method == "GET":
         if not user:

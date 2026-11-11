@@ -48,7 +48,13 @@ function downloadBlobFile(blob, filename) {
 // Enquanto a aba está oculta (document.visibilityState === 'hidden'), nada é executado.
 // Retorna a função agendada (útil para testes); ela devolve o resultado da tarefa.
 function startVisiblePolling(task, intervalMs) {
-  const run = () => (document.visibilityState === 'hidden' ? undefined : task());
+  let lastRun = 0;
+  // "focus" e "visibilitychange" chegam juntos ao voltar para a aba: roda uma vez só.
+  const run = () => {
+    if (document.visibilityState === 'hidden' || Date.now() - lastRun < 1000) return undefined;
+    lastRun = Date.now();
+    return task();
+  };
   setInterval(run, intervalMs);
   window.addEventListener('focus', run);
   document.addEventListener('visibilitychange', run);

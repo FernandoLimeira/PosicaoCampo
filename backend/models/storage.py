@@ -449,6 +449,9 @@ def _create_production_tables(conn):
         "CREATE INDEX IF NOT EXISTS main.idx_production_user_items_owner_unit ON production_user_items(owner_user_id, unit_code, is_active, position, id)",
         "CREATE INDEX IF NOT EXISTS main.idx_production_daily_unit_date ON production_daily_entries(unit_code, work_date)",
         "CREATE INDEX IF NOT EXISTS main.idx_production_daily_owner_date ON production_daily_entries(owner_user_id, work_date)",
+        # Último lançamento por item (lista, edição, preservação de campos e exclusão).
+        "CREATE INDEX IF NOT EXISTS main.idx_production_daily_item_date ON production_daily_entries(user_item_id, work_date, id)",
+        "CREATE INDEX IF NOT EXISTS main.idx_production_daily_unit_item_date ON production_daily_entries(unit_code, user_item_id, work_date)",
     )
     for statement in statements:
         conn.execute(statement)
@@ -897,4 +900,6 @@ CREATE INDEX IF NOT EXISTS idx_production_front_units_unit ON production_service
 CREATE INDEX IF NOT EXISTS idx_production_user_items_owner_unit ON production_user_items(owner_user_id, unit_code, is_active, position, id);
 CREATE INDEX IF NOT EXISTS idx_production_daily_unit_date ON production_daily_entries(unit_code, work_date);
 CREATE INDEX IF NOT EXISTS idx_production_daily_owner_date ON production_daily_entries(owner_user_id, work_date);
+CREATE INDEX IF NOT EXISTS idx_production_daily_item_date ON production_daily_entries(user_item_id, work_date, id);
+CREATE INDEX IF NOT EXISTS idx_production_daily_unit_item_date ON production_daily_entries(unit_code, user_item_id, work_date);
 """

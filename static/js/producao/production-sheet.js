@@ -18,6 +18,25 @@ function sheetShowsSection(unit = productionSheetUnit) {
 }
 
 // Lista com rolagem (datalist) dos setores cadastrados; no Polo MS filtra pela seção da linha.
+let productionSheetSectorLists = new Map();
+
+function sheetSectorListId(row) {
+  const section = sheetShowsSection() ? row.section.trim().toLocaleLowerCase('pt-BR') : '';
+  if (!productionSheetSectorLists.has(section)) {
+    const id = `sheet-sectors-${productionSheetSectorLists.size + 1}`;
+    productionSheetSectorLists.set(section, id);
+    const holder = document.querySelector('#sheet-sector-lists');
+    if (holder?.insertAdjacentHTML) holder.insertAdjacentHTML('beforeend', `<datalist id="${id}">${sheetSectorSuggestions(row)}</datalist>`);
+  }
+  return productionSheetSectorLists.get(section);
+}
+
+function resetSheetSectorLists() {
+  productionSheetSectorLists = new Map();
+  const holder = document.querySelector('#sheet-sector-lists');
+  if (holder) holder.innerHTML = '';
+}
+
 function sheetSectorSuggestions(row) {
   const section = row.section.trim().toLocaleLowerCase('pt-BR');
   const seen = new Set();
@@ -57,10 +76,17 @@ function sheetOperationsValue(row) {
   return [...new Set(row.operations.map(value => value.trim()).filter(Boolean))].join(', ');
 }
 
+let sheetFrontsCache = { catalog: null, fronts: [] };
 function sheetFronts() {
-  return groupsForEntry().flatMap(group => (group.fronts || [])
-    .filter(front => front.is_active !== false)
-    .map(front => ({ ...front, group_id: group.id, group_name: group.name })));
+  if (sheetFrontsCache.catalog !== productionCatalog) {
+    sheetFrontsCache = {
+      catalog: productionCatalog,
+      fronts: groupsForEntry().flatMap(group => (group.fronts || [])
+        .filter(front => front.is_active !== false)
+        .map(front => ({ ...front, group_id: group.id, group_name: group.name })))
+    };
+  }
+  return sheetFrontsCache.fronts;
 }
 
 function sheetRowFromItem(item) {
@@ -144,8 +170,7 @@ function sheetRowHtml(row) {
       <select data-sheet-field="frontId" aria-label="Frente" ${row.removed ? 'disabled' : ''}>${sheetFrontOptions(row)}</select></div></td>
     <td class="production-sheet-section-cell"><input data-sheet-field="section" value="${escapeHtml(row.section)}" maxlength="32" list="sheet-sections-list"
       autocomplete="off" aria-label="Seção" ${row.removed ? 'disabled' : ''} /></td>
-    <td><datalist id="sheet-sectors-${row.key}">${sheetSectorSuggestions(row)}</datalist>
-      <input data-sheet-field="sector" value="${escapeHtml(row.sector)}" maxlength="32" list="sheet-sectors-${row.key}" autocomplete="off"
+    <td><input data-sheet-field="sector" value="${escapeHtml(row.sector)}" maxlength="32" list="${sheetSectorListId(row)}" autocomplete="off"
         placeholder="Setor" aria-label="Setor" ${row.removed ? 'disabled' : ''} /></td>
     <td><select data-sheet-field="status" aria-label="Status" ${row.removed ? 'disabled' : ''}>${productionStatuses.map(status =>
       `<option value="${escapeHtml(status.code)}" ${status.code === row.status ? 'selected' : ''}>${escapeHtml(status.name)}</option>`).join('')}</select></td>
@@ -206,24 +231,33 @@ function renderSheetFilters() {
   frontSelect.value = fronts.some(front => String(front.id) === frontValue) ? frontValue : '';
 }
 
+const productionSheetCache = { sectorBase: null, operations: null };
+
 async function loadProductionSheetOrders(unit) {
   productionSheetOrders = new Map();
   productionSheetCatalog = new Map();
-  try {
-    const base = await apiRequest(`/api/production/sector-base?unit=${encodeURIComponent(unit)}`);
-    productionSheetSectorBase = Array.isArray(base?.items) ? base.items : [];
-  } catch (error) {
-    console.error(error);
+  resetSheetSectorLists();
+  const [base, catalog, orders] = await Promise.allSettled([
+    productionSheetCache.sectorBase || apiRequest(`/api/production/sector-base?unit=${encodeURIComponent(unit)}`),
+    productionSheetCache.operations || apiRequest('/api/production/operations?usage=0'),
+    apiRequest(`/api/production/service-orders?unit=${encodeURIComponent(unit)}&summary=1`)
+  ]);
+  if (base.status === 'fulfilled') {
+    productionSheetCache.sectorBase = base.value;
+    productionSheetSectorBase = Array.isArray(base.value?.items) ? base.value.items : [];
+  } else {
+    console.error(base.reason);
     productionSheetSectorBase = [];
   }
-  try {
-    const catalog = await apiRequest('/api/production/operations');
-    (catalog?.operations || []).forEach(item => productionSheetCatalog.set(sheetOperationKey(item.code), item));
-  } catch (error) {
-    console.error(error);
+  if (catalog.status === 'fulfilled') {
+    productionSheetCache.operations = catalog.value;
+    (catalog.value?.operations || []).forEach(item => productionSheetCatalog.set(sheetOperationKey(item.code), item));
+  } else {
+    console.error(catalog.reason);
   }
   try {
-    const data = await apiRequest(`/api/production/service-orders?unit=${encodeURIComponent(unit)}`);
+    if (orders.status === 'rejected') throw orders.reason;
+    const data = orders.value;
     (data?.orders || []).forEach(order => {
       const key = sheetSectorKey(order.sector);
       if (!productionSheetOrders.has(key)) productionSheetOrders.set(key, []);
