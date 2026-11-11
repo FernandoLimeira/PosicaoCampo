@@ -269,18 +269,25 @@ loadScripts(context, ['core/format.js', 'producao/production-consolidation.js', 
     ['CUSTOM', { code: 'CUSTOM', name: 'Situação cadastrada', style_key: 'wet', is_active: true }],
     ['OLD', { code: 'OLD', name: 'Status desativado', style_key: 'stopped', is_active: false }]
   ]);
-  const configuredLegend = context.productionExportLegendLayout([], configuredStatuses);
+  // A legenda mostra só os status usados nas frentes da imagem.
+  assert.equal(context.productionExportLegendLayout([], configuredStatuses).entries.length, 0,
+    'Sem frentes, nenhum status aparece na legenda');
+  const configuredLegend = context.productionExportLegendLayout(
+    [{ items: [{ entry: { status: 'CUSTOM' } }] }], configuredStatuses);
   assert.equal(configuredLegend.entries.length, 1);
   assert.equal(configuredLegend.entries[0].label, 'Situação cadastrada');
   assert.equal(configuredLegend.entries[0].state, 'wet');
   const legacyLegend = context.productionExportLegendLayout(
     [{ items: [{ entry: { status: 'OLD' } }] }], configuredStatuses);
-  assert.equal(legacyLegend.entries.length, 2, 'Status desativado ainda usado deve constar na legenda');
+  assert.deepEqual(Array.from(legacyLegend.entries, entry => entry.label), ['Status desativado'],
+    'Status desativado ainda usado consta; o cadastrado sem uso não aparece');
   const manyStatuses = new Map(Array.from({ length: 9 }, (_, index) => [String(index), {
     code: String(index), name: `Status ${index}`, style_key: 'active'
   }]));
   const expandedGrid = context.productionExportPageLayout(paint,
-    ['PPT', 'NRD', 'RBR', 'PST'].map(code => ({ code, items: [] })), manyStatuses);
+    ['PPT', 'NRD', 'RBR', 'PST'].map((code, unitIndex) => ({ code, items: unitIndex ? [] : Array.from({ length: 9 },
+      (_, index) => ({ group_name: 'G', service_name: `F${index}`, is_current_day: true, entry: { sector: '1', status: String(index) } })) })),
+    manyStatuses);
   assert.equal(expandedGrid.legend.entries.length, 9);
   assert.equal(expandedGrid.firstY, 370, 'A legenda deve permanecer em uma linha sem deslocar os cartões');
   assert.ok(expandedGrid.legend.entries.every((entry, index, entries) => entry.y === 334
@@ -288,7 +295,7 @@ loadScripts(context, ['core/format.js', 'producao/production-consolidation.js', 
     && (index === entries.length - 1 || entry.x + 25 + entry.width < entries[index + 1].x)),
   'Todos os status devem ficar alinhados dentro da imagem e sem sobreposição');
   const longLabel = 'Status cadastrado com uma descrição extensa para a operação agrícola';
-  const longLegend = context.productionExportLegendLayout([], new Map([
+  const longLegend = context.productionExportLegendLayout([{ items: [{ entry: { status: 'LONG' } }] }], new Map([
     ['LONG', { code: 'LONG', name: longLabel, style_key: 'active' }]
   ]));
   assert.equal(longLegend.entries[0].label, longLabel, 'O nome completo deve ser preservado');
@@ -310,10 +317,12 @@ loadScripts(context, ['core/format.js', 'producao/production-consolidation.js', 
   assert.ok(labels.includes('PRODUÇÃO AGRÍCOLA'));
   assert.ok(labels.includes('Status removido do cadastro'));
   assert.ok(!labels.includes('Status excluído sem uso nesta imagem'));
-  assert.ok(labels.includes('Parado'));
+  // Legenda só com os status usados nas frentes (aqui: Em atividade e o status antigo).
+  assert.ok(labels.includes('Em atividade'));
+  assert.ok(!labels.includes('Parado'));
   assert.ok(!labels.includes('Parado / crítico'));
-  assert.ok(labels.includes('Solo úmido'));
-  assert.ok(labels.includes('Aguardando'));
+  assert.ok(!labels.includes('Solo úmido'));
+  assert.ok(!labels.includes('Aguardando'));
   assert.ok(!labels.includes('Solo úmido / teste'));
   assert.ok(labels.includes('Nenhum lançamento nesta unidade.'));
   assert.ok(labels.some(value => value.startsWith('Unidade não liberada')));

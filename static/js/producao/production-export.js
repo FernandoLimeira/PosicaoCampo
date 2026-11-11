@@ -277,9 +277,11 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
     counts, contentHeight, height: Math.max(minHeight, contentHeight) };
 }
 
+// Legenda só com os status usados nas frentes da imagem (ex.: "Solo úmido" só
+// aparece se alguma frente estiver em solo úmido), na ordem do cadastro.
 function productionExportLegendLayout(page, statusByCode) {
   const used = new Set(page.flatMap(report => (report.items || []).map(item => item.entry?.status)));
-  const statuses = [...statusByCode.values()].filter(status => status.is_active !== false || used.has(status.code));
+  const statuses = [...statusByCode.values()].filter(status => used.has(status.code));
   const font = 'bold 18px "Arial Narrow", Arial, sans-serif';
   const columnWidth = (PRODUCTION_EXPORT_WIDTH - 80) / Math.max(1, statuses.length);
   const entries = statuses.map((status, index) => ({
