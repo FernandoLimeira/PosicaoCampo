@@ -1,7 +1,9 @@
 """Ordens de Serviço (O.S.) da Produção Agrícola.
 
-As O.S. são importadas por unidade (a importação substitui as O.S. anteriores
-da unidade). Cada O.S. tem setor, seção e o código da operação (ex.: 338).
+A base de O.S. é única para todas as unidades: cada importação substitui todas as
+O.S. anteriores, e todas as unidades conferem os lançamentos contra ela. ``unit_code``
+guarda só a unidade de onde a importação foi feita. Cada O.S. tem setor, seção e o
+código da operação (ex.: 338).
 
 Coluna O.S. de um lançamento:
 - com operações escolhidas no popup (uma ou mais, "338, 457"): "OK" se cada
@@ -112,7 +114,7 @@ def import_service_orders(user_id: int, unit_code: Any, records: list[dict[str, 
                    WHERE production_operations.name=''""",
                 (code, key, name, user_id, user_id, now, now),
             )
-        removed = conn.execute("DELETE FROM production_service_orders WHERE unit_code=?", (unit,)).rowcount
+        removed = conn.execute("DELETE FROM production_service_orders").rowcount
         conn.executemany(
             """INSERT INTO production_service_orders (
                    unit_code, order_number, sector, sector_key, section, operation, operation_key,
@@ -124,17 +126,16 @@ def import_service_orders(user_id: int, unit_code: Any, records: list[dict[str, 
 
 
 def list_service_orders(user_id: int, unit_code: Any, search: Any = None, *, summary: bool = False) -> dict[str, Any]:
-    """O.S. da unidade. A busca é aplicada antes de ler o detalhe de cada O.S.;
-    ``summary`` devolve só o resumo (sem as linhas do arquivo)."""
+    """O.S. da base única (todas as unidades). A busca é aplicada antes de ler o detalhe
+    de cada O.S.; ``summary`` devolve só o resumo (sem as linhas do arquivo)."""
     unit = _normalize_unit(unit_code)
     with connection() as conn:
         access = _require_access(conn, user_id, unit=unit)
-        rows = conn.execute("SELECT * FROM production_service_orders WHERE unit_code=?", (unit,)).fetchall()
+        rows = conn.execute("SELECT * FROM production_service_orders").fetchall()
         last = conn.execute(
             """SELECT o.import_file, o.imported_at, COALESCE(u.name, 'Usuário removido') AS imported_by_name
                FROM production_service_orders o LEFT JOIN auth.users u ON u.id=o.imported_by
-               WHERE o.unit_code=? ORDER BY o.imported_at DESC LIMIT 1""",
-            (unit,),
+               ORDER BY o.imported_at DESC LIMIT 1""",
         ).fetchone()
     term = normalize_label(search)
     selected = [row for row in rows if not term or term in normalize_label(" ".join(str(row[field] or "") for field in (
@@ -163,9 +164,10 @@ def order_matches_entry(order: sqlite3.Row | dict, entry: dict[str, Any]) -> boo
 
 
 def attach_service_order_status(conn: sqlite3.Connection, unit: str, items: list[dict[str, Any]]) -> None:
-    """Acrescenta ``service_order`` a cada lançamento: ok, missing ou no_sector."""
+    """Acrescenta ``service_order`` a cada lançamento: ok, missing ou no_sector.
+    A base de O.S. é a mesma para todas as unidades (``unit`` não filtra)."""
     by_sector: dict[str, list[sqlite3.Row]] = {}
-    for row in conn.execute("SELECT * FROM production_service_orders WHERE unit_code=?", (unit,)):
+    for row in conn.execute("SELECT * FROM production_service_orders"):
         by_sector.setdefault(row["sector_key"], []).append(row)
     # Cada O.S. é lida uma vez; o lançamento leva só o resumo (o detalhe vem no "Ver").
     summaries: dict[int, dict[str, Any]] = {}

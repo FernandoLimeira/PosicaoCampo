@@ -131,6 +131,20 @@ class ServiceOrderTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             service_orders.list_service_orders(self.user["id"], "NRD")
 
+        # Base única: a importação feita em outra unidade substitui as O.S. de todas
+        # e vale para os lançamentos de PPT.
+        other = service_orders.import_service_orders(self.admin["id"], "NRD", [
+            {"number": "7000", "sector": "1577", "operation": "457"},
+        ])
+        self.assertEqual(other["removed"], 1)
+        listing = service_orders.list_service_orders(self.user["id"], "PPT")
+        self.assertEqual([item["number"] for item in listing["orders"]], ["7000"])
+        self.assertEqual(listing["total"], 1)
+        production.save_items_sheet(self.user["id"], {"unit_code": "PPT", "work_date": "2026-11-10", "rows": [
+            {"id": item_id, "service_front_id": self.front["id"], "sector": "1577", "section": "", "status": self.status,
+             "operation": "457"}]})
+        self.assertEqual(production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"][0]["service_order"]["status"], "ok")
+
     def test_import_route_accepts_xlsx_upload(self):
         from backend.app import application
         file_bytes = xlsx([self.HEADER, ["1577361", "7001", "1577", "1", "361", "1", "305111", "PREPARO DO SOLO", "46335"]])
@@ -201,6 +215,26 @@ class ServiceOrderTests(unittest.TestCase):
             })
         unchanged = production.list_my_items(self.user["id"], "PPT", "2026-11-12", scope="all")["items"]
         self.assertEqual(unchanged[0]["entry"]["work_date"], "2026-11-11")
+
+    def test_popup_sheet_swaps_sectors_between_rows(self):
+        production.save_items_sheet(self.user["id"], {"unit_code": "PPT", "work_date": "2026-11-10", "rows": [
+            {"service_front_id": self.front["id"], "sector": "3008", "status": self.status},
+            {"service_front_id": self.front["id"], "sector": "3815", "status": self.status},
+        ]})
+        ids = {item["entry"]["sector"]: item["id"] for item in
+               production.list_my_items(self.user["id"], "PPT", "2026-11-10", scope="all")["items"]}
+        # A linha 1 recebe o setor que a linha 2 está deixando na mesma gravação.
+        production.save_items_sheet(self.user["id"], {"unit_code": "PPT", "work_date": "2026-11-10", "rows": [
+            {"id": ids["3008"], "service_front_id": self.front["id"], "sector": "3815", "status": self.status},
+            {"id": ids["3815"], "service_front_id": self.front["id"], "sector": "4000", "status": self.status},
+        ]})
+        after = {item["id"]: item["entry"]["sector"] for item in
+                 production.list_my_items(self.user["id"], "PPT", "2026-11-10", scope="all")["items"]}
+        self.assertEqual(after, {ids["3008"]: "3815", ids["3815"]: "4000"})
+        # Setor de outro lançamento que não muda continua bloqueado.
+        with self.assertRaisesRegex(ValueError, "Linha 1: o setor 3815 já está lançado"):
+            production.save_items_sheet(self.user["id"], {"unit_code": "PPT", "work_date": "2026-11-10", "rows": [
+                {"id": ids["3815"], "service_front_id": self.front["id"], "sector": "3815", "status": self.status}]})
 
     def test_several_operations_need_an_order_each(self):
         self._launch("4")

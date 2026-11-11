@@ -130,20 +130,18 @@ function sheetOperationsFor(sector, frontId = '') {
   return [...operations.values()].sort((a, b) => Number(b.linked) - Number(a.linked) || compareFrontLabels(a.key, b.key));
 }
 
+// Só as frentes do grupo escolhido no filtro do popup (sem grupo, o da própria linha).
 function sheetFrontOptions(row) {
-  const fronts = sheetFronts();
-  const groups = new Map();
-  fronts.forEach(front => {
-    if (!groups.has(front.group_id)) groups.set(front.group_id, { name: front.group_name, fronts: [] });
-    groups.get(front.group_id).fronts.push(front);
-  });
+  const allFronts = sheetFronts();
+  const rowGroup = String(allFronts.find(front => String(front.id) === row.frontId)?.group_id ?? row.groupId ?? '');
+  const group = document.querySelector('#production-sheet-group')?.value || rowGroup;
+  const fronts = allFronts.filter(front => !group || String(front.group_id) === group);
   const known = fronts.some(front => String(front.id) === row.frontId);
+  const current = allFronts.find(front => String(front.id) === row.frontId);
   const fallback = row.frontId && !known
-    ? `<option value="${escapeHtml(row.frontId)}" selected>${escapeHtml(row.frontName || 'Frente inativa')}</option>` : '';
-  return (row.frontId ? '' : '<option value="">Selecione</option>') + fallback + [...groups.values()].map(group =>
-    `<optgroup label="${escapeHtml(group.name)}">${group.fronts.map(front =>
-      `<option value="${front.id}" ${String(front.id) === row.frontId ? 'selected' : ''}>${escapeHtml(front.name)}</option>`).join('')}</optgroup>`
-  ).join('');
+    ? `<option value="${escapeHtml(row.frontId)}" selected>${escapeHtml(current?.name || row.frontName || 'Frente inativa')}</option>` : '';
+  return (row.frontId ? '' : '<option value="">Selecione</option>') + fallback + fronts.map(front =>
+    `<option value="${front.id}" ${String(front.id) === row.frontId ? 'selected' : ''}>${escapeHtml(front.name)}</option>`).join('');
 }
 
 // Sugestões (datalist) com as operações das O.S. do setor; o campo continua livre

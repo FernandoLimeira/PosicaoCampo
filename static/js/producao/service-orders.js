@@ -1,5 +1,5 @@
 // Aba "Ordem de serviço" da Produção Agrícola: importação e consulta das O.S.
-// da unidade, e o detalhe ("Ver") com todas as O.S. abertas de um setor.
+// (base única para todas as unidades), e o detalhe ("Ver") com todas as O.S. abertas de um setor.
 let serviceOrdersData = null;
 let serviceOrdersLoadedUnit = '';
 let serviceOrdersSearchTimer = null;
@@ -117,8 +117,8 @@ async function importServiceOrders(event) {
   const unit = currentProductionUnit();
   const accepted = await askConfirmation({
     kicker: 'Ordem de serviço',
-    title: `Importar O.S. da unidade ${unit}?`,
-    message: `As ordens de serviço atuais de ${unit} serão substituídas pelas do arquivo “${file.name}”.`,
+    title: 'Importar O.S. para todas as unidades?',
+    message: `A base de O.S. é única: as ordens de serviço atuais de todas as unidades serão substituídas pelas do arquivo “${file.name}”.`,
     details: ['Se o arquivo tiver erro, as O.S. atuais são mantidas.'],
     confirmLabel: 'Importar O.S.',
     tone: 'default'
@@ -133,7 +133,7 @@ async function importServiceOrders(event) {
     input.value = '';
     const label = document.querySelector('#production-orders-file-name');
     if (label) label.textContent = 'Nenhum arquivo selecionado';
-    showToast(`${result.imported} O.S. importadas para ${unit}.`);
+    showToast(`${result.imported} O.S. importadas para todas as unidades.`);
     await loadServiceOrders({ force: true });
     // A coluna O.S. dos lançamentos depende das O.S. importadas.
     await refreshProductionPage(unit, { keepFilters: true });

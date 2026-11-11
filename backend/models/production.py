@@ -1000,6 +1000,10 @@ def save_items_sheet(user_id: int, payload: Any) -> dict[str, Any]:
         seen.add(key)
         prepared.append((index, front_id, item_id, entry, row))
 
+    # Lançamentos reescritos nesta gravação não contam pelo setor antigo: trocar o setor
+    # entre linhas (A recebe o setor de B, B muda) não depende da ordem das linhas.
+    # O setor novo de cada um já foi conferido acima contra as demais linhas.
+    rewritten_ids = {item_id for _, _, item_id, _, _ in prepared if item_id is not None}
     now = int(time.time())
     saved_ids = []
     with connection() as conn:
@@ -1020,7 +1024,8 @@ def save_items_sheet(user_id: int, payload: Any) -> dict[str, Any]:
             except ValueError as exc:
                 raise ValueError(f"Linha {index}: {exc}") from exc
             matching_ids = [row["id"] for row in _active_front_entries(conn, unit, front_id, work_date)
-                            if row["sector"].strip().upper() == entry["sector"].upper() and row["id"] not in removed_ids]
+                            if row["sector"].strip().upper() == entry["sector"].upper() and row["id"] not in removed_ids
+                            and (row["id"] == item_id or row["id"] not in rewritten_ids)]
             if item_id is not None and matching_ids and item_id not in matching_ids:
                 raise ValueError(f"Linha {index}: o setor {entry['sector']} já está lançado nesta frente.")
             target_id = item_id if item_id is not None else next(iter(matching_ids), None)
