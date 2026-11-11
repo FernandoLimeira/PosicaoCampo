@@ -2,6 +2,32 @@
 // Usa os mesmos lançamentos da tabela (productionItems) e os status cadastrados.
 const PRODUCTION_VIEW_KEY = 'posicao-campo-production-view';
 let productionPanelFilter = '';
+// O painel mostra um grupo por vez (sem "Todos"): mais espaço para as frentes.
+const PRODUCTION_PANEL_GROUP_KEY = 'posicao-campo-production-panel-group';
+let productionPanelGroup = '';
+try { productionPanelGroup = localStorage.getItem(PRODUCTION_PANEL_GROUP_KEY) || ''; } catch (_) { /* sem armazenamento */ }
+
+function dashboardProblemScore(items) {
+  return items.reduce((sum, item) => {
+    const flags = dashboardFlags(item);
+    return sum + (flags.stopped ? 3 : 0) + (flags.noOrder ? 2 : 0) + (flags.noOperation ? 1 : 0) + (flags.stale ? 1 : 0);
+  }, 0);
+}
+
+function renderDashboardGroupTabs(groups) {
+  const nav = document.querySelector('#production-group-tabs');
+  if (!nav) return;
+  nav.hidden = groups.length === 0;
+  nav.innerHTML = groups.map(group => {
+    const red = group.items.filter(item => { const flags = dashboardFlags(item); return flags.stopped || flags.noOrder; }).length;
+    const amber = group.items.filter(item => dashboardFlags(item).noOperation).length;
+    const badge = red ? `<i class="is-red" title="${red} parada(s) ou sem O.S.">${red}</i>`
+      : amber ? `<i class="is-amber" title="${amber} sem operação">${amber}</i>` : '';
+    const active = String(group.id) === productionPanelGroup;
+    return `<button type="button" role="tab" class="pdash-group-tab${active ? ' is-active' : ''}" aria-selected="${active}" data-panel-group="${escapeHtml(group.id)}">
+      <span>${escapeHtml(group.name)}</span><b>${group.items.length}</b>${badge}</button>`;
+  }).join('');
+}
 
 // Situação de O.S. igual à da coluna da tabela: sem operação não confere O.S.
 function dashboardOrderState(item) {
@@ -32,6 +58,17 @@ function dashboardItems() {
   return Array.isArray(productionItems) ? productionItems : [];
 }
 
+const DASHBOARD_ICONS = {
+  alert: '<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4"/><path d="M12 17.5v.01"/>',
+  ok: '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
+  pin: '<path d="M12 21s-6-5.3-6-11a6 6 0 0 1 12 0c0 5.7-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'
+};
+function dashboardIcon(name) {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${DASHBOARD_ICONS[name]}</svg>`;
+}
+
+// Cartão "Atenção hoje": alertas clicáveis que filtram as frentes do painel.
 function renderDashboardAlerts(items) {
   const box = document.querySelector('#production-alerts');
   if (!box) return;
@@ -39,11 +76,22 @@ function renderDashboardAlerts(items) {
     ...alert, count: items.filter(item => dashboardFlags(item)[alert.key]).length
   })).filter(alert => alert.count > 0);
   if (productionPanelFilter && !alerts.some(alert => alert.key === productionPanelFilter)) productionPanelFilter = '';
-  box.innerHTML = alerts.length
-    ? alerts.map(alert => `<button type="button" class="production-alert is-${alert.tone}${productionPanelFilter === alert.key ? ' is-active' : ''}"
-        data-panel-filter="${alert.key}" aria-pressed="${productionPanelFilter === alert.key}">${escapeHtml(alert.label(alert.count))}</button>`).join('')
-      + (productionPanelFilter ? '<button type="button" class="production-alert is-clear" data-panel-filter="">Mostrar todas</button>' : '')
-    : '<span class="production-alert is-ok">Tudo em dia: nenhuma frente parada, sem O.S. ou sem atualização hoje.</span>';
+  const total = items.length;
+  const active = items.filter(item => statusMeta(item.entry?.status).className === 'is-active').length;
+  const today = items.filter(item => item.is_current_day).length;
+  box.innerHTML = `
+    <div class="pdash-health ${alerts.length ? 'has-alerts' : 'is-ok'}">
+      <span class="pdash-health-icon">${dashboardIcon(alerts.length ? 'alert' : 'ok')}</span>
+      <div class="pdash-health-copy">
+        <strong>${alerts.length ? 'Atenção hoje' : 'Tudo em dia'}</strong>
+        <span>${total} ${total === 1 ? 'frente' : 'frentes'} · ${active} em atividade · ${today}/${total} atualizadas hoje</span>
+      </div>
+      <div class="pdash-health-alerts">
+        ${alerts.map(alert => `<button type="button" class="pdash-alert is-${alert.tone}${productionPanelFilter === alert.key ? ' is-active' : ''}"
+          data-panel-filter="${alert.key}" aria-pressed="${productionPanelFilter === alert.key}">${escapeHtml(alert.label(alert.count))}</button>`).join('')}
+        ${productionPanelFilter ? '<button type="button" class="pdash-alert is-clear" data-panel-filter="">Mostrar todas</button>' : ''}
+      </div>
+    </div>`;
 }
 
 function dashboardStatusBar(items) {
@@ -51,12 +99,12 @@ function dashboardStatusBar(items) {
     status, count: items.filter(item => item.entry?.status === status.code).length
   })).filter(entry => entry.count > 0);
   const total = counts.reduce((sum, entry) => sum + entry.count, 0) || 1;
-  const bar = counts.map(({ status, count }) => `<span class="production-group-bar-segment ${statusMeta(status.code).className}"
+  const bar = counts.map(({ status, count }) => `<span class="pdash-bar-segment ${statusMeta(status.code).className}"
       data-weight="${count}" title="${escapeHtml(status.name)}: ${count}"></span>`).join('');
-  const legend = counts.map(({ status, count }) => `<span class="production-group-legend-item ${statusMeta(status.code).className}">
+  const legend = counts.map(({ status, count }) => `<span class="pdash-legend-item ${statusMeta(status.code).className}">
       <i aria-hidden="true"></i>${escapeHtml(status.name)} <b>${count}</b><small>${Math.round(count * 100 / total)}%</small></span>`).join('');
-  return `<div class="production-group-bar" role="img" aria-label="Distribuição por status">${bar}</div>
-    <div class="production-group-legend">${legend}</div>`;
+  return `<div class="pdash-bar" role="img" aria-label="Distribuição por status">${bar}</div>
+    <div class="pdash-legend">${legend}</div>`;
 }
 
 function dashboardFrontTile(item) {
@@ -64,64 +112,80 @@ function dashboardFrontTile(item) {
   const meta = statusMeta(entry.status);
   const state = dashboardOrderState(item);
   const codes = String(entry.operation || '').split(/[,;+]/).map(code => code.trim()).filter(Boolean);
-  const order = state === 'ok' ? '<span class="production-tile-os is-ok" title="O.S. confere">O.S. OK</span>'
-    : state === 'missing' ? '<span class="production-tile-os is-missing" title="Operação sem O.S. no setor">Sem O.S.</span>' : '';
+  const order = state === 'ok' ? '<span class="pdash-os is-ok" title="O.S. confere">O.S. OK</span>'
+    : state === 'missing' ? '<span class="pdash-os is-missing" title="Operação sem O.S. no setor">Sem O.S.</span>' : '';
   const operation = codes.length
-    ? codes.map(code => `<span class="production-tile-op">${escapeHtml(code)}</span>`).join('')
-    : '<span class="production-tile-op is-empty">Sem operação</span>';
+    ? codes.map(code => `<span class="pdash-op">${escapeHtml(code)}</span>`).join('')
+    : '<span class="pdash-op is-empty">Sem operação</span>';
   const editable = canFillProduction();
-  const tag = editable ? 'button type="button"' : 'div';
-  return `<${tag} class="production-front-tile ${meta.className}${item.is_current_day ? '' : ' is-stale'}" ${editable ? `data-panel-edit="${item.id}"` : ''}
-      title="${escapeHtml(`${item.service_name} · ${meta.name}`)}">
-      <span class="production-tile-head"><i class="production-tile-dot" aria-hidden="true"></i><strong>${escapeHtml(item.service_name || '-')}</strong></span>
-      <span class="production-tile-place">Setor ${escapeHtml(entry.sector || '-')}${entry.farm ? ` · ${escapeHtml(entry.farm)}` : ''}</span>
-      <span class="production-tile-status">${escapeHtml(meta.name)}${item.is_current_day ? '' : ` · último ${escapeHtml(entry.work_date ? formatIsoDateBr(entry.work_date) : 'sem registro')}`}</span>
-      <span class="production-tile-ops">${operation}${order}</span>
+  const stale = item.is_current_day ? ''
+    : `<span class="pdash-stale">${dashboardIcon('clock')}${entry.work_date ? `Último registro ${escapeHtml(formatIsoDateBr(entry.work_date))}` : 'Sem registro'}</span>`;
+  const open = editable ? `button type="button" data-panel-edit="${item.id}"` : 'div';
+  return `<${open} class="pdash-tile ${meta.className}${item.is_current_day ? '' : ' is-stale'}" title="${escapeHtml(`${item.service_name} · ${meta.name}`)}">
+      <span class="pdash-tile-top">
+        <strong>${escapeHtml(item.service_name || '-')}</strong>
+        <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
+      </span>
+      <span class="pdash-place">${dashboardIcon('pin')}<span>Setor ${escapeHtml(entry.sector || '-')}${entry.section ? ` / ${escapeHtml(entry.section)}` : ''}${entry.farm ? ` · ${escapeHtml(entry.farm)}` : ''}</span></span>
+      ${stale}
+      <span class="pdash-tile-foot"><span class="pdash-ops">${operation}</span>${order}</span>
     </${editable ? 'button' : 'div'}>`;
+}
+
+function dashboardGroupInitials(name) {
+  return String(name || '?').split(/\s+/).filter(word => word.length > 2).slice(0, 2)
+    .map(word => word[0]).join('').toLocaleUpperCase('pt-BR') || '?';
 }
 
 function renderProductionDashboard() {
   const cards = document.querySelector('#production-group-cards');
   if (!cards) return;
-  const items = dashboardItems();
-  renderDashboardAlerts(items);
+  const allItems = dashboardItems();
   const empty = document.querySelector('#production-dashboard-empty');
-  if (empty) empty.hidden = items.length > 0;
+  if (empty) empty.hidden = allItems.length > 0;
 
-  // Agrupa na ordem do catálogo; grupos com problemas aparecem primeiro.
+  // Agrupa na ordem do catálogo; o painel mostra só o grupo selecionado.
   const groups = new Map();
-  items.forEach((item, index) => {
+  allItems.forEach((item, index) => {
     if (!groups.has(item.group_id)) groups.set(item.group_id, { id: item.group_id, name: item.group_name || 'Sem grupo', order: index, items: [] });
     groups.get(item.group_id).items.push(item);
   });
-  const score = group => group.items.reduce((sum, item) => {
-    const flags = dashboardFlags(item);
-    return sum + (flags.stopped ? 3 : 0) + (flags.noOrder ? 2 : 0) + (flags.noOperation ? 1 : 0) + (flags.stale ? 1 : 0);
-  }, 0);
-  const ordered = [...groups.values()].sort((a, b) => score(b) - score(a) || a.order - b.order);
+  const ordered = [...groups.values()].sort((a, b) => a.order - b.order);
+  // Grupo escolhido; sem escolha válida, abre no grupo que mais precisa de atenção.
+  if (!ordered.some(group => String(group.id) === productionPanelGroup)) {
+    const worst = [...ordered].sort((a, b) => dashboardProblemScore(b.items) - dashboardProblemScore(a.items) || a.order - b.order)[0];
+    productionPanelGroup = worst ? String(worst.id) : '';
+  }
+  renderDashboardGroupTabs(ordered);
+  const selected = ordered.filter(group => String(group.id) === productionPanelGroup);
+  renderDashboardAlerts(selected[0]?.items || []);
 
-  cards.innerHTML = ordered.map(group => {
+  cards.innerHTML = selected.map(group => {
     const visible = productionPanelFilter
       ? group.items.filter(item => dashboardFlags(item)[productionPanelFilter]) : group.items;
     if (!visible.length) return '';
     const total = group.items.length;
-    const withOperation = group.items.filter(item => dashboardOrderState(item) !== 'no_operation' && item.entry?.sector);
+    const withOperation = group.items.filter(item => dashboardOrderState(item) !== 'no_operation' && item.entry?.sector).length;
     const ok = group.items.filter(item => dashboardOrderState(item) === 'ok').length;
     const noOperation = group.items.filter(item => dashboardOrderState(item) === 'no_operation').length;
     const today = group.items.filter(item => item.is_current_day).length;
     const stopped = group.items.filter(item => dashboardFlags(item).stopped).length;
-    return `<article class="production-group-card">
-      <header class="production-group-card-header">
-        <div><h3>${escapeHtml(group.name)}</h3><span>${total} ${total === 1 ? 'frente' : 'frentes'}</span></div>
-        ${stopped ? `<span class="production-group-flag">${stopped} ${stopped === 1 ? 'parada' : 'paradas'}</span>` : ''}
+    const kpi = (label, value, tone = '') => `<span class="pdash-kpi ${tone}"><b>${value}</b>${label}</span>`;
+    return `<article class="pdash-group${stopped ? ' has-stopped' : ''}">
+      <header class="pdash-group-header">
+        <div class="pdash-group-title">
+          <span class="pdash-group-icon" aria-hidden="true">${escapeHtml(dashboardGroupInitials(group.name))}</span>
+          <div><h3>${escapeHtml(group.name)}</h3><span>${total} ${total === 1 ? 'frente' : 'frentes'}${productionPanelFilter ? ` · ${visible.length} no filtro` : ''}</span></div>
+        </div>
+        <div class="pdash-kpis">
+          ${stopped ? kpi(stopped === 1 ? 'parada' : 'paradas', stopped, 'is-red') : ''}
+          ${kpi('O.S. OK', withOperation ? `${ok}/${withOperation}` : '-', withOperation && ok < withOperation ? 'is-red' : 'is-green')}
+          ${kpi('sem operação', noOperation, noOperation ? 'is-amber' : '')}
+          ${kpi('atualizadas hoje', `${today}/${total}`, today < total ? 'is-gray' : 'is-green')}
+        </div>
       </header>
-      ${dashboardStatusBar(group.items)}
-      <div class="production-group-kpis">
-        <div><b>${withOperation.length ? `${ok}/${withOperation.length}` : '-'}</b><span>O.S. OK</span></div>
-        <div class="${noOperation ? 'is-amber' : ''}"><b>${noOperation}</b><span>Sem operação</span></div>
-        <div class="${today < total ? 'is-gray' : ''}"><b>${today}/${total}</b><span>Atualizadas hoje</span></div>
-      </div>
-      <div class="production-front-tiles">${visible.map(dashboardFrontTile).join('')}</div>
+      <div class="pdash-group-status">${dashboardStatusBar(group.items)}</div>
+      <div class="pdash-tiles">${visible.map(dashboardFrontTile).join('')}</div>
     </article>`;
   }).join('');
   // A CSP bloqueia "style" no HTML; o tamanho de cada faixa é aplicado pelo script.
@@ -150,6 +214,14 @@ document.querySelector('#production-alerts')?.addEventListener('click', event =>
   if (!button) return;
   const key = button.dataset.panelFilter;
   productionPanelFilter = productionPanelFilter === key ? '' : key;
+  renderProductionDashboard();
+});
+document.querySelector('#production-group-tabs')?.addEventListener('click', event => {
+  const tab = event.target.closest('[data-panel-group]');
+  if (!tab) return;
+  productionPanelGroup = tab.dataset.panelGroup;
+  productionPanelFilter = '';
+  try { localStorage.setItem(PRODUCTION_PANEL_GROUP_KEY, productionPanelGroup); } catch (_) { /* preferência opcional */ }
   renderProductionDashboard();
 });
 document.querySelector('#production-group-cards')?.addEventListener('click', event => {
