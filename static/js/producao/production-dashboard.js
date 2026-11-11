@@ -190,6 +190,31 @@ function renderProductionDashboard() {
   }).join('');
   // A CSP bloqueia "style" no HTML; o tamanho de cada faixa é aplicado pelo script.
   cards.querySelectorAll?.('[data-weight]').forEach(segment => { segment.style.flexGrow = segment.dataset.weight; });
+  fitDashboardTiles();
+}
+
+// Blocos das frentes ocupam a largura toda: colunas pelo espaço real (menu lateral,
+// zoom e janela contam), ~240px por bloco, com as linhas equilibradas.
+const DASHBOARD_TILE_MIN = 240;
+let dashboardTilesObserver = null;
+
+function fitDashboardTiles() {
+  const cards = document.querySelector('#production-group-cards');
+  if (!cards?.querySelectorAll) return;
+  if (!dashboardTilesObserver && typeof ResizeObserver === 'function') {
+    dashboardTilesObserver = new ResizeObserver(() => fitDashboardTiles());
+    dashboardTilesObserver.observe(cards);
+  }
+  cards.querySelectorAll('.pdash-tiles').forEach(grid => {
+    const quantity = Math.max(1, grid.children.length);
+    const style = getComputedStyle(grid);
+    const width = grid.clientWidth - parseFloat(style.paddingLeft || 0) - parseFloat(style.paddingRight || 0);
+    if (width <= 0) return;
+    const gap = parseFloat(style.columnGap) || 10;
+    const maxColumns = Math.max(1, Math.min(quantity, Math.floor((width + gap) / (DASHBOARD_TILE_MIN + gap))));
+    const rows = Math.ceil(quantity / maxColumns);
+    grid.style.setProperty('--tile-cols', String(Math.ceil(quantity / rows)));
+  });
 }
 
 function setProductionView(view) {
@@ -233,3 +258,6 @@ document.querySelector('#production-group-cards')?.addEventListener('click', eve
   try { saved = localStorage.getItem(PRODUCTION_VIEW_KEY) || 'panel'; } catch (_) { /* sem armazenamento */ }
   setProductionView(saved);
 })();
+
+// Garantia além do ResizeObserver: refaz as colunas quando a janela muda de tamanho ou de zoom.
+globalThis.addEventListener?.('resize', () => { fitDashboardTiles(); if (typeof fitProductionSummaryColumns === 'function') fitProductionSummaryColumns(); });

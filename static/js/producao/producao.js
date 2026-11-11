@@ -304,6 +304,28 @@ function renderProductionFilters() {
   frontSelect.value = productionFilterFront;
 }
 
+// Colunas dos cartões de status pelo espaço real disponível (menu lateral, zoom e
+// tamanho da janela contam): cabe o máximo com ~170px por cartão e as linhas ficam
+// equilibradas (6 status em 1366px viram 3+3, nunca 5+1).
+const PRODUCTION_SUMMARY_MIN_CARD = 170;
+let productionSummaryObserver = null;
+
+function fitProductionSummaryColumns() {
+  const summary = document.querySelector('#production-summary');
+  if (!summary?.style?.setProperty) return;
+  if (!productionSummaryObserver && typeof ResizeObserver === 'function') {
+    productionSummaryObserver = new ResizeObserver(() => fitProductionSummaryColumns());
+    productionSummaryObserver.observe(summary);
+  }
+  const quantity = Math.max(1, summary.children?.length || 1);
+  const width = summary.clientWidth || 0;
+  if (!width) return;
+  const gap = 10;
+  const maxColumns = Math.max(1, Math.min(quantity, Math.floor((width + gap) / (PRODUCTION_SUMMARY_MIN_CARD + gap))));
+  const rows = Math.ceil(quantity / maxColumns);
+  summary.style.setProperty('--summary-cols', String(Math.ceil(quantity / rows)));
+}
+
 function renderProductionSummary() {
   const summary = document.querySelector('#production-summary');
   if (!summary) return;
@@ -323,11 +345,8 @@ function renderProductionSummary() {
       <strong>${count}<small>${percent}%</small></strong>
     </div>`;
   }).join('');
-  // Colunas conforme a quantidade de status e a largura da tela (sem cartão sozinho numa linha).
-  const quantity = productionStatuses.length;
-  summary.style?.setProperty?.('--summary-cols-lg', String(Math.min(Math.max(quantity, 1), 6)));
-  summary.style?.setProperty?.('--summary-cols-md', String(quantity <= 4 ? Math.min(Math.max(quantity, 1), 2) : 3));
   summary.hidden = productionStatuses.length === 0;
+  fitProductionSummaryColumns();
 }
 
 function statusBadge(status) {

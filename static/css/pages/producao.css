@@ -870,3 +870,26 @@ button.pdash-tile:hover { transform: translateY(-1px); border-color: #b9d8c7; bo
 }
 /* Abas de grupo quebram a linha em telas menores (sem barra de rolagem). */
 .pdash-group-tabs { flex-wrap: wrap; overflow-x: visible; }
+
+
+/* Cartões de status: colunas calculadas pelo espaço real (ver fitProductionSummaryColumns). */
+.production-summary { grid-template-columns: repeat(var(--summary-cols, 4), minmax(0, 1fr)) !important; }
+@media (max-width: 1180px) { .production-summary { grid-template-columns: repeat(var(--summary-cols, 3), minmax(0, 1fr)) !important; } }
+@media (max-width: 640px) { .production-summary { grid-template-columns: repeat(var(--summary-cols, 2), minmax(0, 1fr)) !important; } }
+
+
+/* Blocos das frentes responsivos: colunas pelo espaço real e textos que quebram linha. */
+.pdash-tiles { grid-template-columns: repeat(var(--tile-cols, 3), minmax(0, 1fr)) !important; }
+.pdash-tile-top strong { white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+.pdash-place span { white-space: normal; overflow: visible; line-height: 1.3; }
+.pdash-tile-foot { flex-wrap: wrap; }
+@media (max-width: 520px) { .pdash-tiles { grid-template-columns: 1fr !important; } }
+
+
+/* Paginação da tabela de Ordem de serviço (linhas conforme a altura da tela). */
+.production-orders-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px; border-top: 1px solid #e5ece8; background: #f8fbf9; }
+.production-orders-pagination[hidden] { display: none; }
+.production-orders-pagination span { color: #5d7166; font-size: 12px; font-weight: 700; }
+.production-orders-pagination-actions { display: flex; gap: 8px; }
+.production-orders-pagination button:disabled { opacity: .45; cursor: default; }
+.production-orders-table tbody tr { height: 41px; }

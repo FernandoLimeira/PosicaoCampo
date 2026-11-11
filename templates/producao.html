@@ -95,7 +95,6 @@
       <div>
         <span class="production-kicker">Importação</span>
         <h2>Importar ordens de serviço</h2>
-        <p>O arquivo substitui as O.S. da unidade selecionada. Colunas obrigatórias: NO_OS, SETOR e OPERACAO.</p>
       </div>
       <form id="production-orders-form" class="production-orders-form">
         <label class="production-orders-file" for="production-orders-file">
@@ -126,6 +125,13 @@
           </thead>
           <tbody id="production-orders-body"></tbody>
         </table>
+      </div>
+      <div id="production-orders-pagination" class="production-orders-pagination" hidden>
+        <span id="production-orders-page-info"></span>
+        <div class="production-orders-pagination-actions">
+          <button id="production-orders-prev" class="production-secondary-button" type="button">Anterior</button>
+          <button id="production-orders-next" class="production-secondary-button" type="button">Próxima</button>
+        </div>
       </div>
       <div id="production-orders-empty" class="production-empty" hidden>
         <strong>Nenhuma ordem de serviço importada.</strong>
@@ -253,7 +259,7 @@
   <div id="production-queries-panel" class="production-tab-panel"{% if page != 'production_queries' %} hidden{% endif %}>
     <section class="catalog-section">
       <header class="catalog-section-header">
-        <div><h2>Consultas SQL salvas</h2><p>Guarde aqui o SELECT usado no sistema de origem para gerar o arquivo de Ordem de serviço. Copie, rode no sistema e importe o resultado na página Ordem de serviço.</p></div>
+        <div><h2>Consultas SQL salvas</h2></div>
         <button id="production-query-new" class="production-primary-button" type="button" hidden>+ Nova consulta</button>
       </header>
       <div id="production-queries-list" class="production-queries-list"></div>

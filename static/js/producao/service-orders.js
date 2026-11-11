@@ -3,6 +3,19 @@
 let serviceOrdersData = null;
 let serviceOrdersLoadedUnit = '';
 let serviceOrdersSearchTimer = null;
+let serviceOrdersPage = 1;
+
+// Linhas por página conforme a altura da tela: a tabela cabe sem rolar a página.
+let serviceOrdersRowHeight = 50;
+function serviceOrdersPageSize() {
+  const body = document.querySelector('#production-orders-body');
+  const top = body?.getBoundingClientRect?.().top || 360;
+  // Altura real de uma linha (medida na tela) e espaço da paginação + margem inferior.
+  const measured = body?.querySelector?.('tr')?.getBoundingClientRect?.().height;
+  if (measured > 20) serviceOrdersRowHeight = measured;
+  const available = (globalThis.innerHeight || 800) - Math.max(top, 160) - 100;
+  return Math.max(5, Math.min(50, Math.floor(available / serviceOrdersRowHeight)));
+}
 
 // Ícone de olho usado nos botões "Ver" das O.S.
 const SERVICE_ORDER_EYE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -33,7 +46,22 @@ function renderServiceOrders() {
   if (!body) return;
   const data = serviceOrdersData || { orders: [], total: 0 };
   if (importCard) importCard.hidden = !data.can_import;
-  body.innerHTML = data.orders.map(order => `<tr>
+  const pageSize = serviceOrdersPageSize();
+  const totalPages = Math.max(1, Math.ceil(data.orders.length / pageSize));
+  serviceOrdersPage = Math.min(Math.max(1, serviceOrdersPage), totalPages);
+  const start = (serviceOrdersPage - 1) * pageSize;
+  const pageOrders = data.orders.slice(start, start + pageSize);
+  const pagination = document.querySelector('#production-orders-pagination');
+  if (pagination) {
+    pagination.hidden = data.orders.length <= pageSize;
+    const info = document.querySelector('#production-orders-page-info');
+    if (info) info.textContent = `${start + 1}–${start + pageOrders.length} de ${data.orders.length} · Página ${serviceOrdersPage} de ${totalPages}`;
+    const prev = document.querySelector('#production-orders-prev');
+    const next = document.querySelector('#production-orders-next');
+    if (prev) prev.disabled = serviceOrdersPage <= 1;
+    if (next) next.disabled = serviceOrdersPage >= totalPages;
+  }
+  body.innerHTML = pageOrders.map(order => `<tr>
       <td><strong>${escapeHtml(order.number)}</strong></td>
       <td class="production-cell-number">${escapeHtml(order.sector || '-')}</td>
       <td class="production-cell-number">${escapeHtml(order.section || '-')}</td>
@@ -68,6 +96,7 @@ async function loadServiceOrders({ force = false } = {}) {
     const params = new URLSearchParams({ unit });
     if (search) params.set('search', search);
     serviceOrdersData = await apiRequest(`/api/production/service-orders?${params}`);
+    serviceOrdersPage = 1;
     serviceOrdersLoadedUnit = `${unit}|${search}`;
     renderServiceOrders();
   } catch (error) {
@@ -197,6 +226,14 @@ document.querySelector('#production-orders-body')?.addEventListener('click', eve
   if (button) openSectorOrders(button.dataset.orderSector);
 });
 document.querySelector('#production-orders-form')?.addEventListener('submit', importServiceOrders);
+document.querySelector('#production-orders-prev')?.addEventListener('click', () => { serviceOrdersPage -= 1; renderServiceOrders(); });
+document.querySelector('#production-orders-next')?.addEventListener('click', () => { serviceOrdersPage += 1; renderServiceOrders(); });
+let serviceOrdersResizeTimer = null;
+globalThis.addEventListener?.('resize', () => {
+  if (!serviceOrdersPageActive()) return;
+  clearTimeout(serviceOrdersResizeTimer);
+  serviceOrdersResizeTimer = setTimeout(renderServiceOrders, 150);
+});
 document.querySelector('#production-orders-file')?.addEventListener('change', event => {
   const label = document.querySelector('#production-orders-file-name');
   if (label) label.textContent = event.target.files?.[0]?.name || 'Nenhum arquivo selecionado';
