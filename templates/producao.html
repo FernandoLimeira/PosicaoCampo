@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if page == 'service_orders' %}Ordem de serviço{% elif page == 'production_catalog' %}Cadastros{% else %}Produção Agrícola{% endif %} · Posição de Campo{% endblock %}
+{% block title %}{% if page == 'service_orders' %}Ordem de serviço{% elif page == 'production_queries' %}Consultas SQL{% elif page == 'production_catalog' %}Cadastros{% else %}Produção Agrícola{% endif %} · Posição de Campo{% endblock %}
 {% block styles %}
   <link rel="stylesheet" href="/css/pages/producao.css?v={{ asset_version }}-front-notes" />
 {% endblock %}
@@ -8,8 +8,8 @@
 <section class="production-page" aria-labelledby="production-title">
   <header class="module-standard-header production-page-header">
     <div>
-      <span class="production-kicker">{% if page in ('service_orders', 'production_catalog') %}Produção Agrícola{% else %}Atualização operacional{% endif %}</span>
-      <h1 id="production-title">{% if page == 'service_orders' %}Ordem de serviço{% elif page == 'production_catalog' %}Cadastros{% else %}Produção Agrícola{% endif %}</h1>
+      <span class="production-kicker">{% if page in ('service_orders', 'production_queries', 'production_catalog') %}Produção Agrícola{% else %}Atualização operacional{% endif %}</span>
+      <h1 id="production-title">{% if page == 'service_orders' %}Ordem de serviço{% elif page == 'production_queries' %}Consultas SQL{% elif page == 'production_catalog' %}Cadastros{% else %}Produção Agrícola{% endif %}</h1>
     </div>
     <div class="production-page-actions">
       <div class="production-current-context">
@@ -23,10 +23,27 @@
   <div id="production-access-message" class="production-access-message" hidden></div>
 
   {# Lançamentos (/producao) e Ordem de serviço (/producao/ordens-servico) usam a mesma página. #}
-  <div id="production-entries-panel" class="production-tab-panel"{% if page in ('service_orders', 'production_catalog') %} hidden{% endif %}>
+  <div id="production-entries-panel" class="production-tab-panel"{% if page in ('service_orders', 'production_queries', 'production_catalog') %} hidden{% endif %}>
+  <div class="production-view-bar">
+    <div class="production-view-toggle" role="tablist" aria-label="Visualização">
+      <button class="production-view-option is-active" type="button" role="tab" aria-selected="true" data-production-view="panel">Painel</button>
+      <button class="production-view-option" type="button" role="tab" aria-selected="false" data-production-view="table">Tabela</button>
+    </div>
+    <div class="production-toolbar-actions">
+      <button id="production-rain-button" class="production-secondary-button" type="button" hidden>Informar chuva</button>
+      <button id="production-add-button" class="production-primary-button" type="button">Adicionar frente</button>
+    </div>
+  </div>
+
   <section id="production-summary" class="production-summary" aria-label="Resumo dos status"></section>
 
-  <section class="production-table-card" aria-labelledby="production-table-title">
+  <section id="production-dashboard" class="production-dashboard" aria-label="Painel gerencial por grupo">
+    <div id="production-alerts" class="production-alerts" aria-label="Alertas"></div>
+    <div id="production-group-cards" class="production-group-cards"></div>
+    <p id="production-dashboard-empty" class="production-empty" hidden>Nenhuma frente lançada nesta unidade.</p>
+  </section>
+
+  <section id="production-table-card" class="production-table-card" aria-labelledby="production-table-title" hidden>
     <div class="production-table-heading">
       <div>
         <span>Lançamentos</span>
@@ -44,10 +61,6 @@
         <label for="production-filter-front">Frente / serviço
           <select id="production-filter-front"><option value="">Todas as frentes</option></select>
         </label>
-      </div>
-      <div class="production-toolbar-actions">
-        <button id="production-rain-button" class="production-secondary-button" type="button" hidden>Informar chuva</button>
-        <button id="production-add-button" class="production-primary-button" type="button">Adicionar frente</button>
       </div>
     </div>
     <div class="production-table-wrap">
@@ -236,10 +249,44 @@
       <div id="production-status-list" class="production-config-list catalog-list" data-catalog-list="status"></div>
     </section>
   </div>
+  <div id="production-queries-panel" class="production-tab-panel"{% if page != 'production_queries' %} hidden{% endif %}>
+    <section class="catalog-section">
+      <header class="catalog-section-header">
+        <div><h2>Consultas SQL salvas</h2><p>Guarde aqui o SELECT usado no sistema de origem para gerar o arquivo de Ordem de serviço. Copie, rode no sistema e importe o resultado na página Ordem de serviço.</p></div>
+        <button id="production-query-new" class="production-primary-button" type="button" hidden>+ Nova consulta</button>
+      </header>
+      <div id="production-queries-list" class="production-queries-list"></div>
+    </section>
+  </div>
 </section>
 {% endblock %}
 
 {% block modals %}
+<div id="production-query-modal" class="modal-backdrop" hidden>
+  <section class="editor-modal production-query-modal" role="dialog" aria-modal="true" aria-labelledby="production-query-modal-title">
+    <header class="modal-header production-modal-header">
+      <div>
+        <span class="modal-kicker">Consultas SQL</span>
+        <h2 id="production-query-modal-title">Nova consulta</h2>
+      </div>
+      <button class="modal-close" type="button" data-close-modal="production-query-modal" aria-label="Fechar">×</button>
+    </header>
+    <form id="production-query-form" class="production-query-form">
+      <input id="production-query-id" type="hidden" />
+      <label class="field"><span>Nome</span><input id="production-query-name" type="text" maxlength="120" required placeholder="Ex.: O.S. abertas — Polo SP" autocomplete="off" /></label>
+      <label class="field"><span>Descrição <small>(opcional)</small></span><input id="production-query-description" type="text" maxlength="300" placeholder="Ex.: instâncias 201 e 204, O.S. abertas desde 01/01/2026" autocomplete="off" /></label>
+      <label class="field"><span>Comando SQL</span><textarea id="production-query-sql" rows="16" maxlength="20000" required spellcheck="false" placeholder="SELECT ..."></textarea></label>
+    </form>
+    <footer class="modal-footer">
+      <div class="wizard-footer-info"><strong>Consulta do sistema de origem</strong><p>O comando é só guardado aqui; ele não é executado pelo Posição de Campo.</p></div>
+      <div class="modal-footer-actions">
+        <button class="modal-button secondary" type="button" data-close-modal="production-query-modal">Cancelar</button>
+        <button id="production-query-save" class="modal-button save" type="submit" form="production-query-form">Salvar consulta</button>
+      </div>
+    </footer>
+  </section>
+</div>
+
 <div id="production-sheet-modal" class="modal-backdrop" hidden>
   <section class="editor-modal production-sheet-modal" role="dialog" aria-modal="true" aria-labelledby="production-sheet-title">
     <header class="modal-header production-sheet-header">
@@ -467,5 +514,7 @@
   <script src="/js/producao/producao.js?v={{ asset_version }}-front-notes"></script>
   <script src="/js/producao/service-orders.js?v={{ asset_version }}"></script>
   <script src="/js/producao/production-sheet.js?v={{ asset_version }}"></script>
+  <script src="/js/producao/production-dashboard.js?v={{ asset_version }}"></script>
   <script src="/js/producao/production-catalog.js?v={{ asset_version }}"></script>
+  <script src="/js/producao/production-queries.js?v={{ asset_version }}"></script>
 {% endblock %}

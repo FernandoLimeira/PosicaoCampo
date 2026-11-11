@@ -452,6 +452,8 @@ function renderProductionItems(data) {
   }
 
   renderProductionSummary();
+  // Painel gerencial por grupo (producao/production-dashboard.js) usa os mesmos lançamentos.
+  if (typeof renderProductionDashboard === 'function') renderProductionDashboard();
 }
 
 function groupsForEntry() {

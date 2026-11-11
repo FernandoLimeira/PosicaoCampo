@@ -178,7 +178,7 @@ static/
     │   ├── global-report.js      emissão global (quatro unidades)
     │   ├── sacarose-export.js    imagem da Sacarose
     ├── producao/                 production-consolidation.js, production-config.js,
-    │                             producao.js, service-orders.js, production-sheet.js, production-catalog.js, production-export.js
+    │                             producao.js, service-orders.js, production-sheet.js, production-dashboard.js, production-catalog.js, production-queries.js, production-export.js
     └── sacarose/, setores/, relatorios/, retornos/, historico/, usuarios/, emissao/
 ```
 
@@ -197,7 +197,7 @@ Subpastas funcionam em `/css/`, `/js/` e `/assets/`, e a versão dos assets
 | --- | --- |
 | `/` | `core/field-fronts.js`, `core/sector-base.js`, `dashboard/dashboard.js`, `dashboard/field-notes.js`, `dashboard/editor.js`, `dashboard/app.js` |
 | `/sacarose` | `reports-export/shared-drawing.js`, `reports-export/sacarose-export.js`, `sacarose/sacarose.js` |
-| `/producao` | `producao/production-consolidation.js`, `producao/production-config.js`, `producao/producao.js`, `producao/service-orders.js`, `producao/production-sheet.js`, `producao/production-catalog.js` |
+| `/producao` | `producao/production-consolidation.js`, `producao/production-config.js`, `producao/producao.js`, `producao/service-orders.js`, `producao/production-sheet.js`, `producao/production-dashboard.js`, `producao/production-catalog.js`, `producao/production-queries.js` |
 | `/emitir-posicao-global` | `core/field-fronts.js`, `reports-export/shared-drawing.js`, `reports-export/field-report-data.js`, `reports-export/global-report.js`, `reports-export/sacarose-export.js`, `producao/production-consolidation.js`¹, `producao/production-export.js`¹, `emissao/emissao.js` |
 | `/setores` | `core/sector-base.js`, `setores/setores.js` |
 | `/relatorios` | `relatorios/relatorios.js` |

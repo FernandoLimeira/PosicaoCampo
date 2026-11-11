@@ -21,7 +21,7 @@ CORE_DATA_TABLES = (
 PRODUCTION_TABLES = (
     "production_statuses", "production_status_history", "production_groups", "production_service_fronts", "production_service_front_units",
     "production_user_items", "production_daily_entries", "production_daily_summaries",
-    "production_service_orders", "production_operations",
+    "production_service_orders", "production_operations", "production_sql_queries",
 )
 DATA_TABLES = CORE_DATA_TABLES + ("return_analysis_soil_wet", "field_front_notes") + PRODUCTION_TABLES
 USER_REFERENCES = (
@@ -38,6 +38,7 @@ OPTIONAL_USER_REFERENCES = (
     ("production_daily_summaries", "updated_by"),
     ("production_service_orders", "imported_by"),
     ("production_operations", "created_by"), ("production_operations", "updated_by"),
+    ("production_sql_queries", "created_by"), ("production_sql_queries", "updated_by"),
 )
 ALL_USER_REFERENCES = USER_REFERENCES + OPTIONAL_USER_REFERENCES
 _INIT_LOCK = threading.Lock()
@@ -416,6 +417,19 @@ def _create_production_tables(conn):
         )
         """,
         "CREATE INDEX IF NOT EXISTS main.idx_production_service_orders_unit_sector ON production_service_orders(unit_code, sector_key)",
+        """
+        CREATE TABLE IF NOT EXISTS main.production_sql_queries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            sql_text TEXT NOT NULL,
+            position INTEGER NOT NULL DEFAULT 0,
+            created_by INTEGER,
+            updated_by INTEGER,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+        """,
         """
         CREATE TABLE IF NOT EXISTS main.production_operations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -847,6 +861,18 @@ CREATE TABLE IF NOT EXISTS production_operations (
     service_front_id INTEGER,
     position INTEGER NOT NULL DEFAULT 0,
     is_active INTEGER NOT NULL DEFAULT 1,
+    created_by INTEGER,
+    updated_by INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS production_sql_queries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    sql_text TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
     created_by INTEGER,
     updated_by INTEGER,
     created_at INTEGER NOT NULL,

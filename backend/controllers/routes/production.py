@@ -3,6 +3,9 @@ from http import HTTPStatus
 
 from ...models.service_orders import (
     delete_operation,
+    delete_sql_query,
+    list_sql_queries,
+    save_sql_query,
     import_service_orders,
     list_operations,
     list_service_orders,
@@ -60,6 +63,27 @@ def handle(req):
             return req.json(HTTPStatus.OK, {"ok": True, **result, "sheet": parsed["sheet"]})
 
         return req.guarded(import_orders, bad_request=ValueError)
+
+    if path == "/api/production/queries":
+        if not user:
+            return req.unauthorized()
+        if method == "GET":
+            return req.guarded(lambda: req.json(HTTPStatus.OK, list_sql_queries(user["id"])))
+        if method == "POST":
+            return req.guarded(lambda: req.json(HTTPStatus.CREATED, {"ok": True, "query": save_sql_query(user["id"], req.body())}))
+
+    if path.startswith("/api/production/queries/") and method in {"PUT", "DELETE"}:
+        if not user:
+            return req.unauthorized()
+
+        def query():
+            query_id = _last_id(path)
+            if method == "PUT":
+                return req.json(HTTPStatus.OK, {"ok": True, "query": save_sql_query(user["id"], req.body(), query_id=query_id)})
+            delete_sql_query(user["id"], query_id)
+            return req.json(HTTPStatus.OK, {"ok": True})
+
+        return req.guarded(query, bad_request=(ValueError, TypeError))
 
     if path == "/api/production/operations":
         if not user:

@@ -295,3 +295,77 @@ def delete_operation(user_id: int, operation_id: int) -> None:
         if row["code_key"] in _operations_in_use(conn):
             raise ValueError(f"A operação {row['code']} já foi usada em lançamentos. Inative-a para preservar o histórico.")
         conn.execute("DELETE FROM production_operations WHERE id=?", (operation_id,))
+
+
+# ---------------------------------------------------------------------------
+# Consultas SQL salvas: o SELECT usado no sistema de origem para gerar o arquivo
+# de O.S. Fica guardado aqui para consultar, copiar e editar.
+# ---------------------------------------------------------------------------
+MAX_SQL_LENGTH = 20_000
+
+
+def _query_payload(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": int(row["id"]), "name": row["name"], "description": row["description"],
+        "sql": row["sql_text"], "position": int(row["position"] or 0),
+        "updated_at": int(row["updated_at"] or 0), "updated_by": row["updated_by_name"] or "-",
+    }
+
+
+def list_sql_queries(user_id: int) -> dict[str, Any]:
+    with connection() as conn:
+        access = _require_access(conn, user_id)
+        rows = conn.execute(
+            """SELECT q.*, u.name AS updated_by_name FROM production_sql_queries q
+               LEFT JOIN auth.users u ON u.id=q.updated_by ORDER BY q.position, q.name COLLATE NOCASE""",
+        ).fetchall()
+    return {"queries": [_query_payload(row) for row in rows], "can_configure": bool(access["can_configure"])}
+
+
+def save_sql_query(user_id: int, payload: Any, *, query_id: int | None = None) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("Dados da consulta inválidos.")
+    name = _text(payload.get("name"), 120)
+    description = _text(payload.get("description"), 300)
+    sql = str(payload.get("sql") or "").strip()
+    if not name:
+        raise ValueError("Informe o nome da consulta.")
+    if not sql:
+        raise ValueError("Cole o comando SQL da consulta.")
+    if len(sql) > MAX_SQL_LENGTH:
+        raise ValueError("O comando SQL deve ter no máximo 20.000 caracteres.")
+    try:
+        position = int(payload.get("position") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Ordem inválida.") from exc
+    now = int(time.time())
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _require_configure(conn, user_id)
+        validate_actor(conn, user_id)
+        if query_id is None:
+            query_id = int(conn.execute(
+                """INSERT INTO production_sql_queries(name,description,sql_text,position,created_by,updated_by,created_at,updated_at)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (name, description, sql, position, user_id, user_id, now, now),
+            ).lastrowid)
+        elif conn.execute(
+            """UPDATE production_sql_queries SET name=?,description=?,sql_text=?,position=?,updated_by=?,updated_at=?
+               WHERE id=?""",
+            (name, description, sql, position, user_id, now, query_id),
+        ).rowcount == 0:
+            raise ValueError("Consulta não encontrada.")
+        row = conn.execute(
+            """SELECT q.*, u.name AS updated_by_name FROM production_sql_queries q
+               LEFT JOIN auth.users u ON u.id=q.updated_by WHERE q.id=?""",
+            (query_id,),
+        ).fetchone()
+        return _query_payload(row)
+
+
+def delete_sql_query(user_id: int, query_id: int) -> None:
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _require_configure(conn, user_id)
+        if conn.execute("DELETE FROM production_sql_queries WHERE id=?", (query_id,)).rowcount == 0:
+            raise ValueError("Consulta não encontrada.")

@@ -256,6 +256,26 @@ class ServiceOrderTests(unittest.TestCase):
         service_orders.delete_operation(self.admin["id"], other["id"])
         self.assertEqual(service_orders.list_operations(self.admin["id"])["operations"], [])
 
+    def test_saved_sql_queries_can_be_added_updated_and_removed(self):
+        sql = "SELECT OHE.NO_OS FROM PA_OS_HE OHE\nWHERE OHE.FG_SITUACAO = 'A'"
+        with self.assertRaises(PermissionError):
+            service_orders.save_sql_query(self.user["id"], {"name": "O.S.", "sql": sql})
+        with self.assertRaisesRegex(ValueError, "Cole o comando SQL"):
+            service_orders.save_sql_query(self.admin["id"], {"name": "O.S.", "sql": "   "})
+        created = service_orders.save_sql_query(self.admin["id"], {"name": "O.S. abertas", "description": "Polo SP", "sql": sql})
+        self.assertEqual((created["name"], created["sql"], created["updated_by"]), ("O.S. abertas", sql, "Admin"))
+        updated = service_orders.save_sql_query(self.admin["id"], {"name": "O.S. abertas 2026", "sql": sql + "\nORDER BY 1"},
+                                                query_id=created["id"])
+        self.assertTrue(updated["sql"].endswith("ORDER BY 1"))
+        # Quem só tem acesso à Produção consulta e copia, mas não altera.
+        listing = service_orders.list_sql_queries(self.user["id"])
+        self.assertEqual([item["name"] for item in listing["queries"]], ["O.S. abertas 2026"])
+        self.assertFalse(listing["can_configure"])
+        with self.assertRaises(PermissionError):
+            service_orders.delete_sql_query(self.user["id"], created["id"])
+        service_orders.delete_sql_query(self.admin["id"], created["id"])
+        self.assertEqual(service_orders.list_sql_queries(self.admin["id"])["queries"], [])
+
     def test_codes_are_compared_without_leading_zeros(self):
         self.assertEqual(service_orders.sector_key("0663"), service_orders.sector_key("663.0"))
         self.assertEqual(service_orders.operation_key("0338 — TRATOS PLANTIO"), "338")

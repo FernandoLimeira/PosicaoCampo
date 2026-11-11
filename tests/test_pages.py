@@ -443,7 +443,9 @@ class PageTests(unittest.TestCase):
                                  "sacarose/sacarose.js"],
             "/producao": core + ["producao/production-consolidation.js", "producao/production-config.js",
                                  "producao/producao.js", "producao/service-orders.js",
-                                 "producao/production-sheet.js", "producao/production-catalog.js"],
+                                 "producao/production-sheet.js", "producao/production-dashboard.js",
+                                 "producao/production-catalog.js",
+                                 "producao/production-queries.js"],
             "/emitir-posicao-global": core + [
                 "core/field-fronts.js", "reports-export/shared-drawing.js", "reports-export/field-report-data.js",
                 "reports-export/global-report.js", "reports-export/sacarose-export.js",
@@ -506,6 +508,11 @@ class PageTests(unittest.TestCase):
         self.assertIn('id="production-operation-form"', catalog_page["body"])
         self.assertNotIn('id="production-catalog-panel" class="production-tab-panel production-catalog-panel" hidden', catalog_page["body"])
         self.assertEqual(self.request("/producao/cadastros", role="member")["status"], 403)
+        # "Consultas SQL" (SELECT das O.S.) também fica no menu da Produção.
+        self.assertIn('href="/producao/consultas"', page["body"])
+        self.assertIn('id="production-queries-list"', self.request("/producao/consultas", cookie=cookie)["body"])
+        self.assertEqual(self.request("/producao/consultas", role="member")["status"], 403)
+        self.assertEqual(self.request("/api/production/queries", role="member")["status"], 403)
         self.assertEqual(self.request("/api/production/operations", role="member")["status"], 403)
         # Lista de setores cadastrados para o campo Setor do popup (só com acesso à Produção).
         sectors = self.request("/api/production/sector-base", cookie=cookie, overrides={"QUERY_STRING": "unit=NRD"})

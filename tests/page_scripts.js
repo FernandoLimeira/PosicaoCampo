@@ -16,8 +16,8 @@ const PAGE_SCRIPTS = {
   '/sacarose': [...BASE_SCRIPTS, 'reports-export/shared-drawing.js', 'reports-export/sacarose-export.js',
     'sacarose/sacarose.js'],
   '/producao': [...BASE_SCRIPTS, 'producao/production-consolidation.js', 'producao/production-config.js',
-    'producao/producao.js', 'producao/service-orders.js', 'producao/production-sheet.js',
-    'producao/production-catalog.js'],
+    'producao/producao.js', 'producao/service-orders.js', 'producao/production-sheet.js', 'producao/production-dashboard.js',
+    'producao/production-catalog.js', 'producao/production-queries.js'],
   // Os dois scripts da Produção Agrícola só entram para quem tem acesso a ela.
   '/emitir-posicao-global': [...BASE_SCRIPTS, 'core/field-fronts.js', 'reports-export/shared-drawing.js',
     'reports-export/field-report-data.js', 'reports-export/global-report.js', 'reports-export/sacarose-export.js',
