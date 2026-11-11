@@ -259,6 +259,18 @@ class ServiceOrderTests(unittest.TestCase):
         self.assertEqual({o["number"]: o["matches"] for o in order["orders"]},
                          {"330097": True, "331158": True, "331999": False})
 
+        # Duas operações no mesmo campo, separadas por espaço, "/" ou "-", contam as duas.
+        for typed in ("457 338", "457/338", "457 - 396 / 338"):
+            production.save_items_sheet(self.user["id"], {"unit_code": "PPT", "work_date": "2026-11-10", "rows": [
+                {"id": item_id, "service_front_id": self.front["id"], "sector": "4", "section": "1", "status": self.status,
+                 "operation": typed}]})
+            item = production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"][0]
+            self.assertEqual(item["entry"]["operation"], ", ".join(typed.replace("/", " ").replace("-", " ").split()), typed)
+            self.assertEqual(item["service_order"]["status"], "ok", typed)
+        # Código com descrição continua sendo uma operação só.
+        self.assertEqual(service_orders.operation_keys("338 — TRATOS PLANTIO, 457"), ["338", "457"])
+        self.assertEqual(service_orders.operation_keys("338 999"), ["338", "999"])
+
     def test_operations_catalog_crud_and_import_fill(self):
         with self.assertRaises(PermissionError):
             service_orders.save_operation(self.user["id"], {"code": "338", "name": "Plantio"})

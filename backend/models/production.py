@@ -841,10 +841,24 @@ def _normalize_entry_data(payload: dict[str, Any]) -> dict[str, str]:
     }
 
 
+_ONLY_CODES = re.compile(r"\d+(?:\s*[\s/\-]\s*\d+)+")
+
+
+def split_operations(value: Any) -> list[str]:
+    """Separa as operações do lançamento. Aceita vírgula, ";" e "+" e, quando o trecho
+    só tem códigos, também espaço, "/" e "-" ("338 457", "338/457"). Assim "338 — TRATOS"
+    continua sendo uma operação só."""
+    parts = []
+    for part in re.split(r"[,;+]", str(value or "")):
+        text = part.strip()
+        parts.extend(re.split(r"\s*[\s/\-]\s*", text) if _ONLY_CODES.fullmatch(text) else [text])
+    return [part for part in parts if part]
+
+
 def _normalize_operations(value: Any) -> str:
     """Uma ou mais operações ("338, 457"), sem repetição, no máximo 10."""
     parts = []
-    for part in re.split(r"[,;+]", str(value or "")):
+    for part in split_operations(value):
         text = part.strip()
         if text and text.casefold() not in {item.casefold() for item in parts}:
             parts.append(text)

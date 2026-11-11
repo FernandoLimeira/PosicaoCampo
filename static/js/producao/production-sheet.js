@@ -68,7 +68,7 @@ function sheetOperationKey(value) {
 }
 
 function sheetSplitOperations(value) {
-  const parts = String(value || '').split(/[,;+]/).map(part => part.trim()).filter(Boolean);
+  const parts = splitProductionOperations(value);
   return parts.length ? [...new Set(parts)] : [''];
 }
 

@@ -355,9 +355,17 @@ function statusBadge(status) {
   return `<span class="production-status-badge ${config.className}">${escapeHtml(config.name)}</span>`;
 }
 
+// Separa as operações como o servidor: vírgula, ";" e "+"; e, quando o trecho só tem
+// códigos, também espaço, "/" e "-" ("338 457", "338/457"). "338 — TRATOS" é uma só.
+function splitProductionOperations(value) {
+  return String(value || '').split(/[,;+]/).map(part => part.trim())
+    .flatMap(part => (/^\d+(?:\s*[\s/-]\s*\d+)+$/.test(part) ? part.split(/\s*[\s/-]\s*/) : [part]))
+    .filter(Boolean);
+}
+
 // Coluna Operação: código(s) da operação em execução na frente.
 function productionOperationCell(entry) {
-  const codes = String(entry?.operation || '').split(/[,;+]/).map(code => code.trim()).filter(Boolean);
+  const codes = splitProductionOperations(entry?.operation);
   return codes.length
     ? `<div class="production-operation-codes">${codes.map(code => `<span>${escapeHtml(code)}</span>`).join('')}</div>`
     : '<span class="production-os-state is-no-operation">Sem operação</span>';
@@ -733,7 +741,7 @@ function openEditProductionItem(itemId) {
   section.innerHTML = `<option value="${escapeHtml(entry.section || '')}">${escapeHtml(entry.section || 'Sem seção')}</option>`;
   section.value = entry.section || '';
   setProductionEntryEditMode(true);
-  productionEntryOperations = String(entry.operation || '').split(/[,;+]/).map(code => code.trim()).filter(Boolean);
+  productionEntryOperations = splitProductionOperations(entry.operation);
   if (!productionEntryOperations.length) productionEntryOperations = [''];
   renderEntryOperations();
   loadEntryOperationSuggestions(currentProductionUnit(), entry.sector);

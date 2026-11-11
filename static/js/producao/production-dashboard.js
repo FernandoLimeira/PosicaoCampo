@@ -112,7 +112,7 @@ function dashboardFrontTile(item) {
   const entry = item.entry || {};
   const meta = statusMeta(entry.status);
   const state = dashboardOrderState(item);
-  const codes = String(entry.operation || '').split(/[,;+]/).map(code => code.trim()).filter(Boolean);
+  const codes = splitProductionOperations(entry.operation);
   const order = state === 'ok' ? '<span class="pdash-os is-ok" title="O.S. confere">O.S. OK</span>'
     : state === 'missing' ? '<span class="pdash-os is-missing" title="Operação sem O.S. no setor">Sem O.S.</span>' : '';
   const operation = codes.length

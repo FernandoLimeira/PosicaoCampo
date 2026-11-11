@@ -20,7 +20,7 @@ import time
 from typing import Any
 
 from ..services.front_identifiers import natural_key, normalize_label
-from .production import _normalize_unit, _require_access
+from .production import _normalize_unit, _require_access, split_operations
 from .production import _require_configure as _require_production_configure
 from .storage import connection, validate_actor
 
@@ -45,7 +45,7 @@ def operation_key(value: Any) -> str:
 def operation_keys(value: Any) -> list[str]:
     """Operações do lançamento: o popup permite várias ("338, 457") com o botão "+"."""
     keys = []
-    for part in re.split(r"[,;+]", str(value or "")):
+    for part in split_operations(value):
         key = operation_key(part)
         if key and key not in keys:
             keys.append(key)
