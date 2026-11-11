@@ -847,3 +847,26 @@ button.pdash-tile:hover { transform: translateY(-1px); border-color: #b9d8c7; bo
 .pdash-group-tab i.is-amber { background: #d5a326; }
 .pdash-group-tab.is-active { background: var(--green); color: #fff; box-shadow: 0 4px 12px rgba(32, 100, 79, .2); }
 .pdash-group-tab.is-active b { background: rgba(255, 255, 255, .22); color: #fff; }
+
+
+/* Cartões de status das frentes: responsivos (colunas pela quantidade de status e pela tela). */
+.production-summary { grid-template-columns: repeat(var(--summary-cols-lg, 4), minmax(0, 1fr)) !important; gap: 10px; }
+.production-summary-item { min-height: 66px; padding: 12px 14px; }
+.production-summary-item span {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  line-height: 1.3; overflow-wrap: normal; word-break: normal;
+}
+.production-summary-item strong { display: flex; flex-direction: column; align-items: flex-end; line-height: 1; }
+.production-summary-item strong small { margin-top: 3px; color: #8a978f; font-size: 10px; font-weight: 700; }
+.production-summary-item.is-zero { opacity: .65; }
+@media (max-width: 1180px) {
+  .production-summary { grid-template-columns: repeat(var(--summary-cols-md, 3), minmax(0, 1fr)) !important; }
+}
+@media (max-width: 640px) {
+  .production-summary { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px; }
+  .production-summary-item { min-height: 58px; padding: 10px 12px; gap: 8px; }
+  .production-summary-item span { font-size: 9px; }
+  .production-summary-item strong { font-size: 20px; }
+}
+/* Abas de grupo quebram a linha em telas menores (sem barra de rolagem). */
+.pdash-group-tabs { flex-wrap: wrap; overflow-x: visible; }

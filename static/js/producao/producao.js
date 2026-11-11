@@ -313,10 +313,20 @@ function renderProductionSummary() {
     const code = item.entry?.status;
     if (Object.hasOwn(counts, code)) counts[code] += 1;
   });
+  const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
   summary.innerHTML = productionStatuses.map(status => {
     const style = PRODUCTION_STATUS_STYLES[status.style_key] || PRODUCTION_STATUS_STYLES.waiting;
-    return `<div class="production-summary-item ${style.className}"><span>${escapeHtml(status.name)}</span><strong>${counts[status.code] || 0}</strong></div>`;
+    const count = counts[status.code] || 0;
+    const percent = total ? Math.round(count * 100 / total) : 0;
+    return `<div class="production-summary-item ${style.className}${count ? '' : ' is-zero'}" title="${escapeHtml(status.name)}: ${count}">
+      <span>${escapeHtml(status.name)}</span>
+      <strong>${count}<small>${percent}%</small></strong>
+    </div>`;
   }).join('');
+  // Colunas conforme a quantidade de status e a largura da tela (sem cartão sozinho numa linha).
+  const quantity = productionStatuses.length;
+  summary.style?.setProperty?.('--summary-cols-lg', String(Math.min(Math.max(quantity, 1), 6)));
+  summary.style?.setProperty?.('--summary-cols-md', String(quantity <= 4 ? Math.min(Math.max(quantity, 1), 2) : 3));
   summary.hidden = productionStatuses.length === 0;
 }
 
