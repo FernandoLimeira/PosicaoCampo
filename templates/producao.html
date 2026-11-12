@@ -26,68 +26,27 @@
   {# Lançamentos (/producao) e Ordem de serviço (/producao/ordens-servico) usam a mesma página. #}
   <div id="production-entries-panel" class="production-tab-panel"{% if page in ('service_orders', 'production_queries', 'production_catalog') %} hidden{% endif %}>
   <div class="production-view-bar">
-    <div class="production-view-toggle" role="tablist" aria-label="Visualização">
-      <button class="production-view-option is-active" type="button" role="tab" aria-selected="true" data-production-view="panel">Painel</button>
-      <button class="production-view-option" type="button" role="tab" aria-selected="false" data-production-view="table">Tabela</button>
-    </div>
+    <nav id="production-group-tabs" class="pdash-group-tabs" role="tablist" aria-label="Grupo"></nav>
     <div class="production-toolbar-actions">
-      <button id="production-rain-button" class="production-secondary-button" type="button" hidden>Informar chuva</button>
-      <button id="production-add-button" class="production-primary-button" type="button">Adicionar frente</button>
+      <button id="production-rain-button" class="production-secondary-button pdash-action" type="button" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg>
+        <span>Informar chuva</span>
+      </button>
+      <button id="production-add-button" class="production-primary-button pdash-action" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span>Adicionar frente</span>
+      </button>
     </div>
   </div>
 
   <section id="production-summary" class="production-summary" aria-label="Resumo dos status"></section>
 
   <section id="production-dashboard" class="production-dashboard" aria-label="Painel gerencial por grupo">
-    <nav id="production-group-tabs" class="pdash-group-tabs" role="tablist" aria-label="Grupo"></nav>
+    <section id="production-overview" class="pdash-overview" aria-label="Resumo analítico da unidade"></section>
     <div id="production-group-cards" class="production-group-cards"></div>
     <p id="production-dashboard-empty" class="production-empty" hidden>Nenhuma frente lançada nesta unidade.</p>
   </section>
 
-  <section id="production-table-card" class="production-table-card" aria-labelledby="production-table-title" hidden>
-    <div class="production-table-heading">
-      <div>
-        <span>Lançamentos</span>
-        <h2 id="production-table-title">Lançamentos da unidade</h2>
-      </div>
-      <div class="production-table-heading-actions">
-        <p id="production-list-status" aria-live="polite"></p>
-      </div>
-    </div>
-    <div class="production-toolbar">
-      <div id="production-filters" class="production-filters" hidden>
-        <label for="production-filter-group">Grupo
-          <select id="production-filter-group"><option value="">Todos os grupos</option></select>
-        </label>
-        <label for="production-filter-front">Frente / serviço
-          <select id="production-filter-front"><option value="">Todas as frentes</option></select>
-        </label>
-      </div>
-    </div>
-    <div class="production-table-wrap">
-      <table class="production-table">
-        <thead>
-          <tr>
-            <th>Frente / serviço</th>
-            <th>Setor</th>
-            <th>Seção</th>
-            <th>Fazenda</th>
-            <th>Status</th>
-            <th>Operação</th>
-            <th>O.S.</th>
-            <th>Observação</th>
-            <th>Mudança</th>
-            <th id="production-actions-heading" aria-label="Ações"></th>
-          </tr>
-        </thead>
-        <tbody id="production-items-body"></tbody>
-      </table>
-    </div>
-    <div id="production-empty" class="production-empty" hidden>
-      <strong>Nenhuma frente adicionada.</strong>
-      <span>Use “Adicionar frente” para montar sua lista de trabalho desta unidade.</span>
-    </div>
-  </section>
   </div>
 
   <div id="production-orders-panel" class="production-tab-panel"{% if page != 'service_orders' %} hidden{% endif %}>

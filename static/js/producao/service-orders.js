@@ -150,7 +150,7 @@ async function importServiceOrders(event) {
 // a abertura e todos os talhões. As O.S. que conferem com o lançamento vêm primeiro.
 function serviceOrderPlotsHtml(plots = []) {
   if (!plots.length) return '<span class="pos-os-muted">Sem talhão</span>';
-  return `<span class="pos-os-plots">${plots.map(plot => `<i>${escapeHtml(plot)}</i>`).join('')}</span>`;
+  return `<span class="pos-os-plots"><b>${plots.length === 1 ? 'Talhão' : `Talhões (${plots.length})`}:</b> ${escapeHtml(plots.join(', '))}</span>`;
 }
 
 function serviceOrdersPanelHtml(orders, { check = null } = {}) {
@@ -162,6 +162,7 @@ function serviceOrdersPanelHtml(orders, { check = null } = {}) {
   const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
 
   const status = !check ? ''
+    : check.needsSection ? '<span class="pos-status is-missing">Informe a seção do lançamento</span>'
     : check.missing.length ? `<span class="pos-status is-missing">Sem O.S. para ${escapeHtml(check.missing.join(', '))}</span>`
       : check.wanted ? '<span class="pos-status is-ok">O.S. OK</span>'
         : '<span class="pos-status">Lançamento sem operação</span>';
@@ -201,7 +202,8 @@ function openProductionItemOrders(itemId) {
   const section = entry.section ? ` / Seção ${entry.section}` : '';
   const codes = splitProductionOperations(entry.operation);
   const operation = codes.length ? ` · ${codes.length > 1 ? 'Operações' : 'Operação'} ${codes.join(', ')}` : '';
-  const check = { wanted: codes.length > 0, missing: item.service_order?.missing_operations || [] };
+  const check = { wanted: codes.length > 0, missing: item.service_order?.missing_operations || [],
+    needsSection: Boolean(item.service_order?.needs_section) };
   showServiceOrdersModal(`${item.service_name} · Setor ${entry.sector || '-'}${section}${operation}`,
     item.service_order?.orders || [], { check });
 }

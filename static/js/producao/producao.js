@@ -255,6 +255,8 @@ function refreshProductionSectorStatuses() {
 }
 
 function visibleProductionItems() {
+  // Sem a barra de filtros na página (painel gerencial), filtros salvos não escondem frentes.
+  if (!document.querySelector('#production-filters')) return consolidateProductionItems(productionItems);
   return consolidateProductionItems(productionItems).filter(item =>
     (!productionFilterGroup || String(item.group_id) === productionFilterGroup) &&
     (!productionFilterFront || String(item.service_front_id) === productionFilterFront));
@@ -375,8 +377,16 @@ function productionOperationKey(code) {
 function productionOperationTone(item, code) {
   const status = item?.service_order?.status;
   if (status !== 'ok' && status !== 'missing') return '';
+  if (item.service_order.needs_section) return 'is-order-missing';
   const missing = (item.service_order.missing_operations || []).map(String);
   return missing.includes(productionOperationKey(code)) ? 'is-order-missing' : 'is-order-ok';
+}
+
+// Nome da operação: o servidor manda o do cadastro (ou o do arquivo de O.S.).
+function productionOperationName(item, code) {
+  const key = productionOperationKey(code);
+  return item?.service_order?.operation_names?.[key]
+    || (item?.service_order?.orders || []).find(order => productionOperationKey(order.operation) === key)?.operation_name || '';
 }
 
 // O.S. que conferem com uma operação do lançamento (mesmo setor, seção e operação).
@@ -385,7 +395,8 @@ function productionOperationOrders(item, code) {
   return (item?.service_order?.orders || []).filter(order => order.matches && productionOperationKey(order.operation) === key);
 }
 
-function productionOperationTitle(tone) {
+function productionOperationTitle(tone, item) {
+  if (tone === 'is-order-missing' && item?.service_order?.needs_section) return 'Informe a seção: no Polo MS a O.S. confere por setor e seção';
   return tone === 'is-order-ok' ? 'Operação com O.S. no setor' : tone === 'is-order-missing' ? 'Operação sem O.S. no setor' : '';
 }
 
@@ -394,7 +405,7 @@ function productionOperationCell(entry, item) {
   return codes.length
     ? `<div class="production-operation-codes">${codes.map(code => {
       const tone = productionOperationTone(item, code);
-      return `<span class="${tone}" title="${productionOperationTitle(tone)}">${escapeHtml(code)}</span>`;
+      return `<span class="${tone}" title="${productionOperationTitle(tone, item)}">${escapeHtml(code)}</span>`;
     }).join('')}</div>`
     : '<span class="production-os-state is-no-operation">Sem operação</span>';
 }
@@ -429,7 +440,9 @@ function serviceOrderCell(item) {
   // Sem operação: a coluna O.S. fica sem texto ("Sem operação" aparece só na coluna Operação).
   const state = order.status === 'ok' ? '<span class="production-os-state is-ok">OK</span>'
     : order.status === 'no_operation' ? ''
-      : '<span class="production-os-state is-missing">Sem O.S.</span>';
+      : order.needs_section
+        ? '<span class="production-os-state is-missing" title="No Polo MS a O.S. confere por setor e seção">Informe a seção</span>'
+        : '<span class="production-os-state is-missing">Sem O.S.</span>';
   // "Ver" aparece sempre que o setor tem O.S. abertas (mesmo de outra operação).
   const label = `Ver O.S. do setor ${escapeHtml(item.entry?.sector || '')}`;
   const view = order.orders?.length ? `<button class="production-os-view is-icon" type="button" data-production-action="orders" data-item-id="${item.id}"
@@ -443,7 +456,6 @@ function renderProductionItems(data) {
   const status = document.querySelector('#production-list-status');
   const actionsHeading = document.querySelector('#production-actions-heading');
   const visibleItems = visibleProductionItems();
-  if (!body) return;
 
   if (data?.permissions && productionAccess) {
     productionAccess.permissions = { ...productionAccess.permissions, ...data.permissions };
@@ -456,7 +468,8 @@ function renderProductionItems(data) {
 
   if (actionsHeading) actionsHeading.hidden = !canFillProduction();
 
-  body.innerHTML = visibleItems.map(item => {
+  // Tabela de lançamentos: só desenhada quando existe na página (hoje a Produção usa o painel).
+  if (body) body.innerHTML = visibleItems.map(item => {
     const entry = item.entry || {};
     const current = Boolean(item.is_current_day);
     const updatedDetail = entry.work_date ? `Último registro: ${formatIsoDateBr(entry.work_date)}` : 'Nenhum registro salvo';

@@ -484,12 +484,16 @@ class PageTests(unittest.TestCase):
             'id="production-entry-modal"', 'id="production-entry-form"', 'id="production-item-id"',
             'id="production-status-options"',
             'id="production-status-config-pane"', 'id="production-config-pane"',
-            'id="production-front-form"', 'id="production-items-body"',
+            'id="production-front-form"', 'id="production-dashboard"', 'id="production-group-tabs"',
+            'id="production-overview"', 'id="production-front-detail-modal"',
             'id="production-rain-button"', 'id="production-rain-modal"',
             'id="production-daily-form"',
         ):
             self.assertIn(marker, page["body"])
         self.assertNotIn('class="production-daily-card"', page["body"])
+        # A Produção concentra tudo no painel gerencial: sem a visão Tabela.
+        self.assertNotIn('id="production-items-body"', page["body"])
+        self.assertNotIn('data-production-view', page["body"])
         self.assertNotIn('Configurar status', page["body"])  # status ficam só na página Cadastros
         self.assertNotIn('Configurar nova frente', page["body"])  # frentes também
         self.assertIn('href="/producao"', page["body"])

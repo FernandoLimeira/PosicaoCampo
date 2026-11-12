@@ -1,6 +1,5 @@
-// Painel gerencial da Produção Agrícola: visão por grupo, alternável com a tabela.
+// Painel gerencial da Produção Agrícola: a página da Produção concentra tudo nele.
 // Usa os mesmos lançamentos da tabela (productionItems) e os status cadastrados.
-const PRODUCTION_VIEW_KEY = 'posicao-campo-production-view';
 // O painel mostra um grupo por vez (sem "Todos"): mais espaço para as frentes.
 const PRODUCTION_PANEL_GROUP_KEY = 'posicao-campo-production-panel-group';
 let productionPanelGroup = '';
@@ -71,42 +70,18 @@ function dashboardStatusBar(items) {
     <div class="pdash-legend">${legend}</div>`;
 }
 
-// Detalhe de uma operação (popup da frente): código (verde com O.S., vermelho sem),
-// nome da operação, número da O.S. que confere e todos os talhões dela.
-function dashboardOperationDetail(item, code) {
+// Situação de uma operação do lançamento: O.S. que conferem, talhões e texto do selo.
+function dashboardOperationInfo(item, code) {
   const tone = productionOperationTone(item, code);
   const orders = productionOperationOrders(item, code);
-  const key = productionOperationKey(code);
-  const name = orders[0]?.operation_name
-    || (item.service_order?.orders || []).find(order => productionOperationKey(order.operation) === key)?.operation_name
-    || dashboardOperationNames.get(key) || '';
   const plots = [...new Set(orders.flatMap(order => order.plots || []))];
-  const orderText = orders.length
-    ? `O.S. ${orders.map(order => escapeHtml(order.number)).join(', ')}`
-    : (tone ? 'Sem O.S. no setor' : '');
-  return `<div class="pdash-op-row ${tone}">
-      <div class="pdash-op-head">
-        <span class="pdash-op ${tone}" title="${productionOperationTitle(tone)}">${escapeHtml(code)}</span>
-        <span class="pdash-op-name">${escapeHtml(name || 'Operação')}</span>
-        ${orderText ? `<span class="pdash-op-order">${orderText}</span>` : ''}
-      </div>
-      ${plots.length ? `<div class="pdash-op-plots"><small>${plots.length} ${plots.length === 1 ? 'talhão' : 'talhões'}</small>${plots.map(plot => `<i>${escapeHtml(plot)}</i>`).join('')}</div>` : ''}
-    </div>`;
+  const label = orders.length ? `O.S. ${orders.map(order => order.number).join(', ')}`
+    : tone ? (item.service_order?.needs_section ? 'Informe a seção' : 'Sem O.S.') : 'Sem conferência';
+  return { tone, orders, plots, label, name: productionOperationName(item, code) };
 }
 
-// Nomes do cadastro de operações (para operação sem O.S.), lidos uma vez ao abrir o popup.
-let dashboardOperationNames = new Map();
-let dashboardOperationNamesLoad = null;
-function loadDashboardOperationNames() {
-  dashboardOperationNamesLoad ||= apiRequest('/api/production/operations?usage=0')
-    .then(data => { dashboardOperationNames = new Map((data?.operations || []).map(item => [productionOperationKey(item.code), item.name])); })
-    .catch(error => { console.error(error); });
-  return dashboardOperationNamesLoad;
-}
-
-// Popup com o detalhe da frente: situação, local e cada operação com a O.S. e os talhões.
-async function openDashboardFrontDetail(itemId) {
-  await loadDashboardOperationNames();
+// Popup "Detalhe da frente": situação, dados do local e cada operação com a O.S. e os talhões.
+function openDashboardFrontDetail(itemId) {
   const item = findProductionItem(itemId);
   const body = document.querySelector('#production-front-detail-body');
   if (!item || !body) return;
@@ -116,21 +91,46 @@ async function openDashboardFrontDetail(itemId) {
   const title = document.querySelector('#production-front-detail-title');
   if (title) title.textContent = item.service_name || 'Frente';
   const context = document.querySelector('#production-front-detail-context');
-  if (context) {
-    context.textContent = [item.group_name, `Setor ${entry.sector || '-'}${entry.section ? ` / Seção ${entry.section}` : ''}`, entry.farm]
-      .filter(Boolean).join(' · ');
-  }
-  const updated = entry.work_date ? `Atualizado em ${formatIsoDateBr(entry.work_date)}${entry.updated_by_name ? ` por ${entry.updated_by_name}` : ''}` : 'Sem registro';
-  const operations = codes.length
-    ? codes.map(code => dashboardOperationDetail(item, code)).join('')
-    : '<p class="production-empty">Nenhuma operação informada neste lançamento.</p>';
-  body.innerHTML = `<div class="pdash-detail-summary">
+  if (context) context.textContent = item.group_name || '';
+  const info = [
+    ['Setor', entry.sector || '-'],
+    ['Seção', entry.section || '-'],
+    ['Fazenda', entry.farm || '-'],
+    ['Atualização', entry.work_date ? formatIsoDateBr(entry.work_date) : 'Sem registro'],
+    ['Responsável', entry.updated_by_name || item.owner_name || '-']
+  ];
+  const okCount = codes.filter(code => productionOperationTone(item, code) === 'is-order-ok').length;
+  const operations = codes.map(code => {
+    const op = dashboardOperationInfo(item, code);
+    const opened = [...new Set(op.orders.map(order => order.opened_on).filter(Boolean).map(date => serviceOrderDate(date)))];
+    return `<article class="pfd-op ${op.tone}">
+        <header>
+          <span class="pfd-op-code">${escapeHtml(code)}</span>
+          <span class="pfd-op-name">${escapeHtml(op.name || 'Operação sem nome no cadastro')}</span>
+          <span class="pfd-op-badge ${op.tone}" title="${escapeHtml(productionOperationTitle(op.tone, item))}">${escapeHtml(op.label)}</span>
+        </header>
+        ${op.plots.length ? `<p class="pfd-op-line"><b>${op.plots.length === 1 ? 'Talhão' : `Talhões (${op.plots.length})`}</b>${escapeHtml(op.plots.join(', '))}</p>` : ''}
+        ${opened.length ? `<p class="pfd-op-line"><b>Abertura</b>${escapeHtml(opened.join(', '))}</p>` : ''}
+      </article>`;
+  }).join('');
+  const check = codes.length
+    ? `<span class="pfd-hero-check ${okCount === codes.length ? 'is-order-ok' : 'is-order-missing'}">${okCount}/${codes.length} ${codes.length === 1 ? 'operação' : 'operações'} com O.S.</span>`
+    : '<span class="pfd-hero-check">Sem operação informada</span>';
+  body.innerHTML = `<div class="pfd-hero ${meta.className}">
       <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
-      <span>${escapeHtml(updated)}</span>
+      ${check}
+      ${item.is_current_day ? '' : `<span class="pdash-stale">${dashboardIcon('clock')}Não atualizada hoje</span>`}
     </div>
-    <div class="pdash-detail-ops">${operations}</div>
-    ${entry.observation ? `<p class="pdash-detail-note"><b>Observação:</b> ${escapeHtml(entry.observation)}</p>` : ''}
-    ${canFillProduction() ? `<div class="pdash-detail-actions"><button class="modal-button save" type="button" data-panel-edit="${item.id}">Editar frente</button></div>` : ''}`;
+    <dl class="pfd-info">${info.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}</dl>
+    <section class="pfd-section">
+      <h3>Operações ${codes.length ? `<small>${codes.length}</small>` : ''}</h3>
+      ${operations || '<p class="production-empty">Nenhuma operação informada neste lançamento.</p>'}
+    </section>
+    ${entry.observation ? `<section class="pfd-section"><h3>Observação</h3><p class="pfd-note">${escapeHtml(entry.observation)}</p></section>` : ''}
+    ${canFillProduction() ? `<div class="pdash-detail-actions">
+      <button class="modal-button danger" type="button" data-panel-remove="${item.id}">Remover</button>
+      <button class="modal-button save" type="button" data-panel-edit="${item.id}">Editar frente</button>
+    </div>` : ''}`;
   openModal('production-front-detail-modal');
 }
 
@@ -140,13 +140,18 @@ function dashboardFrontTile(item) {
   const state = dashboardOrderState(item);
   const codes = splitProductionOperations(entry.operation);
   const order = state === 'ok' ? '<span class="pdash-os is-ok" title="O.S. confere">O.S. OK</span>'
-    : state === 'missing' ? '<span class="pdash-os is-missing" title="Operação sem O.S. no setor">Sem O.S.</span>' : '';
-  const operation = codes.length
+    : state === 'missing' ? (item.service_order?.needs_section
+      ? '<span class="pdash-os is-missing" title="No Polo MS a O.S. confere por setor e seção">Informe a seção</span>'
+      : '<span class="pdash-os is-missing" title="Operação sem O.S. no setor">Sem O.S.</span>') : '';
+  // Cada operação numa linha: código (verde com O.S., vermelho sem) e o nome.
+  const operations = codes.length
     ? codes.map(code => {
       const tone = productionOperationTone(item, code);
-      return `<span class="pdash-op ${tone}" title="${productionOperationTitle(tone)}">${escapeHtml(code)}</span>`;
+      const name = productionOperationName(item, code);
+      return `<span class="pdash-tile-op" title="${escapeHtml(productionOperationTitle(tone, item))}">
+          <span class="pdash-op ${tone}">${escapeHtml(code)}</span><span class="pdash-tile-op-name">${escapeHtml(name || '-')}</span></span>`;
     }).join('')
-    : '<span class="pdash-op is-empty">Sem operação</span>';
+    : '<span class="pdash-tile-op"><span class="pdash-op is-empty">Sem operação</span></span>';
   const stale = item.is_current_day ? ''
     : `<span class="pdash-stale">${dashboardIcon('clock')}${entry.work_date ? `Último registro ${escapeHtml(formatIsoDateBr(entry.work_date))}` : 'Sem registro'}</span>`;
   return `<button type="button" data-panel-detail="${item.id}" class="pdash-tile ${meta.className}${item.is_current_day ? '' : ' is-stale'}" title="${escapeHtml(`${item.service_name} · ${meta.name} · ver detalhes`)}">
@@ -155,9 +160,82 @@ function dashboardFrontTile(item) {
         <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
       </span>
       <span class="pdash-place">${dashboardIcon('pin')}<span>Setor ${escapeHtml(entry.sector || '-')}${entry.section ? ` / ${escapeHtml(entry.section)}` : ''}${entry.farm ? ` · ${escapeHtml(entry.farm)}` : ''}</span></span>
-      ${stale}
-      <span class="pdash-tile-foot"><span class="pdash-ops">${operation}</span>${order}</span>
+      <span class="pdash-tile-ops">${operations}</span>
+      <span class="pdash-tile-foot">${stale || '<span></span>'}${order}</span>
     </button>`;
+}
+
+// Resumo analítico da unidade (topo do painel): indicadores por grupo e as operações em
+// execução, com quantas frentes estão com e sem O.S.
+function dashboardGroupStats(items) {
+  const stats = { total: items.length, active: 0, stopped: 0, ok: 0, missing: 0, noOperation: 0, today: 0 };
+  items.forEach(item => {
+    const className = statusMeta(item.entry?.status).className;
+    if (className === 'is-active') stats.active += 1;
+    if (className === 'is-stopped') stats.stopped += 1;
+    const state = dashboardOrderState(item);
+    if (state === 'ok') stats.ok += 1;
+    if (state === 'missing') stats.missing += 1;
+    if (state === 'no_operation') stats.noOperation += 1;
+    if (item.is_current_day) stats.today += 1;
+  });
+  return stats;
+}
+
+function dashboardOverviewRow(name, stats, total = false) {
+  const percent = (part, all) => (all ? `${Math.round(part * 100 / all)}%` : '-');
+  const checked = stats.ok + stats.missing;
+  return `<tr class="${total ? 'is-total' : ''}">
+      <th scope="row">${escapeHtml(name)}</th>
+      <td>${stats.total}</td>
+      <td>${stats.active}</td>
+      <td class="${stats.stopped ? 'is-red' : ''}">${stats.stopped}</td>
+      <td class="${checked && stats.ok < checked ? 'is-red' : checked ? 'is-green' : ''}">${checked ? `${stats.ok}/${checked}` : '-'}<small>${percent(stats.ok, checked)}</small></td>
+      <td class="${stats.missing ? 'is-red' : ''}">${stats.missing}</td>
+      <td class="${stats.noOperation ? 'is-amber' : ''}">${stats.noOperation}</td>
+      <td class="${stats.today < stats.total ? 'is-gray' : 'is-green'}">${stats.today}/${stats.total}<small>${percent(stats.today, stats.total)}</small></td>
+    </tr>`;
+}
+
+function renderDashboardOverview(groups, allItems) {
+  const box = document.querySelector('#production-overview');
+  if (!box) return;
+  box.hidden = allItems.length === 0;
+  if (!allItems.length) {
+    box.innerHTML = '';
+    return;
+  }
+  const operations = new Map();
+  allItems.forEach(item => splitProductionOperations(item.entry?.operation).forEach(code => {
+    const key = productionOperationKey(code);
+    if (!operations.has(key)) operations.set(key, { code, name: '', fronts: 0, ok: 0, missing: 0 });
+    const op = operations.get(key);
+    op.name ||= productionOperationName(item, code);
+    op.fronts += 1;
+    const tone = productionOperationTone(item, code);
+    if (tone === 'is-order-ok') op.ok += 1;
+    if (tone === 'is-order-missing') op.missing += 1;
+  }));
+  const opRows = [...operations.values()].sort((a, b) => b.missing - a.missing || b.fronts - a.fronts || compareFrontLabels(a.code, b.code));
+  const opList = opRows.length ? `<ul class="pdash-op-summary">${opRows.map(op => `<li>
+        <span class="pdash-op ${op.missing ? 'is-order-missing' : op.ok ? 'is-order-ok' : ''}">${escapeHtml(op.code)}</span>
+        <span class="pdash-op-summary-name">${escapeHtml(op.name || '-')}</span>
+        <span class="pdash-op-summary-count">${op.fronts} ${op.fronts === 1 ? 'frente' : 'frentes'}</span>
+        <span class="pdash-op-summary-check">${op.ok ? `<b class="is-ok">${op.ok} com O.S.</b>` : ''}${op.missing ? `<b class="is-missing">${op.missing} sem O.S.</b>` : ''}</span>
+      </li>`).join('')}</ul>` : '<p class="production-empty">Nenhuma operação informada.</p>';
+  box.innerHTML = `<article class="pdash-overview-card">
+      <header><h3>Resumo por grupo</h3><span>${allItems.length} ${allItems.length === 1 ? 'frente' : 'frentes'} na unidade</span></header>
+      <div class="pdash-overview-scroll"><table class="pdash-overview-table">
+        <thead><tr><th scope="col">Grupo</th><th scope="col">Frentes</th><th scope="col">Em atividade</th><th scope="col">Paradas</th>
+          <th scope="col">O.S. OK</th><th scope="col">Sem O.S.</th><th scope="col">Sem operação</th><th scope="col">Atualizadas hoje</th></tr></thead>
+        <tbody>${groups.map(group => dashboardOverviewRow(group.name, dashboardGroupStats(group.items))).join('')}</tbody>
+        <tfoot>${dashboardOverviewRow('Total', dashboardGroupStats(allItems), true)}</tfoot>
+      </table></div>
+    </article>
+    <article class="pdash-overview-card">
+      <header><h3>Operações em execução</h3><span>${opRows.length} ${opRows.length === 1 ? 'operação' : 'operações'}</span></header>
+      ${opList}
+    </article>`;
 }
 
 function dashboardGroupInitials(name) {
@@ -185,6 +263,7 @@ function renderProductionDashboard() {
     const worst = [...ordered].sort((a, b) => dashboardProblemScore(b.items) - dashboardProblemScore(a.items) || a.order - b.order)[0];
     productionPanelGroup = worst ? String(worst.id) : '';
   }
+  renderDashboardOverview(ordered, allItems);
   renderDashboardGroupTabs(ordered);
   const selected = ordered.filter(group => String(group.id) === productionPanelGroup);
 
@@ -244,23 +323,6 @@ function fitDashboardTiles() {
   });
 }
 
-function setProductionView(view) {
-  const panel = view !== 'table';
-  document.querySelectorAll('[data-production-view]').forEach(button => {
-    const active = (button.dataset.productionView === 'panel') === panel;
-    button.classList.toggle('is-active', active);
-    button.setAttribute('aria-selected', String(active));
-  });
-  const dashboard = document.querySelector('#production-dashboard');
-  const table = document.querySelector('#production-table-card');
-  if (dashboard) dashboard.hidden = !panel;
-  if (table) table.hidden = panel;
-  try { localStorage.setItem(PRODUCTION_VIEW_KEY, panel ? 'panel' : 'table'); } catch (_) { /* preferência opcional */ }
-}
-
-document.querySelectorAll('[data-production-view]').forEach(button => {
-  button.addEventListener('click', () => setProductionView(button.dataset.productionView));
-});
 document.querySelector('#production-group-tabs')?.addEventListener('click', event => {
   const tab = event.target.closest('[data-panel-group]');
   if (!tab) return;
@@ -274,15 +336,13 @@ document.querySelector('#production-group-cards')?.addEventListener('click', eve
 });
 document.querySelector('#production-front-detail-body')?.addEventListener('click', event => {
   const edit = event.target.closest('[data-panel-edit]');
-  if (!edit) return;
+  const remove = event.target.closest('[data-panel-remove]');
+  if (!edit && !remove) return;
   closeModal('production-front-detail-modal');
-  openEditProductionItem(Number(edit.dataset.panelEdit));
+  if (edit) openEditProductionItem(Number(edit.dataset.panelEdit));
+  // Remover pede confirmação (mesma ação que ficava na tabela).
+  if (remove) removeProductionItem(Number(remove.dataset.panelRemove));
 });
-(() => {
-  let saved = 'panel';
-  try { saved = localStorage.getItem(PRODUCTION_VIEW_KEY) || 'panel'; } catch (_) { /* sem armazenamento */ }
-  setProductionView(saved);
-})();
 
 // Garantia além do ResizeObserver: refaz as colunas quando a janela muda de tamanho ou de zoom.
 let dashboardResizeFrame = 0;

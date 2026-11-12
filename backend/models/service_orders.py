@@ -9,7 +9,13 @@ Coluna O.S. de um lançamento:
 - com operações escolhidas no popup (uma ou mais, "338, 457"): "OK" se cada
   código tem O.S. no setor;
 - sem operação informada: "Sem operação" (o "Ver" continua mostrando as O.S. do setor);
-- "Sem O.S." quando não existe. Quando o lançamento e a O.S. têm seção, ela também precisa coincidir.
+- "Sem O.S." quando não existe.
+
+Setor e seção: no Polo SP (PPT e NRD) a O.S. confere pelo setor (e pela seção quando
+o lançamento e a O.S. a têm). No Polo MS (RBR e PST) vários setores dividem a mesma
+seção, então a operação é amarrada ao setor E à seção: a O.S. só confere com a mesma
+seção, o lançamento sem seção não confere nenhuma ("needs_section") e o "Ver" mostra
+só as O.S. da seção do lançamento.
 """
 from __future__ import annotations
 
@@ -153,11 +159,18 @@ def list_service_orders(user_id: int, unit_code: Any, search: Any = None, *, sum
     }
 
 
-def order_matches_entry(order: sqlite3.Row | dict, entry: dict[str, Any]) -> bool:
+# Polo MS: a O.S. é conferida por setor + seção.
+SECTION_UNIT_CODES = frozenset({"RBR", "PST"})
+
+
+def order_matches_entry(order: sqlite3.Row | dict, entry: dict[str, Any], *, require_section: bool = False) -> bool:
     if sector_key(order["sector"]) != sector_key(entry.get("sector")):
         return False
     section = sector_key(entry.get("section"))
-    if section and order["section"] and sector_key(order["section"]) != section:
+    if require_section:
+        if not section or sector_key(order["section"]) != section:
+            return False
+    elif section and order["section"] and sector_key(order["section"]) != section:
         return False
     wanted = operation_keys(entry.get("operation"))
     return not wanted or operation_key(order["operation"]) in wanted
@@ -165,10 +178,18 @@ def order_matches_entry(order: sqlite3.Row | dict, entry: dict[str, Any]) -> boo
 
 def attach_service_order_status(conn: sqlite3.Connection, unit: str, items: list[dict[str, Any]]) -> None:
     """Acrescenta ``service_order`` a cada lançamento: ok, missing ou no_sector.
-    A base de O.S. é a mesma para todas as unidades (``unit`` não filtra)."""
+    A base de O.S. é a mesma para todas as unidades; ``unit`` decide se a seção é
+    obrigatória na conferência (Polo MS)."""
+    require_section = str(unit or "").upper() in SECTION_UNIT_CODES
     by_sector: dict[str, list[sqlite3.Row]] = {}
+    # Nome de cada operação: o do cadastro; sem cadastro, o que veio no arquivo de O.S.
+    names: dict[str, str] = {}
     for row in conn.execute("SELECT * FROM production_service_orders"):
         by_sector.setdefault(row["sector_key"], []).append(row)
+        if row["operation_name"]:
+            names.setdefault(row["operation_key"], row["operation_name"])
+    for row in conn.execute("SELECT code_key, name FROM production_operations WHERE name<>''"):
+        names[row["code_key"]] = row["name"]
     # Cada O.S. é lida uma vez; o lançamento leva só o resumo (o detalhe vem no "Ver").
     summaries: dict[int, dict[str, Any]] = {}
 
@@ -179,14 +200,20 @@ def attach_service_order_status(conn: sqlite3.Connection, unit: str, items: list
         return summaries[order_id]
     for item in items:
         entry = item.get("entry") or {}
+        wanted = operation_keys(entry.get("operation"))
+        operation_names = {key: names[key] for key in wanted if names.get(key)}
         if not entry.get("sector"):
-            item["service_order"] = {"status": "no_sector", "orders": []}
+            item["service_order"] = {"status": "no_sector", "orders": [], "operation_names": operation_names}
             continue
         sector_rows = by_sector.get(sector_key(entry["sector"]), [])
-        matching_rows = [row for row in sector_rows if order_matches_entry(row, entry)]
+        section = sector_key(entry.get("section"))
+        needs_section = require_section and not section
+        if require_section and section:
+            # Polo MS: o "Ver" mostra só as O.S. da seção do lançamento.
+            sector_rows = [row for row in sector_rows if sector_key(row["section"]) == section]
+        matching_rows = [row for row in sector_rows if order_matches_entry(row, entry, require_section=require_section)]
         matches = {int(row["id"]) for row in matching_rows}
         # Com várias operações, todas precisam ter O.S. no setor para ficar "OK".
-        wanted = operation_keys(entry.get("operation"))
         covered = {operation_key(row["operation"]) for row in matching_rows}
         complete = bool(wanted) and all(key in covered for key in wanted)
         sector_orders = [{**summary_of(row), "matches": int(row["id"]) in matches} for row in sector_rows]
@@ -198,6 +225,9 @@ def attach_service_order_status(conn: sqlite3.Connection, unit: str, items: list
         item["service_order"] = {
             "status": "no_operation" if not wanted else ("ok" if complete else "missing"),
             "missing_operations": [key for key in wanted if key not in covered],
+            "needs_section": needs_section,
+            # Nome de cada operação do lançamento (código -> nome), mesmo sem O.S. no setor.
+            "operation_names": operation_names,
             # Todas as O.S. abertas do setor; "matches" marca as que conferem com o lançamento.
             "orders": sector_orders,
         }

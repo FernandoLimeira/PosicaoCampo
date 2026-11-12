@@ -79,6 +79,43 @@ class ServiceOrderTests(unittest.TestCase):
         order = service_orders.list_service_orders(self.admin["id"], "PPT")["orders"][0]
         self.assertEqual((order["operation_name"], order["plots"]), ("TRATOS", ["1", "2"]))
 
+    def test_polo_ms_ties_operation_to_sector_and_section(self):
+        group = production.list_catalog(self.admin["id"], include_inactive=True)["groups"][0]
+        front = production.save_service_front(self.admin["id"], {
+            "name": "Fertirrigação MS", "group_id": group["id"], "display_style": "operation",
+            "position": 2, "units": ["PST", "PPT"], "is_active": True,
+        })
+        service_orders.import_service_orders(self.admin["id"], "PST", [
+            {"number": "329655", "sector": "1", "section": "67626", "operation": "342", "plots": ["5", "8"]},
+            {"number": "331116", "sector": "1", "section": "90284", "operation": "348", "plots": ["1"]},
+        ])
+
+        def launch(unit, section, operation):
+            for item in production.list_my_items(self.admin["id"], unit, "2026-11-10", scope="all")["items"]:
+                production.save_items_sheet(self.admin["id"], {"unit_code": unit, "work_date": "2026-11-10", "removed": [item["id"]]})
+            production.save_items_sheet(self.admin["id"], {"unit_code": unit, "work_date": "2026-11-10", "rows": [
+                {"service_front_id": front["id"], "sector": "1", "section": section, "status": self.status, "operation": operation}]})
+            return production.list_my_items(self.admin["id"], unit, "2026-11-10", scope="all")["items"][0]["service_order"]
+
+        # Polo MS: mesma seção confere e o "Ver" mostra só as O.S. dessa seção.
+        order = launch("PST", "67626", "342")
+        self.assertEqual((order["status"], order["needs_section"]), ("ok", False))
+        self.assertEqual([o["number"] for o in order["orders"]], ["329655"])
+        # A operação 348 só tem O.S. em outra seção do mesmo setor: não confere.
+        self.assertEqual(launch("PST", "67626", "348")["missing_operations"], ["348"])
+        # Sem seção, nenhuma O.S. confere e a tela pede a seção.
+        order = launch("PST", "", "342")
+        self.assertEqual((order["status"], order["needs_section"]), ("missing", True))
+        # Polo SP continua conferindo só pelo setor.
+        order = launch("PPT", "", "348")
+        self.assertEqual((order["status"], order["needs_section"]), ("ok", False))
+
+        # Nome de cada operação: o do cadastro; sem cadastro, o do arquivo de O.S.
+        service_orders.save_operation(self.admin["id"], {"code": "999", "name": "OPERAÇÃO DO CADASTRO"})
+        order = launch("PST", "67626", "342, 999")
+        self.assertEqual(order["missing_operations"], ["999"])
+        self.assertEqual(order["operation_names"]["999"], "OPERAÇÃO DO CADASTRO")
+
     def test_parser_reads_operation_name_column(self):
         # Layout novo: DESCRICAO_OPERACAO é o nome da operação, mesmo depois de CCUSTO_TRATOS.
         parsed = parse_service_order_file(xlsx([
