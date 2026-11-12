@@ -150,39 +150,84 @@ function openDashboardFrontDetail(itemId) {
   openModal('production-front-detail-modal');
 }
 
+// Ícone de cada status (ao lado do nome da frente) e das operações (✓ com O.S., ✕ sem).
+const DASHBOARD_STATUS_ICONS = {
+  'is-active': '<path d="M8 5.5v13l10.5-6.5z"/>',
+  'is-wet': '<path d="M12 3.5s6 6.4 6 10.6a6 6 0 0 1-12 0C6 9.9 12 3.5 12 3.5z"/>',
+  'is-waiting': '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  'is-stopped': '<rect x="7" y="7" width="10" height="10" rx="1.5"/>'
+};
+const DASHBOARD_ORDER_ICONS = {
+  'is-order-ok': '<path d="m5 12.5 4.2 4.2L19 7"/>',
+  'is-order-missing': '<path d="M7 7l10 10M17 7 7 17"/>'
+};
+function dashboardSvg(paths, filled = false) {
+  return `<svg viewBox="0 0 24 24" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+}
+
+// Quem atualizou e quando (hoje: só a hora; antes: dia e hora), no horário de Brasília.
+function dashboardUpdatedLabel(item) {
+  const entry = item.entry || {};
+  const who = entry.updated_by_name || item.owner_name || '';
+  if (!entry.updated_at) return who;
+  const when = new Date(entry.updated_at * 1000);
+  const time = when.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+  const day = item.is_current_day ? `hoje ${time}` : `${formatIsoDateBr(entry.work_date || '').slice(0, 5)} ${time}`;
+  return [who, day].filter(Boolean).join(' · ');
+}
+
+// Ordem dos cartões no grupo: problemas primeiro (parada, sem O.S., sem operação,
+// não atualizada hoje) e depois as demais, mantendo a ordem original entre iguais.
+function dashboardTilePriority(item) {
+  const flags = dashboardFlags(item);
+  if (flags.stopped) return 0;
+  if (flags.noOrder) return 1;
+  if (flags.noOperation) return 2;
+  if (flags.stale) return 3;
+  return 4;
+}
+function dashboardSortTiles(items) {
+  return items.map((item, index) => ({ item, index }))
+    .sort((a, b) => dashboardTilePriority(a.item) - dashboardTilePriority(b.item) || a.index - b.index)
+    .map(({ item }) => item);
+}
+
 function dashboardFrontTile(item) {
   const entry = item.entry || {};
   const meta = statusMeta(entry.status);
-  const state = dashboardOrderState(item);
   const codes = splitProductionOperations(entry.operation);
-  const order = state === 'ok' ? '<span class="pdash-os is-ok" title="O.S. confere">O.S. OK</span>'
-    : state === 'missing' ? (item.service_order?.needs_section
-      ? '<span class="pdash-os is-missing" title="No Polo MS a O.S. confere por setor e seção">Informe a seção</span>'
-      : '<span class="pdash-os is-missing" title="Operação sem O.S. no setor">Sem O.S.</span>') : '';
-  // Cada operação numa linha: código (verde com O.S., vermelho sem) e o nome.
+  // Cada operação numa linha: ✓/✕, código colorido e o nome (menor).
   const operations = codes.length
     ? codes.map(code => {
       const tone = productionOperationTone(item, code);
       const name = productionOperationName(item, code);
-      return `<span class="pdash-tile-op" title="${escapeHtml(productionOperationTitle(tone, item))}">
+      return `<span class="pdash-tile-op ${tone}" title="${escapeHtml(productionOperationTitle(tone, item))}">
+          <i class="pdash-tile-op-icon">${DASHBOARD_ORDER_ICONS[tone] ? dashboardSvg(DASHBOARD_ORDER_ICONS[tone]) : ''}</i>
           <span class="pdash-op ${tone}">${escapeHtml(code)}</span><span class="pdash-tile-op-name">${escapeHtml(name || '-')}</span></span>`;
     }).join('')
-    : '<span class="pdash-tile-op"><span class="pdash-op is-empty">Sem operação</span></span>';
+    : '<span class="pdash-tile-op is-empty"><span class="pdash-op is-empty">Sem operação</span></span>';
+  const section = item.service_order?.needs_section
+    ? '<span class="pdash-os is-missing" title="No Polo MS a O.S. confere por setor e seção">Informe a seção</span>' : '';
   const stale = item.is_current_day ? ''
     : `<span class="pdash-stale">${dashboardIcon('clock')}${entry.work_date ? `Último registro ${escapeHtml(formatIsoDateBr(entry.work_date))}` : 'Sem registro'}</span>`;
   // Cartão clicável (abre o detalhe, também por Enter/Espaço) com botão próprio de editar.
   const edit = canFillProduction()
     ? `<button type="button" class="pdash-tile-edit icon-edit-button" data-panel-edit="${item.id}" title="Editar frente"
         aria-label="Editar ${escapeHtml(item.service_name || 'frente')}">${PENCIL_ICON}</button>` : '';
+  const updated = dashboardUpdatedLabel(item);
   return `<article tabindex="0" role="button" data-panel-detail="${item.id}" class="pdash-tile ${meta.className}${item.is_current_day ? '' : ' is-stale'}" title="${escapeHtml(`${item.service_name} · ${meta.name} · ver detalhes`)}">
-      <span class="pdash-tile-top">
+      <span class="pdash-tile-name">
+        <i class="pdash-status-icon ${meta.className}">${dashboardSvg(DASHBOARD_STATUS_ICONS[meta.className] || DASHBOARD_STATUS_ICONS['is-waiting'], meta.className !== 'is-waiting')}</i>
         <strong>${escapeHtml(item.service_name || '-')}</strong>
+      </span>
+      <span class="pdash-tile-meta">
         <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
+        ${stale}
         ${edit}
       </span>
       <span class="pdash-place">${dashboardIcon('pin')}<span>Setor ${escapeHtml(entry.sector || '-')}${entry.section ? ` / ${escapeHtml(entry.section)}` : ''}${entry.farm ? ` · ${escapeHtml(entry.farm)}` : ''}</span></span>
       <span class="pdash-tile-ops">${operations}</span>
-      <span class="pdash-tile-foot">${stale || '<span></span>'}${order}</span>
+      <span class="pdash-tile-foot"><span class="pdash-tile-who">${escapeHtml(updated)}</span>${section}</span>
     </article>`;
 }
 
@@ -366,7 +411,7 @@ function renderProductionDashboard() {
     const fronts = [...new Map(group.items.map(item => [String(item.service_front_id), item.service_name])).entries()]
       .sort((a, b) => compareFrontLabels(a[1] || '', b[1] || ''));
     if (dashboardPanelFilter.front && !fronts.some(([id]) => id === dashboardPanelFilter.front)) dashboardPanelFilter.front = '';
-    const visible = group.items.filter(item => dashboardMatchesFilter(item));
+    const visible = dashboardSortTiles(group.items.filter(item => dashboardMatchesFilter(item)));
     const filtering = Boolean(dashboardPanelFilter.flag || dashboardPanelFilter.front);
     return `<article class="pdash-group${stopped ? ' has-stopped' : ''}">
       <header class="pdash-group-header">

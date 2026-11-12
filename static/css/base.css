@@ -23,8 +23,14 @@
   --control-surface: #eef2f4;
   --control-hover: #e1e8ec;
   --control-text: #22474e;
-  /* Verde de status (OK, em atividade, confere): independente da cor da marca. */
-  --status-ok: #2c8764;
+  /* Paleta (nomes): ink/deep/petrol/slate/silver/graphite. */
+  --ink: #0e1d21; --deep: #122e34; --petrol: #22474e; --slate: #677e8a; --silver: #abafb5; --graphite: #5b6168;
+  /* Status harmonizados com a paleta: mantêm o significado (verde/amarelo/vermelho);
+     "aguardando" usa o ardósia da paleta. --status-ok vale para OK, em atividade e confere. */
+  --status-ok: #2e8b6e; --status-ok-soft: #e1f2ea; --status-ok-text: #1d6b52;
+  --status-wet: #c99a2e; --status-wet-soft: #fbf1d8; --status-wet-text: #7f5f12;
+  --status-stop: #c4454f; --status-stop-soft: #fbe7e9; --status-stop-text: #9f2f39;
+  --status-wait: #677e8a; --status-wait-soft: #e7ecef; --status-wait-text: #4a5d66;
   --yellow: #d4aa43;
   --yellow-soft: #fff6df;
   --red: #d2646e;

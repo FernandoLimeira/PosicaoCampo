@@ -324,6 +324,13 @@ button.pdash-kpi.is-active { color: #e0e0e0; }
 .pdash-overview-table tbody th { color: #e0e0e0; border-bottom: 1px solid #434343; }
 .pdash-overview-table tfoot :is(th, td) { background: #202020; color: #e6e6e6; }
 .pdash-tile[data-panel-detail]:focus-visible { outline: 3px solid rgba(97, 97, 97, 0.45); }
+.pdash-tile { background: #2a2a2a; }
+.pdash-tile.is-stopped { background: linear-gradient(180deg, #282828, #2a2a2a 60%); }
+.pdash-tile.is-stale { background: #282828; }
+.pdash-tile-ops { border-top: 1px solid #414141; }
+:is(.production-operation-codes span, .pdash-op).is-order-ok { border-color: #46534c; }
+:is(.production-operation-codes span, .pdash-op).is-order-missing { border-color: #4d4243; }
+.pdash-tile-foot { border-top: 1px dashed #434343; }
 .production-primary-button.pdash-action { background: linear-gradient(135deg, #3f6f7a 0%, #1b3a41 100%); }
 .production-primary-button.pdash-action:hover:not(:disabled) { background: linear-gradient(135deg, #4a7c87 0%, #22474e 100%); }
 .pdash-group-tab.is-active { background: linear-gradient(135deg, #3f6f7a 0%, #1b3a41 100%); color: #ffffff; }
