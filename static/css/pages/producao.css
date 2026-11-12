@@ -806,6 +806,9 @@ button.pdash-tile:hover { transform: translateY(-1px); border-color: #b9d8c7; bo
 .pdash-ops { display: flex; flex-wrap: wrap; gap: 4px; }
 .pdash-op { padding: 2px 8px; border: 1px solid #c9d8f0; border-radius: 999px; background: #f1f6fd; color: #24508f; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .pdash-op.is-empty { border-color: #f1d2a6; background: #fff8ec; color: #a8680d; }
+/* Cada operação do lançamento: verde com O.S. no setor, vermelho sem O.S. */
+:is(.production-operation-codes span, .pdash-op).is-order-ok { border-color: #a9d8bc; background: #e2f3ea; color: #18733b; }
+:is(.production-operation-codes span, .pdash-op).is-order-missing { border-color: #f0c4c8; background: #fde9ea; color: #a52d36; }
 .pdash-os { flex: 0 0 auto; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 800; }
 .pdash-os.is-ok { background: #e2f3ea; color: #18733b; }
 .pdash-os.is-missing { background: #fde9ea; color: #a52d36; }
@@ -858,9 +861,8 @@ button.pdash-tile:hover { transform: translateY(-1px); border-color: #b9d8c7; bo
 
 /* Blocos das frentes responsivos: colunas pelo espaço real e textos que quebram linha. */
 .pdash-tiles { grid-template-columns: repeat(var(--tile-cols, 3), minmax(0, 1fr)) !important; }
-.pdash-tile-top strong { white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+.pdash-tile-top strong { min-width: 0; font-size: 16px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pdash-place span { white-space: normal; overflow: visible; line-height: 1.3; }
-.pdash-tile-foot { flex-wrap: wrap; }
 @media (max-width: 520px) { .pdash-tiles { grid-template-columns: 1fr !important; } }
 
 
@@ -897,3 +899,25 @@ button.pdash-tile:hover { transform: translateY(-1px); border-color: #b9d8c7; bo
   .production-order-modal-body { padding: 12px; }
   .pos-os-meta { margin-left: 0; width: 100%; }
 }
+
+/* Cartão da frente: nome inteiro numa linha; rodapé com as operações. */
+.pdash-tile-top .pdash-status { flex: 0 0 auto; }
+.pdash-tile-foot { flex-wrap: wrap; }
+
+/* Popup "Detalhe da frente": cada operação com a O.S. que confere e todos os talhões. */
+.pdash-detail-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; color: #5d7166; font-size: 12px; font-weight: 700; }
+.pdash-detail-ops { display: grid; gap: 8px; }
+.pdash-op-row { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--data-border); border-radius: 10px; background: #fff; }
+.pdash-op-row.is-order-ok { border-color: #a9d8bc; background: #f0f9f4; }
+.pdash-op-row.is-order-missing { border-color: #f0c4c8; background: #fdf2f3; }
+.pdash-op-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pdash-op-head .pdash-op { font-size: 12px; }
+.pdash-op-name { flex: 1; min-width: 0; overflow: hidden; color: #1d3a2b; font-size: 13px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.pdash-op-order { flex: 0 0 auto; font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pdash-op-row.is-order-ok .pdash-op-order { color: #18733b; }
+.pdash-op-row.is-order-missing .pdash-op-order { color: #a52d36; }
+.pdash-op-plots { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.pdash-op-plots small { margin-right: 4px; color: #6f8077; font-size: 11px; font-weight: 700; }
+.pdash-op-plots i { min-width: 26px; padding: 2px 6px; border: 1px solid #cfe6da; border-radius: 6px; background: #fff; color: #1d4a31; font-size: 11px; font-style: normal; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
+.pdash-detail-note { margin: 0; color: #4d6158; font-size: 12px; }
+.pdash-detail-actions { display: flex; justify-content: flex-end; }

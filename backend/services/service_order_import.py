@@ -1,11 +1,13 @@
 """Leitura do arquivo de Ordens de Serviço (O.S.) da Produção Agrícola.
 
-Modelo do arquivo (uma linha por talhão):
-``CHAVE | NO_OS | SETOR | SECAO | OPERACAO | TALHAO | CCUSTO | CCUSTO_TRATOS | DT_ABERTURA_OS``
+Modelo do arquivo (uma linha por talhão; a ordem das colunas não importa):
+``SECAO | SETOR | TALHAO | NO_OS | OPERACAO | DESCRICAO_OPERACAO | CCUSTO | CCUSTO_TRATOS | DT_ABERTURA_OS``
 
-``OPERACAO`` é o código da operação (ex.: 338) e ``CCUSTO_TRATOS`` a sua
-descrição (ex.: TRATOS PLANTIO). As linhas da mesma O.S. (NO_OS + SETOR + SECAO
-+ OPERACAO) viram uma única O.S. com a lista de talhões. Todas as colunas do
+``OPERACAO`` é o código da operação (ex.: 342) e ``DESCRICAO_OPERACAO`` o nome dela
+(ex.: FERT ASPERSAO 1 LAMINA). ``CCUSTO_TRATOS`` é a descrição do centro de custo
+(ex.: TRATOS SOQUEIRA) e só vira o nome da operação em arquivos antigos, sem
+``DESCRICAO_OPERACAO``. A coluna ``CHAVE`` é opcional. As linhas da mesma O.S.
+(NO_OS + SETOR + SECAO + OPERACAO) viram uma única O.S. com a lista de talhões. Todas as colunas do
 arquivo são mantidas linha a linha (``rows``) para o detalhe da O.S.; linhas
 vazias são ignoradas.
 """
@@ -41,7 +43,9 @@ HEADER_ALIASES = {
     "operation": {"operacao", "cod operacao", "codigo operacao"},
     "plot": {"talhao", "cod talhao"},
     "cost_center": {"ccusto", "centro custo", "centro de custo"},
-    "operation_name": {"ccusto tratos", "descricao operacao", "descricao da operacao"},
+    "operation_name": {"descricao operacao", "descricao da operacao", "nome operacao", "nome da operacao"},
+    # Descrição do centro de custo: nome da operação só quando falta DESCRICAO_OPERACAO.
+    "cost_center_name": {"ccusto tratos"},
     "opened_on": {"dt abertura os", "data abertura os", "data abertura", "dt abertura"},
 }
 REQUIRED_FIELDS = ("number", "sector", "operation")
@@ -100,6 +104,8 @@ def _parse_rows(rows):
     rows_read = 0
     for row in rows[header_index + 1:]:
         values = {field: _cell(row, mapping.get(field)) for field in HEADER_ALIASES}
+        if "operation_name" not in mapping:
+            values["operation_name"] = values["cost_center_name"]
         if not values["number"] or not values["sector"] or not values["operation"]:
             continue
         rows_read += 1

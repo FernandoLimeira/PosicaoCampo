@@ -79,6 +79,21 @@ class ServiceOrderTests(unittest.TestCase):
         order = service_orders.list_service_orders(self.admin["id"], "PPT")["orders"][0]
         self.assertEqual((order["operation_name"], order["plots"]), ("TRATOS", ["1", "2"]))
 
+    def test_parser_reads_operation_name_column(self):
+        # Layout novo: DESCRICAO_OPERACAO é o nome da operação, mesmo depois de CCUSTO_TRATOS.
+        parsed = parse_service_order_file(xlsx([
+            ["SECAO", "SETOR", "TALHAO", "NO_OS", "OPERACAO", "CCUSTO_TRATOS", "DESCRICAO_OPERACAO", "CCUSTO", "DT_ABERTURA_OS"],
+            ["67626", "1", "5", "329655", "342", "TRATOS SOQUEIRA", "FERT ASPERSAO 1 LAMINA", "305121", "46311"],
+            ["67626", "1", "8", "329655", "342", "TRATOS SOQUEIRA", "FERT ASPERSAO 1 LAMINA", "305121", "46311"],
+            ["90284", "1", "1", "331116", "348", "PREPARO DO SOLO", "ARACAO S/ INSUMO", "305111", "46335"],
+            ["", "", "", "", "", "", "", "", ""],
+        ]), "Pasta1.xlsx")
+        first, second = parsed["records"]
+        self.assertEqual((first["number"], first["operation"], first["operation_name"]), ("329655", "342", "FERT ASPERSAO 1 LAMINA"))
+        self.assertEqual((first["section"], first["cost_center"], first["plots"]), ("67626", "305121", ["5", "8"]))
+        self.assertEqual(second["operation_name"], "ARACAO S/ INSUMO")
+        self.assertEqual(first["key"], "")  # CHAVE é opcional
+
     def test_parser_groups_plots_of_the_same_order(self):
         parsed = parse_service_order_file(xlsx([
             self.HEADER,

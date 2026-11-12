@@ -364,10 +364,38 @@ function splitProductionOperations(value) {
 }
 
 // Coluna Operação: código(s) da operação em execução na frente.
-function productionOperationCell(entry) {
+// Situação de cada operação do lançamento: "is-order-ok" (tem O.S. no setor) ou
+// "is-order-missing" (sem O.S.). Usa a lista que o servidor manda; sem conferência, nada.
+// Código comparável da operação, como no servidor: "0338", "338" e "338 — DESC" são 338.
+function productionOperationKey(code) {
+  const match = String(code ?? '').match(/^\s*(\d+)/);
+  return match ? String(Number.parseInt(match[1], 10)) : String(code ?? '').trim().toLocaleLowerCase('pt-BR');
+}
+
+function productionOperationTone(item, code) {
+  const status = item?.service_order?.status;
+  if (status !== 'ok' && status !== 'missing') return '';
+  const missing = (item.service_order.missing_operations || []).map(String);
+  return missing.includes(productionOperationKey(code)) ? 'is-order-missing' : 'is-order-ok';
+}
+
+// O.S. que conferem com uma operação do lançamento (mesmo setor, seção e operação).
+function productionOperationOrders(item, code) {
+  const key = productionOperationKey(code);
+  return (item?.service_order?.orders || []).filter(order => order.matches && productionOperationKey(order.operation) === key);
+}
+
+function productionOperationTitle(tone) {
+  return tone === 'is-order-ok' ? 'Operação com O.S. no setor' : tone === 'is-order-missing' ? 'Operação sem O.S. no setor' : '';
+}
+
+function productionOperationCell(entry, item) {
   const codes = splitProductionOperations(entry?.operation);
   return codes.length
-    ? `<div class="production-operation-codes">${codes.map(code => `<span>${escapeHtml(code)}</span>`).join('')}</div>`
+    ? `<div class="production-operation-codes">${codes.map(code => {
+      const tone = productionOperationTone(item, code);
+      return `<span class="${tone}" title="${productionOperationTitle(tone)}">${escapeHtml(code)}</span>`;
+    }).join('')}</div>`
     : '<span class="production-os-state is-no-operation">Sem operação</span>';
 }
 
@@ -450,7 +478,7 @@ function renderProductionItems(data) {
       <td class="production-cell-number">${escapeHtml(entry.section || '-')}</td>
       <td class="production-cell-farm">${escapeHtml(entry.farm || '-')}</td>
       <td><div class="production-status-cell">${statusBadge(entry.status)}${current ? '' : `<small class="production-pending-note">${escapeHtml(updatedDetail)}</small>`}</div></td>
-      <td>${productionOperationCell(entry)}</td>
+      <td>${productionOperationCell(entry, item)}</td>
       <td>${serviceOrderCell(item)}</td>
       <td><div class="production-observation${observation ? '' : ' is-empty'}">${escapeHtml(observation || '-')}</div></td>
       <td><div class="production-observation${changes ? '' : ' is-empty'}">${escapeHtml(changes || '-')}</div></td>
