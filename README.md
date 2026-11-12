@@ -37,6 +37,11 @@ modo escuro. Depois de mudar qualquer CSS, rode `python tools/build_dark_css.py`
 (o teste `tests/test_dark_css.py` falha se algum `.dark.css` ficar desatualizado).
 Ajustes manuais do tema escuro ficam em `OVERRIDES`, no próprio script.
 
+Dados de teste (somente no ambiente local): `python tools/seed_test_data.py`
+preenche CTT, setores, frentes, operações, O.S. e lançamentos do dia. O script
+faz backup dos bancos em `data/backups/`, não cria contas e não duplica dados
+quando roda de novo. Não use no servidor de produção.
+
 Consulte a [análise e organização do frontend](docs/frontend.md)
 para entender a separação, as rotas e como adicionar novas páginas.
 A organização do backend (módulos, responsabilidades e direção das

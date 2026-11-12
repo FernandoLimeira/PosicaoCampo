@@ -10,6 +10,7 @@ from backend import config
 from backend.models import database as db
 from backend.models import production
 from backend.models import service_orders
+from backend.models import storage
 from backend.services.service_order_import import parse_service_order_file
 
 
@@ -58,6 +59,25 @@ class ServiceOrderTests(unittest.TestCase):
         })
 
     HEADER = ["CHAVE", "NO_OS", "SETOR", "SECAO", "OPERACAO", "TALHAO", "CCUSTO", "CCUSTO_TRATOS", "DT_ABERTURA_OS"]
+
+    def test_old_service_order_table_is_upgraded(self):
+        # Tabela criada por versões antigas: sem descrição, centro de custo e talhões.
+        with storage.connection() as conn:
+            conn.execute("DROP TABLE production_service_orders")
+            conn.execute("""CREATE TABLE production_service_orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, unit_code TEXT NOT NULL COLLATE NOCASE,
+                order_number TEXT NOT NULL, sector TEXT NOT NULL, sector_key TEXT NOT NULL,
+                section TEXT NOT NULL DEFAULT '', farm TEXT NOT NULL DEFAULT '', operation TEXT NOT NULL DEFAULT '',
+                operation_key TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT '', opened_on TEXT NOT NULL DEFAULT '',
+                closed_on TEXT NOT NULL DEFAULT '', details_json TEXT NOT NULL DEFAULT '{}', import_file TEXT NOT NULL DEFAULT '',
+                imported_by INTEGER, imported_at INTEGER NOT NULL)""")
+        db.init_db()
+        result = service_orders.import_service_orders(self.admin["id"], "PPT", [
+            {"number": "1", "sector": "1577", "operation": "457", "operation_name": "TRATOS", "plots": ["1", "2"]},
+        ])
+        self.assertEqual(result["imported"], 1)
+        order = service_orders.list_service_orders(self.admin["id"], "PPT")["orders"][0]
+        self.assertEqual((order["operation_name"], order["plots"]), ("TRATOS", ["1", "2"]))
 
     def test_parser_groups_plots_of_the_same_order(self):
         parsed = parse_service_order_file(xlsx([

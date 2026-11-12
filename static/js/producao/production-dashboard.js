@@ -1,7 +1,6 @@
 // Painel gerencial da Produção Agrícola: visão por grupo, alternável com a tabela.
 // Usa os mesmos lançamentos da tabela (productionItems) e os status cadastrados.
 const PRODUCTION_VIEW_KEY = 'posicao-campo-production-view';
-let productionPanelFilter = '';
 // O painel mostra um grupo por vez (sem "Todos"): mais espaço para as frentes.
 const PRODUCTION_PANEL_GROUP_KEY = 'posicao-campo-production-panel-group';
 let productionPanelGroup = '';
@@ -47,52 +46,16 @@ function dashboardFlags(item) {
   };
 }
 
-const DASHBOARD_ALERTS = [
-  { key: 'stopped', label: count => `${count} ${count === 1 ? 'frente parada' : 'frentes paradas'}`, tone: 'red' },
-  { key: 'noOrder', label: count => `${count} sem O.S.`, tone: 'red' },
-  { key: 'noOperation', label: count => `${count} sem operação`, tone: 'amber' },
-  { key: 'stale', label: count => `${count} sem atualização hoje`, tone: 'gray' }
-];
-
 function dashboardItems() {
   return Array.isArray(productionItems) ? productionItems : [];
 }
 
 const DASHBOARD_ICONS = {
-  alert: '<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4"/><path d="M12 17.5v.01"/>',
-  ok: '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
   pin: '<path d="M12 21s-6-5.3-6-11a6 6 0 0 1 12 0c0 5.7-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'
 };
 function dashboardIcon(name) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${DASHBOARD_ICONS[name]}</svg>`;
-}
-
-// Cartão "Atenção hoje": alertas clicáveis que filtram as frentes do painel.
-function renderDashboardAlerts(items) {
-  const box = document.querySelector('#production-alerts');
-  if (!box) return;
-  const alerts = DASHBOARD_ALERTS.map(alert => ({
-    ...alert, count: items.filter(item => dashboardFlags(item)[alert.key]).length
-  })).filter(alert => alert.count > 0);
-  // Durante a recarga (sem frentes) o filtro de alerta não é perdido.
-  if (items.length && productionPanelFilter && !alerts.some(alert => alert.key === productionPanelFilter)) productionPanelFilter = '';
-  const total = items.length;
-  const active = items.filter(item => statusMeta(item.entry?.status).className === 'is-active').length;
-  const today = items.filter(item => item.is_current_day).length;
-  box.innerHTML = `
-    <div class="pdash-health ${alerts.length ? 'has-alerts' : 'is-ok'}">
-      <span class="pdash-health-icon">${dashboardIcon(alerts.length ? 'alert' : 'ok')}</span>
-      <div class="pdash-health-copy">
-        <strong>${alerts.length ? 'Atenção hoje' : 'Tudo em dia'}</strong>
-        <span>${total} ${total === 1 ? 'frente' : 'frentes'} · ${active} em atividade · ${today}/${total} atualizadas hoje</span>
-      </div>
-      <div class="pdash-health-alerts">
-        ${alerts.map(alert => `<button type="button" class="pdash-alert is-${alert.tone}${productionPanelFilter === alert.key ? ' is-active' : ''}"
-          data-panel-filter="${alert.key}" aria-pressed="${productionPanelFilter === alert.key}">${escapeHtml(alert.label(alert.count))}</button>`).join('')}
-        ${productionPanelFilter ? '<button type="button" class="pdash-alert is-clear" data-panel-filter="">Mostrar todas</button>' : ''}
-      </div>
-    </div>`;
 }
 
 function dashboardStatusBar(items) {
@@ -160,12 +123,8 @@ function renderProductionDashboard() {
   }
   renderDashboardGroupTabs(ordered);
   const selected = ordered.filter(group => String(group.id) === productionPanelGroup);
-  renderDashboardAlerts(selected[0]?.items || []);
 
   cards.innerHTML = selected.map(group => {
-    const visible = productionPanelFilter
-      ? group.items.filter(item => dashboardFlags(item)[productionPanelFilter]) : group.items;
-    if (!visible.length) return '';
     const total = group.items.length;
     const withOperation = group.items.filter(item => dashboardOrderState(item) !== 'no_operation' && item.entry?.sector).length;
     const ok = group.items.filter(item => dashboardOrderState(item) === 'ok').length;
@@ -177,7 +136,7 @@ function renderProductionDashboard() {
       <header class="pdash-group-header">
         <div class="pdash-group-title">
           <span class="pdash-group-icon" aria-hidden="true">${escapeHtml(dashboardGroupInitials(group.name))}</span>
-          <div><h3>${escapeHtml(group.name)}</h3><span>${total} ${total === 1 ? 'frente' : 'frentes'}${productionPanelFilter ? ` · ${visible.length} no filtro` : ''}</span></div>
+          <div><h3>${escapeHtml(group.name)}</h3><span>${total} ${total === 1 ? 'frente' : 'frentes'}</span></div>
         </div>
         <div class="pdash-kpis">
           ${stopped ? kpi(stopped === 1 ? 'parada' : 'paradas', stopped, 'is-red') : ''}
@@ -187,7 +146,7 @@ function renderProductionDashboard() {
         </div>
       </header>
       <div class="pdash-group-status">${dashboardStatusBar(group.items)}</div>
-      <div class="pdash-tiles">${visible.map(dashboardFrontTile).join('')}</div>
+      <div class="pdash-tiles">${group.items.map(dashboardFrontTile).join('')}</div>
     </article>`;
   }).join('');
   // A CSP bloqueia "style" no HTML; o tamanho de cada faixa é aplicado pelo script.
@@ -238,18 +197,10 @@ function setProductionView(view) {
 document.querySelectorAll('[data-production-view]').forEach(button => {
   button.addEventListener('click', () => setProductionView(button.dataset.productionView));
 });
-document.querySelector('#production-alerts')?.addEventListener('click', event => {
-  const button = event.target.closest('[data-panel-filter]');
-  if (!button) return;
-  const key = button.dataset.panelFilter;
-  productionPanelFilter = productionPanelFilter === key ? '' : key;
-  renderProductionDashboard();
-});
 document.querySelector('#production-group-tabs')?.addEventListener('click', event => {
   const tab = event.target.closest('[data-panel-group]');
   if (!tab) return;
   productionPanelGroup = tab.dataset.panelGroup;
-  productionPanelFilter = '';
   try { localStorage.setItem(PRODUCTION_PANEL_GROUP_KEY, productionPanelGroup); } catch (_) { /* preferência opcional */ }
   renderProductionDashboard();
 });

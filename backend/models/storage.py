@@ -514,7 +514,13 @@ def _upgrade_operational_schema(conn):
     if "operation" not in entry_columns:
         # Operação informada no popup; usada para conferir a O.S. do setor.
         conn.execute("ALTER TABLE main.production_daily_entries ADD COLUMN operation TEXT NOT NULL DEFAULT ''")
-    columns = {row[1]: row for row in conn.execute("PRAGMA main.table_info(return_analysis_soil_wet)")}
+    # Bancos criados antes do arquivo de O.S. com descrição, centro de custo e talhões
+    # têm a tabela antiga: sem estas colunas a importação de O.S. falha.
+    order_columns = {row[1] for row in conn.execute("PRAGMA main.table_info(production_service_orders)")}
+    for column in ("operation_name", "cost_center", "plots"):
+        if column not in order_columns:
+            conn.execute(f"ALTER TABLE main.production_service_orders ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+    columns ={row[1]: row for row in conn.execute("PRAGMA main.table_info(return_analysis_soil_wet)")}
     sector_column = columns.get("sector")
     if sector_column and int(sector_column[3] or 0):
         conn.execute("DROP INDEX IF EXISTS main.idx_return_soil_wet_unit_date")

@@ -145,64 +145,41 @@ async function importServiceOrders(event) {
   }
 }
 
-// Popup "O.S. abertas do setor": visão gerencial curta. No topo, poucos indicadores
-// (O.S., operações, talhões e, vindo de um lançamento, a conferência); abaixo, as O.S.
-// agrupadas por operação, uma linha curta por O.S. (número, seção, abertura e talhões).
-const SERVICE_ORDER_PLOTS_SHOWN = 8;
-
+// Popup "O.S. abertas do setor": visual simples. Uma linha de resumo (com a conferência
+// quando vem de um lançamento) e uma lista única: cada O.S. com a operação, a seção,
+// a abertura e todos os talhões. As O.S. que conferem com o lançamento vêm primeiro.
 function serviceOrderPlotsHtml(plots = []) {
   if (!plots.length) return '<span class="pos-os-muted">Sem talhão</span>';
-  const shown = plots.slice(0, SERVICE_ORDER_PLOTS_SHOWN).map(plot => `<i>${escapeHtml(plot)}</i>`).join('');
-  const rest = plots.length - SERVICE_ORDER_PLOTS_SHOWN;
-  return `<span class="pos-os-plots" title="Talhões: ${escapeHtml(plots.join(', '))}">${shown}${rest > 0 ? `<i class="is-more">+${rest}</i>` : ''}</span>`;
-}
-
-function serviceOrderKpi(label, value, tone = '') {
-  return `<div class="pos-kpi ${tone}"><b>${value}</b><span>${escapeHtml(label)}</span></div>`;
+  return `<span class="pos-os-plots">${plots.map(plot => `<i>${escapeHtml(plot)}</i>`).join('')}</span>`;
 }
 
 function serviceOrdersPanelHtml(orders, { check = null } = {}) {
-  const groups = new Map();
-  orders.forEach(order => {
-    const key = order.operation || '-';
-    if (!groups.has(key)) groups.set(key, { code: key, name: order.operation_name || '', matches: false, orders: [] });
-    const group = groups.get(key);
-    group.orders.push(order);
-    group.matches = group.matches || Boolean(order.matches);
-    if (!group.name && order.operation_name) group.name = order.operation_name;
-  });
-  const ordered = [...groups.values()].sort((a, b) => Number(b.matches) - Number(a.matches) || compareFrontLabels(a.code, b.code));
+  const ordered = [...orders].sort((a, b) => Number(Boolean(b.matches)) - Number(Boolean(a.matches))
+    || compareFrontLabels(a.operation || '', b.operation || '') || compareFrontLabels(a.number || '', b.number || ''));
+  const operations = new Set(orders.map(order => order.operation).filter(Boolean));
   const plots = new Set(orders.flatMap(order => (order.plots || []).map(plot => `${order.section}|${plot}`)));
   const showSection = orders.some(order => order.section);
+  const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
 
-  const kpis = [
-    serviceOrderKpi(orders.length === 1 ? 'O.S. aberta' : 'O.S. abertas', orders.length),
-    serviceOrderKpi(ordered.length === 1 ? 'operação' : 'operações', ordered.length),
-    serviceOrderKpi(plots.size === 1 ? 'talhão' : 'talhões', plots.size)
-  ];
-  if (check) {
-    kpis.push(check.missing.length
-      ? serviceOrderKpi(`sem O.S.: ${check.missing.join(', ')}`, 'Falta', 'is-missing')
-      : check.wanted ? serviceOrderKpi('conferência', 'OK', 'is-ok')
-        : serviceOrderKpi('lançamento sem operação', '—', 'is-neutral'));
-  }
+  const status = !check ? ''
+    : check.missing.length ? `<span class="pos-status is-missing">Sem O.S. para ${escapeHtml(check.missing.join(', '))}</span>`
+      : check.wanted ? '<span class="pos-status is-ok">O.S. OK</span>'
+        : '<span class="pos-status">Lançamento sem operação</span>';
+  const summary = `<div class="pos-summary">
+      <span>${plural(orders.length, 'O.S. aberta', 'O.S. abertas')} · ${plural(operations.size, 'operação', 'operações')} · ${plural(plots.size, 'talhão', 'talhões')}</span>
+      ${status}
+    </div>`;
 
-  const groupsHtml = ordered.map(group => `<section class="pos-op${group.matches ? ' is-match' : ''}">
-      <header>
-        <b class="pos-op-code">${escapeHtml(group.code)}</b>
-        <span class="pos-op-name">${escapeHtml(group.name || 'Operação')}</span>
-        ${group.matches ? '<em class="pos-op-badge">confere</em>' : ''}
-        <small>${group.orders.length} O.S.</small>
-      </header>
-      <ul>${group.orders.map(order => `<li>
-        <strong>O.S. ${escapeHtml(order.number)}</strong>
-        ${showSection ? `<span>Seção ${escapeHtml(order.section || '-')}</span>` : ''}
-        <span>${escapeHtml(serviceOrderDate(order.opened_on))}</span>
-        ${serviceOrderPlotsHtml(order.plots)}
-      </li>`).join('')}</ul>
-    </section>`).join('');
+  const rows = ordered.map(order => `<li class="${order.matches ? 'is-match' : ''}">
+      <div class="pos-os-head">
+        <span class="pos-os-op"><b>${escapeHtml(order.operation || '-')}</b>${escapeHtml(order.operation_name || '')}</span>
+        ${order.matches ? '<em>confere</em>' : ''}
+        <span class="pos-os-meta">O.S. <strong>${escapeHtml(order.number)}</strong>${showSection ? ` · Seção ${escapeHtml(order.section || '-')}` : ''} · ${escapeHtml(serviceOrderDate(order.opened_on))}</span>
+      </div>
+      ${serviceOrderPlotsHtml(order.plots)}
+    </li>`).join('');
 
-  return `<div class="pos-kpis">${kpis.join('')}</div><div class="pos-ops">${groupsHtml}</div>`;
+  return `${summary}<ul class="pos-os-list">${rows}</ul>`;
 }
 
 function showServiceOrdersModal(contextText, orders, options = {}) {
