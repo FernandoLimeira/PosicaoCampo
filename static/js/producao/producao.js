@@ -368,6 +368,13 @@ function splitProductionOperations(value) {
 // Coluna Operação: código(s) da operação em execução na frente.
 // Situação de cada operação do lançamento: "is-order-ok" (tem O.S. no setor) ou
 // "is-order-missing" (sem O.S.). Usa a lista que o servidor manda; sem conferência, nada.
+// Operações padrão da frente (cadastro): preenchem o lançamento quando ele está sem operação.
+function productionFrontDefaultOperations(frontId) {
+  const front = (productionCatalog?.groups || []).flatMap(group => group.fronts || [])
+    .find(item => String(item.id) === String(frontId));
+  return splitProductionOperations(front?.default_operations);
+}
+
 // Código comparável da operação, como no servidor: "0338", "338" e "338 — DESC" são 338.
 function productionOperationKey(code) {
   const match = String(code ?? '').match(/^\s*(\d+)/);
@@ -768,6 +775,7 @@ function openEditProductionItem(itemId) {
   section.value = entry.section || '';
   setProductionEntryEditMode(true);
   productionEntryOperations = splitProductionOperations(entry.operation);
+  if (!productionEntryOperations.length) productionEntryOperations = productionFrontDefaultOperations(item.service_front_id);
   if (!productionEntryOperations.length) productionEntryOperations = [''];
   renderEntryOperations();
   // O nome da frente em edição fica em destaque no topo do popup.

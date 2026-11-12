@@ -79,6 +79,29 @@ class ServiceOrderTests(unittest.TestCase):
         order = service_orders.list_service_orders(self.admin["id"], "PPT")["orders"][0]
         self.assertEqual((order["operation_name"], order["plots"]), ("TRATOS", ["1", "2"]))
 
+    def test_fert_convencional_has_default_operations(self):
+        group = production.list_catalog(self.admin["id"], include_inactive=True)["groups"][0]
+        fert = production.save_service_front(self.admin["id"], {
+            "name": "Fert Convencional", "group_id": group["id"], "position": 3, "units": ["PPT", "PST"], "is_active": True,
+        })
+        self.assertEqual(fert["default_operations"], "")
+        # Migração (servidor com a frente já cadastrada): só a Fert convencional recebe 346, 342.
+        with storage.connection() as conn:
+            conn.execute("DELETE FROM schema_info WHERE key='production_front_default_operations'")
+        db.init_db()
+        fronts = {front["name"]: front for group_item in production.list_catalog(self.admin["id"], include_inactive=True)["groups"]
+                  for front in group_item["fronts"]}
+        self.assertEqual(fronts["Fert Convencional"]["default_operations"], "346, 342")
+        self.assertEqual(fronts["Preparo de solo"]["default_operations"], "")
+        # Salvar a frente sem o campo mantém o padrão; com o campo, troca.
+        payload = {"name": "Fert Convencional", "group_id": group["id"], "position": 3, "units": ["PPT", "PST"], "is_active": True}
+        self.assertEqual(production.save_service_front(self.admin["id"], payload, front_id=fert["id"])["default_operations"], "346, 342")
+        changed = production.save_service_front(self.admin["id"], {**payload, "default_operations": "342 346 342"}, front_id=fert["id"])
+        self.assertEqual(changed["default_operations"], "342, 346")
+        # O catálogo da unidade (usado ao lançar) traz o padrão.
+        unit_fronts = [front for group_item in production.list_catalog(self.admin["id"], unit_code="PST")["groups"] for front in group_item["fronts"]]
+        self.assertEqual([front["default_operations"] for front in unit_fronts if front["id"] == fert["id"]], ["342, 346"])
+
     def test_polo_ms_ties_operation_to_sector_and_section(self):
         group = production.list_catalog(self.admin["id"], include_inactive=True)["groups"][0]
         front = production.save_service_front(self.admin["id"], {

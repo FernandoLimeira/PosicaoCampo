@@ -60,6 +60,11 @@ function sheetSplitOperations(value) {
   return parts.length ? [...new Set(parts)] : [''];
 }
 
+function sheetDefaultOperations(frontId) {
+  const operations = productionFrontDefaultOperations(frontId);
+  return operations.length ? operations : [''];
+}
+
 function sheetOperationsValue(row) {
   return [...new Set(row.operations.map(value => value.trim()).filter(Boolean))].join(', ');
 }
@@ -231,7 +236,7 @@ function addProductionSheetRow({ render = true } = {}) {
   productionSheetRows.unshift({
     key: `row-${++productionSheetSequence}`, id: null, groupId: front?.group_id ?? null,
     frontId: front ? String(front.id) : '', frontName: front?.name || '', section: '', sector: '',
-    status: defaultStatusCode(), operations: [''], observation: '', farm: '', removed: false, original: ''
+    status: defaultStatusCode(), operations: front ? sheetDefaultOperations(front.id) : [''], observation: '', farm: '', removed: false, original: ''
   });
   if (!render) return;
   renderProductionSheet();
@@ -346,7 +351,11 @@ productionSheetBody?.addEventListener('change', event => {
   const row = field && findSheetRow(event.target);
   if (!row) return;
   row[field] = event.target.value;
-  if (field === 'frontId') row.frontName = event.target.selectedOptions?.[0]?.textContent || '';
+  if (field === 'frontId') {
+    row.frontName = event.target.selectedOptions?.[0]?.textContent || '';
+    // Linha sem operação recebe as operações padrão da frente escolhida (ex.: Fert convencional).
+    if (!row.operations.some(value => value.trim())) row.operations = sheetDefaultOperations(row.frontId);
+  }
   // Setor e status mudam as opções de operação, o aviso de O.S. e a cor da linha.
   if (['sector', 'section', 'status', 'frontId'].includes(field)) {
     const tr = event.target.closest('tr');

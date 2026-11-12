@@ -408,7 +408,7 @@ def list_catalog(user_id: int, *, unit_code: Any | None = None, include_inactive
         where = "WHERE " + " AND ".join(conditions) if conditions else ""
         rows = conn.execute(
             f"""
-            SELECT f.id,f.group_id,f.name,f.display_style,f.position,f.is_active
+            SELECT f.id,f.group_id,f.name,f.display_style,f.position,f.is_active,f.default_operations
             FROM production_service_fronts f
             {where}
             ORDER BY f.position,f.name COLLATE NOCASE
@@ -432,6 +432,7 @@ def list_catalog(user_id: int, *, unit_code: Any | None = None, include_inactive
                     "id": int(row["id"]), "group_id": int(row["group_id"]), "name": row["name"],
                     "display_style": row["display_style"], "position": int(row["position"]),
                     "is_active": bool(row["is_active"]), "units": units_by_front.get(int(row["id"]), []),
+                    "default_operations": row["default_operations"] or "",
                 })
         return {"groups": groups, "unit": unit, "can_configure": access["can_configure"]}
 
@@ -536,6 +537,9 @@ def save_service_front(user_id: int, payload: Any, *, front_id: int | None = Non
     if display_style not in DISPLAY_STYLES:
         raise ValueError("Tipo de exibição inválido.")
     position = _normalize_position(payload.get("position", 0))
+    # Operações já preenchidas quando a frente é lançada (ex.: Fert convencional: 346, 342).
+    default_operations = _normalize_operations(payload.get("default_operations"))
+    keep_default_operations = "default_operations" not in payload
     is_active = payload.get("is_active", True)
     if not isinstance(is_active, bool):
         raise ValueError("Situação da frente/serviço inválida.")
@@ -583,9 +587,10 @@ def save_service_front(user_id: int, payload: Any, *, front_id: int | None = Non
                 if front_id is None:
                     cursor = conn.execute(
                         """INSERT INTO production_service_fronts(
-                               group_id,name,display_style,position,is_active,created_by,updated_by,created_at,updated_at
-                           ) VALUES (?,?,?,?,?,?,?,?,?)""",
-                        (group_id, name, display_style, position, int(is_active), user_id, user_id, now, now),
+                               group_id,name,display_style,position,is_active,default_operations,
+                               created_by,updated_by,created_at,updated_at
+                           ) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                        (group_id, name, display_style, position, int(is_active), default_operations, user_id, user_id, now, now),
                     )
                     front_id = int(cursor.lastrowid)
                 else:
@@ -593,8 +598,11 @@ def save_service_front(user_id: int, payload: Any, *, front_id: int | None = Non
                         raise ValueError("Frente/serviço não encontrada.")
                     conn.execute(
                         """UPDATE production_service_fronts
-                           SET group_id=?,name=?,display_style=?,position=?,is_active=?,updated_by=?,updated_at=? WHERE id=?""",
-                        (group_id, name, display_style, position, int(is_active), user_id, now, front_id),
+                           SET group_id=?,name=?,display_style=?,position=?,is_active=?,
+                               default_operations=CASE WHEN ? THEN default_operations ELSE ? END,
+                               updated_by=?,updated_at=? WHERE id=?""",
+                        (group_id, name, display_style, position, int(is_active),
+                         keep_default_operations, default_operations, user_id, now, front_id),
                     )
             except sqlite3.IntegrityError as exc:
                 raise ValueError("Já existe uma frente/serviço com esse nome.") from exc

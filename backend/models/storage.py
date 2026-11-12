@@ -485,6 +485,22 @@ def seed_production_defaults(conn):
         )
 
 
+def _upgrade_front_default_operations(conn):
+    """Operações padrão da frente (preenchidas ao lançar). Na primeira vez, a Fert
+    convencional recebe 346 e 342, em todas as unidades (o cadastro de frentes é único)."""
+    front_columns = {row[1] for row in conn.execute("PRAGMA main.table_info(production_service_fronts)")}
+    if "default_operations" not in front_columns:
+        conn.execute("ALTER TABLE main.production_service_fronts ADD COLUMN default_operations TEXT NOT NULL DEFAULT ''")
+    if conn.execute("SELECT 1 FROM main.schema_info WHERE key='production_front_default_operations'").fetchone():
+        return
+    from ..services.front_identifiers import normalize_label
+    for row in conn.execute("SELECT id,name,default_operations FROM main.production_service_fronts").fetchall():
+        words = normalize_label(row[1]).split()
+        if not row[2] and words and words[0].startswith("fert") and any(word.startswith("conv") for word in words):
+            conn.execute("UPDATE main.production_service_fronts SET default_operations='346, 342' WHERE id=?", (row[0],))
+    conn.execute("INSERT INTO main.schema_info(key,value) VALUES ('production_front_default_operations','1')")
+
+
 def _upgrade_operational_schema(conn):
     """Migrações idempotentes dos dados operacionais sem perder registros existentes."""
     # Import local: front_notes importa storage (connection) no nível superior.
@@ -520,7 +536,8 @@ def _upgrade_operational_schema(conn):
     for column in ("operation_name", "cost_center", "plots"):
         if column not in order_columns:
             conn.execute(f"ALTER TABLE main.production_service_orders ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
-    columns ={row[1]: row for row in conn.execute("PRAGMA main.table_info(return_analysis_soil_wet)")}
+    _upgrade_front_default_operations(conn)
+    columns = {row[1]: row for row in conn.execute("PRAGMA main.table_info(return_analysis_soil_wet)")}
     sector_column = columns.get("sector")
     if sector_column and int(sector_column[3] or 0):
         conn.execute("DROP INDEX IF EXISTS main.idx_return_soil_wet_unit_date")

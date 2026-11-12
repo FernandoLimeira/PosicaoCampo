@@ -30,7 +30,7 @@ function renderProductionConfigLists() {
     const fronts = groups.flatMap(group => (group.fronts || []).map(front => ({ ...front, group_name: group.name })));
     frontList.innerHTML = fronts.map(front => `
       <div class="production-config-list-item ${front.is_active ? '' : 'is-inactive'}">
-        <div class="production-config-list-item-copy"><strong>${escapeHtml(front.name)}</strong><span>${escapeHtml(front.group_name)} · ${front.display_style === 'front' ? 'frente' : 'operação'}${front.is_active ? '' : ' · inativa'}</span></div>
+        <div class="production-config-list-item-copy"><strong>${escapeHtml(front.name)}</strong><span>${escapeHtml(front.group_name)} · ${front.display_style === 'front' ? 'frente' : 'operação'}${front.default_operations ? ` · padrão ${escapeHtml(front.default_operations)}` : ''}${front.is_active ? '' : ' · inativa'}</span></div>
         <div class="production-config-list-actions">
           <button class="icon-edit-button" type="button" data-config-action="edit-front" data-front-id="${front.id}" title="Editar" aria-label="Editar frente ${escapeHtml(front.name)}">${PENCIL_ICON}</button>
           <button class="is-delete" type="button" data-config-action="delete-front" data-front-id="${front.id}" data-front-name="${escapeHtml(front.name)}" title="Apagar" aria-label="Apagar frente ${escapeHtml(front.name)}">${TRASH_ICON}</button>
@@ -88,6 +88,8 @@ function clearFrontConfigForm({ keepOpen = false } = {}) {
   document.querySelector('#production-config-front-name').value = '';
   document.querySelector('#production-config-front-position').value = '0';
   document.querySelector('#production-config-front-style').value = 'operation';
+  const defaultOperations = document.querySelector('#production-config-front-operations');
+  if (defaultOperations) defaultOperations.value = '';
   productionEditingFrontActive = true;
   const unit = setProductionConfigUnit(selectedNavbarProductionUnit());
   productionEditingFrontUnits = unit ? [unit] : [];
@@ -114,6 +116,8 @@ function editConfigFront(frontId) {
   document.querySelector('#production-config-front-group').value = String(front.group_id);
   document.querySelector('#production-config-front-style').value = front.display_style || 'operation';
   document.querySelector('#production-config-front-position').value = String(front.position || 0);
+  const defaultOperations = document.querySelector('#production-config-front-operations');
+  if (defaultOperations) defaultOperations.value = front.default_operations || '';
   productionEditingFrontActive = Boolean(front.is_active);
   productionEditingFrontUnits = Array.isArray(front.units) ? [...front.units] : [];
   const unit = setProductionConfigUnit(selectedNavbarProductionUnit());
@@ -162,6 +166,7 @@ async function submitConfigFront(event) {
     group_id: Number(document.querySelector('#production-config-front-group')?.value || 0),
     display_style: document.querySelector('#production-config-front-style')?.value || 'operation',
     position: Number(document.querySelector('#production-config-front-position')?.value || 0),
+    default_operations: document.querySelector('#production-config-front-operations')?.value.trim() || '',
     is_active: id ? productionEditingFrontActive : true,
     units
   };
