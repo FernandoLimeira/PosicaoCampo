@@ -79,8 +79,10 @@ document.querySelector('#emit-global-production')?.addEventListener('click', asy
       })
     ]);
     const byUnit = new Map(units.map((code, index) => [code, unitPayloads[index]]));
+    // Regra da imagem: só entram as frentes atualizadas no dia; lançamento de dias
+    // anteriores não é considerado na emissão.
     const reports = ['PPT', 'NRD', 'RBR', 'PST'].map(code => ({
-      code, restricted: !byUnit.has(code), items: byUnit.get(code)?.items || [],
+      code, restricted: !byUnit.has(code), items: (byUnit.get(code)?.items || []).filter(item => item.is_current_day),
       summary: byUnit.get(code)?.summary || null
     }));
     status.textContent = 'Gerando imagem no formato da troca de turno…';

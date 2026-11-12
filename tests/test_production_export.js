@@ -66,12 +66,17 @@ const context = vm.createContext({
     if (url.includes('/api/production/daily-summary?unit=NRD')) return { summary: {
       rain_turn_mm: null, rain_accumulated_mm: null, changes: ''
     } };
-    if (url.includes('unit=PPT')) return { items: Array.from({ length: 19 }, (_, index) => ({
+    if (url.includes('unit=PPT')) return { items: [...Array.from({ length: 19 }, (_, index) => ({
       group_name: 'Fertirrigação', service_name: `Frente ${index + 1}`, owner_name: 'Analista',
-      is_current_day: index !== 0,
+      is_current_day: true,
       entry: { sector: '3392', section: '10', farm: 'Fazenda', status: index === 0 ? 'ANTIGO' : 'ATIVO',
-        work_date: '2026-10-15', observation: 'Operação normal' }
-    })) };
+        work_date: '2026-10-16', observation: 'Operação normal' }
+    })), {
+      // Lançamento de um dia anterior: não entra na imagem.
+      group_name: 'Fertirrigação', service_name: 'Frente de ontem', owner_name: 'Analista', is_current_day: false,
+      entry: { sector: '4000', section: '10', farm: 'Fazenda', status: 'CRITICO', work_date: '2026-10-15',
+        observation: 'Registro de ontem' }
+    }] };
     if (url.includes('unit=NRD')) return { items: [] };
     throw new Error(`Consulta inesperada: ${url}`);
   }
@@ -332,6 +337,9 @@ loadScripts(context, ['core/format.js', 'producao/production-consolidation.js', 
   assert.ok(labels.some(value => value.startsWith('Chuva: turno 3 mm')));
   assert.ok(labels.includes('• Frente 1 deslocada.'));
   assert.ok(labels.includes('• Frente 2 em teste.'));
-  assert.ok(labels.some(value => value.includes('15/10/2026')));
+  // Regra da imagem: lançamento de dia anterior não é considerado.
+  assert.ok(!labels.some(value => value.includes('Frente de ontem')));
+  assert.ok(!labels.some(value => value.includes('Registro de ontem')));
+  assert.ok(!labels.some(value => value.includes('15/10/2026')));
   assert.match(status.textContent, /1 imagem emitida/);
 })().catch(error => { console.error(error); process.exitCode = 1; });

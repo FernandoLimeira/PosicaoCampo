@@ -328,7 +328,7 @@
 .production-toolbar-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 .production-toolbar-actions [hidden] { display: none; }
 
-.production-table thead th { background: #3f5961; color: #fff; }
+.production-table thead th { background: var(--data-header); color: #fff; }
 .production-table tbody tr:nth-child(even) td { background: #f6faf8; }
 .production-cell-number { color: #2d4045; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .production-table td.production-cell-number { font-weight: 750; }
@@ -385,7 +385,7 @@
 .production-order-card dl { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .production-order-rows { max-height: 260px; overflow: auto; border-top: 1px solid var(--line); }
 .production-order-rows table { width: 100%; border-collapse: collapse; font-size: 11px; }
-.production-order-rows th { position: sticky; top: 0; padding: 7px 10px; background: #3f5961; color: #fff; font-size: 9px; font-weight: 800; letter-spacing: .4px; text-align: left; white-space: nowrap; }
+.production-order-rows th { position: sticky; top: 0; padding: 7px 10px; background: var(--data-header); color: #fff; font-size: 9px; font-weight: 800; letter-spacing: .4px; text-align: left; white-space: nowrap; }
 .production-order-rows td { padding: 6px 10px; border-bottom: 1px solid #edf2ef; color: #303c42; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .production-order-rows tbody tr:nth-child(even) td { background: #f6faf8; }
 .production-os-plots { display: inline-block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
@@ -409,7 +409,7 @@
 
 .production-sheet-table-wrap { overflow-x: auto; padding: 0 14px 14px; }
 .production-sheet-table { width: 100%; min-width: 980px; border-collapse: separate; border-spacing: 0 6px; }
-.production-sheet-table thead th { padding: 11px 8px; background: #3f5961; color: #fff; font-size: 12px; font-weight: 600; text-align: center; }
+.production-sheet-table thead th { padding: 11px 8px; background: var(--data-header); color: #fff; font-size: 12px; font-weight: 600; text-align: center; }
 .production-sheet-table thead th:first-child { border-radius: 8px 0 0 0; }
 .production-sheet-table thead th:last-child { border-radius: 0 8px 0 0; }
 .production-sheet-table td { padding: 4px 5px; vertical-align: middle; background: #fff; border-bottom: 1px solid #edf2ef; }
@@ -679,7 +679,7 @@
 .production-order-summary span.is-match { border-color: #9fd2b4; background: #e9f6ef; color: #18733b; }
 .production-order-table-wrap { border: 1px solid var(--data-border); border-radius: 10px; overflow: hidden; }
 .production-order-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.production-order-table th { padding: 10px 12px; background: #3f5961; color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .4px; text-align: left; text-transform: uppercase; white-space: nowrap; }
+.production-order-table th { padding: 10px 12px; background: var(--data-header); color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .4px; text-align: left; text-transform: uppercase; white-space: nowrap; }
 .production-order-table td { padding: 10px 12px; border-top: 1px solid #edf2ef; color: #2b363b; vertical-align: middle; }
 .production-order-table tbody tr:nth-child(even) td { background: #f8fbf9; }
 .production-order-table tr.is-match td { background: #f0f9f4; }
@@ -786,8 +786,8 @@
   padding: 12px 14px; border: 1px solid #e3e8eb; border-top: 4px solid #9aa3a7; border-radius: 8px;
   background: #fff; color: inherit; font: inherit; text-align: left;
 }
-button.pdash-tile { cursor: pointer; transition: transform .12s ease, box-shadow .15s ease, border-color .15s ease; }
-button.pdash-tile:hover { transform: translateY(-1px); border-color: #c0cbd1; box-shadow: 0 8px 18px rgba(46, 81, 91, .1); }
+.pdash-tile[data-panel-detail] { cursor: pointer; transition: transform .12s ease, box-shadow .15s ease, border-color .15s ease; }
+.pdash-tile[data-panel-detail]:hover { transform: translateY(-1px); border-color: #c0cbd1; box-shadow: 0 8px 18px rgba(46, 81, 91, .1); }
 .pdash-tile.is-active { border-top-color: #2c8764; }
 .pdash-tile.is-wet { border-top-color: #d5a326; }
 .pdash-tile.is-stopped { border-top-color: #c9434e; background: #fffafa; }
@@ -951,7 +951,7 @@ button.pdash-tile:hover { transform: translateY(-1px); border-color: #c0cbd1; bo
 .pdash-overview-scroll { overflow-x: auto; }
 .pdash-overview-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
 .pdash-overview-table th, .pdash-overview-table td { padding: 8px 8px; border-bottom: 1px solid #edf2ef; text-align: center; white-space: nowrap; }
-.pdash-overview-table thead th { color: #6f7a80; font-size: 10px; font-weight: 800; letter-spacing: .3px; line-height: 1.25; text-transform: uppercase; white-space: normal; vertical-align: bottom; }
+.pdash-overview-table thead th { color: #ffffff; font-size: 10px; font-weight: 800; letter-spacing: .3px; line-height: 1.25; text-transform: uppercase; white-space: normal; vertical-align: bottom; }
 .pdash-overview-table tbody th, .pdash-overview-table tfoot th { color: #1f262a; font-weight: 800; text-align: left; }
 .pdash-overview-table td { color: #303c42; font-weight: 700; }
 .pdash-overview-table td small { display: block; color: #5b6168; font-size: 10px; font-weight: 700; }
@@ -959,7 +959,7 @@ button.pdash-tile:hover { transform: translateY(-1px); border-color: #c0cbd1; bo
 .pdash-overview-table td.is-green { color: #18733b; }
 .pdash-overview-table td.is-amber { color: #a8680d; }
 .pdash-overview-table td.is-gray { color: #6c777d; }
-.pdash-overview-table tr.is-total th, .pdash-overview-table tr.is-total td { border-bottom: 0; background: var(--data-alternate); }
+.pdash-overview-table tr.is-total th, .pdash-overview-table tr.is-total td { border-bottom: 0; background: #e8ecef; }
 @media (max-width: 980px) { .pdash-overview { grid-template-columns: 1fr; } }
 
 /* ===== Painel gerencial: barra do topo com os grupos, botões modernos e animações ===== */
@@ -987,7 +987,7 @@ button.pdash-tile:hover { transform: translateY(-1px); border-color: #c0cbd1; bo
 /* Cartões e blocos do painel: hover com leve elevação. */
 .pdash-overview-card, .pdash-group { transition: box-shadow .25s ease, transform .25s ease; }
 .pdash-overview-card:hover { box-shadow: 0 10px 28px rgba(38, 61, 68, .1); }
-button.pdash-tile:hover { transform: translateY(-3px); }
+.pdash-tile[data-panel-detail]:hover { transform: translateY(-3px); }
 
 /* Entrada: blocos sobem suavemente, um depois do outro; barras de status crescem. */
 @keyframes pdash-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -1017,7 +1017,7 @@ button.pdash-tile:hover { transform: translateY(-3px); }
 @media (prefers-reduced-motion: reduce) {
   .production-summary > *, .pdash-overview-card, .pdash-group, .pdash-tile, .pdash-bar, .pfd-op,
   #production-front-detail-modal .editor-modal { animation: none !important; }
-  .pdash-action, .pdash-group-tab, button.pdash-tile, .pdash-overview-card { transition: none !important; }
+  .pdash-action, .pdash-group-tab, .pdash-tile[data-panel-detail], .pdash-overview-card { transition: none !important; }
 }
 
 /* Quadro "Chuva nas 4 unidades" (fixo, não muda com a unidade) e aviso do turno. */
@@ -1072,3 +1072,15 @@ button.pdash-kpi.is-amber.is-active { box-shadow: 0 0 0 3px rgba(213, 163, 38, .
 
 /* Ícone do grupo: petróleo da paleta com letra branca (acima das regras do título). */
 .pdash-group-title .pdash-group-icon { background: linear-gradient(135deg, #22474e, #122e34); color: #ffffff; }
+
+/* Tabelas no padrão do sistema: no resumo do turno, o nome do grupo (título da linha) segue as linhas. */
+.pdash-overview-table tbody th { background: var(--data-surface); color: #1f262a; border-bottom: 1px solid #e3e8eb; letter-spacing: 0; }
+.pdash-overview-table tbody tr:nth-child(even) th { background: var(--data-alternate); }
+.pdash-overview-table tbody tr:hover th { background: var(--data-hover); }
+.pdash-overview-table tfoot :is(th, td) { background: #e8ecef; color: #0e1d21; border-bottom: 0; letter-spacing: 0; }
+
+/* Cartão da frente: clicável (detalhe) + botão de editar no canto. */
+.pdash-tile[data-panel-detail] { cursor: pointer; }
+.pdash-tile[data-panel-detail]:focus-visible { outline: 3px solid rgba(103, 126, 138, .45); outline-offset: 2px; }
+.pdash-tile-edit { flex: 0 0 auto; width: 30px; height: 30px; min-height: 0; display: inline-grid; place-items: center; padding: 0; border-radius: 8px; }
+.pdash-tile-edit svg { width: 15px; height: 15px; }

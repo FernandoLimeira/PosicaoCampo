@@ -85,12 +85,16 @@ class ServiceOrderTests(unittest.TestCase):
         production.save_daily_summary(self.admin["id"], {"unit_code": "PST", "work_date": "2026-11-10",
                                                          "rain_turn_mm": "5", "rain_accumulated_mm": "31"})
         production.save_daily_summary(self.admin["id"], {"unit_code": "NRD", "work_date": "2026-11-09",
-                                                         "rain_turn_mm": "50", "rain_accumulated_mm": "50"})  # outro dia
+                                                         "rain_turn_mm": "8", "rain_accumulated_mm": "40"})  # dia anterior
+        production.save_daily_summary(self.admin["id"], {"unit_code": "RBR", "work_date": "2026-11-11",
+                                                         "rain_turn_mm": "90", "rain_accumulated_mm": "90"})  # depois: não entra
         # Analista com acesso só ao PPT também vê o quadro das 4 unidades.
         rain = production.get_rain_overview(self.user["id"], "2026-11-10")
         self.assertEqual([unit["unit"] for unit in rain["units"]], ["PPT", "NRD", "RBR", "PST"])
-        self.assertEqual((rain["average_turn_mm"], rain["average_accumulated_mm"], rain["informed"]), (3.5, 20.5, 2))
-        self.assertIsNone(rain["units"][1]["rain_turn_mm"])
+        # Cada unidade mostra a última chuva informada até o dia (NRD de 09/11); RBR (12/11 em diante) não.
+        self.assertEqual([unit["work_date"] for unit in rain["units"]], ["2026-11-10", "2026-11-09", None, "2026-11-10"])
+        self.assertEqual((rain["average_turn_mm"], rain["average_accumulated_mm"], rain["informed"]), (5.0, 27.0, 3))
+        self.assertIsNone(rain["units"][2]["rain_turn_mm"])
 
         # A chuva do CTT não entra: o quadro usa só o "Informar chuva" da Produção.
         from backend.models import units as unit_model
@@ -98,7 +102,7 @@ class ServiceOrderTests(unittest.TestCase):
         pst = next(item for item in payload["units"] if item.get("code") == "PST")
         unit_model.save_unit({**pst, "rain": [["PLUV-01", 40, 90]]}, unit_model.UNIT_DEFINITIONS["PST"]["position"], self.admin["id"])
         rain = production.get_rain_overview(self.user["id"], "2026-11-10")
-        self.assertEqual((rain["units"][3]["rain_turn_mm"], rain["average_turn_mm"]), (5.0, 3.5))
+        self.assertEqual((rain["units"][3]["rain_turn_mm"], rain["average_turn_mm"]), (5.0, 5.0))
 
     def test_fert_convencional_has_default_operations(self):
         group = production.list_catalog(self.admin["id"], include_inactive=True)["groups"][0]

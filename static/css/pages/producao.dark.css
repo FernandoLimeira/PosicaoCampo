@@ -78,7 +78,7 @@
 .production-filters select { border: 1px solid #484848; background: #2a2a2a; color: #d2d2d2; }
 .production-owner-name { color: #b9b9b9; }
 .production-toolbar { border-bottom: 1px solid #434343; background: #272727; }
-.production-table thead th { background: #3d3d3d; color: #ffffff; }
+.production-table thead th { color: #ffffff; }
 .production-table tbody tr:nth-child(even) td { background: #272727; }
 .production-cell-number { color: #cbcbcb; }
 .production-cell-farm { color: #bdbdbd; }
@@ -103,14 +103,14 @@
 .production-order-card dd { color: #d1d1d1; }
 .production-order-card header small { color: #9d9d9d; }
 .production-order-card.is-match { border-color: #4b5850; }
-.production-order-rows th { background: #3d3d3d; color: #ffffff; }
+.production-order-rows th { color: #ffffff; }
 .production-order-rows td { border-bottom: 1px solid #414141; color: #cbcbcb; }
 .production-order-rows tbody tr:nth-child(even) td { background: #272727; }
 .production-sheet-unit span { color: #9d9d9d; }
 .production-sheet-unit strong { color: #d0d0d0; }
 .production-sheet-body { background: #262626; }
 .production-sheet-card { background: #2a2a2a; }
-.production-sheet-table thead th { background: #3d3d3d; color: #ffffff; }
+.production-sheet-table thead th { color: #ffffff; }
 .production-sheet-table td { background: #2a2a2a; border-bottom: 1px solid #414141; }
 .production-sheet-table input, .production-sheet-table select { border: 1px solid #474747; background: #2a2a2a; color: #d8d8d8; }
 .production-sheet-front::before { background: #40474a; }
@@ -171,7 +171,7 @@
 .production-order-summary span { background: #272727; color: #adadad; }
 .production-order-summary b { color: #e0e0e0; }
 .production-order-summary span.is-match { border-color: #4b5850; background: #1d2822; color: #98e5b6; }
-.production-order-table th { background: #3d3d3d; color: #ffffff; }
+.production-order-table th { color: #ffffff; }
 .production-order-table td { border-top: 1px solid #414141; color: #d1d1d1; }
 .production-order-table tbody tr:nth-child(even) td { background: #272727; }
 .production-order-table tr.is-match td { background: #252525; }
@@ -217,7 +217,7 @@
 .pdash-legend-item.is-wet i { background: #c39b38; }
 .pdash-legend-item small { color: #999999; }
 .pdash-tile { border: 1px solid #434343; border-top: 4px solid #585858; background: #2a2a2a; }
-button.pdash-tile:hover { border-color: #4c4c4c; }
+.pdash-tile[data-panel-detail]:hover { border-color: #4c4c4c; }
 .pdash-tile.is-active { border-top-color: #35a278; }
 .pdash-tile.is-wet { border-top-color: #c39b38; }
 .pdash-tile.is-stopped { background: #292929; }
@@ -286,7 +286,6 @@ button.pdash-tile:hover { border-color: #4c4c4c; }
 .pdash-overview-card h3 { color: #e0e0e0; }
 .pdash-overview-card > header span { color: #999999; }
 .pdash-overview-table th, .pdash-overview-table td { border-bottom: 1px solid #414141; }
-.pdash-overview-table thead th { color: #999999; }
 .pdash-overview-table tbody th, .pdash-overview-table tfoot th { color: #e0e0e0; }
 .pdash-overview-table td { color: #cbcbcb; }
 .pdash-overview-table td small { color: #a3a3a3; }
@@ -294,6 +293,7 @@ button.pdash-tile:hover { border-color: #4c4c4c; }
 .pdash-overview-table td.is-green { color: #98e5b6; }
 .pdash-overview-table td.is-amber { color: #ddb376; }
 .pdash-overview-table td.is-gray { color: #999999; }
+.pdash-overview-table tr.is-total th, .pdash-overview-table tr.is-total td { background: #202020; }
 .production-view-bar .pdash-group-tabs { background: linear-gradient(180deg, #2a2a2a, #262626); }
 .pdash-group-tab:hover:not(.is-active) { background: #202020; }
 .pdash-group-tab.is-active { background: linear-gradient(135deg, #3d3d3d 0%, #2b2b2b 100%); }
@@ -321,6 +321,9 @@ button.pdash-kpi.is-active { color: #e0e0e0; }
 .pdash-front-filter select { background-color: #2a2a2a; color: #e0e0e0; }
 .pdash-filter-count { color: #999999; }
 .pdash-group-title .pdash-group-icon { background: linear-gradient(135deg, #383838, #2b2b2b); }
+.pdash-overview-table tbody th { color: #e0e0e0; border-bottom: 1px solid #434343; }
+.pdash-overview-table tfoot :is(th, td) { background: #202020; color: #e6e6e6; }
+.pdash-tile[data-panel-detail]:focus-visible { outline: 3px solid rgba(97, 97, 97, 0.45); }
 .production-primary-button.pdash-action { background: linear-gradient(135deg, #3f6f7a 0%, #1b3a41 100%); }
 .production-primary-button.pdash-action:hover:not(:disabled) { background: linear-gradient(135deg, #4a7c87 0%, #22474e 100%); }
 .pdash-group-tab.is-active { background: linear-gradient(135deg, #3f6f7a 0%, #1b3a41 100%); color: #ffffff; }

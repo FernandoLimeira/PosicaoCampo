@@ -170,15 +170,20 @@ function dashboardFrontTile(item) {
     : '<span class="pdash-tile-op"><span class="pdash-op is-empty">Sem operação</span></span>';
   const stale = item.is_current_day ? ''
     : `<span class="pdash-stale">${dashboardIcon('clock')}${entry.work_date ? `Último registro ${escapeHtml(formatIsoDateBr(entry.work_date))}` : 'Sem registro'}</span>`;
-  return `<button type="button" data-panel-detail="${item.id}" class="pdash-tile ${meta.className}${item.is_current_day ? '' : ' is-stale'}" title="${escapeHtml(`${item.service_name} · ${meta.name} · ver detalhes`)}">
+  // Cartão clicável (abre o detalhe, também por Enter/Espaço) com botão próprio de editar.
+  const edit = canFillProduction()
+    ? `<button type="button" class="pdash-tile-edit icon-edit-button" data-panel-edit="${item.id}" title="Editar frente"
+        aria-label="Editar ${escapeHtml(item.service_name || 'frente')}">${PENCIL_ICON}</button>` : '';
+  return `<article tabindex="0" role="button" data-panel-detail="${item.id}" class="pdash-tile ${meta.className}${item.is_current_day ? '' : ' is-stale'}" title="${escapeHtml(`${item.service_name} · ${meta.name} · ver detalhes`)}">
       <span class="pdash-tile-top">
         <strong>${escapeHtml(item.service_name || '-')}</strong>
         <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
+        ${edit}
       </span>
       <span class="pdash-place">${dashboardIcon('pin')}<span>Setor ${escapeHtml(entry.sector || '-')}${entry.section ? ` / ${escapeHtml(entry.section)}` : ''}${entry.farm ? ` · ${escapeHtml(entry.farm)}` : ''}</span></span>
       <span class="pdash-tile-ops">${operations}</span>
       <span class="pdash-tile-foot">${stale || '<span></span>'}${order}</span>
-    </button>`;
+    </article>`;
 }
 
 // Resumo analítico (topo do painel): indicadores por grupo da unidade e a chuva das 4 unidades.
@@ -259,7 +264,8 @@ function dashboardRainCardHtml() {
     const accumulated = Number(unit.rain_accumulated_mm) || 0;
     const turn = Number(unit.rain_turn_mm) || 0;
     return `<li class="${informed ? '' : 'is-empty'}" title="${escapeHtml(productionUnitLabel(unit.unit))}">
-        <span class="pdash-rain-unit"><b>${escapeHtml(unit.unit)}</b><small>${escapeHtml(PRODUCTION_UNIT_NAMES[unit.unit] || '')}</small></span>
+        <span class="pdash-rain-unit"><b>${escapeHtml(unit.unit)}</b><small>${escapeHtml(informed && unit.work_date && unit.work_date !== rain.work_date
+          ? `Informada em ${unit.work_date.slice(8, 10)}/${unit.work_date.slice(5, 7)}` : (PRODUCTION_UNIT_NAMES[unit.unit] || ''))}</small></span>
         <span class="pdash-rain-bars" aria-hidden="true">
           <i class="is-accumulated" data-rain-width="${Math.round(accumulated * 100 / max)}"></i>
           <i class="is-turn" data-rain-width="${Math.round(turn * 100 / max)}"></i>
@@ -448,8 +454,19 @@ document.querySelector('#production-group-cards')?.addEventListener('click', eve
     renderProductionDashboard();
     return;
   }
+  const edit = event.target.closest('[data-panel-edit]');
+  if (edit) {
+    openEditProductionItem(Number(edit.dataset.panelEdit));
+    return;
+  }
   const tile = event.target.closest('[data-panel-detail]');
   if (tile) openDashboardFrontDetail(Number(tile.dataset.panelDetail));
+});
+// Teclado: Enter ou Espaço no cartão abre o detalhe (o cartão não é mais um <button>).
+document.querySelector('#production-group-cards')?.addEventListener('keydown', event => {
+  if (!['Enter', ' '].includes(event.key) || !event.target.matches?.('[data-panel-detail]')) return;
+  event.preventDefault();
+  openDashboardFrontDetail(Number(event.target.dataset.panelDetail));
 });
 document.querySelector('#production-group-cards')?.addEventListener('change', event => {
   if (!event.target.matches?.('[data-panel-front]')) return;

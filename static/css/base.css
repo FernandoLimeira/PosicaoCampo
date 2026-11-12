@@ -293,25 +293,25 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 /* Aparência compartilhada das tabelas; cada módulo define suas colunas e tamanhos. */
 @media screen {
-:is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table) th {
+:is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table, .production-sheet-table, .pdash-overview-table, .production-order-table, .production-order-rows table) th {
   background: var(--data-header);
   color: #f6f7f8;
   border-bottom: 1px solid #24373c;
 }
-:is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table) td {
+:is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table, .production-sheet-table, .pdash-overview-table, .production-order-table, .production-order-rows table) td {
   background: var(--data-surface);
   color: #323e44;
   border-bottom: 1px solid var(--data-border);
   transition: background-color .15s ease;
 }
-:is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table) tbody tr:nth-child(even) td {
+:is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table, .production-sheet-table, .pdash-overview-table, .production-order-table, .production-order-rows table) tbody tr:nth-child(even) td {
   background: var(--data-alternate);
 }
-:is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table) tbody tr:is(:hover, :focus-within) td {
+:is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table, .production-sheet-table, .pdash-overview-table, .production-order-table, .production-order-rows table) tbody tr:is(:hover, :focus-within) td {
   background: var(--data-hover);
 }
-:is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table) tbody tr:is(:hover, :focus-within) td:first-child {
-  box-shadow: inset 3px 0 #4a707c;
+:is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table, .production-sheet-table, .pdash-overview-table, .production-order-table, .production-order-rows table) tbody tr:is(:hover, :focus-within) td:first-child {
+  box-shadow: inset 3px 0 #677e8a;
 }
 :is(.user-list-item, .history-item):nth-child(even) { background: var(--data-alternate); }
 :is(.user-list-item, .history-item):is(:hover, :focus-within) { background: var(--data-hover); border-color: #a2b3b8; }

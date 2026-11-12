@@ -15,8 +15,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .nav-unit-selector-label { color: rgba(255, 255, 255, 0.7); }
 .nav-link { color: #ffffff; }
 @media screen {
-  :is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table) th { border-bottom: 1px solid #616161; }
-  :is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table) td { color: #c9c9c9; }
+  :is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table, .production-sheet-table, .pdash-overview-table, .production-order-table, .production-order-rows table) th { border-bottom: 1px solid #616161; }
+  :is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table, .production-sheet-table, .pdash-overview-table, .production-order-table, .production-order-rows table) td { color: #c9c9c9; }
   :is(.user-list-item, .history-item):is(:hover, :focus-within) { border-color: #4e585b; }
 }
 .empty-table-row td { color: #999999; }

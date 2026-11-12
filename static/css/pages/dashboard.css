@@ -1065,7 +1065,7 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 .field-filter-button.is-selected { color: #30545f; background: #fff; border-color: #ced7dc; box-shadow: 0 2px 7px rgba(32, 61, 69, .07); }
 .field-filter-button:focus-visible { outline: 2px solid #5b818c; outline-offset: 2px; }
 .field-data-table { font-variant-numeric: tabular-nums; }
-.field-data-table th { position: sticky; top: 0; z-index: 1; color: #f0f3f4; background: #3b5056; font-size: 12px; letter-spacing: .3px; box-shadow: 0 1px 0 rgba(255,255,255,.16); }
+.field-data-table th { position: sticky; top: 0; z-index: 1; color: #f0f3f4; background: var(--data-header); font-size: 12px; letter-spacing: .3px; box-shadow: 0 1px 0 rgba(255,255,255,.16); }
 .field-data-table td { color: #38464d; font-size: 13px; line-height: 1.45; border-bottom: 1px solid #e8ecee; }
 .field-front-row[hidden], .field-filter-empty[hidden] { display: none !important; }
 .field-front-row .front-cell strong { color: #2d3f45; font-weight: 800; }
