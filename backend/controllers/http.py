@@ -10,6 +10,9 @@ from ..config import MAX_BODY_BYTES
 from ..services.excel_reports import MAX_EXCEL_UPLOAD_BYTES
 from ..views.templates import render_template
 
+# Fonte do sistema (Inter, WOFF2): versões antigas do Python não conhecem o tipo.
+mimetypes.add_type("font/woff2", ".woff2")
+
 AUTH_REQUIRED_MESSAGE = "Autenticação necessária."
 
 

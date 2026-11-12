@@ -198,7 +198,7 @@ function dashboardGroupStats(items) {
 }
 
 // Turno atual no horário de Brasília (mesmo calendário do campo: A 00:00–07:20,
-// B 07:20–15:40, C 15:40–24:00) e o instante em que ele começou.
+// B 07:20–15:40, C 15:40–00:00) e o instante em que ele começou.
 const DASHBOARD_SHIFTS = [['A', 0, 440], ['B', 440, 940], ['C', 940, 1440]];
 function dashboardCurrentShift(now = new Date()) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
@@ -208,7 +208,7 @@ function dashboardCurrentShift(now = new Date()) {
   const [name, start, end] = DASHBOARD_SHIFTS.find(([, from, to]) => minutes >= from && minutes < to) || DASHBOARD_SHIFTS[0];
   const startAt = Math.floor(now.getTime() / 1000) - ((minutes - start) * 60 + Number(parts.second));
   const clock = value => `${String(Math.floor(value / 60) % 24).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
-  return { name, startAt, label: `${clock(start)}–${end === 1440 ? '24:00' : clock(end)}` };
+  return { name, startAt, label: `${clock(start)}–${clock(end)}` };
 }
 
 // Atualizada pelo analista no turno atual (hoje e depois do início do turno).

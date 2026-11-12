@@ -30,6 +30,7 @@ PUBLIC_STATIC_FILES = {
     ("js", "login.js"),
     ("assets", "cornfield.svg"),
     ("assets", "login-field-sunrise-v1.png"),
+    ("assets", "inter-variable-latin.woff2"),
 }
 
 
