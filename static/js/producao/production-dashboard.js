@@ -281,8 +281,8 @@ function dashboardOverviewRow(name, stats, total = false) {
     </tr>`;
 }
 
-// Chuva nas 4 unidades (quadro gerencial fixo: não muda com a unidade escolhida). Vem do
-// botão "Informar chuva" da Produção de cada unidade (a média das frentes).
+// Chuva do dia nas 4 unidades (quadro gerencial fixo: não muda com a unidade escolhida).
+// Vem do botão "Informar chuva" da Produção (a média das frentes); só a chuva de hoje.
 let productionRainOverview = null;
 
 async function loadDashboardRainOverview() {
@@ -309,8 +309,7 @@ function dashboardRainCardHtml() {
     const accumulated = Number(unit.rain_accumulated_mm) || 0;
     const turn = Number(unit.rain_turn_mm) || 0;
     return `<li class="${informed ? '' : 'is-empty'}" title="${escapeHtml(productionUnitLabel(unit.unit))}">
-        <span class="pdash-rain-unit"><b>${escapeHtml(unit.unit)}</b><small>${escapeHtml(informed && unit.work_date && unit.work_date !== rain.work_date
-          ? `Informada em ${unit.work_date.slice(8, 10)}/${unit.work_date.slice(5, 7)}` : (PRODUCTION_UNIT_NAMES[unit.unit] || ''))}</small></span>
+        <span class="pdash-rain-unit"><b>${escapeHtml(unit.unit)}</b><small>${escapeHtml(PRODUCTION_UNIT_NAMES[unit.unit] || '')}</small></span>
         <span class="pdash-rain-bars" aria-hidden="true">
           <i class="is-accumulated" data-rain-width="${Math.round(accumulated * 100 / max)}"></i>
           <i class="is-turn" data-rain-width="${Math.round(turn * 100 / max)}"></i>

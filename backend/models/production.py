@@ -790,19 +790,16 @@ def _summary_payload(row: sqlite3.Row | None, unit: str, work_date: str) -> dict
 def get_rain_overview(user_id: int, work_date: Any) -> dict[str, Any]:
     """Chuva nas 4 unidades (quadro gerencial fixo do painel) e a média das que informaram.
     Fonte: o botão "Informar chuva" da Produção de cada unidade (a média das frentes).
-    Cada unidade mostra a última chuva informada até o dia pedido; ``work_date`` da
-    unidade diz de que dia ela é (a tela marca quando não é de hoje).
+    Vale só a chuva do dia pedido: unidade sem chuva no dia fica "não informada" e fora
+    da média (não usa chuva de dias anteriores).
     É visão gerencial: vale para quem acessa a Produção, em qualquer unidade."""
     selected_date = _normalize_work_date(work_date)
     with connection() as conn:
         _require_access(conn, user_id)
         rows = {
             row["unit_code"]: row for row in conn.execute(
-                """SELECT s.unit_code,s.work_date,s.rain_turn_mm,s.rain_accumulated_mm,s.updated_at
-                   FROM production_daily_summaries s
-                   WHERE s.work_date=(SELECT MAX(latest.work_date) FROM production_daily_summaries latest
-                                      WHERE latest.unit_code=s.unit_code AND latest.work_date<=?
-                                        AND (latest.rain_turn_mm IS NOT NULL OR latest.rain_accumulated_mm IS NOT NULL))""",
+                """SELECT unit_code,work_date,rain_turn_mm,rain_accumulated_mm,updated_at
+                   FROM production_daily_summaries WHERE work_date=?""",
                 (selected_date,),
             )
         }
