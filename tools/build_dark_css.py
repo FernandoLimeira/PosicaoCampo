@@ -175,10 +175,17 @@ def convert_value(prop: str, value: str) -> str:
 OVERRIDES = {
     "base.css": """:root {
   --data-hover: #333333; --control-hover: #343434; --control-surface: #2e2e2e;
-  --green-pale: #26302b; --line: #3a3a3a; --data-border: #3a3a3a; --control-border: #464646;
-  --data-header: #383838; --page: #1e1e1e; --surface: #2a2a2a; --data-surface: #282828;
-  --nav-background: linear-gradient(160deg, #1b1b1b 0%, #171717 100%);
+  --green-pale: #252b2d; --line: #3a3a3a; --data-border: #3a3a3a; --control-border: #464646;
+  --data-header: #1b3a41; --page: #1e1e1e; --surface: #2a2a2a; --data-surface: #282828;
+  /* Paleta petróleo: barra lateral e destaques; o resto em cinza escuro. */
+  --green: #3f6f7a; --green-strong: #2e5a63; --green-soft: #22333a; --control-text: #a9c6cf;
+  --nav-background: linear-gradient(165deg, #122e34 0%, #0e1d21 100%);
 }
+""",
+    # Botões principais e aba ativa do painel mantêm o petróleo da paleta no escuro.
+    "pages/producao.css": """.production-primary-button.pdash-action { background: linear-gradient(135deg, #3f6f7a 0%, #1b3a41 100%); }
+.production-primary-button.pdash-action:hover:not(:disabled) { background: linear-gradient(135deg, #4a7c87 0%, #22474e 100%); }
+.pdash-group-tab.is-active { background: linear-gradient(135deg, #3f6f7a 0%, #1b3a41 100%); color: #ffffff; }
 """,
     # Folhas decorativas do login têm cor fixa no SVG: no escuro ficam bem discretas.
     "auth.css": """.auth-panel-leaves { opacity: .06; }

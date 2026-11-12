@@ -789,7 +789,8 @@ def _summary_payload(row: sqlite3.Row | None, unit: str, work_date: str) -> dict
 
 def get_rain_overview(user_id: int, work_date: Any) -> dict[str, Any]:
     """Chuva do dia nas 4 unidades (quadro gerencial fixo do painel) e a média das que
-    informaram. É visão gerencial: vale para quem acessa a Produção, em qualquer unidade."""
+    informaram. Fonte: o botão "Informar chuva" da Produção de cada unidade (a média
+    das frentes). É visão gerencial: vale para quem acessa a Produção, em qualquer unidade."""
     selected_date = _normalize_work_date(work_date)
     with connection() as conn:
         _require_access(conn, user_id)

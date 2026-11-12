@@ -2,13 +2,13 @@
 .excel-upload-panel, .excel-browser-section { background: #2a2a2a; }
 .excel-page-kicker, .excel-section-heading span { color: #999999; }
 .excel-section-heading p { color: #999999; }
-.excel-page-back:hover, .excel-filter-reset:hover { border-color: #505e54; }
+.excel-page-back:hover, .excel-filter-reset:hover { border-color: #505b5e; }
 .excel-upload-copy > strong { color: #cccccc; }
 .excel-upload-copy > p { color: #999999; }
 .excel-shift-rules span { border: 1px solid #454545; background: #272727; color: #999999; }
 .excel-file-field > span { color: #a8a8a8; }
 .excel-file-field input { border: 1px solid #4a4a4a; background: #2a2a2a; color: #cccccc; }
-.excel-file-field input:focus { border-color: #30a65e; }
+.excel-file-field input:focus { border-color: #616161; }
 .excel-file-field small { color: #999999; }
 .excel-report-status { color: #999999; }
 .excel-report-status.is-error { color: #cd656d; }

@@ -4,7 +4,7 @@
 .return-section-heading p { color: #999999; }
 .return-field > span { color: #a8a8a8; }
 .return-field input, .return-field select { border: 1px solid #4a4a4a; background: #2a2a2a; color: #cccccc; }
-.return-field input:focus, .return-field select:focus { border-color: #30a65e; }
+.return-field input:focus, .return-field select:focus { border-color: #616161; }
 .return-layout-row { border: 1px solid #434343; background: #292929; }
 .return-remove-front { border: 1px solid #4d4243; background: #282828; color: #c66c74; }
 .return-remove-front:hover { border-color: #574a4c; background: #2c2022; }
@@ -13,20 +13,20 @@
 .return-table { background: #2a2a2a; }
 .return-table td strong { color: #d0d0d0; }
 .return-table-empty { color: #999999 !important; }
-.return-layout-config-button { border-color: #4d5a52; background: #272727; color: #abe2c4; }
+.return-layout-config-button { border-color: #4d575a; background: #272727; color: #c7c7c7; }
 .return-layout-config-button:hover { border-color: #616161; background: #242424; }
 .return-layout-modal-header p { color: #999999; }
 .return-layout-modal-body { background: #272727; }
 .return-layout-modal-toolbar { border: 1px solid #454545; background: #2a2a2a; }
 .return-layout-modal .return-layout-row { background: #2a2a2a; }
 .return-soil-wet-status { border: 1px solid #444444; background: #272727; color: #9b9b9b; }
-.return-soil-wet-status.is-success { border-color: #434f47; background: #252525; color: #9ed3b3; }
+.return-soil-wet-status.is-success { border-color: #494949; background: #252525; color: #9ed3b3; }
 .return-soil-wet-status.is-error { border-color: #4e4244; background: #282828; color: #c86a74; }
 .return-confirmed-soil-wet-section { border-left: 3px solid #616161; }
 .return-presentation-footer { background: #2a2a2a; }
-.return-presentation-footer strong { color: #b1ddcb; }
+.return-presentation-footer strong { color: #cbcbcb; }
 .return-presentation-footer p { color: #9e9e9e; }
-.return-trace-options h4 { color: #b1ddcb; }
+.return-trace-options h4 { color: #cbcbcb; }
 .return-trace-options p, .return-trace-options small { color: #9e9e9e; }
-.return-trace-list label { color: #a7c5d2; }
+.return-trace-list label { color: #bdbdbd; }
 .return-trace-list input[type="checkbox"] { accent-color: #393939; }

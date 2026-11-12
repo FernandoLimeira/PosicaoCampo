@@ -1,41 +1,43 @@
 /* Gerado por tools/build_dark_css.py a partir de base.css. Não edite: rode o script. */
 :root { color-scheme: dark; }
-:root { --green: #30926c; --green-strong: #309273; --green-soft: #1c2622; --green-pale: #252525; --text: #d0d0d0; --muted: #999999; --line: #454545; --surface: #2a2a2a; --page: #232323; --data-surface: #2a2a2a; --data-alternate: #272727; --data-hover: #222222; --data-border: #464646; --data-header: #3e7583; --control-border: #444f4c; --control-surface: #242424; --control-hover: #1b2520; --control-text: #9edbca; --yellow: #cba64c; --yellow-soft: #28241d; --red: #cb4d59; --red-soft: #2c2021; --nav-background: linear-gradient(160deg, #3d3d3d 0%, #3d3d3d 58%, #3d3d3d 100%); --nav-text-soft: rgba(255, 255, 255, 0.82); }
-button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid rgba(53, 162, 120, 0.24); }
+:root { --green: #383838; --green-strong: #2b2b2b; --green-soft: #1e1e1e; --green-pale: #242424; --text: #e6e6e6; --muted: #a3a3a3; --line: #474747; --surface: #2a2a2a; --page: #232323; --data-surface: #2a2a2a; --data-alternate: #262626; --data-hover: #212121; --data-border: #474747; --data-header: #383838; --control-border: #4d4d4d; --control-surface: #232323; --control-hover: #1e1e1e; --control-text: #b1d6dd; --status-ok: #30926c; --yellow: #cba64c; --yellow-soft: #28241d; --red: #cb4d59; --red-soft: #2c2021; --nav-background: linear-gradient(165deg, #383838 0%, #2b2b2b 52%, #2b2b2b 100%); --nav-text-soft: rgba(255, 255, 255, 0.82); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid rgba(97, 97, 97, 0.24); }
 .app-navbar { color: #ffffff; }
 .module-standard-header { background: linear-gradient(135deg, #2a2a2a 0%, #262626 100%); }
 .module-standard-header h1 { color: #e0e0e0; }
 .module-standard-header p { color: #999999; }
 .module-standard-card { background: #2a2a2a; }
-.nav-brand::after { background: #53c68e; }
+.nav-brand::after { background: #35474c; }
 .report-unit-button:hover { color: #ffffff; }
 .report-unit-button.selected { color: #ffffff; }
 .nav-report-flyout { color: #ffffff; }
-.nav-report-flyout a:focus-visible, .nav-reports-toggle:focus-visible { outline: 2px solid #4b584e; }
+.nav-report-flyout a:focus-visible, .nav-reports-toggle:focus-visible { outline: 2px solid #4b5558; }
 .nav-unit-selector-label { color: rgba(255, 255, 255, 0.7); }
 .nav-link { color: #ffffff; }
 @media screen {
   :is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table) th { border-bottom: 1px solid #616161; }
   :is(.data-table, .editable-table, .production-table, .sector-base-table, .sacarose-table, .return-table) td { color: #c9c9c9; }
-  :is(.user-list-item, .history-item):is(:hover, :focus-within) { border-color: #4e5b52; }
+  :is(.user-list-item, .history-item):is(:hover, :focus-within) { border-color: #4e585b; }
 }
 .empty-table-row td { color: #999999; }
 .compact-block-title { color: #a8a8a8; background: #262626; border-bottom: 1px solid #424242; }
 .footer { color: #999999; background: #282828; }
-.modal-backdrop { --data-surface: #272727; --data-alternate: #242424; --data-hover: #222222; --data-border: #464646; background: rgba(43, 43, 43, 0.52); }
-.editor-modal { background: #2a2a2a; border: 1px solid rgba(65, 77, 73, 0.9); }
+.modal-backdrop { --data-surface: #272727; --data-alternate: #242424; --data-hover: #222222; --data-border: #464646; }
+.editor-modal { background: #2a2a2a; border: 1px solid rgba(71, 71, 71, 0.9); }
 .modal-header { background: linear-gradient(180deg, #2a2a2a 0%, #272727 100%); }
+.modal-kicker { color: #999999; }
 .modal-header h2 { color: #e0e0e0; }
-.modal-close:focus-visible, .modal-backdrop button:focus-visible { outline: 2px solid #35a278; }
+.modal-close:focus-visible, .modal-backdrop button:focus-visible { outline: 2px solid #616161; }
 .editor-unit-summary span { color: #999999; }
 .editor-unit-summary strong { color: #d3d3d3; }
 .section-heading h3 { color: #d1d1d1; }
 .field > span, .metric-field label > span, .rain-edit-row label > span { color: #999999; }
 input, select, textarea { background: #2a2a2a; color: #d9d9d9; }
-.modal-backdrop :is(input, select, textarea):hover:not(:focus) { border-color: #4a5753; }
+input:focus, select:focus, textarea:focus { border-color: #616161; }
+.modal-backdrop :is(input, select, textarea):hover:not(:focus) { border-color: #4a5457; }
 .modal-footer { background: linear-gradient(180deg, #272727, #2a2a2a); }
 .modal-footer p { color: #999999; }
-.modal-button.secondary:hover:not(:disabled) { border-color: #505e54; }
+.modal-button.secondary:hover:not(:disabled) { border-color: #505b5e; }
 .modal-button.save { color: #ffffff; }
 .modal-button.danger { color: #ffffff; }
 .toast { color: #ffffff; background: #2b2b2b; }
@@ -44,7 +46,7 @@ input, select, textarea { background: #2a2a2a; color: #d9d9d9; }
 .menu-icon { color: #ffffff; }
 .nav-logout { color: #ffffff; }
 .nav-link.is-active { color: #ffffff; }
-.confirm-dialog { background: #2a2a2a; border: 1px solid rgba(65, 77, 73, 0.9); }
+.confirm-dialog { background: #2a2a2a; border: 1px solid rgba(71, 71, 71, 0.9); }
 .confirm-dialog.is-warning { --tone: #b18333; --tone-soft: #29251d; }
 .confirm-dialog h2 { color: #e0e0e0; }
 .confirm-dialog-body p { color: #adadad; }
@@ -58,9 +60,28 @@ button.icon-edit-button { border: 1px solid #514c45 !important; background: #2b2
 button.icon-edit-button:hover { border-color: #a66d30 !important; background: #24201a !important; }
 button.icon-delete-button { border: 1px solid #4d4142 !important; background: #2d2122 !important; color: #d65c67 !important; }
 button.icon-delete-button:hover { border-color: #ba3642 !important; background: #281d1e !important; }
+body { background: radial-gradient(1100px 520px at 100% 0%, rgba(61, 61, 61, 0.2), transparent 62%),
+    radial-gradient(900px 480px at 0% 100%, rgba(56, 56, 56, 0.1), transparent 60%),
+    linear-gradient(180deg, #212121 0%, #313131 100%); }
+.module-standard-header.module-standard-header { background: linear-gradient(120deg, #383838 0%, #2b2b2b 55%, #2b2b2b 100%); }
+.module-standard-header.module-standard-header::after { background: linear-gradient(100deg, transparent 0%, rgba(64, 64, 64, 0.14) 100%); }
+.module-standard-header.module-standard-header p { color: rgba(230, 236, 239, 0.74); }
+.module-standard-header.module-standard-header :is(.modal-kicker, .production-kicker, .excel-page-kicker, .eyebrow), .module-standard-header.module-standard-header .dashboard-heading-copy > p { color: #999999; }
+.module-standard-header.module-standard-header .production-current-context span { color: #999999; }
+.module-standard-header.module-standard-header .production-current-context small { color: rgba(230, 236, 239, 0.7); }
+.module-standard-header.module-standard-header :is(.modal-button.save, .dashboard-fill-button) { background: #2a2a2a; color: #e1e1e1; }
+.module-standard-header.module-standard-header :is(.modal-button.save, .dashboard-fill-button):hover:not(:disabled) { background: #212121; color: #e6e6e6; }
+.modal-backdrop { background: rgba(43, 43, 43, 0.58); }
+.editor-modal { border: 1px solid rgba(84, 84, 84, 0.45); }
+.modal-backdrop .modal-header.modal-header { background: linear-gradient(120deg, #383838 0%, #2b2b2b 70%, #2b2b2b 100%); }
+.modal-backdrop .modal-header.modal-header .modal-kicker { color: #999999; }
+.modal-backdrop .modal-header.modal-header p, .modal-backdrop .modal-header.modal-header :is(small, .production-order-modal-context, .editor-unit-summary span) { color: rgba(230, 236, 239, 0.76); }
+.modal-backdrop .modal-footer.modal-footer { border-top: 1px solid #464646; background: linear-gradient(180deg, #252525, #212121); }
 :root {
   --data-hover: #333333; --control-hover: #343434; --control-surface: #2e2e2e;
-  --green-pale: #26302b; --line: #3a3a3a; --data-border: #3a3a3a; --control-border: #464646;
-  --data-header: #383838; --page: #1e1e1e; --surface: #2a2a2a; --data-surface: #282828;
-  --nav-background: linear-gradient(160deg, #1b1b1b 0%, #171717 100%);
+  --green-pale: #252b2d; --line: #3a3a3a; --data-border: #3a3a3a; --control-border: #464646;
+  --data-header: #1b3a41; --page: #1e1e1e; --surface: #2a2a2a; --data-surface: #282828;
+  /* Paleta petróleo: barra lateral e destaques; o resto em cinza escuro. */
+  --green: #3f6f7a; --green-strong: #2e5a63; --green-soft: #22333a; --control-text: #a9c6cf;
+  --nav-background: linear-gradient(165deg, #122e34 0%, #0e1d21 100%);
 }

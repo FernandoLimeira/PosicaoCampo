@@ -5,14 +5,14 @@
 .excel-team-rule strong { color: #e3d7a8; }
 .excel-filter-grid label > span { color: #a8a8a8; }
 .excel-filter-grid select { border: 1px solid #4a4a4a; background: #2a2a2a; color: #cccccc; }
-.excel-filter-grid select:focus { border-color: #30a65e; }
+.excel-filter-grid select:focus { border-color: #616161; }
 .excel-filter-heading strong { color: #cdcdcd; }
 .excel-detail-header h3 { color: #d1d1d1; }
 .excel-browser-title { border-bottom: 1px solid #616161; }
 .excel-browser-title span { background: #1f1f1f; color: #aeaeae; }
 .excel-entity-copy strong { color: #cccccc; }
 .excel-entity-copy small { color: #999999; }
-.excel-entity-metric strong { color: #9cdeb7; }
+.excel-entity-metric strong { color: #a8c7d1; }
 .excel-entity-metric small { color: #999999; }
 .excel-entity-chevron { color: #999999; }
 .excel-detail-header { border-bottom: 1px solid #424242; }
@@ -21,7 +21,7 @@
 .excel-comparison-card.is-low { border-color: #514546; background: #282828; }
 .excel-comparison-card.is-empty > strong { color: #c0c0c0; }
 .excel-comparison-card-head span { color: #a1a1a1; }
-.excel-comparison-card-head b { color: #91d6ad; }
+.excel-comparison-card-head b { color: #9fbfc9; }
 .excel-comparison-card.is-low .excel-comparison-card-head b { color: #c36f77; }
 .excel-comparison-card h4 { color: #cfcfcf; }
 .excel-comparison-card p { color: #999999; }

@@ -1,6 +1,6 @@
 /* Gerado por tools/build_dark_css.py a partir de pages/sacarose.css. Não edite: rode o script. */
 .card-footer p { color: #999999; }
-.save-status { color: #9dccb0; }
+.save-status { color: #b4b4b4; }
 .save-status.is-error { color: #d2616e; }
 .unit-tab { border: 1px solid #4a4a4a; color: #c0c0c0; background: #2a2a2a; }
 .unit-tab:hover { border-color: #616161; }
@@ -13,7 +13,7 @@
 .sacarose-option-field select { border: 1px solid #494949; color: #d8d8d8; background: #2a2a2a; }
 .sacarose-option-toggle { color: #a7a7a7; }
 .primary-button { color: #ffffff; }
-.secondary-button:hover { border-color: #505e54; }
+.secondary-button:hover { border-color: #505b5e; }
 .sacarose-table input, .sacarose-table select { border: 1px solid #494949; color: #d8d8d8; background: #2a2a2a; }
 .sacarose-table input:focus, .sacarose-table select:focus { outline: 2px solid rgba(97, 97, 97, 0.333); border-color: #616161; }
 .lookup { color: #cdcdcd; }

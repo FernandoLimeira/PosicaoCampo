@@ -231,7 +231,8 @@ function dashboardOverviewRow(name, stats, total = false) {
     </tr>`;
 }
 
-// Chuva do dia nas 4 unidades (quadro gerencial fixo: não muda com a unidade escolhida).
+// Chuva nas 4 unidades (quadro gerencial fixo: não muda com a unidade escolhida). Vem do
+// botão "Informar chuva" da Produção de cada unidade (a média das frentes).
 let productionRainOverview = null;
 
 async function loadDashboardRainOverview() {
@@ -273,7 +274,7 @@ function dashboardRainCardHtml() {
       <div><span>Média acumulada</span><strong>${dashboardRainValue(rain.average_accumulated_mm)}<small>mm</small></strong></div>
     </div>
     <ul class="pdash-rain-units">${units}</ul>
-    <p class="pdash-rain-legend"><i class="is-turn"></i>Turno <i class="is-accumulated"></i>Acumulada · ${rain.informed} de ${rain.units.length} unidades informaram</p>`;
+    <p class="pdash-rain-legend"><i class="is-turn"></i>Turno <i class="is-accumulated"></i>Acumulada · ${rain.informed} de ${rain.units.length} unidades informaram (botão Informar chuva)</p>`;
 }
 
 function renderDashboardRainCard() {

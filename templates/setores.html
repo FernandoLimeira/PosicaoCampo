@@ -29,12 +29,6 @@
                 <input id="sector-base-file" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" required />
                 <small id="sector-base-file-name">Nenhum arquivo selecionado</small>
               </label>
-              {% if user.module_access.sectors_purge.view %}
-              <label class="sector-base-replace-option" for="sector-base-replace">
-                <input id="sector-base-replace" type="checkbox" />
-                <span><strong>Substituir a base atual</strong><small>Apaga todos os setores antes de importar a planilha</small></span>
-              </label>
-              {% endif %}
               <button id="sector-base-import-button" class="modal-button save" type="submit">Importar Excel</button>
             </form>
           </section>

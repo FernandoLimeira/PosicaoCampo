@@ -25,7 +25,7 @@
 .return-section-heading span {
   display: block;
   margin-bottom: 4px;
-  color: #72847a;
+  color: #727e84;
   font-size: 8px;
   font-weight: 900;
   letter-spacing: .12em;
@@ -34,13 +34,13 @@
 
 .return-section-heading h3 {
   margin: 0;
-  color: #244234;
+  color: #2b363b;
   font-size: 13px;
 }
 
 .return-section-heading p {
   margin: 6px 0 0;
-  color: #718078;
+  color: #717b80;
   font-size: 8px;
   line-height: 1.45;
 }
@@ -60,7 +60,7 @@
 }
 
 .return-field > span {
-  color: #51675b;
+  color: #516067;
   font-size: 8px;
   font-weight: 800;
 }
@@ -70,10 +70,10 @@
   width: 100%;
   min-height: 36px;
   padding: 7px 9px;
-  border: 1px solid #cad8cf;
+  border: 1px solid #cad3d8;
   border-radius: var(--control-radius);
   background: #fff;
-  color: #29483a;
+  color: #2f3c42;
   font: inherit;
   font-size: 9px;
   outline: none;
@@ -81,7 +81,7 @@
 
 .return-field input:focus,
 .return-field select:focus {
-  border-color: #0b7a36;
+  border-color: #27515e;
   box-shadow: 0 0 0 3px rgba(11, 122, 54, .08);
 }
 
@@ -99,7 +99,7 @@
   gap: 8px;
   align-items: end;
   padding: 9px 10px;
-  border: 1px solid #e2ebe5;
+  border: 1px solid #e3e8ea;
   border-radius: var(--control-radius);
   background: #fbfdfc;
 }
@@ -120,9 +120,9 @@
 
 .return-layout-empty {
   padding: 14px;
-  border: 1px dashed #cfded4;
+  border: 1px dashed #d0d9dd;
   border-radius: var(--control-radius);
-  color: #78877f;
+  color: #788287;
   font-size: 8px;
   text-align: center;
   background: #fbfdfc;
@@ -157,10 +157,10 @@
 .return-report-text {
   margin: 12px 0 0;
   padding: 13px 14px;
-  border: 1px solid #e0e9e3;
+  border: 1px solid #e0e6e9;
   border-radius: var(--control-radius);
   background: #f8fbf9;
-  color: #2b4739;
+  color: #303c42;
   font-family: Inter, "Segoe UI Variable Text", "Segoe UI Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   font-size: 9px;
   line-height: 1.65;
@@ -204,9 +204,9 @@
 .return-table tbody tr:last-child td { border-bottom: 0; }
 
 
-.return-table td strong { color: #234536; }
+.return-table td strong { color: #293a3f; }
 
-.return-table-empty { color: #7d8b84 !important; text-align: center; }
+.return-table-empty { color: #7d868b !important; text-align: center; }
 
 @media (max-width: 980px) {
 .return-section-heading { flex-direction: column; }
@@ -251,14 +251,14 @@
 }
 
 .return-layout-config-button {
-  border-color: #9fc2ac;
+  border-color: #a6b6bb;
   background: #f6fbf8;
-  color: #1f5b3a;
+  color: #2a4750;
 }
 
 .return-layout-config-button:hover {
-  border-color: #6e9f80;
-  background: #edf7f1;
+  border-color: #778f96;
+  background: #f0f3f4;
 }
 
 .return-layout-modal {
@@ -274,7 +274,7 @@
 
 .return-layout-modal-header p {
   margin: 6px 0 0;
-  color: #718078;
+  color: #717b80;
   font-size: 10px;
   line-height: 1.45;
 }
@@ -292,7 +292,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 12px;
-  border: 1px solid #dce8e0;
+  border: 1px solid #dde4e7;
   border-radius: var(--control-radius);
   background: #fff;
 }
@@ -469,16 +469,16 @@
 .return-soil-wet-status {
   min-height: 18px;
   padding: 7px 9px;
-  border: 1px solid #dfe9e2;
+  border: 1px solid #e0e5e8;
   border-radius: var(--control-radius);
   background: #f8fbf9;
-  color: #617269;
+  color: #616c72;
   font-size: 8px;
   line-height: 1.45;
 }
 
 .return-soil-wet-status.is-success {
-  border-color: #c8dfcf;
+  border-color: #cdd6da;
   background: #f1f8f3;
   color: #2f6845;
 }
@@ -490,7 +490,7 @@
 }
 
 .return-confirmed-soil-wet-section {
-  border-left: 3px solid #6f9f7f;
+  border-left: 3px solid #788f96;
 }
 
 .return-compact-table-wrap {
@@ -523,15 +523,15 @@
 }
 .return-presentation-footer > * { min-width: 0; max-width: 100%; }
 .return-presentation-footer > button { justify-self: end; white-space: normal; }
-.return-presentation-footer strong { color: #234f3d; font-size: 14px; }
-.return-presentation-footer p { margin: 6px 0 0; color: #5c7065; font-size: 12px; }
+.return-presentation-footer strong { color: #2b4047; font-size: 14px; }
+.return-presentation-footer p { margin: 6px 0 0; color: #5c6970; font-size: 12px; }
 .return-presentation-footer .excel-report-status { flex-basis: 100%; margin: 0; }
 .return-presentation-footer .excel-report-status:empty { display: none; }
 .return-presentation-footer button:disabled { opacity: .55; cursor: not-allowed; }
 .return-trace-options { min-width: 0; width: 100%; }
 .return-trace-options[hidden] { display: none; }
-.return-trace-options h4 { margin: 0 0 8px; color: #234f3d; }
-.return-trace-options p, .return-trace-options small { color: #5c7065; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.return-trace-options h4 { margin: 0 0 8px; color: #2b4047; }
+.return-trace-options p, .return-trace-options small { color: #5c6970; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
 .return-trace-options small { display: block; }
 .return-trace-list {
   display: grid;
@@ -553,7 +553,7 @@
   max-width: 100%;
   gap: 8px;
   padding: 4px 0;
-  color: #30515f;
+  color: #394f56;
   font-size: 11px;
   line-height: 1.5;
   cursor: pointer;
@@ -568,7 +568,7 @@
   min-height: 16px;
   padding: 0;
   margin: 1px 0 0;
-  accent-color: #234f3d;
+  accent-color: #2b4047;
   cursor: pointer;
 }
 @media (max-width: 640px) { .return-trace-list { grid-template-columns: 1fr; } }

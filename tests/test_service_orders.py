@@ -92,6 +92,14 @@ class ServiceOrderTests(unittest.TestCase):
         self.assertEqual((rain["average_turn_mm"], rain["average_accumulated_mm"], rain["informed"]), (3.5, 20.5, 2))
         self.assertIsNone(rain["units"][1]["rain_turn_mm"])
 
+        # A chuva do CTT não entra: o quadro usa só o "Informar chuva" da Produção.
+        from backend.models import units as unit_model
+        payload = unit_model.list_units_payload()
+        pst = next(item for item in payload["units"] if item.get("code") == "PST")
+        unit_model.save_unit({**pst, "rain": [["PLUV-01", 40, 90]]}, unit_model.UNIT_DEFINITIONS["PST"]["position"], self.admin["id"])
+        rain = production.get_rain_overview(self.user["id"], "2026-11-10")
+        self.assertEqual((rain["units"][3]["rain_turn_mm"], rain["average_turn_mm"]), (5.0, 3.5))
+
     def test_fert_convencional_has_default_operations(self):
         group = production.list_catalog(self.admin["id"], include_inactive=True)["groups"][0]
         fert = production.save_service_front(self.admin["id"], {

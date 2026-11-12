@@ -202,25 +202,14 @@ async function importSectorBaseExcel(event) {
     return;
   }
 
-  const replace = canPurgeSectorBase() && Boolean(document.querySelector('#sector-base-replace')?.checked);
-  if (replace && !await askConfirmation({
-    kicker: 'Cadastro de setores',
-    title: 'Substituir a base de setores?',
-    message: `A base atual será apagada e trocada pelos setores da planilha “${file.name}”.`,
-    details: [
-      `${sectorCountLabel(sectorBaseItems.length)} cadastrados hoje serão removidos, inclusive os cadastrados manualmente.`,
-      'Se a planilha tiver algum erro, nada é apagado.'
-    ],
-    confirmLabel: 'Substituir base'
-  })) return;
-
+  // A importação só acrescenta e atualiza setores; apagar a base é o botão "Apagar base".
   if (button) button.disabled = true;
   try {
     const formData = new FormData();
     formData.append('file', file, file.name);
     let payload;
     try {
-      payload = await apiRequest(`/api/sector-base/import${replace ? '?replace=1' : ''}`, { method: 'POST', body: formData });
+      payload = await apiRequest('/api/sector-base/import', { method: 'POST', body: formData });
     } catch (error) {
       // apiRequest já redireciona para o login quando a sessão expira.
       if (error.status === 401) return;
@@ -231,11 +220,7 @@ async function importSectorBaseExcel(event) {
     if (fileInput) fileInput.value = '';
     const fileName = document.querySelector('#sector-base-file-name');
     if (fileName) fileName.textContent = 'Nenhum arquivo selecionado';
-    const replaceInput = document.querySelector('#sector-base-replace');
-    if (replaceInput) replaceInput.checked = false;
-    showToast(payload.replaced
-      ? `Base substituída: ${payload.removed || 0} removidos · ${payload.total || 0} importados.`
-      : `${payload.total || 0} setores processados · ${payload.created || 0} novos · ${payload.updated || 0} atualizados.`);
+    showToast(`${payload.total || 0} setores processados · ${payload.created || 0} novos · ${payload.updated || 0} atualizados.`);
   } catch (error) {
     console.error(error);
     showToast(error.message || 'Não foi possível importar a base de setores.', true);
