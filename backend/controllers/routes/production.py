@@ -19,6 +19,7 @@ from ...models.production import (
     delete_service_front as delete_production_service_front,
     delete_status as delete_production_status,
     get_daily_summary as get_production_daily_summary,
+    get_rain_overview as get_production_rain_overview,
     get_user_access as get_production_user_access,
     list_catalog as list_production_catalog,
     list_my_items as list_production_my_items,
@@ -239,6 +240,13 @@ def handle(req):
             return req.unauthorized()
         return req.guarded(lambda: req.json(HTTPStatus.OK, {
             "items": list_production_sector_options(user["id"], req.param("unit", ""), req.param("sector", "")),
+        }), bad_request=ValueError)
+
+    if path == "/api/production/rain-overview" and method == "GET":
+        if not user:
+            return req.unauthorized()
+        return req.guarded(lambda: req.json(HTTPStatus.OK, {
+            "rain": get_production_rain_overview(user["id"], req.param("date", "")),
         }), bad_request=ValueError)
 
     if path == "/api/production/daily-summary":

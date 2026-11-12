@@ -5,6 +5,22 @@ const PRODUCTION_PANEL_GROUP_KEY = 'posicao-campo-production-panel-group';
 let productionPanelGroup = '';
 try { productionPanelGroup = localStorage.getItem(PRODUCTION_PANEL_GROUP_KEY) || ''; } catch (_) { /* sem armazenamento */ }
 
+// Filtros do painel (por grupo): frente escolhida e indicador clicado no cabeçalho.
+const dashboardPanelFilter = { front: '', flag: '' };
+
+function dashboardMatchesFilter(item) {
+  if (dashboardPanelFilter.front && String(item.service_front_id) !== dashboardPanelFilter.front) return false;
+  const state = dashboardOrderState(item);
+  switch (dashboardPanelFilter.flag) {
+    case 'stopped': return dashboardFlags(item).stopped;
+    case 'ok': return state === 'ok';
+    case 'noOrder': return state === 'missing';
+    case 'noOperation': return state === 'no_operation';
+    case 'today': return Boolean(item.is_current_day);
+    default: return true;
+  }
+}
+
 function dashboardProblemScore(items) {
   return items.reduce((sum, item) => {
     const flags = dashboardFlags(item);
@@ -165,8 +181,7 @@ function dashboardFrontTile(item) {
     </button>`;
 }
 
-// Resumo analítico da unidade (topo do painel): indicadores por grupo e as operações em
-// execução, com quantas frentes estão com e sem O.S.
+// Resumo analítico (topo do painel): indicadores por grupo da unidade e a chuva das 4 unidades.
 function dashboardGroupStats(items) {
   const stats = { total: items.length, active: 0, stopped: 0, ok: 0, missing: 0, noOperation: 0, today: 0 };
   items.forEach(item => {
@@ -182,6 +197,25 @@ function dashboardGroupStats(items) {
   return stats;
 }
 
+// Turno atual no horário de Brasília (mesmo calendário do campo: A 00:00–07:20,
+// B 07:20–15:40, C 15:40–24:00) e o instante em que ele começou.
+const DASHBOARD_SHIFTS = [['A', 0, 440], ['B', 440, 940], ['C', 940, 1440]];
+function dashboardCurrentShift(now = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+  }).formatToParts(now).map(part => [part.type, part.value]));
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  const [name, start, end] = DASHBOARD_SHIFTS.find(([, from, to]) => minutes >= from && minutes < to) || DASHBOARD_SHIFTS[0];
+  const startAt = Math.floor(now.getTime() / 1000) - ((minutes - start) * 60 + Number(parts.second));
+  const clock = value => `${String(Math.floor(value / 60) % 24).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
+  return { name, startAt, label: `${clock(start)}–${end === 1440 ? '24:00' : clock(end)}` };
+}
+
+// Atualizada pelo analista no turno atual (hoje e depois do início do turno).
+function dashboardUpdatedInShift(item, shift) {
+  return Boolean(item.is_current_day) && Number(item.entry?.updated_at || 0) >= shift.startAt;
+}
+
 function dashboardOverviewRow(name, stats, total = false) {
   const percent = (part, all) => (all ? `${Math.round(part * 100 / all)}%` : '-');
   const checked = stats.ok + stats.missing;
@@ -193,49 +227,90 @@ function dashboardOverviewRow(name, stats, total = false) {
       <td class="${checked && stats.ok < checked ? 'is-red' : checked ? 'is-green' : ''}">${checked ? `${stats.ok}/${checked}` : '-'}<small>${percent(stats.ok, checked)}</small></td>
       <td class="${stats.missing ? 'is-red' : ''}">${stats.missing}</td>
       <td class="${stats.noOperation ? 'is-amber' : ''}">${stats.noOperation}</td>
-      <td class="${stats.today < stats.total ? 'is-gray' : 'is-green'}">${stats.today}/${stats.total}<small>${percent(stats.today, stats.total)}</small></td>
+      <td class="${stats.shiftUpdated < stats.unitTotal ? 'is-gray' : 'is-green'}">${stats.shiftUpdated}/${stats.unitTotal}<small>${percent(stats.shiftUpdated, stats.unitTotal)}</small></td>
     </tr>`;
+}
+
+// Chuva do dia nas 4 unidades (quadro gerencial fixo: não muda com a unidade escolhida).
+let productionRainOverview = null;
+
+async function loadDashboardRainOverview() {
+  try {
+    const data = await apiRequest(`/api/production/rain-overview?date=${encodeURIComponent(saoPauloIsoDate())}`);
+    productionRainOverview = data?.rain || null;
+  } catch (error) {
+    console.error(error);
+    productionRainOverview = null;
+  }
+  renderDashboardRainCard();
+}
+
+function dashboardRainValue(value) {
+  return value === null || value === undefined ? '-' : `${Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}`;
+}
+
+function dashboardRainCardHtml() {
+  const rain = productionRainOverview;
+  if (!rain) return '<p class="production-empty">Não foi possível carregar a chuva das unidades.</p>';
+  const max = Math.max(1, ...rain.units.map(unit => Number(unit.rain_accumulated_mm) || 0), ...rain.units.map(unit => Number(unit.rain_turn_mm) || 0));
+  const units = rain.units.map(unit => {
+    const informed = unit.rain_turn_mm !== null || unit.rain_accumulated_mm !== null;
+    const accumulated = Number(unit.rain_accumulated_mm) || 0;
+    const turn = Number(unit.rain_turn_mm) || 0;
+    return `<li class="${informed ? '' : 'is-empty'}" title="${escapeHtml(productionUnitLabel(unit.unit))}">
+        <span class="pdash-rain-unit"><b>${escapeHtml(unit.unit)}</b><small>${escapeHtml(PRODUCTION_UNIT_NAMES[unit.unit] || '')}</small></span>
+        <span class="pdash-rain-bars" aria-hidden="true">
+          <i class="is-accumulated" data-rain-width="${Math.round(accumulated * 100 / max)}"></i>
+          <i class="is-turn" data-rain-width="${Math.round(turn * 100 / max)}"></i>
+        </span>
+        <span class="pdash-rain-values">${informed
+          ? `<b>${dashboardRainValue(unit.rain_turn_mm)}</b> turno · <b>${dashboardRainValue(unit.rain_accumulated_mm)}</b> acum.`
+          : 'Não informada'}</span>
+      </li>`;
+  }).join('');
+  return `<div class="pdash-rain-average">
+      <div><span>Média do turno</span><strong>${dashboardRainValue(rain.average_turn_mm)}<small>mm</small></strong></div>
+      <div><span>Média acumulada</span><strong>${dashboardRainValue(rain.average_accumulated_mm)}<small>mm</small></strong></div>
+    </div>
+    <ul class="pdash-rain-units">${units}</ul>
+    <p class="pdash-rain-legend"><i class="is-turn"></i>Turno <i class="is-accumulated"></i>Acumulada · ${rain.informed} de ${rain.units.length} unidades informaram</p>`;
+}
+
+function renderDashboardRainCard() {
+  const card = document.querySelector('#production-rain-card');
+  if (!card) return;
+  card.innerHTML = `<header><h3>Chuva nas 4 unidades</h3><span>${productionRainOverview ? escapeHtml(formatIsoDateBr(productionRainOverview.work_date)) : ''}</span></header>
+    <div class="pdash-rain-body">${dashboardRainCardHtml()}</div>`;
+  // A CSP bloqueia "style" no HTML; a largura das barras é aplicada pelo script.
+  card.querySelectorAll?.('[data-rain-width]').forEach(bar => { bar.style.width = `${bar.dataset.rainWidth}%`; });
+}
+
+// Resumo por grupo só com as frentes atualizadas pelo analista no turno atual:
+// informação certeira do momento (o que não foi atualizado no turno não entra na conta).
+function dashboardShiftStats(items, shift) {
+  const updated = items.filter(item => dashboardUpdatedInShift(item, shift));
+  return { ...dashboardGroupStats(updated), shiftUpdated: updated.length, unitTotal: items.length };
 }
 
 function renderDashboardOverview(groups, allItems) {
   const box = document.querySelector('#production-overview');
   if (!box) return;
-  box.hidden = allItems.length === 0;
-  if (!allItems.length) {
-    box.innerHTML = '';
-    return;
-  }
-  const operations = new Map();
-  allItems.forEach(item => splitProductionOperations(item.entry?.operation).forEach(code => {
-    const key = productionOperationKey(code);
-    if (!operations.has(key)) operations.set(key, { code, name: '', fronts: 0, ok: 0, missing: 0 });
-    const op = operations.get(key);
-    op.name ||= productionOperationName(item, code);
-    op.fronts += 1;
-    const tone = productionOperationTone(item, code);
-    if (tone === 'is-order-ok') op.ok += 1;
-    if (tone === 'is-order-missing') op.missing += 1;
-  }));
-  const opRows = [...operations.values()].sort((a, b) => b.missing - a.missing || b.fronts - a.fronts || compareFrontLabels(a.code, b.code));
-  const opList = opRows.length ? `<ul class="pdash-op-summary">${opRows.map(op => `<li>
-        <span class="pdash-op ${op.missing ? 'is-order-missing' : op.ok ? 'is-order-ok' : ''}">${escapeHtml(op.code)}</span>
-        <span class="pdash-op-summary-name">${escapeHtml(op.name || '-')}</span>
-        <span class="pdash-op-summary-count">${op.fronts} ${op.fronts === 1 ? 'frente' : 'frentes'}</span>
-        <span class="pdash-op-summary-check">${op.ok ? `<b class="is-ok">${op.ok} com O.S.</b>` : ''}${op.missing ? `<b class="is-missing">${op.missing} sem O.S.</b>` : ''}</span>
-      </li>`).join('')}</ul>` : '<p class="production-empty">Nenhuma operação informada.</p>';
-  box.innerHTML = `<article class="pdash-overview-card">
-      <header><h3>Resumo por grupo</h3><span>${allItems.length} ${allItems.length === 1 ? 'frente' : 'frentes'} na unidade</span></header>
+  box.hidden = false;
+  const shift = dashboardCurrentShift();
+  const totals = dashboardShiftStats(allItems, shift);
+  const groupsCard = allItems.length
+    ? `<header><h3>Resumo do turno ${shift.name} <small>${shift.label}</small></h3><span>${totals.shiftUpdated} de ${allItems.length} ${allItems.length === 1 ? 'frente atualizada' : 'frentes atualizadas'} no turno</span></header>
       <div class="pdash-overview-scroll"><table class="pdash-overview-table">
         <thead><tr><th scope="col">Grupo</th><th scope="col">Frentes</th><th scope="col">Em atividade</th><th scope="col">Paradas</th>
-          <th scope="col">O.S. OK</th><th scope="col">Sem O.S.</th><th scope="col">Sem operação</th><th scope="col">Atualizadas hoje</th></tr></thead>
-        <tbody>${groups.map(group => dashboardOverviewRow(group.name, dashboardGroupStats(group.items))).join('')}</tbody>
-        <tfoot>${dashboardOverviewRow('Total', dashboardGroupStats(allItems), true)}</tfoot>
+          <th scope="col">O.S. OK</th><th scope="col">Sem O.S.</th><th scope="col">Sem operação</th><th scope="col">Atualizadas no turno</th></tr></thead>
+        <tbody>${groups.map(group => dashboardOverviewRow(group.name, dashboardShiftStats(group.items, shift))).join('')}</tbody>
+        <tfoot>${dashboardOverviewRow('Total', totals, true)}</tfoot>
       </table></div>
-    </article>
-    <article class="pdash-overview-card">
-      <header><h3>Operações em execução</h3><span>${opRows.length} ${opRows.length === 1 ? 'operação' : 'operações'}</span></header>
-      ${opList}
-    </article>`;
+      ${totals.shiftUpdated ? '' : '<p class="pdash-overview-note">Nenhuma frente foi atualizada neste turno ainda.</p>'}`
+    : '<header><h3>Resumo do turno</h3></header><p class="production-empty">Nenhuma frente lançada nesta unidade.</p>';
+  box.innerHTML = `<article class="pdash-overview-card">${groupsCard}</article>
+    <article id="production-rain-card" class="pdash-overview-card pdash-rain-card"></article>`;
+  renderDashboardRainCard();
 }
 
 function dashboardGroupInitials(name) {
@@ -271,25 +346,50 @@ function renderProductionDashboard() {
     const total = group.items.length;
     const withOperation = group.items.filter(item => dashboardOrderState(item) !== 'no_operation' && item.entry?.sector).length;
     const ok = group.items.filter(item => dashboardOrderState(item) === 'ok').length;
+    const noOrder = group.items.filter(item => dashboardOrderState(item) === 'missing').length;
     const noOperation = group.items.filter(item => dashboardOrderState(item) === 'no_operation').length;
     const today = group.items.filter(item => item.is_current_day).length;
     const stopped = group.items.filter(item => dashboardFlags(item).stopped).length;
-    const kpi = (label, value, tone = '') => `<span class="pdash-kpi ${tone}"><b>${value}</b>${label}</span>`;
+    // Indicadores do grupo são filtros: clicar mostra só essas frentes; clicar de novo desfaz.
+    const kpi = (key, label, value, tone = '') => {
+      const active = dashboardPanelFilter.flag === key;
+      return `<button type="button" class="pdash-kpi ${tone}${active ? ' is-active' : ''}" data-panel-filter="${key}" aria-pressed="${active}"
+        title="${active ? 'Mostrar todas as frentes' : `Filtrar: ${label}`}"><b>${value}</b>${label}</button>`;
+    };
+    const fronts = [...new Map(group.items.map(item => [String(item.service_front_id), item.service_name])).entries()]
+      .sort((a, b) => compareFrontLabels(a[1] || '', b[1] || ''));
+    if (dashboardPanelFilter.front && !fronts.some(([id]) => id === dashboardPanelFilter.front)) dashboardPanelFilter.front = '';
+    const visible = group.items.filter(item => dashboardMatchesFilter(item));
+    const filtering = Boolean(dashboardPanelFilter.flag || dashboardPanelFilter.front);
     return `<article class="pdash-group${stopped ? ' has-stopped' : ''}">
       <header class="pdash-group-header">
         <div class="pdash-group-title">
           <span class="pdash-group-icon" aria-hidden="true">${escapeHtml(dashboardGroupInitials(group.name))}</span>
           <div><h3>${escapeHtml(group.name)}</h3><span>${total} ${total === 1 ? 'frente' : 'frentes'}</span></div>
         </div>
-        <div class="pdash-kpis">
-          ${stopped ? kpi(stopped === 1 ? 'parada' : 'paradas', stopped, 'is-red') : ''}
-          ${kpi('O.S. OK', withOperation ? `${ok}/${withOperation}` : '-', withOperation && ok < withOperation ? 'is-red' : 'is-green')}
-          ${kpi('sem operação', noOperation, noOperation ? 'is-amber' : '')}
-          ${kpi('atualizadas hoje', `${today}/${total}`, today < total ? 'is-gray' : 'is-green')}
+        <div class="pdash-kpis" role="group" aria-label="Filtros do grupo">
+          ${kpi('stopped', stopped === 1 ? 'parada' : 'paradas', stopped, stopped ? 'is-red' : '')}
+          ${kpi('ok', 'O.S. OK', withOperation ? `${ok}/${withOperation}` : '-', withOperation && ok < withOperation ? 'is-red' : 'is-green')}
+          ${kpi('noOrder', 'sem O.S.', noOrder, noOrder ? 'is-red' : '')}
+          ${kpi('noOperation', 'sem operação', noOperation, noOperation ? 'is-amber' : '')}
+          ${kpi('today', 'atualizadas hoje', `${today}/${total}`, today < total ? 'is-gray' : 'is-green')}
         </div>
       </header>
+      <div class="pdash-group-filters">
+        <label class="pdash-front-filter">
+          <span>Frente</span>
+          <select data-panel-front aria-label="Filtrar por frente">
+            <option value="">Todas as frentes</option>
+            ${fronts.map(([id, name]) => `<option value="${escapeHtml(id)}"${id === dashboardPanelFilter.front ? ' selected' : ''}>${escapeHtml(name || '-')}</option>`).join('')}
+          </select>
+        </label>
+        <span class="pdash-filter-count">${filtering ? `Mostrando ${visible.length} de ${total}` : `${total} ${total === 1 ? 'frente' : 'frentes'}`}</span>
+        ${filtering ? '<button type="button" class="pdash-filter-clear" data-panel-filter-clear>Limpar filtros</button>' : ''}
+      </div>
       <div class="pdash-group-status">${dashboardStatusBar(group.items)}</div>
-      <div class="pdash-tiles">${group.items.map(dashboardFrontTile).join('')}</div>
+      ${visible.length
+        ? `<div class="pdash-tiles">${visible.map(dashboardFrontTile).join('')}</div>`
+        : '<p class="production-empty pdash-filter-empty">Nenhuma frente neste filtro.</p>'}
     </article>`;
   }).join('');
   // A CSP bloqueia "style" no HTML; o tamanho de cada faixa é aplicado pelo script.
@@ -298,8 +398,8 @@ function renderProductionDashboard() {
 }
 
 // Blocos das frentes ocupam a largura toda: colunas pelo espaço real (menu lateral,
-// zoom e janela contam), ~240px por bloco, com as linhas equilibradas.
-const DASHBOARD_TILE_MIN = 240;
+// zoom e janela contam), ~270px por bloco, com as linhas equilibradas.
+const DASHBOARD_TILE_MIN = 270;
 let dashboardTilesObserver = null;
 
 function fitDashboardTiles() {
@@ -315,7 +415,9 @@ function fitDashboardTiles() {
     const width = grid.clientWidth - parseFloat(style.paddingLeft || 0) - parseFloat(style.paddingRight || 0);
     if (width <= 0) return null;
     const gap = parseFloat(style.columnGap) || 10;
-    const maxColumns = Math.max(1, Math.min(quantity, Math.floor((width + gap) / (DASHBOARD_TILE_MIN + gap))));
+    const maxColumns = Math.max(1, Math.floor((width + gap) / (DASHBOARD_TILE_MIN + gap)));
+    // Poucas frentes (ex.: filtro ligado) mantêm a largura normal do cartão, sem esticar.
+    if (quantity <= maxColumns) return { grid, columns: String(maxColumns) };
     return { grid, columns: String(Math.ceil(quantity / Math.ceil(quantity / maxColumns))) };
   });
   plans.forEach(plan => {
@@ -327,12 +429,31 @@ document.querySelector('#production-group-tabs')?.addEventListener('click', even
   const tab = event.target.closest('[data-panel-group]');
   if (!tab) return;
   productionPanelGroup = tab.dataset.panelGroup;
+  dashboardPanelFilter.front = '';
+  dashboardPanelFilter.flag = '';
   try { localStorage.setItem(PRODUCTION_PANEL_GROUP_KEY, productionPanelGroup); } catch (_) { /* preferência opcional */ }
   renderProductionDashboard();
 });
 document.querySelector('#production-group-cards')?.addEventListener('click', event => {
+  const filter = event.target.closest('[data-panel-filter]');
+  if (filter) {
+    dashboardPanelFilter.flag = dashboardPanelFilter.flag === filter.dataset.panelFilter ? '' : filter.dataset.panelFilter;
+    renderProductionDashboard();
+    return;
+  }
+  if (event.target.closest('[data-panel-filter-clear]')) {
+    dashboardPanelFilter.front = '';
+    dashboardPanelFilter.flag = '';
+    renderProductionDashboard();
+    return;
+  }
   const tile = event.target.closest('[data-panel-detail]');
   if (tile) openDashboardFrontDetail(Number(tile.dataset.panelDetail));
+});
+document.querySelector('#production-group-cards')?.addEventListener('change', event => {
+  if (!event.target.matches?.('[data-panel-front]')) return;
+  dashboardPanelFilter.front = event.target.value;
+  renderProductionDashboard();
 });
 document.querySelector('#production-front-detail-body')?.addEventListener('click', event => {
   const edit = event.target.closest('[data-panel-edit]');

@@ -295,11 +295,6 @@ button.pdash-tile:hover { border-color: #46524c; }
 .pdash-overview-table td.is-green { color: #98e5b6; }
 .pdash-overview-table td.is-amber { color: #ddb376; }
 .pdash-overview-table td.is-gray { color: #999999; }
-.pdash-op-summary li + li { border-top: 1px solid #414141; }
-.pdash-op-summary-name { color: #e0e0e0; }
-.pdash-op-summary-count { color: #999999; }
-.pdash-op-summary-check .is-ok { background: #283a30; color: #98e5b6; }
-.pdash-op-summary-check .is-missing { background: #291e1f; color: #d4626b; }
 .production-view-bar .pdash-group-tabs { background: linear-gradient(180deg, #2a2a2a, #262626); }
 .pdash-group-tab:hover:not(.is-active) { background: #222222; }
 .pdash-group-tab.is-active { background: linear-gradient(135deg, #2f9a70 0%, #309273 100%); }
@@ -307,3 +302,23 @@ button.pdash-tile:hover { border-color: #46524c; }
 .production-primary-button.pdash-action:hover:not(:disabled) { background: linear-gradient(135deg, #3bb183 0%, #309275 100%); }
 .production-secondary-button.pdash-action { background: #2a2a2a; }
 .production-secondary-button.pdash-action svg { color: #5da4d5; }
+.pdash-overview-card h3 small { color: #999999; }
+.pdash-overview-note { color: #e1c989; background: #2a261e; }
+.pdash-rain-average div { background: linear-gradient(135deg, #1f262b, #1c2227); }
+.pdash-rain-average span { color: #77a2c5; }
+.pdash-rain-average strong { color: #8ebce3; }
+.pdash-rain-average strong small { color: #769cbc; }
+.pdash-rain-unit b { color: #e0e0e0; }
+.pdash-rain-unit small { color: #999999; }
+.pdash-rain-bars { background: #232323; }
+.pdash-rain-bars i.is-accumulated { background: #4d93cb; }
+.pdash-rain-bars i.is-turn { background: #347eb2; }
+.pdash-rain-values { color: #adadad; }
+.pdash-rain-values b { color: #8ebce3; }
+.pdash-rain-legend { color: #999999; }
+.pdash-rain-legend i.is-turn { background: #347eb2; }
+.pdash-rain-legend i.is-accumulated { background: #4d93cb; }
+button.pdash-kpi.is-active { color: #e0e0e0; }
+.pdash-front-filter { color: #9d9d9d; }
+.pdash-front-filter select { background-color: #2a2a2a; color: #e0e0e0; }
+.pdash-filter-count { color: #999999; }

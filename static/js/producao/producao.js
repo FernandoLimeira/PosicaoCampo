@@ -210,6 +210,7 @@ async function submitProductionDailySummary(event) {
   }
   closeModal('production-rain-modal');
   productionRainModalContext = null;
+  if (typeof loadDashboardRainOverview === 'function') loadDashboardRainOverview();
   showToast('Dados da imagem salvos.');
   try {
     await loadProductionDailySummary(unit, productionPageEpoch, workDate);
@@ -906,6 +907,8 @@ async function refreshProductionPage(unit = currentProductionUnit(), { keepFilte
   if (!keepFilters) renderProductionFilters();
   renderProductionItems();
   try {
+    // Chuva das 4 unidades (quadro fixo do painel): carrega junto, sem travar a página se falhar.
+    if (typeof loadDashboardRainOverview === 'function') loadDashboardRainOverview();
     await Promise.all([loadProductionCatalog(unit, epoch), loadProductionStatuses(), loadProductionDailySummary(unit, epoch)]);
     if (!isCurrentProductionRequest(unit, epoch)) return;
     renderStatusOptions(defaultStatusCode());

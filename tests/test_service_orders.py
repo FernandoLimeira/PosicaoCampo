@@ -79,6 +79,19 @@ class ServiceOrderTests(unittest.TestCase):
         order = service_orders.list_service_orders(self.admin["id"], "PPT")["orders"][0]
         self.assertEqual((order["operation_name"], order["plots"]), ("TRATOS", ["1", "2"]))
 
+    def test_rain_overview_averages_the_four_units(self):
+        production.save_daily_summary(self.admin["id"], {"unit_code": "PPT", "work_date": "2026-11-10",
+                                                         "rain_turn_mm": "2", "rain_accumulated_mm": "10"})
+        production.save_daily_summary(self.admin["id"], {"unit_code": "PST", "work_date": "2026-11-10",
+                                                         "rain_turn_mm": "5", "rain_accumulated_mm": "31"})
+        production.save_daily_summary(self.admin["id"], {"unit_code": "NRD", "work_date": "2026-11-09",
+                                                         "rain_turn_mm": "50", "rain_accumulated_mm": "50"})  # outro dia
+        # Analista com acesso só ao PPT também vê o quadro das 4 unidades.
+        rain = production.get_rain_overview(self.user["id"], "2026-11-10")
+        self.assertEqual([unit["unit"] for unit in rain["units"]], ["PPT", "NRD", "RBR", "PST"])
+        self.assertEqual((rain["average_turn_mm"], rain["average_accumulated_mm"], rain["informed"]), (3.5, 20.5, 2))
+        self.assertIsNone(rain["units"][1]["rain_turn_mm"])
+
     def test_fert_convencional_has_default_operations(self):
         group = production.list_catalog(self.admin["id"], include_inactive=True)["groups"][0]
         fert = production.save_service_front(self.admin["id"], {

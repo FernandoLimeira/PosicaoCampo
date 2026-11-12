@@ -787,6 +787,39 @@ def _summary_payload(row: sqlite3.Row | None, unit: str, work_date: str) -> dict
     }
 
 
+def get_rain_overview(user_id: int, work_date: Any) -> dict[str, Any]:
+    """Chuva do dia nas 4 unidades (quadro gerencial fixo do painel) e a média das que
+    informaram. É visão gerencial: vale para quem acessa a Produção, em qualquer unidade."""
+    selected_date = _normalize_work_date(work_date)
+    with connection() as conn:
+        _require_access(conn, user_id)
+        rows = {
+            row["unit_code"]: row for row in conn.execute(
+                "SELECT unit_code,rain_turn_mm,rain_accumulated_mm,updated_at FROM production_daily_summaries WHERE work_date=?",
+                (selected_date,),
+            )
+        }
+    units = []
+    for code in ALLOWED_UNIT_CODES:
+        row = rows.get(code)
+        units.append({
+            "unit": code,
+            "rain_turn_mm": row["rain_turn_mm"] if row else None,
+            "rain_accumulated_mm": row["rain_accumulated_mm"] if row else None,
+            "updated_at": int(row["updated_at"]) if row else 0,
+        })
+
+    def average(field: str) -> float | None:
+        values = [float(item[field]) for item in units if item[field] is not None]
+        return round(sum(values) / len(values), 1) if values else None
+    return {
+        "work_date": selected_date, "units": units,
+        "average_turn_mm": average("rain_turn_mm"),
+        "average_accumulated_mm": average("rain_accumulated_mm"),
+        "informed": sum(1 for item in units if item["rain_turn_mm"] is not None or item["rain_accumulated_mm"] is not None),
+    }
+
+
 def get_daily_summary(user_id: int, unit_code: Any, work_date: Any) -> dict[str, Any]:
     unit = _normalize_unit(unit_code)
     selected_date = _normalize_work_date(work_date)
