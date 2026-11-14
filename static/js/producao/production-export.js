@@ -279,6 +279,10 @@ function productionExportPillLayout(ctx, pill, pillArea) {
 }
 
 const PRODUCTION_EXPORT_LOCALIZED_ROW = 'Fertirrigação localizada';
+// Espaçamento das etiquetas de setor dentro de cada linha de serviço.
+const PRODUCTION_EXPORT_ROW_PADDING_TOP = 3;
+const PRODUCTION_EXPORT_PILL_LINE_GAP = 5;
+const PRODUCTION_EXPORT_ROW_PADDING_BOTTOM = 4;
 
 // Frente operacional da Fertirrigação (ex.: "Frente 54"): cadastrada com o tipo
 // "Frente operacional" ou com o nome começando por "Frente".
@@ -349,9 +353,14 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
       // descrições de serviços realmente longas continuam quebrando.
       const nameLines = ctx.measureText(serviceName).width <= 155 * 1.46
         ? [serviceName] : productionExportWrap(ctx, serviceName, 155, nameFont);
+      // Mesmo espaçamento usado no desenho: assim a linha divisória fica sempre
+      // abaixo da última fileira de etiquetas, sem sobrepor nenhuma.
+      const pillsHeight = PRODUCTION_EXPORT_ROW_PADDING_TOP
+        + lines.reduce((sum, line) => sum + line.height, 0)
+        + PRODUCTION_EXPORT_PILL_LINE_GAP * (lines.length - 1)
+        + PRODUCTION_EXPORT_ROW_PADDING_BOTTOM;
       rows.push({ type: 'service', nameLines, lines,
-        height: Math.max(30, lines.reduce((sum, line) => sum + line.height + 5, 0),
-          nameLines.length * 20 + 6) });
+        height: Math.max(30, pillsHeight, nameLines.length * 20 + 6) });
     }
   }
   if (!rows.length) rows.push({ type: 'empty', height: 48 });
@@ -529,14 +538,14 @@ function drawProductionExportCard(ctx, report, plan, x, y) {
       row.nameLines.forEach((line, lineIndex) => productionExportText(ctx,
         line, x + 17, cursor + 19 + lineIndex * 20, 179,
         `16px ${PRODUCTION_EXPORT_FONT}`));
-      let lineY = cursor + 2;
+      let lineY = cursor + PRODUCTION_EXPORT_ROW_PADDING_TOP;
       row.lines.forEach(line => {
         let pillX = x + 204;
         for (const pill of line.pills) {
           drawProductionExportPill(ctx, pill, pillX, lineY);
           pillX += pill.width + 5;
         }
-        lineY += line.height + 7;
+        lineY += line.height + PRODUCTION_EXPORT_PILL_LINE_GAP;
       });
       productionExportRule(ctx, x + 17, cursor + row.height - 1, x + 489);
     } else {

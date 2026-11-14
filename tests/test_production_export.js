@@ -325,6 +325,14 @@ loadScripts(context, ['core/format.js', 'producao/production-status-groups.js', 
     ['Frente 54 · 3016', 'Frente 56 · 3516']);
   assert.equal(fertRows[1].lines.flatMap(line => line.pills)[1].state, 'stopped');
   assert.equal(fertRows[0].lines[0].pills[0].label, '3815');
+  // A linha divisória (row.height - 1) fica abaixo da última fileira de etiquetas.
+  for (const row of [...fertRows, ...context.productionExportCardPlan(paint, { code: 'PPT', items: Array.from({ length: 12 },
+    (_, index) => ({ group_name: 'Fertirrigação', service_name: `Frente ${index + 1}`, display_style: 'front',
+      is_current_day: true, entry: { sector: String(1000 + index), status: index % 3 ? 'ATIVO' : 'CRITICO' } })) },
+  mixedStatuses, 0).rows.filter(row => row.type === 'service')]) {
+    const bottom = 3 + row.lines.reduce((sum, line) => sum + line.height, 0) + 5 * (row.lines.length - 1);
+    assert.ok(bottom < row.height - 1, `Etiquetas sobrepostas pela linha (${bottom} >= ${row.height - 1})`);
+  }
   assert.equal(fertRows[2].lines[0].pills[0].label, '10', 'Só a Fertirrigação junta as frentes');
 
   await button.click({ currentTarget: button });
