@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{% if page == 'delivery_queries' %}Consultas SQL · Entrega CTT{% else %}Entrega CTT{% endif %} · Posição de Campo{% endblock %}
 {% block styles %}
-  <link rel="stylesheet" href="/css/pages/entrega.css?v={{ asset_version }}" />
-  <link rel="stylesheet" href="/css/pages/entrega.dark.css?v={{ asset_version }}" media="(prefers-color-scheme: dark)" />
+  <link rel="stylesheet" href="/css/pages/entrega.css?v={{ asset_version }}-import-report" />
+  <link rel="stylesheet" href="/css/pages/entrega.dark.css?v={{ asset_version }}-import-report" media="(prefers-color-scheme: dark)" />
 {% endblock %}
 
 {% block content %}
@@ -25,6 +25,7 @@
 
   {% if page == 'delivery' %}
   <p id="delivery-reference" class="delivery-reference">Carregando…</p>
+  <div id="delivery-import-report" class="delivery-import-report" hidden></div>
   <section class="delivery-card" aria-labelledby="delivery-units-title">
     <header><h2 id="delivery-units-title">Unidades</h2></header>
     <div class="delivery-table-wrap">
@@ -77,5 +78,5 @@
 {% endblock %}
 
 {% block scripts %}
-  <script src="/js/entrega/entrega.js?v={{ asset_version }}"></script>
+  <script src="/js/entrega/entrega.js?v={{ asset_version }}-import-report"></script>
 {% endblock %}

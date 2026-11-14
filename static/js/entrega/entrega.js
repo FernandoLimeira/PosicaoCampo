@@ -75,6 +75,31 @@ async function loadDeliverySummary() {
   renderDeliverySummary(summary);
 }
 
+// Quadro da última importação: cargas por unidade e data, unidades sem cargas e
+// instâncias do arquivo que não são de PPT/NRD/RBR/PST (ignoradas).
+function renderDeliveryImportReport(result, selectedDay) {
+  const box = document.querySelector('#delivery-import-report');
+  if (!box) return;
+  const units = Object.entries(result.by_unit || {}).map(([code, loads]) => {
+    const dates = Object.entries(result.dates_by_unit?.[code] || {})
+      .map(([day, count]) => `${escapeHtml(formatIsoDateBr(day))}: ${deliveryNumber(count)}`).join(', ');
+    const otherDay = dates && !(result.dates_by_unit?.[code] || {})[selectedDay];
+    const tone = !loads || otherDay ? ' is-warning' : '';
+    const note = !loads ? 'nenhuma carga no arquivo' : otherDay ? `sem cargas em ${escapeHtml(formatIsoDateBr(selectedDay))}` : '';
+    return `<li class="${tone}"><strong>${escapeHtml(code)}</strong> ${deliveryNumber(loads)} ${loads === 1 ? 'carga' : 'cargas'}${
+      dates ? ` <small>(${dates})</small>` : ''}${note ? ` <em>${note}</em>` : ''}</li>`;
+  }).join('');
+  const ignored = Object.entries(result.ignored_instances || {});
+  const ignoredText = ignored.length
+    ? `<p class="is-warning"><strong>Ignoradas:</strong> ${ignored.map(([code, count]) =>
+      `INSTANCIA_ORIGEM ${escapeHtml(code)} (${deliveryNumber(count)} ${count === 1 ? 'linha' : 'linhas'})`).join(', ')}. `
+      + 'Só são reconhecidas 201 (PPT), 204 (NRD), 402 (RBR) e 401 (PST).</p>' : '';
+  const invalid = result.invalid_rows
+    ? `<p class="is-warning">${deliveryNumber(result.invalid_rows)} ${result.invalid_rows === 1 ? 'linha sem' : 'linhas sem'} liberação, frente ou peso válido.</p>` : '';
+  box.innerHTML = `<strong>Última importação</strong><ul>${units}</ul>${ignoredText}${invalid}`;
+  box.hidden = false;
+}
+
 // A mesma liberação importada de novo é atualizada, então o arquivo pode ser reenviado no dia.
 async function importDeliveryFile(event) {
   const input = event.currentTarget;
@@ -91,6 +116,7 @@ async function importDeliveryFile(event) {
       + `${result.pending ? ` e ${deliveryNumber(result.pending)} no pátio` : ''}.`);
     const dateInput = document.querySelector('#delivery-date');
     if (dateInput && result.dates?.length) dateInput.value = result.dates.at(-1);
+    renderDeliveryImportReport(result, dateInput?.value || saoPauloIsoDate());
     await loadDeliverySummary();
   } catch (error) {
     console.error(error);

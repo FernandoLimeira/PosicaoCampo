@@ -192,7 +192,6 @@ const reportsMenu = setupSidebarFlyout('#reports-toggle', '#reports-flyout');
 setupSidebarFlyout('#ctt-toggle', '#ctt-flyout');
 
 setupSidebarFlyout('#production-toggle', '#production-flyout');
-setupSidebarFlyout('#delivery-toggle', '#delivery-flyout');
 
 function positionReportsFlyout() { reportsMenu?.position(); }
 

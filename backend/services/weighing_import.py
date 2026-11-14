@@ -134,14 +134,22 @@ def _parse_rows(rows):
         return None
     records = []
     ignored_units = 0
+    ignored_instances: dict[str, int] = {}
     invalid_rows = 0
     for row in rows[header_index + 1:]:
         values = {field: _cell(row, mapping.get(field)) for field in HEADER_ALIASES}
         if not any(values.values()):
             continue
-        unit = INSTANCE_UNITS.get(values["instance"])
+        # "0204", "204.0" ou " 204 " valem como 204.
+        instance = values["instance"].strip()
+        if instance.replace(".", "", 1).isdigit():
+            instance = str(int(float(instance)))
+        unit = INSTANCE_UNITS.get(instance)
         if not unit:
             ignored_units += 1
+            # Mostrado na importação: instância desconhecida não pode sumir sem aviso.
+            code = values["instance"][:20] or "(vazia)"
+            ignored_instances[code] = ignored_instances.get(code, 0) + 1
             continue
         release = values["release"][:40]
         front = values["front"][:20]
@@ -170,7 +178,8 @@ def _parse_rows(rows):
             "patio_at": _timestamp(values["patio_at"]), "scale_in_at": _timestamp(values["scale_in_at"]),
             "scale_out_at": out_at,
         })
-    return {"records": records, "ignored_units": ignored_units, "invalid_rows": invalid_rows}
+    return {"records": records, "ignored_units": ignored_units, "invalid_rows": invalid_rows,
+            "ignored_instances": dict(sorted(ignored_instances.items(), key=lambda item: -item[1])[:20])}
 
 
 def parse_weighing_file(file_bytes: bytes, filename: str = "pesagem.xlsx") -> dict:

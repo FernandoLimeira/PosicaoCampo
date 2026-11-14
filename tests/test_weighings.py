@@ -65,6 +65,7 @@ class WeighingTests(unittest.TestCase):
             load("401", "5", "404", "90428", "1", "32000", "14/11/2026 15:20:00"),
             load("401", "6", "402", "67742", "2", "31000", "14/11/2026 15:35:00"),
             load("999", "7", "1", "1", "1", "1000", "14/11/2026 15:00:00"),  # indústria desconhecida
+            load("0402", "9", "411", "90453", "3", "30000", "14/11/2026 15:10:00"),  # "0402" vale como 402 (RBR)
             # NRD: carga que entrou no pátio às 15:40 (o arquivo está completo até aí).
             load("204", "8", "20", "300", "3500", "", "", patio="14/11/2026 15:40:00"),
         ])
@@ -82,6 +83,14 @@ class WeighingTests(unittest.TestCase):
         self.assertIsNone(records["4"]["net_kg"])
         self.assertEqual(records["1"]["movement_date"], "2026-11-14")
 
+    def test_import_reports_units_dates_and_ignored_instances(self):
+        parsed = parse_weighing_file(self.file(), "a.xlsx")
+        self.assertEqual(parsed["ignored_instances"], {"999": 1})
+        result = weighings.import_weighings(self.admin["id"], parsed["records"])
+        self.assertEqual(result["by_unit"], {"PPT": 4, "NRD": 1, "RBR": 1, "PST": 2})
+        self.assertEqual(result["dates_by_unit"]["PPT"], {"2026-11-14": 3})
+        self.assertEqual(result["dates_by_unit"]["RBR"], {"2026-11-14": 1})
+
     def test_parse_rejects_missing_columns(self):
         with self.assertRaisesRegex(ValueError, "HR_SAIDA_BALANCA"):
             parse_weighing_file(xlsx([["INSTANCIA_ORIGEM", "NO_LIBERACAO", "CD_FREN_TRAN", "QT_LIQUIDO"]]), "a.xlsx")
@@ -91,7 +100,7 @@ class WeighingTests(unittest.TestCase):
     def test_import_upserts_by_release(self):
         records = parse_weighing_file(self.file(), "a.xlsx")["records"]
         first = weighings.import_weighings(self.admin["id"], records, filename="a.xlsx")
-        self.assertEqual((first["created"], first["updated"], first["pending"]), (7, 0, 2))
+        self.assertEqual((first["created"], first["updated"], first["pending"]), (8, 0, 2))
         # A carga que estava no pátio foi pesada no arquivo seguinte: atualiza, não duplica.
         pending = next(record for record in records if record["release_no"] == "4")
         pending.update(scale_out_at=pending["patio_at"] + 7 * 3600, net_kg=35000.0, movement_date="2026-11-14")
@@ -125,7 +134,7 @@ class WeighingTests(unittest.TestCase):
         self.assertEqual(fronts["19"]["home_unit"], "NRD")
         self.assertEqual([front["front"] for front in ppt["received"]], ["19"])
         self.assertEqual([front["front"] for front in pst["received"]], ["402"])
-        self.assertEqual(units["RBR"]["milling_day_t"], 0)
+        self.assertEqual(units["RBR"]["milling_day_t"], 30.0)
         support = {(item["front"], item["from_unit"], item["to_unit"]) for item in summary["support"]}
         self.assertEqual(support, {("19", "NRD", "PPT"), ("402", "RBR", "PST")})
         self.assertEqual(summary["last_import"]["imported_by_name"], "Admin")

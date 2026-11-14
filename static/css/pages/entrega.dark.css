@@ -1,5 +1,9 @@
 /* Gerado por tools/build_dark_css.py a partir de pages/entrega.css. Não edite: rode o script. */
 .delivery-reference { color: #9b9b9b; }
+.delivery-import-report { background: #2a2a2a; color: #cbcbcb; }
+.delivery-import-report small { color: #999999; }
+.delivery-import-report em { color: #da9d6d; }
+.delivery-import-report .is-warning strong, .delivery-import-report p.is-warning { color: #da9d6d; }
 .delivery-card { background: #2a2a2a; }
 .delivery-card > header { border-bottom: 1px solid #434343; }
 .delivery-card h2 { color: #e0e0e0; }

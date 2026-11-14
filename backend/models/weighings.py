@@ -99,12 +99,17 @@ def import_weighings(user_id: int, records: Any, *, filename: str = "") -> dict[
         )
     keys = {(values[0], values[1]) for values in prepared}
     by_unit = {code: 0 for code in ALLOWED_UNIT_CODES}
+    # Cargas pesadas por unidade e data de movimento: mostra na importação se uma
+    # unidade veio sem cargas ou com outra data.
+    dates_by_unit: dict[str, dict[str, int]] = {code: {} for code in ALLOWED_UNIT_CODES}
     for values in prepared:
         by_unit[values[0]] += 1
+        if values[2]:
+            dates_by_unit[values[0]][values[2]] = dates_by_unit[values[0]].get(values[2], 0) + 1
     dates = sorted({values[2] for values in prepared if values[2]})
     return {
         "imported": len(keys), "created": len(keys - existing), "updated": len(keys & existing),
-        "by_unit": by_unit, "dates": dates,
+        "by_unit": by_unit, "dates": dates, "dates_by_unit": dates_by_unit,
         "pending": sum(1 for values in prepared if values[12] is None),
     }
 

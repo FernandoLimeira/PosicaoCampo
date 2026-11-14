@@ -106,7 +106,10 @@ class PageTests(unittest.TestCase):
         from backend.models.module_access import MODULES
         page = self.request('/entrega-ctt', role='admin')
         self.assertEqual(page['status'], 200)
-        self.assertIn('id="delivery-flyout"', page['body'])
+        # Fica dentro do menu CTT, depois de Sacarose.
+        menu = page['body'].split('id="ctt-flyout"', 1)[1].split('</nav>', 1)[0]
+        self.assertLess(menu.index('href="/sacarose"'), menu.index('href="/entrega-ctt"'))
+        self.assertNotIn('id="delivery-toggle"', page['body'])
         self.assertIn('href="/entrega-ctt/consultas"', page['body'])
         self.assertIn('id="delivery-import-file"', page['body'])
         self.assertIn('id="delivery-query-modal"', self.request('/entrega-ctt/consultas', role='admin')['body'])
@@ -124,7 +127,7 @@ class PageTests(unittest.TestCase):
         self.assertEqual(self.request('/entrega-ctt', cookie=denied_cookie)['status'], 403)
         self.assertEqual(self.request('/api/weighings/summary', cookie=denied_cookie)['status'], 200
                          if modules.get('emission', {}).get('view') else 403)
-        self.assertNotIn('id="delivery-toggle"', self.request('/historico', cookie=denied_cookie)['body'])
+        self.assertNotIn('href="/entrega-ctt"', self.request('/historico', cookie=denied_cookie)['body'])
 
     def test_field_front_notes_http_flow_and_module_permissions(self):
         from backend.models.module_access import MODULES

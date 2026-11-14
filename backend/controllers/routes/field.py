@@ -89,6 +89,7 @@ def handle(req):
             return req.json(HTTPStatus.OK, {
                 "ok": True, **result, "sheet": parsed["sheet"],
                 "ignored_units": parsed["ignored_units"], "invalid_rows": parsed["invalid_rows"],
+                "ignored_instances": parsed["ignored_instances"],
             })
 
         return req.guarded(import_file, bad_request=ValueError)
