@@ -184,7 +184,12 @@ function productionExportBorderState(counts) {
 function productionExportRainText(summary) {
   const turn = summary?.rain_turn_mm;
   const accumulated = summary?.rain_accumulated_mm;
-  if (turn == null && accumulated == null) return 'Chuva: dados não enviados';
+  // Regra de negócio: o quadro de chuva só aparece quando há volume lançado.
+  const hasRain = [turn, accumulated].some(value => {
+    const number = parseBrNumber(value);
+    return Number.isFinite(number) && number > 0;
+  });
+  if (!hasRain) return '';
   const format = value => value == null ? '—' : String(value).replace('.', ',');
   return `Chuva: turno ${format(turn)} mm | acumulado ${format(accumulated)} mm`;
 }
@@ -333,16 +338,17 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
   if (!changeLines.length && !report.continuation && report.changeLinesOverride == null) {
     changeLines.push('• Sem mudanças previstas.');
   }
-  const rainLines = productionExportWrap(ctx, productionExportRainText(report.summary), 418,
-    `bold 18px ${PRODUCTION_EXPORT_FONT}`);
-  const rainHeight = Math.max(36, rainLines.length * 22 + 12);
+  const rainText = productionExportRainText(report.summary);
+  const rainLines = rainText ? productionExportWrap(ctx, rainText, 418,
+    `bold 18px ${PRODUCTION_EXPORT_FONT}`) : [];
+  const rainHeight = rainLines.length ? Math.max(36, rainLines.length * 22 + 12) : 0;
   const statusLines = productionExportStatusLines(ctx, counts);
   // Topo do cartão: identificação da unidade, resumo de status e linha divisória.
   const headerHeight = 99 + statusLines.length * 25;
   // Todas as seções são medidas com os mesmos espaçamentos usados no desenho.
   // A altura cresce com dados reais, sem cortar observações ou deixar lacunas fixas.
   const contentHeight = headerHeight + rows.reduce((sum, row) => sum + row.height, 0)
-    + 16 + rainHeight + 14 + 26 + noteLines.length * 21 + 13
+    + (rainLines.length ? 16 + rainHeight + 14 : 8) + 26 + noteLines.length * 21 + 13
     + 26 + changeLines.length * 21 + 26;
   return { rows, noteLines, changeLines, rainLines, rainHeight, statusLines, headerHeight,
     counts, contentHeight, height: Math.max(minHeight, contentHeight) };
@@ -509,6 +515,26 @@ function drawProductionExportCard(ctx, report, plan, x, y) {
     cursor += row.height;
   }
 
+  cursor = plan.rainLines.length ? drawProductionExportRain(ctx, plan, x, cursor) : cursor + 8;
+
+  productionExportText(ctx, 'OBSERVAÇÃO', x + 17, cursor + 20, 460,
+    `bold 21px ${PRODUCTION_EXPORT_TITLE_FONT}`, PRODUCTION_EXPORT_ACCENT);
+  cursor += 26;
+  for (const line of plan.noteLines) {
+    productionExportText(ctx, line, x + 17, cursor + 15, 466, `16px ${PRODUCTION_EXPORT_FONT}`);
+    cursor += 21;
+  }
+  cursor += 13;
+  productionExportText(ctx, 'MUDANÇAS', x + 17, cursor + 20, 460,
+    `bold 21px ${PRODUCTION_EXPORT_TITLE_FONT}`, PRODUCTION_EXPORT_ACCENT);
+  cursor += 26;
+  for (const line of plan.changeLines) {
+    productionExportText(ctx, line, x + 17, cursor + 19, 466, `16px ${PRODUCTION_EXPORT_FONT}`);
+    cursor += 21;
+  }
+}
+
+function drawProductionExportRain(ctx, plan, x, cursor) {
   cursor += 16;
   productionExportRoundRect(ctx, x + 17, cursor, 472, plan.rainHeight, 9, '#e5eaec');
   productionExportCloud(ctx, x + 29, cursor + plan.rainHeight / 2 - 12);
@@ -526,23 +552,7 @@ function drawProductionExportCard(ctx, report, plan, x, y) {
       productionExportText(ctx, line, x + 64, lineY, 413, rainFont);
     }
   });
-  cursor += plan.rainHeight + 14;
-
-  productionExportText(ctx, 'OBSERVAÇÃO', x + 17, cursor + 20, 460,
-    `bold 21px ${PRODUCTION_EXPORT_TITLE_FONT}`, PRODUCTION_EXPORT_ACCENT);
-  cursor += 26;
-  for (const line of plan.noteLines) {
-    productionExportText(ctx, line, x + 17, cursor + 15, 466, `16px ${PRODUCTION_EXPORT_FONT}`);
-    cursor += 21;
-  }
-  cursor += 13;
-  productionExportText(ctx, 'MUDANÇAS', x + 17, cursor + 20, 460,
-    `bold 21px ${PRODUCTION_EXPORT_TITLE_FONT}`, PRODUCTION_EXPORT_ACCENT);
-  cursor += 26;
-  for (const line of plan.changeLines) {
-    productionExportText(ctx, line, x + 17, cursor + 19, 466, `16px ${PRODUCTION_EXPORT_FONT}`);
-    cursor += 21;
-  }
+  return cursor + plan.rainHeight + 14;
 }
 
 function productionExportFooterIcon(ctx, index, x, y) {

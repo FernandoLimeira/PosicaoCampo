@@ -325,7 +325,7 @@ loadScripts(context, ['core/format.js', 'producao/production-consolidation.js', 
   assert.ok(labels.some(value => value.startsWith('· Status')), 'Etiqueta fora de atividade mostra o status');
   assert.ok(labels.includes('em atividade'));
   assert.ok(labels.includes('Chuva:'));
-  assert.ok(labels.includes(' dados não enviados') || labels.includes('dados não enviados'));
+  assert.ok(!labels.some(value => value.includes('dados não enviados')));
   assert.ok(labels.includes('PRODUÇÃO AGRÍCOLA'));
   assert.ok(labels.includes('Status removido do cadastro'));
   assert.ok(!labels.includes('Status excluído sem uso nesta imagem'));
@@ -341,7 +341,13 @@ loadScripts(context, ['core/format.js', 'producao/production-consolidation.js', 
   assert.ok(labels.includes('Frente 19'));
   assert.equal(context.productionExportRainText({ rain_turn_mm: 3, rain_accumulated_mm: 5 }),
     'Chuva: turno 3 mm | acumulado 5 mm');
-  assert.equal(context.productionExportRainText(null), 'Chuva: dados não enviados');
+  // Sem volume lançado no turno o quadro de chuva não aparece.
+  assert.equal(context.productionExportRainText(null), '');
+  assert.equal(context.productionExportRainText({ rain_turn_mm: null, rain_accumulated_mm: null }), '');
+  assert.equal(context.productionExportRainText({ rain_turn_mm: 0, rain_accumulated_mm: 0 }), '');
+  const dryPlan = context.productionExportCardPlan(paint, { code: 'NRD', items: [], summary: { rain_turn_mm: 0 } }, new Map(), 0);
+  assert.equal(dryPlan.rainLines.length, 0);
+  assert.equal(dryPlan.rainHeight, 0);
   assert.equal(context.productionExportShift({ hour: 7, minute: 19 }), 'A');
   assert.equal(context.productionExportShift({ hour: 7, minute: 20 }), 'B');
   assert.equal(context.productionExportShift({ hour: 15, minute: 40 }), 'C');
