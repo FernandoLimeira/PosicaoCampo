@@ -10,23 +10,35 @@ const PRODUCTION_EXPORT_UNIT_NAMES = {
   RBR: 'RIO BRILHANTE', PST: 'PASSA TEMPO'
 };
 const PRODUCTION_EXPORT_COLORS = {
-  active: '#76b82a', wet: '#ffcc00', waiting: '#b2b2b2', stopped: '#e95b45'
+  active: '#76b82a', wet: '#ffcc00', waiting: '#b2b2b2', stopped: '#ef7d1a'
 };
 // As etiquetas usam um leve preenchimento, contorno contínuo e ponto sólido,
 // independentemente de o lançamento ser do dia ou estar pendente.
 const PRODUCTION_EXPORT_PILL_BACKGROUNDS = {
   active: 'rgba(118, 184, 42, 0.14)',
-  wet: 'rgba(221, 190, 0, 0.14)',
-  waiting: 'rgba(178, 178, 178, 0.12)',
-  stopped: 'rgba(233, 91, 69, 0.14)'
+  wet: 'rgba(255, 204, 0, 0.16)',
+  waiting: 'rgba(178, 178, 178, 0.16)',
+  stopped: 'rgba(239, 125, 26, 0.14)'
 };
 const PRODUCTION_EXPORT_PILL_BORDERS = {
-  active: '#679b2b', wet: '#bba020', waiting: '#969d9e', stopped: '#bf594d'
+  active: '#76b82a', wet: '#e6b800', waiting: '#a9b0b3', stopped: '#ef7d1a'
 };
-const PRODUCTION_EXPORT_BODY = '#0f1e24';
-const PRODUCTION_EXPORT_CARD = '#12252c';
-const PRODUCTION_EXPORT_TEXT = '#e9eef0';
-const PRODUCTION_EXPORT_MUTED = '#a6c4ce';
+// Resumo de status de cada cartão (ex.: "16 em atividade · 1 parado / oficina").
+const PRODUCTION_EXPORT_STATE_LABELS = {
+  active: 'em atividade', wet: 'solo úmido / mudança',
+  waiting: 'aguardando', stopped: 'parado / oficina'
+};
+const PRODUCTION_EXPORT_HEADER = '#33495a';
+const PRODUCTION_EXPORT_BODY = '#eef1f2';
+const PRODUCTION_EXPORT_CARD = '#ffffff';
+const PRODUCTION_EXPORT_TEXT = '#1f2f38';
+const PRODUCTION_EXPORT_MUTED = '#5d6d75';
+const PRODUCTION_EXPORT_ACCENT = '#ef7d1a';
+const PRODUCTION_EXPORT_RULE = '#e1e6e8';
+const PRODUCTION_EXPORT_FONT = '"Roboto Condensed", "Arial Narrow", Arial, sans-serif';
+const PRODUCTION_EXPORT_TITLE_FONT = 'Bahnschrift, "Arial Narrow", sans-serif';
+const PRODUCTION_EXPORT_PILL_FONT = `bold 15px ${PRODUCTION_EXPORT_FONT}`;
+const PRODUCTION_EXPORT_PILL_NOTE_FONT = `12px ${PRODUCTION_EXPORT_FONT}`;
 
 function buildProductionExportPages(reports, limit = PRODUCTION_EXPORT_PAGE_LIMIT) {
   const byCode = new Map(reports.map(report => [report.code, report]));
@@ -49,12 +61,17 @@ function productionExportText(ctx, value, x, y, width, font, color = PRODUCTION_
   ctx.fillText(String(value ?? '').trim(), x, y, width);
 }
 
-function productionExportRoundRect(ctx, x, y, width, height, radius, color, stroke = false) {
+function productionExportMeasure(ctx, value, font) {
+  ctx.font = font;
+  return ctx.measureText(String(value ?? '')).width;
+}
+
+function productionExportRoundRect(ctx, x, y, width, height, radius, color, stroke = false, lineWidth = 2) {
   ctx.beginPath();
   ctx.roundRect(x, y, width, height, radius);
   if (stroke) {
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = lineWidth;
     ctx.stroke();
   } else {
     ctx.fillStyle = color;
@@ -62,7 +79,7 @@ function productionExportRoundRect(ctx, x, y, width, height, radius, color, stro
   }
 }
 
-function productionExportRule(ctx, x1, y, x2, color = '#355059') {
+function productionExportRule(ctx, x1, y, x2, color = PRODUCTION_EXPORT_RULE) {
   ctx.beginPath();
   ctx.moveTo(x1, y);
   ctx.lineTo(x2, y);
@@ -84,8 +101,8 @@ function productionExportGrass(ctx, x, y) {
 }
 
 function productionExportGroupIcon(ctx, x, y, name) {
-  productionExportRoundRect(ctx, x, y, 24, 24, 5, '#264956');
-  ctx.strokeStyle = '#d8eef2';
+  productionExportRoundRect(ctx, x, y, 24, 24, 5, PRODUCTION_EXPORT_HEADER);
+  ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 1.5;
   ctx.lineCap = 'round';
   const group = name.toLocaleLowerCase('pt-BR');
@@ -131,25 +148,43 @@ function productionExportCalendar(ctx, x, y) {
   });
 }
 
+function productionExportCloud(ctx, x, y) {
+  ctx.fillStyle = '#9aa6ab';
+  [[x + 7, y + 9, 6], [x + 14, y + 5, 7], [x + 21, y + 9, 6]].forEach(([cx, cy, r]) => {
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.fillRect(x + 7, y + 9, 14, 6);
+  ctx.strokeStyle = '#9aa6ab';
+  ctx.lineWidth = 1.5;
+  [x + 9, x + 15, x + 21].forEach(dropX => {
+    ctx.beginPath(); ctx.moveTo(dropX, y + 18); ctx.lineTo(dropX - 2, y + 22); ctx.stroke();
+  });
+}
+
+// Turnos de campo (horário de Brasília): A até 07:20, B até 15:40, C no restante.
+function productionExportShift(parts = saoPauloDateParts()) {
+  const minutes = parts.hour * 60 + parts.minute;
+  return minutes < 440 ? 'A' : minutes < 940 ? 'B' : 'C';
+}
+
 function productionExportStatus(item, statusByCode) {
   const status = statusByCode.get(item.entry?.status);
   return status?.style_key in PRODUCTION_EXPORT_COLORS ? status.style_key : 'waiting';
 }
 
+// A borda do cartão destaca a pior situação presente na unidade: qualquer
+// frente parada deixa o cartão laranja, mesmo com a maioria em atividade.
 function productionExportBorderState(counts) {
-  const order = ['stopped', 'wet', 'waiting', 'active'];
-  const highest = Math.max(...order.map(state => counts[state] || 0));
-  return highest ? order.find(state => counts[state] === highest) : 'waiting';
+  for (const state of ['stopped', 'wet', 'active', 'waiting']) {
+    if (counts[state]) return state;
+  }
+  return 'waiting';
 }
 
 function productionExportRainText(summary) {
   const turn = summary?.rain_turn_mm;
   const accumulated = summary?.rain_accumulated_mm;
-  const hasRain = [turn, accumulated].some(value => {
-    const number = parseBrNumber(value);
-    return Number.isFinite(number) && number > 0;
-  });
-  if (!hasRain) return '';
+  if (turn == null && accumulated == null) return 'Chuva: dados não enviados';
   const format = value => value == null ? '—' : String(value).replace('.', ',');
   return `Chuva: turno ${format(turn)} mm | acumulado ${format(accumulated)} mm`;
 }
@@ -185,6 +220,44 @@ function productionExportWrap(ctx, text, width, font) {
   return lines.length ? lines : ['-'];
 }
 
+// Linha(s) de resumo do cartão: ponto colorido, quantidade em negrito e rótulo.
+function productionExportStatusLines(ctx, counts) {
+  const lines = [];
+  let used = 0;
+  for (const state of ['active', 'wet', 'waiting', 'stopped']) {
+    if (!counts[state]) continue;
+    const number = String(counts[state]);
+    const label = PRODUCTION_EXPORT_STATE_LABELS[state];
+    const numberWidth = productionExportMeasure(ctx, number, `bold 17px ${PRODUCTION_EXPORT_FONT}`);
+    const labelWidth = productionExportMeasure(ctx, label, `16px ${PRODUCTION_EXPORT_FONT}`);
+    const width = 16 + numberWidth + 5 + labelWidth;
+    if (!lines.length || (used && used + width > 472)) {
+      lines.push([]);
+      used = 0;
+    }
+    lines.at(-1).push({ state, number, label, numberWidth, width });
+    used += width + 18;
+  }
+  return lines;
+}
+
+function productionExportPillLayout(ctx, pill, pillArea) {
+  const labelWidth = Math.ceil(productionExportMeasure(ctx, pill.label, PRODUCTION_EXPORT_PILL_FONT));
+  const noteText = pill.note ? `· ${pill.note}` : '';
+  const noteWidth = noteText ? Math.ceil(productionExportMeasure(ctx, noteText, PRODUCTION_EXPORT_PILL_NOTE_FONT)) + 6 : 0;
+  pill.width = Math.min(pillArea, Math.max(46, labelWidth + noteWidth + 35));
+  pill.textLines = productionExportWrap(ctx, pill.label, pill.width - 24, PRODUCTION_EXPORT_PILL_FONT);
+  pill.noteLines = [];
+  pill.noteInline = false;
+  if (noteText) {
+    const lastWidth = productionExportMeasure(ctx, pill.textLines.at(-1), PRODUCTION_EXPORT_PILL_FONT);
+    if (lastWidth + noteWidth <= pill.width - 24) pill.noteInline = true;
+    else pill.noteLines = productionExportWrap(ctx, noteText, pill.width - 24, PRODUCTION_EXPORT_PILL_NOTE_FONT);
+  }
+  pill.noteText = noteText;
+  pill.height = Math.max(24, pill.textLines.length * 18 + pill.noteLines.length * 15 + 6);
+}
+
 function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
   const groups = new Map();
   const notes = [];
@@ -200,7 +273,9 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
     if (item.is_current_day) counts[state] += 1;
     else counts.pending += 1;
     const sector = item.entry?.sector || 'Sem setor';
-    services.get(serviceName).push({ label: sector, state, pending: !item.is_current_day });
+    // Frentes fora de atividade mostram o status cadastrado ao lado do setor.
+    const note = state === 'active' ? '' : statusByCode.get(item.entry?.status)?.name || '';
+    services.get(serviceName).push({ label: sector, state, note, pending: !item.is_current_day });
     const dated = item.is_current_day || !item.entry?.work_date
       ? '' : ` (${formatIsoDateBr(item.entry.work_date)})`;
     const prefix = `${serviceName}${dated}: `;
@@ -216,28 +291,24 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
   const rows = [];
   for (const [groupName, services] of groups) {
     const groupLines = productionExportWrap(ctx, groupName.toLocaleUpperCase('pt-BR'), 424,
-      'bold 19px Bahnschrift, "Arial Narrow", sans-serif');
+      `bold 19px ${PRODUCTION_EXPORT_TITLE_FONT}`);
     rows.push({ type: 'group', nameLines: groupLines,
-      height: Math.max(28, groupLines.length * 22 + 6) });
+      height: Math.max(32, groupLines.length * 22 + 10) });
     for (const [serviceName, pills] of services) {
       const lines = [{ pills: [], height: 24 }];
       let used = 0;
+      const pillArea = 260;
       for (const pill of pills) {
-        ctx.font = 'bold 15px "Roboto Condensed", "Arial Narrow", Arial, sans-serif';
-        const pillArea = 260;
-        pill.width = Math.min(pillArea, Math.max(46, Math.ceil(ctx.measureText(pill.label).width) + 35));
+        productionExportPillLayout(ctx, pill, pillArea);
         if (used && used + pill.width > pillArea) {
           lines.push({ pills: [], height: 24 });
           used = 0;
         }
-        pill.textLines = productionExportWrap(ctx, pill.label, pill.width - 24,
-          'bold 15px "Roboto Condensed", "Arial Narrow", Arial, sans-serif');
-        pill.height = Math.max(24, pill.textLines.length * 18 + 6);
         lines.at(-1).pills.push(pill);
         lines.at(-1).height = Math.max(lines.at(-1).height, pill.height);
         used += pill.width + 5;
       }
-      const nameFont = 'bold 16px "Roboto Condensed", "Arial Narrow", Arial, sans-serif';
+      const nameFont = `bold 16px ${PRODUCTION_EXPORT_FONT}`;
       ctx.font = nameFont;
       // Nomes comuns (ex.: Fertirrigação convencional) cabem em uma linha;
       // descrições de serviços realmente longas continuam quebrando.
@@ -250,30 +321,30 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
   }
   if (!rows.length) rows.push({ type: 'empty', height: 48 });
 
-  const noteLines = report.noteLinesOverride ?? notes.flatMap(note => productionExportWrap(ctx, `• ${note}`, 466,
-    '16px "Roboto Condensed", "Arial Narrow", Arial, sans-serif'));
+  const textFont = `16px ${PRODUCTION_EXPORT_FONT}`;
+  const noteLines = report.noteLinesOverride ?? notes.flatMap(note => productionExportWrap(ctx, `• ${note}`, 466, textFont));
   if (!noteLines.length && !report.continuation && report.noteLinesOverride == null) {
-    noteLines.push('• Sem observações registradas.');
+    noteLines.push('• Sem observações.');
   }
   const legacyChanges = String(report.summary?.changes || '').split(/\r?\n/)
     .map(line => line.trim().replace(/^[•-]\s*/, '')).filter(Boolean);
   const changeLines = report.changeLinesOverride ?? ([...changes, ...legacyChanges])
-    .flatMap(line => productionExportWrap(ctx, `• ${line}`, 466,
-      '16px "Roboto Condensed", "Arial Narrow", Arial, sans-serif'));
+    .flatMap(line => productionExportWrap(ctx, `• ${line}`, 466, textFont));
   if (!changeLines.length && !report.continuation && report.changeLinesOverride == null) {
-    changeLines.push('• Sem mudanças registradas.');
+    changeLines.push('• Sem mudanças previstas.');
   }
-  const rainText = productionExportRainText(report.summary);
-  const rainLines = rainText ? productionExportWrap(ctx, rainText, 418,
-    'bold 18px "Roboto Condensed", "Arial Narrow", Arial, sans-serif') : [];
-  const rainHeight = rainLines.length ? Math.max(36, rainLines.length * 22 + 12) : 0;
+  const rainLines = productionExportWrap(ctx, productionExportRainText(report.summary), 418,
+    `bold 18px ${PRODUCTION_EXPORT_FONT}`);
+  const rainHeight = Math.max(36, rainLines.length * 22 + 12);
+  const statusLines = productionExportStatusLines(ctx, counts);
+  // Topo do cartão: identificação da unidade, resumo de status e linha divisória.
+  const headerHeight = 99 + statusLines.length * 25;
   // Todas as seções são medidas com os mesmos espaçamentos usados no desenho.
   // A altura cresce com dados reais, sem cortar observações ou deixar lacunas fixas.
-  // Sem a linha de status por unidade: a legenda geral do cabeçalho já identifica as cores.
-  const contentHeight = 99 + rows.reduce((sum, row) => sum + row.height, 0)
-    + (rainLines.length ? 16 + rainHeight + 14 : 0) + 26 + noteLines.length * 21 + 13
+  const contentHeight = headerHeight + rows.reduce((sum, row) => sum + row.height, 0)
+    + 16 + rainHeight + 14 + 26 + noteLines.length * 21 + 13
     + 26 + changeLines.length * 21 + 26;
-  return { rows, noteLines, changeLines, rainLines, rainHeight,
+  return { rows, noteLines, changeLines, rainLines, rainHeight, statusLines, headerHeight,
     counts, contentHeight, height: Math.max(minHeight, contentHeight) };
 }
 
@@ -282,7 +353,7 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
 function productionExportLegendLayout(page, statusByCode) {
   const used = new Set(page.flatMap(report => (report.items || []).map(item => item.entry?.status)));
   const statuses = [...statusByCode.values()].filter(status => used.has(status.code));
-  const font = 'bold 18px "Arial Narrow", Arial, sans-serif';
+  const font = `bold 18px ${PRODUCTION_EXPORT_FONT}`;
   const columnWidth = (PRODUCTION_EXPORT_WIDTH - 80) / Math.max(1, statuses.length);
   const entries = statuses.map((status, index) => ({
     state: productionExportStatus({ entry: { status: status.code } }, statusByCode),
@@ -292,158 +363,191 @@ function productionExportLegendLayout(page, statusByCode) {
   return { entries, font };
 }
 
-function drawProductionExportHeader(ctx, workDate, background, pageNumber, totalPages, height, legend) {
+function drawProductionExportHeader(ctx, workDate, pageNumber, totalPages, height, legend) {
   ctx.fillStyle = PRODUCTION_EXPORT_BODY;
   ctx.fillRect(0, 0, PRODUCTION_EXPORT_WIDTH, height);
-  if (background) {
+  ctx.fillStyle = PRODUCTION_EXPORT_HEADER;
+  ctx.fillRect(0, 0, PRODUCTION_EXPORT_WIDTH, 352);
+  ctx.fillStyle = '#5a6e7b';
+  ctx.fillRect(0, 89, PRODUCTION_EXPORT_WIDTH, 3);
+  // Faixa com as cores dos status logo abaixo do cabeçalho.
+  ['active', 'wet', 'stopped', 'waiting'].forEach((state, index) => {
+    ctx.fillStyle = PRODUCTION_EXPORT_COLORS[state];
+    ctx.fillRect(index * 270, 352, 270, 7);
+  });
+
+  const parts = saoPauloDateParts();
+  const topFont = `bold 32px ${PRODUCTION_EXPORT_TITLE_FONT}`;
+  const greeting = greetingForHour(parts.hour).toUpperCase();
+  const greetingWidth = Math.min(200, productionExportMeasure(ctx, greeting, topFont));
+  productionExportText(ctx, greeting, 40, 62, 200, topFont, '#ffffff');
+  let x = 40 + greetingWidth + 22;
+  ctx.fillStyle = '#8ea2ad';
+  ctx.fillRect(x, 30, 2, 38);
+  x += 22;
+  productionExportCalendar(ctx, x, 34);
+  x += 39;
+  const dateText = formatIsoDateBr(workDate);
+  const dateWidth = Math.min(220, productionExportMeasure(ctx, dateText, topFont));
+  productionExportText(ctx, dateText, x, 62, 220, topFont, '#ffffff');
+  x += dateWidth + 22;
+  ctx.fillStyle = '#8ea2ad';
+  ctx.fillRect(x, 30, 2, 38);
+  productionExportText(ctx, `TURNO ${productionExportShift(parts)}`, x + 22, 62, 200, topFont,
+    PRODUCTION_EXPORT_COLORS.wet);
+  if (totalPages > 1) {
     ctx.save();
-    ctx.filter = 'blur(7px)';
-    ctx.drawImage(background, 0, 0, background.width,
-      Math.min(background.height, background.width * .62), 0, 0, 1080, 360);
+    ctx.textAlign = 'right';
+    productionExportText(ctx, `${pageNumber}/${totalPages}`, 1040, 62, 80,
+      `bold 22px ${PRODUCTION_EXPORT_TITLE_FONT}`, '#c5d2d8');
     ctx.restore();
   }
-  const overlay = ctx.createLinearGradient(0, 0, 0, 365);
-  overlay.addColorStop(0, 'rgba(9, 22, 27, .74)');
-  overlay.addColorStop(1, 'rgba(9, 25, 30, .90)');
-  ctx.fillStyle = overlay;
-  ctx.fillRect(0, 0, 1080, 365);
-  const eveningGlow = ctx.createLinearGradient(0, 95, 0, 365);
-  eveningGlow.addColorStop(0, 'rgba(180, 90, 47, .08)');
-  eveningGlow.addColorStop(.45, 'rgba(180, 90, 47, .20)');
-  eveningGlow.addColorStop(1, 'rgba(180, 90, 47, 0)');
-  ctx.fillStyle = eveningGlow;
-  ctx.fillRect(0, 95, 1080, 270);
-  ctx.fillStyle = 'rgba(13, 28, 34, .62)';
-  ctx.fillRect(0, 0, 1080, 91);
-  const rule = ctx.createLinearGradient(0, 0, 1080, 0);
-  rule.addColorStop(0, '#455f65');
-  rule.addColorStop(.52, PRODUCTION_EXPORT_COLORS.active);
-  rule.addColorStop(1, PRODUCTION_EXPORT_COLORS.wet);
-  ctx.fillStyle = rule;
-  ctx.fillRect(0, 90, 1080, 4);
 
-  const greeting = greetingForHour(saoPauloDateParts().hour).toUpperCase();
-  productionExportText(ctx, greeting, 40, 65, 182, 'bold 28px Bahnschrift, "Arial Narrow", sans-serif');
-  ctx.fillStyle = '#8ea2a5';
-  ctx.fillRect(227, 29, 2, 41);
-  productionExportCalendar(ctx, 252, 37);
-  productionExportText(ctx, formatIsoDateBr(workDate), 291, 65, 260,
-    'bold 35px Bahnschrift, "Arial Narrow", sans-serif');
-  if (totalPages > 1) productionExportText(ctx, `${pageNumber}/${totalPages}`, 989, 64, 55,
-    'bold 21px Impact, "Arial Narrow", sans-serif', PRODUCTION_EXPORT_MUTED);
-
-  productionExportText(ctx, 'POSIÇÃO DE CAMPO', 40, 181, 520,
-    'bold 71px Impact, "Roboto Condensed", "Arial Narrow", sans-serif');
-  productionExportText(ctx, 'PRODUÇÃO AGRÍCOLA', 40, 250, 570,
-    'bold 68px Impact, "Roboto Condensed", "Arial Narrow", sans-serif', PRODUCTION_EXPORT_COLORS.active);
+  productionExportText(ctx, 'TROCA DE TURNO', 40, 181, 640,
+    `bold 74px Impact, ${PRODUCTION_EXPORT_FONT}`, '#ffffff');
+  productionExportText(ctx, 'PRODUÇÃO AGRÍCOLA', 40, 250, 640,
+    `bold 70px Impact, ${PRODUCTION_EXPORT_FONT}`, PRODUCTION_EXPORT_COLORS.active);
   productionExportText(ctx, 'Preparo, plantio, tratos culturais e fertirrigação', 40, 293, 930,
-    'bold 24px "Arial Narrow", Arial, sans-serif', '#e7eeee');
-  legend.entries.forEach(({ state, label, x, y, width }) => {
+    `24px ${PRODUCTION_EXPORT_FONT}`, '#ffffff');
+  legend.entries.forEach(({ state, label, x: entryX, y, width }) => {
     ctx.beginPath();
-    ctx.arc(x + 9, y - 9, 9, 0, Math.PI * 2);
+    ctx.arc(entryX + 9, y - 7, 8, 0, Math.PI * 2);
     ctx.fillStyle = PRODUCTION_EXPORT_COLORS[state];
     ctx.fill();
-    productionExportText(ctx, label, x + 25, y, width, legend.font);
+    productionExportText(ctx, label, entryX + 25, y, width, legend.font, '#ffffff');
   });
+}
+
+function drawProductionExportPill(ctx, pill, x, y) {
+  productionExportRoundRect(ctx, x, y, pill.width, pill.height,
+    12, PRODUCTION_EXPORT_PILL_BACKGROUNDS[pill.state]);
+  productionExportRoundRect(ctx, x, y, pill.width, pill.height,
+    12, PRODUCTION_EXPORT_PILL_BORDERS[pill.state], true, 1.5);
+  ctx.beginPath(); ctx.arc(x + 12, y + 12, 5.5, 0, Math.PI * 2);
+  ctx.fillStyle = PRODUCTION_EXPORT_COLORS[pill.state]; ctx.fill();
+  pill.textLines.forEach((textLine, index) => productionExportText(ctx,
+    textLine, x + 22, y + 17 + index * 18, pill.width - 24, PRODUCTION_EXPORT_PILL_FONT));
+  if (pill.noteInline) {
+    const lastY = y + 17 + (pill.textLines.length - 1) * 18;
+    const offset = productionExportMeasure(ctx, pill.textLines.at(-1), PRODUCTION_EXPORT_PILL_FONT) + 6;
+    productionExportText(ctx, pill.noteText, x + 22 + offset, lastY,
+      Math.max(1, pill.width - 24 - offset), PRODUCTION_EXPORT_PILL_NOTE_FONT, PRODUCTION_EXPORT_MUTED);
+  }
+  pill.noteLines.forEach((line, index) => productionExportText(ctx, line, x + 22,
+    y + 17 + pill.textLines.length * 18 + index * 15 - 3, pill.width - 24,
+    PRODUCTION_EXPORT_PILL_NOTE_FONT, PRODUCTION_EXPORT_MUTED));
 }
 
 function drawProductionExportCard(ctx, report, plan, x, y) {
   const width = 506;
   const counts = plan.counts;
   const border = PRODUCTION_EXPORT_COLORS[productionExportBorderState(counts)];
-  const cardBackground = ctx.createLinearGradient(x, y, x, y + plan.height);
-  cardBackground.addColorStop(0, PRODUCTION_EXPORT_CARD);
-  cardBackground.addColorStop(1, PRODUCTION_EXPORT_BODY);
-  productionExportRoundRect(ctx, x, y, width, plan.height, 15, cardBackground);
-  productionExportRoundRect(ctx, x + 1, y + 1, width - 2, plan.height - 2, 15, border, true);
-  productionExportRoundRect(ctx, x + 17, y + 24, 6, 43, 3, border);
+  productionExportRoundRect(ctx, x, y, width, plan.height, 14, PRODUCTION_EXPORT_CARD);
+  productionExportRoundRect(ctx, x + 1, y + 1, width - 2, plan.height - 2, 14, border, true);
+  productionExportRoundRect(ctx, x + 17, y + 24, 5, 43, 2.5, border);
   productionExportGrass(ctx, x + 37, y + 40);
-  productionExportText(ctx, report.code, x + 80, y + 52, 150,
-    'bold 43px Impact, "Arial Narrow", sans-serif');
-  productionExportText(ctx, PRODUCTION_EXPORT_UNIT_NAMES[report.code], x + 80, y + 74, 310,
-    '16px "Arial Narrow", Arial, sans-serif', '#c2d3d6');
+  productionExportText(ctx, report.code, x + 80, y + 54, 150,
+    `bold 40px ${PRODUCTION_EXPORT_TITLE_FONT}`, PRODUCTION_EXPORT_HEADER);
+  ctx.letterSpacing = '1px';
+  productionExportText(ctx, PRODUCTION_EXPORT_UNIT_NAMES[report.code], x + 80, y + 77, 310,
+    `15px ${PRODUCTION_EXPORT_FONT}`, PRODUCTION_EXPORT_MUTED);
+  ctx.letterSpacing = '0px';
   // Alinhar pela borda direita evita cortar contagens de 2 ou mais dígitos.
   ctx.save();
   ctx.textAlign = 'right';
   productionExportText(ctx, report.continuation ? 'CONT.' : String(report.items.length),
-    x + 489, y + 52, 94,
-    'bold 38px Impact, "Roboto Condensed", "Arial Narrow", sans-serif', PRODUCTION_EXPORT_COLORS.active);
-  productionExportText(ctx, report.continuation ? 'INFORMAÇÕES' : 'OPERAÇÕES', x + 489, y + 72, 94,
-    '12px "Roboto Condensed", "Arial Narrow", Arial, sans-serif', '#c2d3d6');
+    x + 489, y + 54, 94,
+    `bold 36px ${PRODUCTION_EXPORT_TITLE_FONT}`, PRODUCTION_EXPORT_COLORS.active);
+  ctx.letterSpacing = '1px';
+  productionExportText(ctx, report.continuation ? 'INFORMAÇÕES' : 'OPERAÇÕES', x + 489, y + 74, 94,
+    `12px ${PRODUCTION_EXPORT_FONT}`, PRODUCTION_EXPORT_MUTED);
+  ctx.letterSpacing = '0px';
   ctx.restore();
 
-  productionExportRule(ctx, x + 17, y + 90, x + 489);
+  plan.statusLines.forEach((line, lineIndex) => {
+    const baseY = y + 106 + lineIndex * 25;
+    let itemX = x + 17;
+    for (const item of line) {
+      ctx.beginPath(); ctx.arc(itemX + 6, baseY - 6, 6, 0, Math.PI * 2);
+      ctx.fillStyle = PRODUCTION_EXPORT_COLORS[item.state]; ctx.fill();
+      productionExportText(ctx, item.number, itemX + 16, baseY, item.numberWidth + 2,
+        `bold 17px ${PRODUCTION_EXPORT_FONT}`);
+      productionExportText(ctx, item.label, itemX + 21 + item.numberWidth, baseY,
+        Math.max(1, item.width - item.numberWidth - 21), `16px ${PRODUCTION_EXPORT_FONT}`, PRODUCTION_EXPORT_MUTED);
+      itemX += item.width + 18;
+    }
+  });
+  productionExportRule(ctx, x + 17, y + plan.headerHeight - 9, x + 489, '#d5dcdf');
 
-  let cursor = y + 99;
+  let cursor = y + plan.headerHeight;
   for (const row of plan.rows) {
     if (row.type === 'group') {
-      productionExportGroupIcon(ctx, x + 17, cursor + 2, row.nameLines.join(' '));
+      productionExportGroupIcon(ctx, x + 17, cursor + 4, row.nameLines.join(' '));
       row.nameLines.forEach((line, index) => productionExportText(ctx, line,
-        x + 49, cursor + 22 + index * 22, 424,
-        'bold 19px Bahnschrift, "Arial Narrow", sans-serif', PRODUCTION_EXPORT_MUTED));
+        x + 49, cursor + 24 + index * 22, 424,
+        `bold 19px ${PRODUCTION_EXPORT_TITLE_FONT}`, PRODUCTION_EXPORT_HEADER));
     } else if (row.type === 'service') {
       row.nameLines.forEach((line, lineIndex) => productionExportText(ctx,
         line, x + 17, cursor + 19 + lineIndex * 20, 179,
-        'bold 16px "Arial Narrow", Arial, sans-serif'));
+        `16px ${PRODUCTION_EXPORT_FONT}`));
       let lineY = cursor + 2;
       row.lines.forEach(line => {
         let pillX = x + 204;
         for (const pill of line.pills) {
-          const color = PRODUCTION_EXPORT_COLORS[pill.state];
-          productionExportRoundRect(ctx, pillX, lineY, pill.width, pill.height,
-            13, PRODUCTION_EXPORT_PILL_BACKGROUNDS[pill.state]);
-          productionExportRoundRect(ctx, pillX, lineY, pill.width, pill.height,
-            13, PRODUCTION_EXPORT_PILL_BORDERS[pill.state], true);
-          ctx.beginPath(); ctx.arc(pillX + 12, lineY + 12, 6, 0, Math.PI * 2);
-          ctx.fillStyle = color; ctx.fill();
-          pill.textLines.forEach((textLine, textIndex) => productionExportText(ctx,
-            textLine, pillX + 22, lineY + 17 + textIndex * 18,
-            pill.width - 24, 'bold 15px "Roboto Condensed", "Arial Narrow", Arial, sans-serif'));
+          drawProductionExportPill(ctx, pill, pillX, lineY);
           pillX += pill.width + 5;
         }
         lineY += line.height + 7;
       });
-      productionExportRule(ctx, x + 17, cursor + row.height - 1, x + 489, '#29434b');
+      productionExportRule(ctx, x + 17, cursor + row.height - 1, x + 489);
     } else {
       productionExportText(ctx, report.restricted ? 'Unidade não liberada para este usuário.'
         : report.continuation ? 'Continuação das informações da unidade.'
           : 'Nenhum lançamento nesta unidade.', x + 17, cursor + 29, 455,
-      '16px "Arial Narrow", Arial, sans-serif', PRODUCTION_EXPORT_MUTED);
+      `16px ${PRODUCTION_EXPORT_FONT}`, PRODUCTION_EXPORT_MUTED);
     }
     cursor += row.height;
   }
 
-  if (plan.rainLines.length) {
-    cursor += 16;
-    productionExportRoundRect(ctx, x + 17, cursor, 472, plan.rainHeight, 9, '#213b46');
-    productionExportText(ctx, '☁', x + 29, cursor + 26, 30, 'bold 23px Arial', PRODUCTION_EXPORT_MUTED);
-    plan.rainLines.forEach((line, index) => productionExportText(ctx, line,
-      x + 60, cursor + 25 + index * 22, 418,
-      'bold 18px "Roboto Condensed", "Arial Narrow", Arial, sans-serif'));
-    cursor += plan.rainHeight + 14;
-  }
+  cursor += 16;
+  productionExportRoundRect(ctx, x + 17, cursor, 472, plan.rainHeight, 9, '#e5eaec');
+  productionExportCloud(ctx, x + 29, cursor + plan.rainHeight / 2 - 12);
+  const rainFont = `bold 18px ${PRODUCTION_EXPORT_FONT}`;
+  plan.rainLines.forEach((line, index) => {
+    const lineY = cursor + 25 + index * 22;
+    if (index === 0 && line.startsWith('Chuva:')) {
+      // "Chuva:" em peso normal e o valor em destaque, como no modelo.
+      const labelFont = `18px ${PRODUCTION_EXPORT_FONT}`;
+      const labelWidth = productionExportMeasure(ctx, 'Chuva:', labelFont);
+      productionExportText(ctx, 'Chuva:', x + 64, lineY, labelWidth + 2, labelFont);
+      productionExportText(ctx, line.slice(6), x + 64 + labelWidth + 5, lineY,
+        Math.max(1, 413 - labelWidth), rainFont);
+    } else {
+      productionExportText(ctx, line, x + 64, lineY, 413, rainFont);
+    }
+  });
+  cursor += plan.rainHeight + 14;
+
   productionExportText(ctx, 'OBSERVAÇÃO', x + 17, cursor + 20, 460,
-    'bold 21px Bahnschrift, "Arial Narrow", sans-serif', PRODUCTION_EXPORT_COLORS.wet);
+    `bold 21px ${PRODUCTION_EXPORT_TITLE_FONT}`, PRODUCTION_EXPORT_ACCENT);
   cursor += 26;
   for (const line of plan.noteLines) {
-    productionExportText(ctx, line, x + 17, cursor + 15, 466,
-      '16px "Arial Narrow", Arial, sans-serif');
+    productionExportText(ctx, line, x + 17, cursor + 15, 466, `16px ${PRODUCTION_EXPORT_FONT}`);
     cursor += 21;
   }
   cursor += 13;
   productionExportText(ctx, 'MUDANÇAS', x + 17, cursor + 20, 460,
-    'bold 21px Bahnschrift, "Arial Narrow", sans-serif', PRODUCTION_EXPORT_COLORS.wet);
+    `bold 21px ${PRODUCTION_EXPORT_TITLE_FONT}`, PRODUCTION_EXPORT_ACCENT);
   cursor += 26;
   for (const line of plan.changeLines) {
-    productionExportText(ctx, line, x + 17, cursor + 19, 466,
-      '16px "Arial Narrow", Arial, sans-serif');
+    productionExportText(ctx, line, x + 17, cursor + 19, 466, `16px ${PRODUCTION_EXPORT_FONT}`);
     cursor += 21;
   }
 }
 
 function productionExportFooterIcon(ctx, index, x, y) {
-  ctx.strokeStyle = PRODUCTION_EXPORT_COLORS.wet;
-  ctx.fillStyle = PRODUCTION_EXPORT_COLORS.wet;
+  ctx.strokeStyle = PRODUCTION_EXPORT_HEADER;
+  ctx.fillStyle = PRODUCTION_EXPORT_HEADER;
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   if (index === 0) {
@@ -470,21 +574,28 @@ function drawProductionExportFooter(ctx, y, workDate, height) {
     ['SEGURANÇA', 'SEMPRE'], ['OPERAÇÃO', 'COM QUALIDADE'],
     ['PESSOAS QUE FAZEM', 'A DIFERENÇA'], ['RESULTADOS', 'SUSTENTÁVEIS']
   ];
+  const footerFont = `bold 16px ${PRODUCTION_EXPORT_TITLE_FONT}`;
   blocks.forEach(([lineOne, lineTwo], index) => {
     const x = 30 + index * 270;
     ctx.beginPath(); ctx.arc(x + 32, y + 39, 31, 0, Math.PI * 2);
-    ctx.strokeStyle = PRODUCTION_EXPORT_COLORS.wet; ctx.lineWidth = 2; ctx.stroke();
+    ctx.strokeStyle = PRODUCTION_EXPORT_HEADER; ctx.lineWidth = 2; ctx.stroke();
     productionExportFooterIcon(ctx, index, x + 32, y + 39);
-    productionExportText(ctx, lineOne, x + 77, y + 32, 183,
-      'bold 16px Bahnschrift, "Arial Narrow", sans-serif');
-    productionExportText(ctx, lineTwo, x + 77, y + 54, 183,
-      'bold 16px Bahnschrift, "Arial Narrow", sans-serif');
+    productionExportText(ctx, lineOne, x + 77, y + 34, 183, footerFont, PRODUCTION_EXPORT_HEADER);
+    productionExportText(ctx, lineTwo, x + 77, y + 55, 183, footerFont, PRODUCTION_EXPORT_HEADER);
   });
-  productionExportText(ctx, `COA | COCAL | SAFRA ${workDate.slice(0, 4)} ·`, 380, y + 106, 310,
-    'bold 14px "Arial Narrow", Arial, sans-serif', '#aeb8b9');
-  productionExportText(ctx, 'Juntos fazemos mais!', 689, y + 106, 220,
-    'bold 14px "Arial Narrow", Arial, sans-serif', PRODUCTION_EXPORT_COLORS.wet);
-  ctx.fillStyle = PRODUCTION_EXPORT_COLORS.wet;
+  const taglineFont = `bold 15px ${PRODUCTION_EXPORT_FONT}`;
+  const left = `COA | COCAL | SAFRA ${workDate.slice(0, 4)} ·`;
+  const right = 'Juntos fazemos mais!';
+  const leftWidth = productionExportMeasure(ctx, left, taglineFont);
+  const rightWidth = productionExportMeasure(ctx, right, taglineFont);
+  const start = (PRODUCTION_EXPORT_WIDTH - leftWidth - 5 - rightWidth) / 2;
+  productionExportText(ctx, left, start, y + 106, leftWidth + 2, taglineFont, PRODUCTION_EXPORT_MUTED);
+  productionExportText(ctx, right, start + leftWidth + 5, y + 106, rightWidth + 2, taglineFont,
+    PRODUCTION_EXPORT_COLORS.active);
+  const stripe = ctx.createLinearGradient(0, 0, PRODUCTION_EXPORT_WIDTH, 0);
+  stripe.addColorStop(0, PRODUCTION_EXPORT_COLORS.active);
+  stripe.addColorStop(1, PRODUCTION_EXPORT_COLORS.wet);
+  ctx.fillStyle = stripe;
   ctx.fillRect(0, height - 6, PRODUCTION_EXPORT_WIDTH, 6);
 }
 
@@ -514,8 +625,8 @@ function productionExportPageLayout(ctx, page, statusByCode) {
   plans[0].height = plans[1].height = firstHeight;
   plans[2].height = plans[3].height = secondHeight;
   const secondY = firstY + firstHeight + 16;
-  const footerY = secondY + secondHeight + 16;
-  return { page, plans, legend, firstY, secondY, footerY, height: footerY + 123 };
+  const footerY = secondY + secondHeight + 24;
+  return { page, plans, legend, firstY, secondY, footerY, height: footerY + 130 };
 }
 
 function productionExportSplitTextPage(page, plans) {
@@ -582,12 +693,6 @@ async function generateProductionReportImages(reports, statuses, workDate) {
   const measureCtx = measureCanvas.getContext('2d');
   if (!measureCtx) throw new Error('Não foi possível preparar a imagem da Produção Agrícola.');
   const pages = prepareProductionExportPages(measureCtx, reports, statusByCode);
-  let background = null;
-  try {
-    background = await loadImageAsset('/assets/login-field-sunrise-v1.png', '');
-  } catch (_) {
-    // O gradiente escuro mantém o relatório legível se a foto não carregar.
-  }
   const images = [];
   for (const [index, layout] of pages.entries()) {
     const canvas = document.createElement('canvas');
@@ -598,7 +703,7 @@ async function generateProductionReportImages(reports, statuses, workDate) {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.scale(PRODUCTION_EXPORT_SCALE, PRODUCTION_EXPORT_SCALE);
-    drawProductionExportHeader(ctx, workDate, background, index + 1, pages.length, layout.height, layout.legend);
+    drawProductionExportHeader(ctx, workDate, index + 1, pages.length, layout.height, layout.legend);
     layout.page.forEach((report, cardIndex) => drawProductionExportCard(ctx, report,
       layout.plans[cardIndex], cardIndex % 2 ? 548 : 26,
       cardIndex < 2 ? layout.firstY : layout.secondY));
@@ -609,6 +714,5 @@ async function generateProductionReportImages(reports, statuses, workDate) {
     ));
     images.push(blob);
   }
-  if (background?.close) background.close();
   return images;
 }

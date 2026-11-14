@@ -100,11 +100,14 @@ loadScripts(context, ['core/format.js', 'producao/production-consolidation.js', 
   assert.equal(colors.active, '#76b82a');
   assert.equal(colors.wet, '#ffcc00');
   assert.equal(colors.waiting, '#b2b2b2');
-  assert.equal(colors.stopped, '#e95b45');
+  assert.equal(colors.stopped, '#ef7d1a');
   assert.equal(context.productionExportBorderState({ active: 2, wet: 3, waiting: 0, stopped: 0 }), 'wet');
-  assert.equal(context.productionExportBorderState({ active: 12, wet: 8, waiting: 0, stopped: 0 }), 'active');
+  assert.equal(context.productionExportBorderState({ active: 12, wet: 8, waiting: 0, stopped: 0 }), 'wet');
+  assert.equal(context.productionExportBorderState({ active: 16, wet: 0, waiting: 1, stopped: 1 }), 'stopped',
+    'Qualquer frente parada deixa o cartão laranja');
   assert.equal(context.productionExportBorderState({ active: 8, wet: 13, waiting: 0, stopped: 0 }), 'wet');
-  assert.equal(context.productionExportBorderState({ active: 1, wet: 0, waiting: 2, stopped: 0 }), 'waiting');
+  assert.equal(context.productionExportBorderState({ active: 1, wet: 0, waiting: 2, stopped: 0 }), 'active');
+  assert.equal(context.productionExportBorderState({ active: 0, wet: 0, waiting: 2, stopped: 0 }), 'waiting');
   assert.equal(context.productionExportBorderState({ active: 1, wet: 0, waiting: 0, stopped: 2 }), 'stopped');
   assert.equal(context.productionExportBorderState({ active: 2, wet: 2, waiting: 0, stopped: 0 }), 'wet');
   assert.equal(context.productionExportBorderState({ active: 0, wet: 0, waiting: 0, stopped: 0 }), 'waiting');
@@ -145,8 +148,8 @@ loadScripts(context, ['core/format.js', 'producao/production-consolidation.js', 
   assert.equal(stalePill.state, 'stopped');
   assert.equal(stalePill.label, '3392');
   context.drawProductionExportCard(paint, staleReport, plan, 26, 370);
-  assert.ok(strokes.some(stroke => stroke.color === '#bf594d' && !stroke.dash.length));
-  assert.ok(fills.includes('rgba(233, 91, 69, 0.14)'));
+  assert.ok(strokes.some(stroke => stroke.color === '#ef7d1a' && !stroke.dash.length));
+  assert.ok(fills.includes('rgba(239, 125, 26, 0.14)'));
   const mixedReport = { code: 'PPT', items: [
     ['A', 'ATIVO'], ['B', 'UMIDO'], ['C', 'AGUARDA'], ['D', 'CRITICO']
   ].map(([sector, statusCode]) => ({
@@ -192,14 +195,14 @@ loadScripts(context, ['core/format.js', 'producao/production-consolidation.js', 
     }
   }
   context.drawProductionExportCard(paint, mixedReport, mixedPlan, 26, 370);
-  for (const color of ['#679b2b', '#bba020', '#969d9e', '#bf594d']) {
+  for (const color of ['#76b82a', '#e6b800', '#a9b0b3', '#ef7d1a']) {
     assert.ok(strokes.some(stroke => stroke.color === color && !stroke.dash.length));
   }
   for (const color of Object.values(colors)) {
     assert.ok(fills.includes(color), `Ponto colorido ausente: ${color}`);
   }
-  for (const background of ['rgba(118, 184, 42, 0.14)', 'rgba(221, 190, 0, 0.14)',
-    'rgba(178, 178, 178, 0.12)', 'rgba(233, 91, 69, 0.14)']) {
+  for (const background of ['rgba(118, 184, 42, 0.14)', 'rgba(255, 204, 0, 0.16)',
+    'rgba(178, 178, 178, 0.16)', 'rgba(239, 125, 26, 0.14)']) {
     assert.ok(fills.includes(background), `Fundo de etiqueta não aplicado: ${background}`);
   }
   const verbose = Array.from({ length: 48 }, (_, index) => ({
@@ -317,8 +320,12 @@ loadScripts(context, ['core/format.js', 'producao/production-consolidation.js', 
   assert.ok(requests.some(url => url.includes('unit=NRD') && url.includes('scope=all')));
   assert.ok(requests.some(url => url.includes('daily-summary?unit=PPT')));
   assert.ok(!requests.some(url => url.includes('unit=RBR')));
-  assert.ok(labels.includes('POSIÇÃO DE CAMPO'));
-  assert.ok(!labels.includes('TROCA DE TURNO'));
+  assert.ok(labels.includes('TROCA DE TURNO'));
+  assert.ok(labels.some(value => /^TURNO [ABC]$/.test(value)));
+  assert.ok(labels.some(value => value.startsWith('· Status')), 'Etiqueta fora de atividade mostra o status');
+  assert.ok(labels.includes('em atividade'));
+  assert.ok(labels.includes('Chuva:'));
+  assert.ok(labels.includes(' dados não enviados') || labels.includes('dados não enviados'));
   assert.ok(labels.includes('PRODUÇÃO AGRÍCOLA'));
   assert.ok(labels.includes('Status removido do cadastro'));
   assert.ok(!labels.includes('Status excluído sem uso nesta imagem'));
@@ -334,7 +341,11 @@ loadScripts(context, ['core/format.js', 'producao/production-consolidation.js', 
   assert.ok(labels.includes('Frente 19'));
   assert.equal(context.productionExportRainText({ rain_turn_mm: 3, rain_accumulated_mm: 5 }),
     'Chuva: turno 3 mm | acumulado 5 mm');
-  assert.ok(labels.some(value => value.startsWith('Chuva: turno 3 mm')));
+  assert.equal(context.productionExportRainText(null), 'Chuva: dados não enviados');
+  assert.equal(context.productionExportShift({ hour: 7, minute: 19 }), 'A');
+  assert.equal(context.productionExportShift({ hour: 7, minute: 20 }), 'B');
+  assert.equal(context.productionExportShift({ hour: 15, minute: 40 }), 'C');
+  assert.ok(labels.some(value => value.startsWith('turno 3 mm')));
   assert.ok(labels.includes('• Frente 1 deslocada.'));
   assert.ok(labels.includes('• Frente 2 em teste.'));
   // Regra da imagem: lançamento de dia anterior não é considerado.
