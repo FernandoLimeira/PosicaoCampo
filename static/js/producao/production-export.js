@@ -9,9 +9,8 @@ const PRODUCTION_EXPORT_UNIT_NAMES = {
   PPT: 'PARAGUAÇU PAULISTA', NRD: 'NARANDIBA',
   RBR: 'RIO BRILHANTE', PST: 'PASSA TEMPO'
 };
-const PRODUCTION_EXPORT_COLORS = {
-  active: '#76b82a', wet: '#ffcc00', waiting: '#b2b2b2', stopped: '#ef7d1a'
-};
+// Cores e rótulos vêm dos grupos de status (production-status-groups.js).
+const PRODUCTION_EXPORT_COLORS = Object.fromEntries(PRODUCTION_STATUS_GROUPS.map(group => [group.key, group.color]));
 // As etiquetas usam um leve preenchimento, contorno contínuo e ponto sólido,
 // independentemente de o lançamento ser do dia ou estar pendente.
 const PRODUCTION_EXPORT_PILL_BACKGROUNDS = {
@@ -24,10 +23,7 @@ const PRODUCTION_EXPORT_PILL_BORDERS = {
   active: '#76b82a', wet: '#e6b800', waiting: '#a9b0b3', stopped: '#ef7d1a'
 };
 // Resumo de status de cada cartão (ex.: "16 em atividade · 1 parado / oficina").
-const PRODUCTION_EXPORT_STATE_LABELS = {
-  active: 'em atividade', wet: 'solo úmido / mudança',
-  waiting: 'aguardando', stopped: 'parado / oficina'
-};
+const PRODUCTION_EXPORT_STATE_LABELS = Object.fromEntries(PRODUCTION_STATUS_GROUPS.map(group => [group.key, group.summary]));
 const PRODUCTION_EXPORT_HEADER = '#33495a';
 const PRODUCTION_EXPORT_BODY = '#eef1f2';
 const PRODUCTION_EXPORT_CARD = '#ffffff';
@@ -89,48 +85,67 @@ function productionExportRule(ctx, x1, y, x2, color = PRODUCTION_EXPORT_RULE) {
 }
 
 function productionExportGrass(ctx, x, y) {
+  // Tufo de cana: quatro folhas finas saindo da mesma base e abrindo para os lados.
   ctx.strokeStyle = PRODUCTION_EXPORT_COLORS.active;
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 2.2;
   ctx.lineCap = 'round';
-  [[0, 0, 13, 31], [17, -5, 16, 31], [32, 4, 20, 31]].forEach(points => {
+  [
+    [13, 31, 6, 17, 0, 8],
+    [15, 31, 12, 12, 10, -6],
+    [17, 31, 19, 9, 26, -3],
+    [18, 31, 25, 16, 36, 6]
+  ].forEach(([startX, startY, controlX, controlY, endX, endY]) => {
     ctx.beginPath();
-    ctx.moveTo(x + points[0], y + points[1]);
-    ctx.quadraticCurveTo(x + points[2], y + 8, x + points[3], y + 31);
+    ctx.moveTo(x + startX, y + startY);
+    ctx.quadraticCurveTo(x + controlX, y + controlY, x + endX, y + endY);
     ctx.stroke();
   });
 }
 
+// Ícones dos grupos: quadrado arredondado azul-escuro com o desenho em branco.
 function productionExportGroupIcon(ctx, x, y, name) {
-  productionExportRoundRect(ctx, x, y, 24, 24, 5, PRODUCTION_EXPORT_HEADER);
+  productionExportRoundRect(ctx, x, y, 26, 26, 6, PRODUCTION_EXPORT_HEADER);
   ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 1.5;
   ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
   const group = name.toLocaleLowerCase('pt-BR');
   if (group.includes('fertirrig')) {
+    // Gota com a ponta para cima.
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(x + 12, y + 4);
-    ctx.quadraticCurveTo(x + 4, y + 13, x + 8, y + 18);
-    ctx.quadraticCurveTo(x + 12, y + 23, x + 16, y + 18);
-    ctx.quadraticCurveTo(x + 20, y + 13, x + 12, y + 4);
+    ctx.moveTo(x + 13, y + 5);
+    ctx.quadraticCurveTo(x + 19, y + 11, x + 19, y + 15);
+    ctx.arc(x + 13, y + 15, 6, 0, Math.PI);
+    ctx.quadraticCurveTo(x + 7, y + 11, x + 13, y + 5);
     ctx.stroke();
   } else if (group.includes('trato')) {
+    // Folha pontuda na diagonal com a nervura central.
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
-    ctx.ellipse(x + 12, y + 12, 8, 5, -.65, 0, Math.PI * 2);
+    ctx.moveTo(x + 7, y + 19);
+    ctx.quadraticCurveTo(x + 7, y + 7, x + 19, y + 7);
+    ctx.quadraticCurveTo(x + 19, y + 19, x + 7, y + 19);
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(x + 8, y + 17);
-    ctx.lineTo(x + 17, y + 7);
+    ctx.moveTo(x + 9, y + 17);
+    ctx.lineTo(x + 16, y + 10);
     ctx.stroke();
   } else {
-    [0, 1, 2].forEach(index => {
+    // Preparo e plantio: brotos sobre duas fileiras de solo tracejadas.
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x + 6, y + 12);
+    [[8, 9], [10, 12], [13, 8], [16, 12], [18, 9], [20, 12]].forEach(([pointX, pointY]) =>
+      ctx.lineTo(x + pointX, y + pointY));
+    ctx.stroke();
+    ctx.setLineDash([2, 2]);
+    [16, 20].forEach(rowY => {
       ctx.beginPath();
-      ctx.moveTo(x + 6, y + 7 + index * 5);
-      ctx.lineTo(x + 10, y + 7 + index * 5);
-      ctx.lineTo(x + 12, y + 5 + index * 5);
-      ctx.lineTo(x + 14, y + 7 + index * 5);
-      ctx.lineTo(x + 18, y + 7 + index * 5);
+      ctx.moveTo(x + 6, y + rowY);
+      ctx.lineTo(x + 20, y + rowY);
       ctx.stroke();
     });
+    ctx.setLineDash([]);
   }
 }
 
@@ -229,7 +244,7 @@ function productionExportWrap(ctx, text, width, font) {
 function productionExportStatusLines(ctx, counts) {
   const lines = [];
   let used = 0;
-  for (const state of ['active', 'wet', 'waiting', 'stopped']) {
+  for (const { key: state } of PRODUCTION_STATUS_GROUPS) {
     if (!counts[state]) continue;
     const number = String(counts[state]);
     const label = PRODUCTION_EXPORT_STATE_LABELS[state];
@@ -263,6 +278,16 @@ function productionExportPillLayout(ctx, pill, pillArea) {
   pill.height = Math.max(24, pill.textLines.length * 18 + pill.noteLines.length * 15 + 6);
 }
 
+const PRODUCTION_EXPORT_LOCALIZED_ROW = 'Fertirrigação localizada';
+
+// Frente operacional da Fertirrigação (ex.: "Frente 54"): cadastrada com o tipo
+// "Frente operacional" ou com o nome começando por "Frente".
+function productionExportIsLocalizedFront(item) {
+  const group = String(item.group_name || '').toLocaleLowerCase('pt-BR');
+  if (!group.includes('fertirrig')) return false;
+  return item.display_style === 'front' || /^frente\b/i.test(String(item.service_name || '').trim());
+}
+
 function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
   const groups = new Map();
   const notes = [];
@@ -271,16 +296,21 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
   for (const item of report.items) {
     const groupName = item.group_name || 'OUTROS SERVIÇOS';
     const serviceName = item.service_name || 'Serviço não informado';
+    const sector = item.entry?.sector || 'Sem setor';
+    const localized = productionExportIsLocalizedFront(item);
+    // Frentes da fertirrigação localizada ficam juntas em uma linha, com a
+    // etiqueta "Frente 54 · 3016"; os demais serviços mostram só o setor.
+    const rowName = localized ? PRODUCTION_EXPORT_LOCALIZED_ROW : serviceName;
+    const label = localized ? `${serviceName} · ${sector}` : sector;
     if (!groups.has(groupName)) groups.set(groupName, new Map());
     const services = groups.get(groupName);
-    if (!services.has(serviceName)) services.set(serviceName, []);
+    if (!services.has(rowName)) services.set(rowName, []);
     const state = productionExportStatus(item, statusByCode);
     if (item.is_current_day) counts[state] += 1;
     else counts.pending += 1;
-    const sector = item.entry?.sector || 'Sem setor';
     // Frentes fora de atividade mostram o status cadastrado ao lado do setor.
     const note = state === 'active' ? '' : statusByCode.get(item.entry?.status)?.name || '';
-    services.get(serviceName).push({ label: sector, state, note, pending: !item.is_current_day });
+    services.get(rowName).push({ label, state, note, localized, pending: !item.is_current_day });
     const dated = item.is_current_day || !item.entry?.work_date
       ? '' : ` (${formatIsoDateBr(item.entry.work_date)})`;
     const prefix = `${serviceName}${dated}: `;
@@ -354,16 +384,18 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
     counts, contentHeight, height: Math.max(minHeight, contentHeight) };
 }
 
-// Legenda só com os status usados nas frentes da imagem (ex.: "Solo úmido" só
-// aparece se alguma frente estiver em solo úmido), na ordem do cadastro.
+// Legenda com os grupos de status usados nas frentes da imagem (ex.: o grupo
+// "Solo úmido / mudança / teste" só aparece se alguma frente estiver nele).
+// O status específico de cada frente aparece na própria etiqueta.
 function productionExportLegendLayout(page, statusByCode) {
-  const used = new Set(page.flatMap(report => (report.items || []).map(item => item.entry?.status)));
-  const statuses = [...statusByCode.values()].filter(status => used.has(status.code));
+  const used = new Set(page.flatMap(report => (report.items || [])
+    .map(item => productionExportStatus(item, statusByCode))));
+  const groups = PRODUCTION_STATUS_GROUPS.filter(group => used.has(group.key));
   const font = `bold 18px ${PRODUCTION_EXPORT_FONT}`;
-  const columnWidth = (PRODUCTION_EXPORT_WIDTH - 80) / Math.max(1, statuses.length);
-  const entries = statuses.map((status, index) => ({
-    state: productionExportStatus({ entry: { status: status.code } }, statusByCode),
-    label: status.name,
+  const columnWidth = (PRODUCTION_EXPORT_WIDTH - 80) / Math.max(1, groups.length);
+  const entries = groups.map((group, index) => ({
+    state: group.key,
+    label: group.name,
     x: 40 + index * columnWidth, y: 334, width: Math.max(1, columnWidth - 35)
   }));
   return { entries, font };
@@ -377,9 +409,10 @@ function drawProductionExportHeader(ctx, workDate, pageNumber, totalPages, heigh
   ctx.fillStyle = '#5a6e7b';
   ctx.fillRect(0, 89, PRODUCTION_EXPORT_WIDTH, 3);
   // Faixa com as cores dos status logo abaixo do cabeçalho.
-  ['active', 'wet', 'stopped', 'waiting'].forEach((state, index) => {
-    ctx.fillStyle = PRODUCTION_EXPORT_COLORS[state];
-    ctx.fillRect(index * 270, 352, 270, 7);
+  const stripeWidth = PRODUCTION_EXPORT_WIDTH / PRODUCTION_STATUS_GROUPS.length;
+  PRODUCTION_STATUS_GROUPS.forEach((group, index) => {
+    ctx.fillStyle = group.color;
+    ctx.fillRect(index * stripeWidth, 352, stripeWidth, 7);
   });
 
   const parts = saoPauloDateParts();
@@ -451,7 +484,7 @@ function drawProductionExportCard(ctx, report, plan, x, y) {
   productionExportRoundRect(ctx, x, y, width, plan.height, 14, PRODUCTION_EXPORT_CARD);
   productionExportRoundRect(ctx, x + 1, y + 1, width - 2, plan.height - 2, 14, border, true);
   productionExportRoundRect(ctx, x + 17, y + 24, 5, 43, 2.5, border);
-  productionExportGrass(ctx, x + 37, y + 40);
+  productionExportGrass(ctx, x + 36, y + 36);
   productionExportText(ctx, report.code, x + 80, y + 54, 150,
     `bold 40px ${PRODUCTION_EXPORT_TITLE_FONT}`, PRODUCTION_EXPORT_HEADER);
   ctx.letterSpacing = '1px';
@@ -488,9 +521,9 @@ function drawProductionExportCard(ctx, report, plan, x, y) {
   let cursor = y + plan.headerHeight;
   for (const row of plan.rows) {
     if (row.type === 'group') {
-      productionExportGroupIcon(ctx, x + 17, cursor + 4, row.nameLines.join(' '));
+      productionExportGroupIcon(ctx, x + 17, cursor + 3, row.nameLines.join(' '));
       row.nameLines.forEach((line, index) => productionExportText(ctx, line,
-        x + 49, cursor + 24 + index * 22, 424,
+        x + 51, cursor + 24 + index * 22, 422,
         `bold 19px ${PRODUCTION_EXPORT_TITLE_FONT}`, PRODUCTION_EXPORT_HEADER));
     } else if (row.type === 'service') {
       row.nameLines.forEach((line, lineIndex) => productionExportText(ctx,

@@ -59,8 +59,9 @@
   <script src="/js/reports-export/global-report.js?v={{ asset_version }}"></script>
   <script src="/js/reports-export/sacarose-export.js?v={{ asset_version }}"></script>
   {% if user.role == 'admin' or (user.production_access is defined and user.production_access.enabled) %}
+  <script src="/js/producao/production-status-groups.js?v={{ asset_version }}"></script>
   <script src="/js/producao/production-consolidation.js?v={{ asset_version }}"></script>
-  <script src="/js/producao/production-export.js?v={{ asset_version }}-prod-report-layout-v10"></script>
+  <script src="/js/producao/production-export.js?v={{ asset_version }}-prod-report-layout-v11"></script>
   {% endif %}
   <script src="/js/emissao/emissao.js?v={{ asset_version }}-compact-cards"></script>
 {% endblock %}

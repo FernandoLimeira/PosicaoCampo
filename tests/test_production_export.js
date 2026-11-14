@@ -83,7 +83,7 @@ const context = vm.createContext({
 });
 
 // Helpers puros de data/número (core/format.js) e os scripts de produção da página de emissão.
-loadScripts(context, ['core/format.js', 'producao/production-consolidation.js', 'producao/production-export.js',
+loadScripts(context, ['core/format.js', 'producao/production-status-groups.js', 'producao/production-consolidation.js', 'producao/production-export.js',
   'emissao/emissao.js']);
 
 (async () => {
@@ -277,18 +277,26 @@ loadScripts(context, ['core/format.js', 'producao/production-consolidation.js', 
     ['CUSTOM', { code: 'CUSTOM', name: 'Situação cadastrada', style_key: 'wet', is_active: true }],
     ['OLD', { code: 'OLD', name: 'Status desativado', style_key: 'stopped', is_active: false }]
   ]);
-  // A legenda mostra só os status usados nas frentes da imagem.
+  // A legenda mostra só os grupos de status usados nas frentes da imagem.
   assert.equal(context.productionExportLegendLayout([], configuredStatuses).entries.length, 0,
-    'Sem frentes, nenhum status aparece na legenda');
+    'Sem frentes, nenhum grupo aparece na legenda');
   const configuredLegend = context.productionExportLegendLayout(
     [{ items: [{ entry: { status: 'CUSTOM' } }] }], configuredStatuses);
   assert.equal(configuredLegend.entries.length, 1);
-  assert.equal(configuredLegend.entries[0].label, 'Situação cadastrada');
+  assert.equal(configuredLegend.entries[0].label, 'Solo úmido / mudança / teste');
   assert.equal(configuredLegend.entries[0].state, 'wet');
   const legacyLegend = context.productionExportLegendLayout(
     [{ items: [{ entry: { status: 'OLD' } }] }], configuredStatuses);
-  assert.deepEqual(Array.from(legacyLegend.entries, entry => entry.label), ['Status desativado'],
-    'Status desativado ainda usado consta; o cadastrado sem uso não aparece');
+  assert.deepEqual(Array.from(legacyLegend.entries, entry => entry.label), ['Parado / oficina / crítico'],
+    'Status desativado ainda usado conta para o grupo; grupo sem uso não aparece');
+  const allGroups = context.productionExportLegendLayout([{ items: ['ATIVO', 'UMIDO', 'AGUARDA', 'CRITICO']
+    .map(status => ({ entry: { status } })) }], mixedStatuses);
+  assert.deepEqual(Array.from(allGroups.entries, entry => entry.label), ['Em atividade',
+    'Solo úmido / mudança / teste', 'Aguardando atividade', 'Parado / oficina / crítico']);
+  assert.ok(allGroups.entries.every((entry, index, entries) => entry.y === 334
+    && entry.width > 0 && entry.x + 25 + entry.width <= 1040
+    && (index === entries.length - 1 || entry.x + 25 + entry.width < entries[index + 1].x)),
+  'Todos os grupos devem ficar alinhados dentro da imagem e sem sobreposição');
   const manyStatuses = new Map(Array.from({ length: 9 }, (_, index) => [String(index), {
     code: String(index), name: `Status ${index}`, style_key: 'active'
   }]));
@@ -296,18 +304,28 @@ loadScripts(context, ['core/format.js', 'producao/production-consolidation.js', 
     ['PPT', 'NRD', 'RBR', 'PST'].map((code, unitIndex) => ({ code, items: unitIndex ? [] : Array.from({ length: 9 },
       (_, index) => ({ group_name: 'G', service_name: `F${index}`, is_current_day: true, entry: { sector: '1', status: String(index) } })) })),
     manyStatuses);
-  assert.equal(expandedGrid.legend.entries.length, 9);
-  assert.equal(expandedGrid.firstY, 370, 'A legenda deve permanecer em uma linha sem deslocar os cartões');
-  assert.ok(expandedGrid.legend.entries.every((entry, index, entries) => entry.y === 334
-    && entry.width > 0 && entry.x + 25 + entry.width <= 1040
-    && (index === entries.length - 1 || entry.x + 25 + entry.width < entries[index + 1].x)),
-  'Todos os status devem ficar alinhados dentro da imagem e sem sobreposição');
-  const longLabel = 'Status cadastrado com uma descrição extensa para a operação agrícola';
-  const longLegend = context.productionExportLegendLayout([{ items: [{ entry: { status: 'LONG' } }] }], new Map([
-    ['LONG', { code: 'LONG', name: longLabel, style_key: 'active' }]
-  ]));
-  assert.equal(longLegend.entries[0].label, longLabel, 'O nome completo deve ser preservado');
-  assert.equal(longLegend.entries[0].y, 334);
+  assert.equal(expandedGrid.legend.entries.length, 1, 'Vários status do mesmo grupo viram uma entrada');
+  assert.equal(expandedGrid.firstY, 370);
+
+  // Fertirrigação localizada: frentes juntas em uma linha com "Frente N · setor".
+  const fertPlan = context.productionExportCardPlan(paint, { code: 'NRD', items: [
+    { group_name: 'Fertirrigação', service_name: 'Fertirrigação convencional', display_style: 'operation',
+      is_current_day: true, entry: { sector: '3815', status: 'ATIVO' } },
+    { group_name: 'Fertirrigação', service_name: 'Frente 54', display_style: 'front',
+      is_current_day: true, entry: { sector: '3016', status: 'ATIVO' } },
+    { group_name: 'Fertirrigação', service_name: 'Frente 56', display_style: 'operation',
+      is_current_day: true, entry: { sector: '3516', status: 'CRITICO' } },
+    { group_name: 'Preparo e Plantio', service_name: 'Frente de plantio', display_style: 'front',
+      is_current_day: true, entry: { sector: '10', status: 'ATIVO' } }
+  ] }, mixedStatuses, 0);
+  const fertRows = fertPlan.rows.filter(row => row.type === 'service');
+  assert.deepEqual(Array.from(fertRows, row => row.nameLines.join(' ').replace(/\s+/g, '')),
+    ['Fertirrigaçãoconvencional', 'Fertirrigaçãolocalizada', 'Frentedeplantio']);
+  assert.deepEqual(Array.from(fertRows[1].lines.flatMap(line => line.pills), pill => pill.label),
+    ['Frente 54 · 3016', 'Frente 56 · 3516']);
+  assert.equal(fertRows[1].lines.flatMap(line => line.pills)[1].state, 'stopped');
+  assert.equal(fertRows[0].lines[0].pills[0].label, '3815');
+  assert.equal(fertRows[2].lines[0].pills[0].label, '10', 'Só a Fertirrigação junta as frentes');
 
   await button.click({ currentTarget: button });
   assert.equal(button.disabled, false);
@@ -327,9 +345,9 @@ loadScripts(context, ['core/format.js', 'producao/production-consolidation.js', 
   assert.ok(labels.includes('Chuva:'));
   assert.ok(!labels.some(value => value.includes('dados não enviados')));
   assert.ok(labels.includes('PRODUÇÃO AGRÍCOLA'));
-  assert.ok(labels.includes('Status removido do cadastro'));
+  assert.ok(labels.includes('Solo úmido / mudança / teste'));
   assert.ok(!labels.includes('Status excluído sem uso nesta imagem'));
-  // Legenda só com os status usados nas frentes (aqui: Em atividade e o status antigo).
+  // Legenda só com os grupos usados nas frentes (aqui: Em atividade e o grupo do status antigo).
   assert.ok(labels.includes('Em atividade'));
   assert.ok(!labels.includes('Parado'));
   assert.ok(!labels.includes('Parado / crítico'));
@@ -338,7 +356,7 @@ loadScripts(context, ['core/format.js', 'producao/production-consolidation.js', 
   assert.ok(!labels.includes('Solo úmido / teste'));
   assert.ok(labels.includes('Nenhum lançamento nesta unidade.'));
   assert.ok(labels.some(value => value.startsWith('Unidade não liberada')));
-  assert.ok(labels.includes('Frente 19'));
+  assert.ok(labels.includes('Frente 19 · 3392'));
   assert.equal(context.productionExportRainText({ rain_turn_mm: 3, rain_accumulated_mm: 5 }),
     'Chuva: turno 3 mm | acumulado 5 mm');
   // Sem volume lançado no turno o quadro de chuva não aparece.

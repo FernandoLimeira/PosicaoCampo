@@ -1,10 +1,8 @@
 // Produção Agrícola: lançamentos do dia, filtros, chuva e inicialização da página.
-const PRODUCTION_STATUS_STYLES = {
-  active: { className: 'is-active', label: 'Verde' },
-  wet: { className: 'is-wet', label: 'Amarelo' },
-  waiting: { className: 'is-waiting', label: 'Cinza' },
-  stopped: { className: 'is-stopped', label: 'Vermelho' }
-};
+// Classe visual e rótulo de cada grupo de status (production-status-groups.js).
+const PRODUCTION_STATUS_STYLES = Object.fromEntries(PRODUCTION_STATUS_GROUPS.map(group => [
+  group.key, { className: `is-${group.key}`, label: group.name }
+]));
 
 const PRODUCTION_UNIT_NAMES = {
   PPT: 'Paraguaçu Paulista',

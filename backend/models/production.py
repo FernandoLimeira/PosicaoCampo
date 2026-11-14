@@ -310,7 +310,7 @@ def save_status(user_id: int, payload: Any, *, status_id: int | None = None) -> 
     name = _clean_text(payload.get("name"), "o nome do status", 80, required=True)
     style_key = str(payload.get("style_key") or "waiting").strip().lower()
     if style_key not in STATUS_STYLE_KEYS:
-        raise ValueError("Cor do status inválida.")
+        raise ValueError("Grupo do status inválido.")
     position = _normalize_position(payload.get("position", 0))
     is_active = payload.get("is_active", True)
     if not isinstance(is_active, bool):

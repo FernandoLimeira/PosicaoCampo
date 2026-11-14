@@ -231,8 +231,19 @@ async function deleteConfigFront(frontId, frontName = '') {
   }
 }
 
+// As opções do campo "Grupo" vêm da definição única dos grupos de status.
+function renderStatusGroupOptions() {
+  const select = document.querySelector('#production-status-style');
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = PRODUCTION_STATUS_GROUPS.map(group =>
+    `<option value="${group.key}">● ${escapeHtml(group.name)}</option>`).join('');
+  if (current) select.value = current;
+}
+
 async function loadProductionConfigStatuses() {
   productionConfigStatuses = await loadProductionStatuses({ includeInactive: true });
+  renderStatusGroupOptions();
   renderProductionStatusConfigList();
   return productionConfigStatuses;
 }

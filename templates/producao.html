@@ -204,7 +204,7 @@
         <form id="production-status-form" class="production-config-form production-config-form-collapsible">
           <input id="production-status-id" type="hidden" />
           <label class="field"><span>Nome</span><input id="production-status-name" type="text" maxlength="80" autocomplete="off" required placeholder="Ex.: Em atividade" /></label>
-          <label class="field"><span>Cor</span><select id="production-status-style" required><option value="active">Verde</option><option value="wet">Amarelo</option><option value="waiting">Cinza</option><option value="stopped">Vermelho</option></select></label>
+          <label class="field"><span>Grupo</span><select id="production-status-style" required><option value="active">● Em atividade</option><option value="wet">● Solo úmido / mudança / teste</option><option value="waiting">● Aguardando atividade</option><option value="stopped">● Parado / oficina / crítico</option></select></label>
           <label class="field"><span>Ordem</span><input id="production-status-position" type="number" min="0" max="9999" inputmode="numeric" /></label>
           <div class="production-config-form-actions">
             <button class="production-secondary-button" type="button" id="production-status-clear">Cancelar</button>
@@ -488,9 +488,10 @@
 {% endblock %}
 
 {% block scripts %}
+  <script src="/js/producao/production-status-groups.js?v={{ asset_version }}"></script>
   <script src="/js/producao/production-consolidation.js?v={{ asset_version }}"></script>
-  <script src="/js/producao/production-config.js?v={{ asset_version }}"></script>
-  <script src="/js/producao/producao.js?v={{ asset_version }}-front-notes"></script>
+  <script src="/js/producao/production-config.js?v={{ asset_version }}-status-groups"></script>
+  <script src="/js/producao/producao.js?v={{ asset_version }}-status-groups"></script>
   <script src="/js/producao/service-orders.js?v={{ asset_version }}"></script>
   <script src="/js/producao/production-sheet.js?v={{ asset_version }}"></script>
   <script src="/js/producao/production-dashboard.js?v={{ asset_version }}"></script>
