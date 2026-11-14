@@ -1,0 +1,50 @@
+/* Entrega CTT: pesagem, moagem e consultas SQL salvas. */
+.delivery-header { align-items: flex-end; }
+.delivery-header-actions { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.delivery-date { min-width: 160px; margin: 0; }
+.delivery-import { display: inline-flex; align-items: center; cursor: pointer; white-space: nowrap; }
+.delivery-import.is-busy { opacity: .6; pointer-events: none; }
+.delivery-reference { margin: 0 0 14px; color: #5f6d74; font-size: 12px; }
+
+.delivery-card { margin-bottom: 16px; border: 1px solid var(--data-border); border-radius: 10px; background: #fff; box-shadow: var(--data-shadow); overflow: hidden; }
+.delivery-card > header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #e5eaec; }
+.delivery-card h2 { margin: 0; color: #1f262a; font-size: 16px; }
+.delivery-card h2 small { margin-left: 6px; color: #6c777d; font-size: 12px; font-weight: 600; }
+.delivery-card > header span { color: #6c777d; font-size: 12px; }
+
+.delivery-table-wrap { overflow-x: auto; }
+.delivery-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.delivery-table th, .delivery-table td { padding: 8px 14px; border-bottom: 1px solid #edf1f2; text-align: right; white-space: nowrap; }
+.delivery-table thead th { color: #5f6d74; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .3px; background: var(--data-alternate); }
+.delivery-table th small { display: block; color: #8a9397; font-size: 10px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+.delivery-table th:first-child, .delivery-table td:first-child { text-align: left; }
+.delivery-table tbody th strong { display: block; color: #1f262a; font-size: 14px; }
+.delivery-table tbody tr:last-child > * { border-bottom: 0; }
+
+.delivery-fronts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.delivery-fronts .delivery-card { margin-bottom: 0; }
+.delivery-front-table td:first-child strong { margin-right: 6px; }
+.delivery-tag { display: inline-block; padding: 1px 7px; border-radius: 999px; background: #fdeedf; color: #b5560c; font-size: 10px; font-weight: 800; }
+.delivery-front-table tr.is-external td { background: #fffaf5; }
+.delivery-empty { margin: 0; padding: 18px; color: #6c777d; font-size: 13px; }
+
+.delivery-query { padding: 16px 20px; border-bottom: 1px solid #edf2ef; }
+.delivery-query:last-child { border-bottom: 0; }
+.delivery-query-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.delivery-query-head strong { display: block; color: #1f262a; font-size: 15px; }
+.delivery-query-head small { display: block; margin-top: 3px; color: #8a9397; font-size: 11px; }
+.delivery-query-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.delivery-query-copy { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 12px; border: 1px solid #bcd3f2; border-radius: 6px; background: #eef4fd; color: #2462b8; font-size: 11px; font-weight: 800; cursor: pointer; }
+.delivery-query-copy svg { width: 15px; height: 15px; }
+.delivery-query-sql { max-height: 190px; margin: 10px 0 0; padding: 12px 14px; overflow: hidden; border-radius: 8px; background: var(--data-alternate); color: #303c42; font: 12px/1.5 Consolas, "Courier New", monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.delivery-query.is-expanded .delivery-query-sql { max-height: none; }
+.delivery-query-toggle { margin-top: 6px; border: 0; background: transparent; color: var(--green-strong); font-size: 11px; font-weight: 800; cursor: pointer; }
+.delivery-query-modal { width: min(860px, 100%); }
+.delivery-query-form { display: grid; gap: 12px; padding: 18px 24px; overflow-y: auto; }
+.delivery-query-form textarea { min-height: 300px; font: 12px/1.5 Consolas, "Courier New", monospace; white-space: pre; tab-size: 4; resize: vertical; }
+.delivery-clipboard { position: fixed; opacity: 0; }
+
+@media (max-width: 900px) {
+  .delivery-fronts { grid-template-columns: minmax(0, 1fr); }
+  .delivery-header-actions { width: 100%; }
+}

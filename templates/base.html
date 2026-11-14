@@ -35,6 +35,9 @@
         {% if user.module_access.dashboard.view or user.module_access.sacarose.view %}
         <button id="ctt-toggle" class="nav-link nav-reports-toggle{% if page in ['dashboard', 'sacarose'] %} is-active{% endif %}" type="button" aria-expanded="false" aria-controls="ctt-flyout">{{ icon('dashboard') }}<span>CTT</span></button>
         {% endif %}
+        {% if user.module_access.dashboard.view %}
+        <button id="delivery-toggle" class="nav-link nav-reports-toggle{% if page in ('delivery', 'delivery_queries') %} is-active{% endif %}" type="button" aria-expanded="false" aria-controls="delivery-flyout">{{ icon('delivery') }}<span>Entrega CTT</span></button>
+        {% endif %}
         {% if user.role == 'admin' or (user.production_access is defined and user.production_access.enabled) %}
         <button id="production-toggle" class="nav-link nav-reports-toggle{% if page in ('production', 'service_orders', 'production_queries', 'production_catalog') %} is-active{% endif %}" type="button" aria-expanded="false" aria-controls="production-flyout">{{ icon('production') }}<span>Produção Agrícola</span></button>
         {% endif %}
@@ -85,6 +88,15 @@
         ] %}
         {% if user.module_access[key].view %}<a class="nav-link{% if page == key %} is-active{% endif %}" href="{{ href }}" data-unit-context{% if page == key %} aria-current="page"{% endif %}>{{ icon(key) }}<span>{{ label }}</span></a>{% endif %}
         {% endfor %}
+      </div>
+    </nav>
+    {% endif %}
+    {% if user.module_access.dashboard.view %}
+    <nav id="delivery-flyout" class="nav-report-flyout" aria-label="Entrega CTT" hidden>
+      <div class="nav-report-heading"><strong>Entrega CTT</strong></div>
+      <div class="nav-report-items">
+        <a class="nav-link{% if page == 'delivery' %} is-active{% endif %}" href="/entrega-ctt"{% if page == 'delivery' %} aria-current="page"{% endif %}>{{ icon('delivery') }}<span>Pesagem e moagem</span></a>
+        <a class="nav-link{% if page == 'delivery_queries' %} is-active{% endif %}" href="/entrega-ctt/consultas"{% if page == 'delivery_queries' %} aria-current="page"{% endif %}>{{ icon('sql') }}<span>Consultas SQL</span></a>
       </div>
     </nav>
     {% endif %}

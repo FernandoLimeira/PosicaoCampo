@@ -65,6 +65,8 @@ class WeighingTests(unittest.TestCase):
             load("401", "5", "404", "90428", "1", "32000", "14/11/2026 15:20:00"),
             load("401", "6", "402", "67742", "2", "31000", "14/11/2026 15:35:00"),
             load("999", "7", "1", "1", "1", "1000", "14/11/2026 15:00:00"),  # indústria desconhecida
+            # NRD: carga que entrou no pátio às 15:40 (o arquivo está completo até aí).
+            load("204", "8", "20", "300", "3500", "", "", patio="14/11/2026 15:40:00"),
         ])
 
     def test_parse_maps_instances_sector_and_section(self):
@@ -89,7 +91,7 @@ class WeighingTests(unittest.TestCase):
     def test_import_upserts_by_release(self):
         records = parse_weighing_file(self.file(), "a.xlsx")["records"]
         first = weighings.import_weighings(self.admin["id"], records, filename="a.xlsx")
-        self.assertEqual((first["created"], first["updated"], first["pending"]), (6, 0, 1))
+        self.assertEqual((first["created"], first["updated"], first["pending"]), (7, 0, 2))
         # A carga que estava no pátio foi pesada no arquivo seguinte: atualiza, não duplica.
         pending = next(record for record in records if record["release_no"] == "4")
         pending.update(scale_out_at=pending["patio_at"] + 7 * 3600, net_kg=35000.0, movement_date="2026-11-14")
@@ -111,7 +113,8 @@ class WeighingTests(unittest.TestCase):
         # Turno B: 100 t em 8h15 (07:20-15:35).
         self.assertEqual(ppt["milling_shift_tph"], round(100 / 8.25, 1))
         # Entrega pela entrada no pátio (08:00): entrou no turno B, mas não nas últimas 3 h.
-        self.assertEqual(ppt["delivery_shift_tph"], round(100 / 8.25, 1))
+        # A carga ainda no pátio entra com o peso médio das pesadas (100 t / 3 = 33,3 t).
+        self.assertEqual(ppt["delivery_shift_tph"], round((100 + 100 / 3) / 8.25, 1))
         self.assertEqual(ppt["delivery_last3h_tph"], 0)
         # ATR ponderado pelo peso.
         self.assertEqual(ppt["atr"], round((120 * 36 + 130 * 34 + 127.91 * 30) / 100, 2))
@@ -127,6 +130,21 @@ class WeighingTests(unittest.TestCase):
         self.assertEqual(support, {("19", "NRD", "PPT"), ("402", "RBR", "PST")})
         self.assertEqual(summary["last_import"]["imported_by_name"], "Admin")
 
+    def test_reference_stops_at_last_patio_entry(self):
+        # Arquivo com entradas no pátio só até 10:00, mas uma saída às 12:00: a referência
+        # fica em 10:00 e a saída das 12:00 não entra na moagem (fica para a próxima importação).
+        weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx([HEADER,
+            load("201", "1", "5", "361", "1173", "30000", "14/11/2026 09:00:00", patio="14/11/2026 08:00:00"),
+            load("201", "2", "5", "361", "1173", "30000", "14/11/2026 12:00:00", patio="14/11/2026 10:00:00"),
+        ]), "a.xlsx")["records"])
+        summary = weighings.weighing_summary("2026-11-14")
+        ppt = summary["units"][0]
+        self.assertEqual(summary["reference_at"], 1794661200)  # 14/11/2026 10:00 (Brasília)
+        self.assertEqual(ppt["milling_day_t"], 30.0)
+        # A segunda carga estava no pátio às 10:00: estoque, e entrega com o peso médio.
+        self.assertEqual(ppt["stock_loads"], 1)
+        self.assertEqual(ppt["delivery_last3h_tph"], round(60 / 3, 1))
+
     def test_summary_without_data(self):
         summary = weighings.weighing_summary("2026-11-13")
         self.assertIsNone(summary["reference_at"])
@@ -135,10 +153,29 @@ class WeighingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Data"):
             weighings.weighing_summary("14/11/2026")
 
+    def test_saved_queries(self):
+        saved = weighings.save_delivery_query(self.admin["id"], {"name": "  Pesagem   do dia ", "sql": "SELECT 1\nFROM dual"})
+        self.assertEqual(saved["name"], "Pesagem do dia")
+        self.assertEqual(saved["updated_by"], "Admin")
+        updated = weighings.save_delivery_query(self.admin["id"], {"name": "Pesagem", "sql": "SELECT 2"}, query_id=saved["id"])
+        self.assertEqual([query["sql"] for query in weighings.list_delivery_queries()], ["SELECT 2"])
+        self.assertEqual(updated["id"], saved["id"])
+        for payload, message in (({"name": "", "sql": "SELECT 1"}, "nome"), ({"name": "A", "sql": " "}, "SQL"),
+                                 ({"name": "A", "sql": "x" * 20001}, "20.000")):
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                weighings.save_delivery_query(self.admin["id"], payload)
+        weighings.delete_delivery_query(saved["id"])
+        self.assertEqual(weighings.list_delivery_queries(), [])
+        with self.assertRaisesRegex(ValueError, "não encontrada"):
+            weighings.delete_delivery_query(saved["id"])
+
     def test_permissions(self):
         self.assertEqual(module_access.required_permission("/api/weighings/import", "POST"), (("dashboard",), "edit"))
         self.assertEqual(module_access.required_permission("/api/weighings/summary", "GET"),
                          (("dashboard", "emission"), "view"))
+        self.assertEqual(module_access.required_permission("/api/delivery/queries", "GET"), (("dashboard",), "view"))
+        self.assertEqual(module_access.required_permission("/api/delivery/queries", "POST"), (("dashboard",), "edit"))
+        self.assertEqual(module_access.required_permission("/api/delivery/queries/3", "DELETE"), (("dashboard",), "edit"))
 
 
 if __name__ == "__main__":

@@ -18,8 +18,7 @@
           </div>
           <div class="dashboard-heading-actions">
             <span id="preview-unit-state" class="unit-state dashboard-unit-state"></span>
-            {% if user.module_access.dashboard.edit %}<label class="modal-button secondary dashboard-import-button" title="Importar o Excel de pesagem da balança (cargas do dia)">Importar pesagem<input id="weighing-import-file" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" hidden /></label>
-            <button id="open-data-modal" class="dashboard-fill-button" type="button">Preencher</button>{% endif %}
+            {% if user.module_access.dashboard.edit %}<button id="open-data-modal" class="dashboard-fill-button" type="button">Preencher</button>{% endif %}
           </div>
         </section>
 

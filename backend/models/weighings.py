@@ -3,13 +3,16 @@
 Regras do resumo (data ``work_date``):
 - Moagem: peso líquido (QT_LIQUIDO) pelo horário de saída da balança.
   Moagem do dia = cargas com saída da balança e data de movimento no dia.
-- Entrega: peso líquido pelo horário de entrada no pátio (só cargas já pesadas,
-  porque a carga no pátio ainda não tem peso).
-- Referência ("dados até"): horário da última saída da balança no dia. As taxas usam
-  essa referência para não diluir quando o arquivo é importado algum tempo depois.
+- Entrega: cargas pelo horário de entrada no pátio. Carga já pesada usa o peso
+  líquido; carga ainda no pátio usa o peso médio das cargas pesadas da unidade no dia.
+- Referência ("dados até"): horário da última saída da balança no dia, limitado à
+  última entrada no pátio (até onde o arquivo está completo). As taxas usam essa
+  referência para não diluir quando o arquivo é importado algum tempo depois.
 - Turno (t/h): toneladas desde o início do turno da referência ÷ horas decorridas.
 - Últimas 3 h (t/h): toneladas nas 3 h até a referência ÷ 3.
-- Estoque: cargas no pátio (entraram e ainda não foram pesadas) nas 24 h até a referência.
+- Estoque: cargas que entraram no pátio (nas 24 h até a referência) e ainda não
+  tinham saído da balança na referência.
+- Todas as unidades (inclusive o Polo MS) usam o mesmo horário e os mesmos turnos.
 - Frente de outra unidade: a frente é procurada nas frentes da Posição de Campo de
   cada unidade; se pertence a outra, conta como ATR recebido nesta e apoio daquela.
 """
@@ -150,10 +153,23 @@ def weighing_summary(work_date: Any = None) -> dict[str, Any]:
         weighed = conn.execute(
             "SELECT * FROM field_weighings WHERE scale_out_at IS NOT NULL AND movement_date=?", (day,)
         ).fetchall()
-        reference = max((row["scale_out_at"] for row in weighed), default=None)
-        stock_rows = conn.execute(
-            "SELECT unit_code, front, patio_at FROM field_weighings WHERE scale_out_at IS NULL AND patio_at BETWEEN ? AND ?",
-            ((reference or day_start + 86399) - STOCK_WINDOW_SECONDS, reference or day_start + 86399),
+        # Referência = momento em que o arquivo está completo: a última saída da balança,
+        # limitada à última entrada no pátio. O SELECT traz as cargas que entraram até um
+        # horário; depois dele faltam cargas novas e as taxas ficariam diluídas. Saídas
+        # após a referência ficam para a próxima importação.
+        last_exit = max((row["scale_out_at"] for row in weighed), default=None)
+        last_entry = conn.execute(
+            "SELECT MAX(patio_at) FROM field_weighings WHERE patio_at BETWEEN ? AND ?",
+            (day_start, day_start + 86399),
+        ).fetchone()[0]
+        reference = min(value for value in (last_exit, last_entry) if value) if last_exit else None
+        weighed = [row for row in weighed if reference and row["scale_out_at"] <= reference]
+        # Cargas que entraram no pátio nas 24 h até a referência (pesadas ou não):
+        # base da entrega e do estoque.
+        reference_end = reference or day_start + 86399
+        arrival_rows = conn.execute(
+            "SELECT unit_code, patio_at, scale_out_at, net_kg FROM field_weighings WHERE patio_at BETWEEN ? AND ?",
+            (reference_end - STOCK_WINDOW_SECONDS, reference_end),
         ).fetchall()
         last_import = conn.execute(
             """SELECT w.import_file, w.imported_at, u.name AS imported_by_name
@@ -170,9 +186,16 @@ def weighing_summary(work_date: Any = None) -> dict[str, Any]:
         rows = [row for row in weighed if row["unit_code"] == code]
         shift_rows = [row for row in rows if shift and row["scale_out_at"] >= shift["start_at"]]
         recent_rows = [row for row in rows if last_start is not None and row["scale_out_at"] > last_start]
-        arrived = [row for row in rows if row["patio_at"] is not None and reference and row["patio_at"] <= reference]
-        delivery_shift = [row for row in arrived if row["patio_at"] >= shift["start_at"]] if shift else []
-        delivery_recent = [row for row in arrived if row["patio_at"] > last_start] if reference else []
+        arrivals = [row for row in arrival_rows if row["unit_code"] == code]
+        # Estoque: entrou no pátio e ainda não tinha saído da balança na referência.
+        stock = [row for row in arrivals if row["scale_out_at"] is None or row["scale_out_at"] > reference_end]
+        # Entrega: carga que entrou no pátio. Já pesada usa o peso real; ainda no pátio
+        # usa o peso médio das cargas pesadas da unidade no dia.
+        average_kg = sum(row["net_kg"] or 0 for row in rows) / len(rows) if rows else 0
+
+        def delivered_tons(start):
+            return sum((row["net_kg"] or 0) if row not in stock else average_kg
+                       for row in arrivals if row["patio_at"] >= start) / 1000
         fronts: dict[str, list] = {}
         for row in rows:
             fronts.setdefault(row["front"], []).append(row)
@@ -197,9 +220,9 @@ def weighing_summary(work_date: Any = None) -> dict[str, Any]:
             "loads_day": len(rows),
             "milling_shift_tph": _round(_tons(shift_rows) / shift_hours) if shift_hours else None,
             "milling_last3h_tph": _round(_tons(recent_rows) / LAST_HOURS) if reference else None,
-            "delivery_shift_tph": _round(_tons(delivery_shift) / shift_hours) if shift_hours else None,
-            "delivery_last3h_tph": _round(_tons(delivery_recent) / LAST_HOURS) if reference else None,
-            "stock_loads": sum(1 for row in stock_rows if row["unit_code"] == code),
+            "delivery_shift_tph": _round(delivered_tons(shift["start_at"]) / shift_hours) if shift_hours else None,
+            "delivery_last3h_tph": _round(delivered_tons(last_start) / LAST_HOURS) if reference else None,
+            "stock_loads": len(stock),
             "atr": _weighted_atr(rows),
             "fronts": front_list,
             "received": [front for front in front_list if front["external"]],

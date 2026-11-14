@@ -26,6 +26,7 @@ const PAGE_SCRIPTS = {
   '/relatorios': [...BASE_SCRIPTS, 'relatorios/relatorios.js'],
   '/retornos': [...BASE_SCRIPTS, 'retornos/return-analysis.js'],
   '/historico': [...BASE_SCRIPTS, 'historico/historico.js'],
+  '/entrega-ctt': [...BASE_SCRIPTS, 'entrega/entrega.js'],
   '/usuarios': [...BASE_SCRIPTS, 'usuarios/usuarios.js'],
 };
 
@@ -33,6 +34,7 @@ const PAGE_TEMPLATES = {
   '/': 'index.html', '/sacarose': 'sacarose.html', '/producao': 'producao.html',
   '/emitir-posicao-global': 'emissao.html', '/setores': 'setores.html', '/relatorios': 'relatorios.html',
   '/retornos': 'retornos.html', '/historico': 'historico.html', '/usuarios': 'usuarios.html',
+  '/entrega-ctt': 'entrega.html',
 };
 
 // Emissão individual: nenhuma página a carrega (somente os testes).
