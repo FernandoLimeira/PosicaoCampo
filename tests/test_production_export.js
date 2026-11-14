@@ -307,12 +307,14 @@ loadScripts(context, ['core/format.js', 'producao/production-status-groups.js', 
   assert.equal(expandedGrid.legend.entries.length, 1, 'Vários status do mesmo grupo viram uma entrada');
   assert.equal(expandedGrid.firstY, 370);
 
-  // Polo MS (RBR e PST): a etiqueta leva a seção ("setor / seção"); Polo SP só o setor.
+  // Polo MS (RBR e PST): a etiqueta mostra só a seção; Polo SP só o setor.
   const sectionItems = [
     { service_front_id: 1, group_name: 'Preparo e Plantio', service_name: 'Plantio mecanizado', is_current_day: true,
       entry: { id: 1, sector: '90253', section: '12', status: 'ATIVO' } },
     { service_front_id: 1, group_name: 'Preparo e Plantio', service_name: 'Plantio mecanizado', is_current_day: true,
       entry: { id: 2, sector: '90253', section: '14', status: 'ATIVO' } },
+    { service_front_id: 1, group_name: 'Preparo e Plantio', service_name: 'Plantio mecanizado', is_current_day: true,
+      entry: { id: 5, sector: '90260', section: '12', status: 'ATIVO' } },
     { service_front_id: 3, group_name: 'Preparo e Plantio', service_name: 'Sulcação', is_current_day: true,
       entry: { id: 4, sector: '90300', section: '', status: 'ATIVO' } },
     { service_front_id: 2, group_name: 'Fertirrigação', service_name: 'Frente 7', display_style: 'front', is_current_day: true,
@@ -325,11 +327,11 @@ loadScripts(context, ['core/format.js', 'producao/production-status-groups.js', 
       .flatMap(row => row.lines).flatMap(line => line.pills), pill => pill.label);
   };
   for (const code of ['RBR', 'PST']) {
-    assert.deepEqual(pillLabels(code), ['90253 / 12', '90253 / 14', '90300', 'Frente 7 · 61444 / 3'],
-      `${code}: setor / seção, sem unir seções diferentes do mesmo setor`);
+    assert.deepEqual(pillLabels(code), ['12', '14', '90300', 'Frente 7 · 3'],
+      `${code}: só a seção (uma etiqueta por seção); sem seção, o setor`);
   }
   for (const code of ['PPT', 'NRD']) {
-    assert.deepEqual(pillLabels(code), ['90253', '90300', 'Frente 7 · 61444'], `${code}: só o setor`);
+    assert.deepEqual(pillLabels(code), ['90253', '90260', '90300', 'Frente 7 · 61444'], `${code}: só o setor`);
   }
 
   // Fertirrigação localizada: frentes juntas em uma linha com "Frente N · setor".

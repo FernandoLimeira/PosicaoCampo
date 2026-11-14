@@ -942,7 +942,8 @@
 .pfd-op-line { display: flex; gap: 8px; margin: 0; color: #303c42; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .pfd-op-line b { flex: 0 0 auto; min-width: 86px; color: #7a8489; font-weight: 700; }
 .pfd-note { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--data-alternate); color: #303c42; font-size: 13px; }
-.pdash-detail-actions { display: flex; justify-content: flex-end; }
+/* Remover à esquerda e Editar frente à direita, separados. */
+.pdash-detail-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--data-border); }
 
 /* Resumo analítico da unidade (topo do painel). */
 .pdash-overview { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
@@ -1085,8 +1086,6 @@ button.pdash-kpi.is-amber.is-active { box-shadow: 0 0 0 3px rgba(213, 163, 38, .
 /* Cartão da frente: clicável (detalhe) + botão de editar no canto. */
 .pdash-tile[data-panel-detail] { cursor: pointer; }
 .pdash-tile[data-panel-detail]:focus-visible { outline: 3px solid rgba(103, 126, 138, .45); outline-offset: 2px; }
-.pdash-tile-edit { flex: 0 0 auto; width: 30px; height: 30px; min-height: 0; display: inline-grid; place-items: center; padding: 0; border-radius: 8px; }
-.pdash-tile-edit svg { width: 15px; height: 15px; }
 
 /* ===== Status com as cores harmonizadas da paleta (cartões, barras, resumo, selos) ===== */
 .production-summary-item.is-active, .production-summary-item.is-active::before { border-left-color: var(--status-ok); }
@@ -1120,7 +1119,6 @@ button.pdash-kpi.is-amber.is-active { box-shadow: 0 0 0 3px rgba(213, 163, 38, .
 .pdash-status-icon.is-wet { background: var(--status-wet-soft); color: var(--status-wet); }
 .pdash-status-icon.is-stopped { background: var(--production-stop-soft); color: var(--production-stop); }
 .pdash-tile-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; min-height: 30px; }
-.pdash-tile-meta .pdash-tile-edit { margin-left: auto; }
 .pdash-tile-meta .pdash-stale { padding: 2px 8px; border-radius: 999px; background: var(--status-wet-soft); color: var(--status-wet-text); }
 .pdash-tile-ops { gap: 4px; padding-top: 7px; border-top: 1px solid #edf0f2; }
 .pdash-tile-op { gap: 7px; }

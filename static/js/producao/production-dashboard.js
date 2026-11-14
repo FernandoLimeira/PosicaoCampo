@@ -210,10 +210,7 @@ function dashboardFrontTile(item) {
     ? '<span class="pdash-os is-missing" title="No Polo MS a O.S. confere por setor e seção">Informe a seção</span>' : '';
   const stale = item.is_current_day ? ''
     : `<span class="pdash-stale">${dashboardIcon('clock')}${entry.work_date ? `Último registro ${escapeHtml(formatIsoDateBr(entry.work_date))}` : 'Sem registro'}</span>`;
-  // Cartão clicável (abre o detalhe, também por Enter/Espaço) com botão próprio de editar.
-  const edit = canFillProduction()
-    ? `<button type="button" class="pdash-tile-edit icon-edit-button" data-panel-edit="${item.id}" title="Editar frente"
-        aria-label="Editar ${escapeHtml(item.service_name || 'frente')}">${PENCIL_ICON}</button>` : '';
+  // Cartão clicável (abre o detalhe, também por Enter/Espaço); editar fica só dentro do detalhe.
   const updated = dashboardUpdatedLabel(item);
   return `<article tabindex="0" role="button" data-panel-detail="${item.id}" class="pdash-tile ${meta.className}${item.is_current_day ? '' : ' is-stale'}" title="${escapeHtml(`${item.service_name} · ${meta.name} · ver detalhes`)}">
       <span class="pdash-tile-name">
@@ -223,7 +220,6 @@ function dashboardFrontTile(item) {
       <span class="pdash-tile-meta">
         <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
         ${stale}
-        ${edit}
       </span>
       <span class="pdash-place">${dashboardIcon('pin')}<span>Setor ${escapeHtml(entry.sector || '-')}${entry.section ? ` / ${escapeHtml(entry.section)}` : ''}${entry.farm ? ` · ${escapeHtml(entry.farm)}` : ''}</span></span>
       <span class="pdash-tile-ops">${operations}</span>
@@ -276,7 +272,6 @@ function dashboardOverviewRow(name, stats, total = false) {
       <td class="${stats.stopped ? 'is-red' : ''}">${stats.stopped}</td>
       <td class="${checked && stats.ok < checked ? 'is-red' : checked ? 'is-green' : ''}">${checked ? `${stats.ok}/${checked}` : '-'}<small>${percent(stats.ok, checked)}</small></td>
       <td class="${stats.missing ? 'is-red' : ''}">${stats.missing}</td>
-      <td class="${stats.noOperation ? 'is-amber' : ''}">${stats.noOperation}</td>
       <td class="${stats.shiftUpdated < stats.unitTotal ? 'is-gray' : 'is-green'}">${stats.shiftUpdated}/${stats.unitTotal}<small>${percent(stats.shiftUpdated, stats.unitTotal)}</small></td>
     </tr>`;
 }
@@ -353,7 +348,7 @@ function renderDashboardOverview(groups, allItems) {
     ? `<header><h3>Resumo do turno ${shift.name} <small>${shift.label}</small></h3><span>${totals.shiftUpdated} de ${allItems.length} ${allItems.length === 1 ? 'frente atualizada' : 'frentes atualizadas'} no turno</span></header>
       <div class="pdash-overview-scroll"><table class="pdash-overview-table">
         <thead><tr><th scope="col">Grupo</th><th scope="col">Frentes</th><th scope="col">Em atividade</th><th scope="col">Paradas</th>
-          <th scope="col">O.S. OK</th><th scope="col">Sem O.S.</th><th scope="col">Sem operação</th><th scope="col">Atualizadas no turno</th></tr></thead>
+          <th scope="col">O.S. OK</th><th scope="col">Sem O.S.</th><th scope="col">Atualizadas no turno</th></tr></thead>
         <tbody>${groups.map(group => dashboardOverviewRow(group.name, dashboardShiftStats(group.items, shift))).join('')}</tbody>
         <tfoot>${dashboardOverviewRow('Total', totals, true)}</tfoot>
       </table></div>
