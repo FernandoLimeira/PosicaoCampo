@@ -81,6 +81,9 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
   gap: 14px;
 }
 
+.dashboard-import-button { cursor: pointer; display: inline-flex; align-items: center; min-height: 40px; white-space: nowrap; }
+.dashboard-import-button.is-busy { opacity: .6; pointer-events: none; }
+
 .dashboard-fill-button {
   flex: 0 0 auto;
   min-height: 40px;

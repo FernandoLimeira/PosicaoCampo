@@ -230,6 +230,14 @@ def required_permission(path: str, method: str):
         return (("dashboard",), "edit")
     if path == "/api/units" and method == "GET":
         return (("dashboard", "emission"), "view")
+    if path == "/api/weighings/import" and method == "POST":
+        return (("dashboard",), "edit")
+    if path == "/api/weighings/summary" and method == "GET":
+        return (("dashboard", "emission"), "view")
+    if path == "/api/delivery/queries" and method in {"GET", "POST"}:
+        return (("dashboard",), "view" if method == "GET" else "edit")
+    if path.startswith("/api/delivery/queries/") and method in {"PUT", "DELETE"}:
+        return (("dashboard",), "edit")
     if path == "/api/units/meta" and method == "GET":
         return (("sacarose",), "view")
     if path == "/api/units/sync" and method == "POST":

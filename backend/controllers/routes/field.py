@@ -18,7 +18,17 @@ from ...models.units import (
     list_units_payload,
     save_unit,
 )
+from ...models.module_access import user_can
+from ...models.weighings import (
+    delete_delivery_query,
+    import_weighings,
+    list_delivery_queries,
+    save_delivery_query,
+    weighing_summary,
+)
 from ...services.operational_shifts import shift_at
+from ...services.weighing_import import MAX_WEIGHING_UPLOAD_BYTES, parse_weighing_file
+from ..http import _multipart_file
 from ..auth import _is_admin
 
 
@@ -66,6 +76,52 @@ def handle(req):
         if not user:
             return req.unauthorized()
         return _front_notes(req)
+
+    # Pesagem de cana (balança) do CTT: importação do Excel e resumo calculado.
+    if path == "/api/weighings/import" and method == "POST":
+        if not user:
+            return req.unauthorized()
+
+        def import_file():
+            filename, file_bytes = _multipart_file(req.environ, max_file_bytes=MAX_WEIGHING_UPLOAD_BYTES)
+            parsed = parse_weighing_file(file_bytes, filename)
+            result = import_weighings(user["id"], parsed["records"], filename=filename)
+            return req.json(HTTPStatus.OK, {
+                "ok": True, **result, "sheet": parsed["sheet"],
+                "ignored_units": parsed["ignored_units"], "invalid_rows": parsed["invalid_rows"],
+            })
+
+        return req.guarded(import_file, bad_request=ValueError)
+
+    if path == "/api/weighings/summary" and method == "GET":
+        if not user:
+            return req.unauthorized()
+        return req.guarded(lambda: req.json(HTTPStatus.OK, weighing_summary(req.param("date"))),
+                           bad_request=ValueError)
+
+    # Consultas SQL salvas da Entrega CTT (só guardadas, não executadas).
+    if path == "/api/delivery/queries":
+        if not user:
+            return req.unauthorized()
+        if method == "GET":
+            return req.json(HTTPStatus.OK, {"queries": list_delivery_queries(),
+                                            "can_configure": user_can(user, "dashboard", "edit")})
+        if method == "POST":
+            return req.guarded(lambda: req.json(HTTPStatus.CREATED,
+                                                {"ok": True, "query": save_delivery_query(user["id"], req.body())}))
+
+    if re.fullmatch(r"/api/delivery/queries/\d+", path) and method in {"PUT", "DELETE"}:
+        if not user:
+            return req.unauthorized()
+
+        def change_query():
+            query_id = int(path.rsplit("/", 1)[-1])
+            if method == "PUT":
+                return req.json(HTTPStatus.OK, {"ok": True, "query": save_delivery_query(user["id"], req.body(), query_id=query_id)})
+            delete_delivery_query(query_id)
+            return req.json(HTTPStatus.OK, {"ok": True})
+
+        return req.guarded(change_query)
 
     if path == "/api/units/meta" and method == "GET":
         if not user:

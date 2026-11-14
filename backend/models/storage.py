@@ -23,7 +23,7 @@ PRODUCTION_TABLES = (
     "production_user_items", "production_daily_entries", "production_daily_summaries",
     "production_service_orders", "production_operations", "production_sql_queries",
 )
-DATA_TABLES = CORE_DATA_TABLES + ("return_analysis_soil_wet", "field_front_notes") + PRODUCTION_TABLES
+DATA_TABLES = CORE_DATA_TABLES + ("return_analysis_soil_wet", "field_front_notes", "field_weighings", "field_sql_queries") + PRODUCTION_TABLES
 USER_REFERENCES = (
     ("units", "updated_by"), ("unit_history", "user_id"),
     ("sector_base", "updated_by"), ("sacarose_positions", "updated_by"),
@@ -31,6 +31,8 @@ USER_REFERENCES = (
 )
 OPTIONAL_USER_REFERENCES = (
     ("return_analysis_soil_wet", "updated_by"),
+    ("field_weighings", "imported_by"),
+    ("field_sql_queries", "created_by"), ("field_sql_queries", "updated_by"),
     ("production_groups", "created_by"), ("production_groups", "updated_by"),
     ("production_service_fronts", "created_by"), ("production_service_fronts", "updated_by"),
     ("production_daily_entries", "owner_user_id"), ("production_daily_entries", "created_by"),
@@ -284,6 +286,48 @@ def _create_return_soil_wet_table(conn):
     )
 
 
+def _create_field_weighing_table(conn):
+    """Pesagem de cana do CTT: uma linha por carga (liberação) de cada indústria."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS main.field_weighings (
+            unit_code TEXT NOT NULL,
+            release_no TEXT NOT NULL,
+            movement_date TEXT NOT NULL DEFAULT '',
+            truck TEXT NOT NULL DEFAULT '',
+            trailer TEXT NOT NULL DEFAULT '',
+            front TEXT NOT NULL,
+            sector TEXT NOT NULL DEFAULT '',
+            section TEXT NOT NULL DEFAULT '',
+            net_kg REAL,
+            atr REAL,
+            patio_at INTEGER,
+            scale_in_at INTEGER,
+            scale_out_at INTEGER,
+            import_file TEXT NOT NULL DEFAULT '',
+            imported_by INTEGER,
+            imported_at INTEGER NOT NULL,
+            PRIMARY KEY (unit_code, release_no)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS main.idx_field_weighings_out ON field_weighings(scale_out_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS main.idx_field_weighings_patio ON field_weighings(patio_at)")
+    # Consultas SQL da Entrega CTT (o SELECT da pesagem): só guardadas, nunca executadas.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS main.field_sql_queries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            sql_text TEXT NOT NULL,
+            position INTEGER NOT NULL DEFAULT 0,
+            created_by INTEGER,
+            updated_by INTEGER,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+    """)
+
+
 def _create_production_tables(conn):
     statements = (
         """
@@ -507,6 +551,7 @@ def _upgrade_operational_schema(conn):
     from .front_notes import initialize_front_notes
     initialize_front_notes(conn)
     _create_return_soil_wet_table(conn)
+    _create_field_weighing_table(conn)
     _create_production_tables(conn)
     if not conn.execute(
         "SELECT 1 FROM main.schema_info WHERE key='production_status_labels_version'"
@@ -756,6 +801,37 @@ CREATE TABLE IF NOT EXISTS return_analysis_soil_wet (
     updated_by INTEGER,
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (unit_code, record_key)
+);
+
+CREATE TABLE IF NOT EXISTS field_weighings (
+    unit_code TEXT NOT NULL,
+    release_no TEXT NOT NULL,
+    movement_date TEXT NOT NULL DEFAULT '',
+    truck TEXT NOT NULL DEFAULT '',
+    trailer TEXT NOT NULL DEFAULT '',
+    front TEXT NOT NULL,
+    sector TEXT NOT NULL DEFAULT '',
+    section TEXT NOT NULL DEFAULT '',
+    net_kg REAL,
+    atr REAL,
+    patio_at INTEGER,
+    scale_in_at INTEGER,
+    scale_out_at INTEGER,
+    import_file TEXT NOT NULL DEFAULT '',
+    imported_by INTEGER,
+    imported_at INTEGER NOT NULL,
+    PRIMARY KEY (unit_code, release_no)
+);
+
+CREATE TABLE IF NOT EXISTS field_sql_queries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    sql_text TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_by INTEGER,
+    updated_by INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS production_status_history (
