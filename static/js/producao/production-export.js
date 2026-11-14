@@ -5,6 +5,8 @@ const PRODUCTION_EXPORT_SCALE = PRODUCTION_EXPORT_PIXEL_WIDTH / PRODUCTION_EXPOR
 const PRODUCTION_EXPORT_MAX_PIXEL_HEIGHT = 12000;
 const PRODUCTION_EXPORT_UNITS = ['PPT', 'NRD', 'RBR', 'PST'];
 const PRODUCTION_EXPORT_PAGE_LIMIT = 48;
+// Polo MS: vários setores dividem a mesma seção, então a etiqueta mostra "setor / seção".
+const PRODUCTION_EXPORT_SECTION_UNITS = new Set(['RBR', 'PST']);
 const PRODUCTION_EXPORT_UNIT_NAMES = {
   PPT: 'PARAGUAÇU PAULISTA', NRD: 'NARANDIBA',
   RBR: 'RIO BRILHANTE', PST: 'PASSA TEMPO'
@@ -300,7 +302,9 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
   for (const item of report.items) {
     const groupName = item.group_name || 'OUTROS SERVIÇOS';
     const serviceName = item.service_name || 'Serviço não informado';
-    const sector = item.entry?.sector || 'Sem setor';
+    const section = PRODUCTION_EXPORT_SECTION_UNITS.has(report.code)
+      ? String(item.entry?.section || '').trim() : '';
+    const sector = `${item.entry?.sector || 'Sem setor'}${section ? ` / ${section}` : ''}`;
     const localized = productionExportIsLocalizedFront(item);
     // Frentes da fertirrigação localizada ficam juntas em uma linha, com a
     // etiqueta "Frente 54 · 3016"; os demais serviços mostram só o setor.
@@ -708,7 +712,8 @@ function productionExportSplitTextPage(page, plans) {
 
 function prepareProductionExportPages(ctx, reports, statusByCode) {
   const consolidated = reports.map(report => ({
-    ...report, items: consolidateProductionItems(report.items || [])
+    ...report, items: consolidateProductionItems(report.items || [],
+      { withSection: PRODUCTION_EXPORT_SECTION_UNITS.has(report.code) })
   }));
   const pending = buildProductionExportPages(consolidated);
   const ready = [];

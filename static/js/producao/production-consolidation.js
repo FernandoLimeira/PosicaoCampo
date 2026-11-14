@@ -1,4 +1,6 @@
-function consolidateProductionItems(items) {
+// withSection: no Polo MS o mesmo setor pode existir em seções diferentes,
+// então setor + seção formam a chave e os lançamentos não são unidos.
+function consolidateProductionItems(items, { withSection = false } = {}) {
   const latestBySector = new Map();
   items.forEach((item, index) => {
     const sector = item.entry?.sector?.trim();
@@ -9,7 +11,8 @@ function consolidateProductionItems(items) {
     const front = item.service_front_id == null
       ? `${item.group_name || ''}\u0000${item.service_name || ''}`
       : `id:${item.service_front_id}`;
-    const key = `${front}\u0000${sector.toLocaleUpperCase('pt-BR')}`;
+    const section = withSection ? String(item.entry?.section || '').trim().toLocaleUpperCase('pt-BR') : '';
+    const key = `${front}\u0000${sector.toLocaleUpperCase('pt-BR')}\u0000${section}`;
     const previous = latestBySector.get(key);
     const date = item.entry?.work_date || '';
     const previousDate = previous?.item.entry?.work_date || '';
