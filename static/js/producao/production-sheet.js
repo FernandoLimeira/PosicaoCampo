@@ -10,9 +10,8 @@ let productionSheetSectorBase = []; // setores cadastrados: { sector, section, f
 
 // Polo SP (PPT e NRD) trabalha só com setor; no Polo MS (PST e RBR) vários setores
 // dividem a mesma seção, então o popup mostra também a coluna Seção.
-const SHEET_SECTION_UNITS = new Set(['PST', 'RBR']);
 function sheetShowsSection(unit = productionSheetUnit) {
-  return SHEET_SECTION_UNITS.has(String(unit || '').toUpperCase());
+  return productionUnitUsesSection(unit);
 }
 
 // Lista com rolagem (datalist) dos setores cadastrados; no Polo MS filtra pela seção da linha.
@@ -50,9 +49,14 @@ function sheetSectorSuggestions(row) {
     .join('');
 }
 
-function sheetSectionSuggestions() {
-  return [...new Set(productionSheetSectorBase.map(item => item.section).filter(Boolean))]
-    .sort(compareFrontLabels).map(section => `<option value="${escapeHtml(section)}"></option>`).join('');
+// Polo MS: a seção é digitada e o setor é escolhido numa lista com os setores
+// cadastrados daquela seção.
+function sheetSectionSectors(section) {
+  return productionSectionSectors(productionSheetSectorBase, section);
+}
+
+function sheetSectorSelectOptions(row) {
+  return productionSectorSelectOptions(productionSheetSectorBase, row.section, row.sector);
 }
 
 function sheetSplitOperations(value) {
@@ -136,10 +140,12 @@ function sheetRowHtml(row) {
   return `<tr data-sheet-row="${row.key}" class="${row.removed ? 'is-removed' : ''} ${sheetRowChanged(row) && !row.removed ? 'is-changed' : ''}">
     <td><div class="production-sheet-front ${style}">
       <select data-sheet-field="frontId" aria-label="Frente" ${row.removed ? 'disabled' : ''}>${sheetFrontOptions(row)}</select></div></td>
-    <td class="production-sheet-section-cell"><input data-sheet-field="section" value="${escapeHtml(row.section)}" maxlength="32" list="sheet-sections-list"
-      autocomplete="off" aria-label="Seção" ${row.removed ? 'disabled' : ''} /></td>
-    <td><input data-sheet-field="sector" value="${escapeHtml(row.sector)}" maxlength="32" list="${sheetSectorListId(row)}" autocomplete="off"
-        placeholder="Setor" aria-label="Setor" ${row.removed ? 'disabled' : ''} /></td>
+    <td class="production-sheet-section-cell"><input data-sheet-field="section" value="${escapeHtml(row.section)}" maxlength="32"
+      autocomplete="off" placeholder="Seção" aria-label="Seção" ${row.removed ? 'disabled' : ''} /></td>
+    <td>${sheetShowsSection()
+      ? `<select data-sheet-field="sector" aria-label="Setor" ${row.removed ? 'disabled' : ''}>${sheetSectorSelectOptions(row)}</select>`
+      : `<input data-sheet-field="sector" value="${escapeHtml(row.sector)}" maxlength="32" list="${sheetSectorListId(row)}" autocomplete="off"
+        placeholder="Setor" aria-label="Setor" ${row.removed ? 'disabled' : ''} />`}</td>
     <td><select data-sheet-field="status" aria-label="Status" ${row.removed ? 'disabled' : ''}>${productionStatuses.map(status =>
       `<option value="${escapeHtml(status.code)}" ${status.code === row.status ? 'selected' : ''}>${escapeHtml(status.name)}</option>`).join('')}</select></td>
     <td><div class="production-sheet-operations">
@@ -162,8 +168,6 @@ function renderProductionSheet() {
   const body = document.querySelector('#production-sheet-rows');
   if (!body) return;
   body.closest('table')?.classList.toggle('shows-section', sheetShowsSection());
-  const sections = document.querySelector('#sheet-sections-list');
-  if (sections) sections.innerHTML = sheetSectionSuggestions();
   const visible = productionSheetRows.filter(sheetRowVisible);
   body.innerHTML = visible.map(sheetRowHtml).join('');
   const empty = document.querySelector('#production-sheet-empty');
@@ -198,16 +202,12 @@ function renderSheetFilters() {
   frontSelect.value = fronts.some(front => String(front.id) === frontValue) ? frontValue : '';
 }
 
-const productionSheetCache = { sectorBase: null };
-
 // Base de setores para a lista do campo Setor. A operação é digitada livre (sem lista);
 // o sistema confere com as O.S. ao salvar.
 async function loadProductionSheetSectorBase(unit) {
   resetSheetSectorLists();
   try {
-    const base = productionSheetCache.sectorBase || await apiRequest(`/api/production/sector-base?unit=${encodeURIComponent(unit)}`);
-    productionSheetCache.sectorBase = base;
-    productionSheetSectorBase = Array.isArray(base?.items) ? base.items : [];
+    productionSheetSectorBase = await loadProductionSectorBase(unit);
   } catch (error) {
     console.error(error);
     productionSheetSectorBase = [];
@@ -240,7 +240,7 @@ function addProductionSheetRow({ render = true } = {}) {
   });
   if (!render) return;
   renderProductionSheet();
-  document.querySelector(`[data-sheet-row="${productionSheetRows[0].key}"] [data-sheet-field="sector"]`)?.focus();
+  document.querySelector(`[data-sheet-row="${productionSheetRows[0].key}"] [data-sheet-field="${sheetShowsSection() ? 'section' : 'sector'}"]`)?.focus();
 }
 
 function findSheetRow(element) {
@@ -356,11 +356,15 @@ productionSheetBody?.addEventListener('change', event => {
     // Linha sem operação recebe as operações padrão da frente escolhida (ex.: Fert convencional).
     if (!row.operations.some(value => value.trim())) row.operations = sheetDefaultOperations(row.frontId);
   }
+  // Polo MS: trocar a seção limpa o setor que não pertence a ela.
+  if (field === 'section' && sheetShowsSection() && row.sector.trim()
+    && !sheetSectionSectors(row.section).some(item => item.sector === row.sector.trim())) row.sector = '';
   // Setor e status mudam as opções de operação, o aviso de O.S. e a cor da linha.
   if (['sector', 'section', 'status', 'frontId'].includes(field)) {
     const tr = event.target.closest('tr');
     if (tr) {
       tr.outerHTML = sheetRowHtml(row);
+      if (field === 'section' && sheetShowsSection()) document.querySelector(`[data-sheet-row="${row.key}"] [data-sheet-field="sector"]`)?.focus();
       if (field === 'sector') document.querySelector(`[data-sheet-row="${row.key}"] [data-sheet-field="status"]`)?.focus();
     }
   }

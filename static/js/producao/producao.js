@@ -611,12 +611,17 @@ function addProductionSector() {
   renderStatusOptions(defaultStatusCode(), row.querySelector('.production-status-options'));
   document.querySelector('#production-sector-rows').append(row);
   updateProductionSectorRows();
-  productionSectorField(row, 'sector').focus();
+  productionSectorField(row, productionEntryUsesSection() ? 'section' : 'sector').focus();
 }
 
 function resetSectorFields(row = document) {
   productionSectorOptions.set(row, []);
   const section = productionSectorField(row, 'section');
+  if (productionEntryUsesSection()) {
+    if (section) section.value = '';
+    renderProductionSectorChoices(row);
+    return;
+  }
   if (section) section.innerHTML = '<option value="">Sem seção</option>';
 }
 
@@ -661,6 +666,126 @@ function syncFarmFromSection(row = document) {
   const selected = Array.isArray(options) ? options.find(item => item.section === sectionValue) : null;
   const farm = productionSectorField(row, 'farm');
   if (farm && selected) farm.value = selected.farm || '';
+}
+
+// Polo MS (PST e RBR): vários setores dividem a mesma seção, então a seção é digitada
+// e o setor é escolhido numa lista com os setores cadastrados daquela seção.
+// No Polo SP segue o inverso: setor digitado e seção escolhida pelo setor.
+const PRODUCTION_SECTION_UNITS = new Set(['PST', 'RBR']);
+function productionUnitUsesSection(unit) {
+  return PRODUCTION_SECTION_UNITS.has(String(unit || '').toUpperCase());
+}
+
+function productionEntryUsesSection() {
+  return productionUnitUsesSection(document.querySelector('#production-unit-input')?.value || currentProductionUnit());
+}
+
+// Base de setores da unidade ({ sector, section, farm }), carregada uma vez por unidade.
+const productionSectorBaseCache = new Map();
+function loadProductionSectorBase(unit) {
+  const key = String(unit || '').toUpperCase();
+  if (!productionSectorBaseCache.has(key)) {
+    const promise = apiRequest(`/api/production/sector-base?unit=${encodeURIComponent(key)}`)
+      .then(base => (Array.isArray(base?.items) ? base.items : []))
+      .catch(error => { productionSectorBaseCache.delete(key); throw error; });
+    productionSectorBaseCache.set(key, promise);
+  }
+  return productionSectorBaseCache.get(key);
+}
+
+function productionSectionSectors(base, section) {
+  const key = String(section || '').trim().toLocaleLowerCase('pt-BR');
+  if (!key) return [];
+  const bySector = new Map();
+  (base || [])
+    .filter(item => String(item.section || '').trim().toLocaleLowerCase('pt-BR') === key)
+    .forEach(item => { if (!bySector.has(item.sector)) bySector.set(item.sector, item); });
+  return [...bySector.values()].sort((a, b) => compareFrontLabels(a.sector, b.sector));
+}
+
+// Opções do seletor de setor (Polo MS); um setor salvo fora do cadastro continua na lista.
+function productionSectorSelectOptions(base, section, current) {
+  const sectors = productionSectionSectors(base, section);
+  const value = String(current || '').trim();
+  const placeholder = !String(section || '').trim() ? 'Digite a seção' : (sectors.length ? 'Selecione' : 'Seção sem setores');
+  const known = sectors.some(item => item.sector === value);
+  return `<option value="" ${value ? '' : 'selected'}>${placeholder}</option>`
+    + (value && !known ? `<option value="${escapeHtml(value)}" selected>${escapeHtml(value)}</option>` : '')
+    + sectors.map(item => `<option value="${escapeHtml(item.sector)}" ${item.sector === value ? 'selected' : ''}>${
+      escapeHtml([item.sector, item.farm].filter(Boolean).join(' · '))}</option>`).join('');
+}
+
+// Troca o campo entre texto e lista mantendo id e o vínculo data-sector-field.
+function swapProductionSectorField(row, field, tag) {
+  const current = productionSectorField(row, field);
+  if (!current?.tagName || current.tagName.toLowerCase() === tag) return;
+  const next = document.createElement(tag);
+  next.id = current.id;
+  next.dataset.sectorField = field;
+  if (tag === 'input') {
+    next.type = 'text';
+    next.maxLength = 32;
+    next.autocomplete = 'off';
+    next.placeholder = field === 'section' ? 'Ex.: 3190' : 'Ex.: 3392';
+  }
+  next.required = field === 'sector';
+  current.replaceWith(next);
+}
+
+// Ajusta todas as linhas de setor do popup ao polo da unidade escolhida.
+function applyProductionLocationMode() {
+  const usesSection = productionEntryUsesSection();
+  productionSectorRows().forEach(row => {
+    swapProductionSectorField(row, 'section', usesSection ? 'input' : 'select');
+    swapProductionSectorField(row, 'sector', usesSection ? 'select' : 'input');
+    const sectorLabel = productionSectorField(row, 'sector')?.closest?.('label');
+    const sectionLabel = productionSectorField(row, 'section')?.closest?.('label');
+    if (!sectorLabel || !sectionLabel) return;
+    // Polo MS: a seção vem primeiro, porque filtra a lista de setores.
+    if (usesSection) sectorLabel.before(sectionLabel);
+    else sectionLabel.before(sectorLabel);
+  });
+}
+
+// Polo MS: monta a lista de setores da seção digitada. Um setor que não é da
+// seção é limpo, a não ser que seja o valor já salvo do lançamento (keep).
+async function renderProductionSectorChoices(row = document, { keep = '' } = {}) {
+  const select = productionSectorField(row, 'sector');
+  const sectionInput = productionSectorField(row, 'section');
+  if (!select || !sectionInput) return;
+  const unit = document.querySelector('#production-unit-input')?.value || currentProductionUnit();
+  const request = {};
+  productionSectorOptions.set(row, request);
+  const previous = keep || select.value;
+  const draw = (base, loaded) => {
+    const section = sectionInput.value.trim();
+    // Antes da base carregar, mantém o valor; depois, só se for da seção (ou o salvo).
+    const current = keep || !loaded || productionSectionSectors(base, section).some(item => item.sector === previous) ? previous : '';
+    select.innerHTML = productionSectorSelectOptions(base, section, current);
+    select.value = current;
+  };
+  draw([], false);
+  try {
+    request.promise = loadProductionSectorBase(unit);
+    const base = await request.promise;
+    if (productionSectorOptions.get(row) !== request) return;
+    request.base = base;
+    draw(base, true);
+    syncFarmFromSectorChoice(row);
+  } catch (error) {
+    console.warn(error);
+  }
+}
+
+function syncFarmFromSectorChoice(row = document) {
+  const base = productionSectorOptions.get(row)?.base;
+  const farm = productionSectorField(row, 'farm');
+  if (!farm || !Array.isArray(base)) return;
+  const sector = productionSectorField(row, 'sector')?.value || '';
+  if (!sector) farm.value = '';
+  const selected = productionSectionSectors(base, productionSectorField(row, 'section')?.value)
+    .find(item => item.sector === sector);
+  if (selected) farm.value = selected.farm || '';
 }
 
 function showEntryPane() {
@@ -727,6 +852,7 @@ function clearEntryForm(defaultUnit = selectedNavbarProductionUnit()) {
   if (itemInput) itemInput.value = '';
   document.querySelector('#production-work-date').value = saoPauloIsoDate();
   setProductionEntryUnit(defaultUnit);
+  applyProductionLocationMode();
   renderEntryGroups();
   setSelectedStatus(defaultStatusCode());
   resetSectorFields();
@@ -764,16 +890,23 @@ function openEditProductionItem(itemId) {
   if (itemInput) itemInput.value = String(item.id);
   document.querySelector('#production-work-date').value = saoPauloIsoDate();
   setProductionEntryUnit(currentProductionUnit());
+  applyProductionLocationMode();
   renderEntryGroups(item.group_id, item.service_front_id, item);
   document.querySelector('#production-sector-input').value = entry.sector || '';
   document.querySelector('#production-farm-input').value = entry.farm || '';
   document.querySelector('#production-observation-input').value = entry.observation || '';
   document.querySelector('#production-changes-input').value = entry.changes || '';
   setSelectedStatus(entry.status || defaultStatusCode());
-  resetSectorFields();
   const section = document.querySelector('#production-section-input');
-  section.innerHTML = `<option value="${escapeHtml(entry.section || '')}">${escapeHtml(entry.section || 'Sem seção')}</option>`;
-  section.value = entry.section || '';
+  if (productionEntryUsesSection()) {
+    // Polo MS: seção digitada; o setor salvo fica escolhido na lista da seção.
+    section.value = entry.section || '';
+    renderProductionSectorChoices(document, { keep: entry.sector || '' });
+  } else {
+    resetSectorFields();
+    section.innerHTML = `<option value="${escapeHtml(entry.section || '')}">${escapeHtml(entry.section || 'Sem seção')}</option>`;
+    section.value = entry.section || '';
+  }
   setProductionEntryEditMode(true);
   productionEntryOperations = splitProductionOperations(entry.operation);
   if (!productionEntryOperations.length) productionEntryOperations = productionFrontDefaultOperations(item.service_front_id);
@@ -792,7 +925,7 @@ function openEditProductionItem(itemId) {
     document.querySelector('#production-entry-submit').textContent = 'Salvar atualização';
   }
   openModal('production-entry-modal');
-  document.querySelector('#production-sector-input')?.focus();
+  document.querySelector(productionEntryUsesSection() ? '#production-section-input' : '#production-sector-input')?.focus();
 }
 
 async function submitProductionEntry(event) {
@@ -867,7 +1000,7 @@ function collectProductionSectors() {
     }
     if (!status) throw new Error(`Selecione o status do setor ${sector}.`);
     seen.add(sector.toLocaleUpperCase('pt-BR'));
-    return { sector, section: productionSectorField(row, 'section').value,
+    return { sector, section: productionSectorField(row, 'section').value.trim(),
       farm: productionSectorField(row, 'farm').value.trim(), status };
   });
 }
@@ -985,8 +1118,17 @@ document.querySelector('#production-sector-rows')?.addEventListener('click', eve
 document.querySelector('#production-sector-rows')?.addEventListener('change', event => {
   const row = event.target.closest('[data-production-sector-row]');
   if (!row) return;
-  if (event.target.matches('[data-sector-field="sector"]')) resolveSectorFromBase(row);
-  if (event.target.matches('[data-sector-field="section"]')) syncFarmFromSection(row);
+  if (productionEntryUsesSection()) {
+    // Polo MS: a seção digitada refaz a lista de setores; o setor escolhido traz a fazenda.
+    if (event.target.matches('[data-sector-field="section"]')) {
+      renderProductionSectorChoices(row);
+      productionSectorField(row, 'sector')?.focus();
+    }
+    if (event.target.matches('[data-sector-field="sector"]')) syncFarmFromSectorChoice(row);
+  } else {
+    if (event.target.matches('[data-sector-field="sector"]')) resolveSectorFromBase(row);
+    if (event.target.matches('[data-sector-field="section"]')) syncFarmFromSection(row);
+  }
   if (event.target.matches('[data-production-status-select]')) setSelectedStatus(event.target.value, row);
 });
 
