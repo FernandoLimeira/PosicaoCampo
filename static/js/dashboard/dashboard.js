@@ -87,11 +87,16 @@ function weighingReferenceTime(code) {
 }
 
 // Indicadores exibidos (e sugeridos no Preencher): os da balança substituem os digitados.
+// Correções da etapa "Imagem CTT" (mesmo fechamento da balança) valem também no card.
+const WEIGHING_METRIC_OVERRIDES = { 1: 'millingShift', 2: 'deliveryShift', 3: 'stock', 4: 'milling3h', 5: 'delivery3h' };
+
 function displayMetrics(unit) {
   const weighing = unitWeighing(unit.code);
   if (!weighing) return unit.metrics;
+  const overrides = fieldImageOverrides(unit, weighing);
   return unit.metrics.map((metric, index) => {
-    const value = weighing[WEIGHING_METRIC_FIELDS[index]];
+    const corrected = overrides[WEIGHING_METRIC_OVERRIDES[index]];
+    const value = corrected !== undefined ? corrected : weighing[WEIGHING_METRIC_FIELDS[index]];
     if (value === null || value === undefined) return metric;
     // Sem separador de milhar: "1.243" seria lido como 1,243 no Preencher (metricNumber).
     const text = String(Math.round(value));

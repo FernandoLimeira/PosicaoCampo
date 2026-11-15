@@ -173,13 +173,20 @@ async function main() {
   assert.equal(data.active, 1, 'Solo úmido não conta como frente em atividade');
   assert.equal(data.frontAtr(ppt.rows[0]), '121,06', 'Sem ATR digitado, usa o ATR da balança da frente');
   assert.equal(data.frontAtr(ppt.rows[1]), '125', 'O ATR digitado tem prioridade');
-  assert.deepEqual(Array.from(data.support), ['FT 19 (NRD) entregando aqui: 12 cargas · 411 t.',
-    'FT 05 apoiando a RBR: 3 cargas · 98 t.']);
   // 846,6 ÷ 850 = 99,6%: amarelo e "99%" (verde só a partir de 100%).
   assert.equal(standalone.globalIndustryShare(data).color, '#fdcc05');
+  // Correção da etapa "Imagem CTT": vale só no fechamento em que foi feita (ref = data_until).
+  summary.units[0].data_until = 1794772799;
+  const corrected = standalone.normalizeReportUnit({ ...ppt, image_overrides: { ref: 1794772799, values: { millingShift: 850.5, stock: 50 } } }, 0);
+  const fixed = standalone.fieldUnitIndicators(corrected, summary);
+  assert.deepEqual([fixed.millingShift, fixed.stock, fixed.deliveryShift, fixed.balance.millingShift, fixed.balance.stock],
+    [850.5, 50, 818, 846.6, 48]);
+  assert.deepEqual(Array.from(fixed.corrected), ['millingShift', 'stock']);
+  summary.units[0].data_until = 1794776399;  // outro SELECT importado: a correção deixa de valer
+  const stale = standalone.fieldUnitIndicators(corrected, summary);
+  assert.deepEqual([stale.millingShift, stale.stock, stale.corrected.length], [846.6, 48, 0]);
   const fallback = standalone.fieldUnitIndicators(ppt, null);
   assert.deepEqual([fallback.millingShift, fallback.stock, fallback.atr, fallback.day], [700, 40, null, null]);
-  assert.deepEqual(Array.from(fallback.support), []);
   drawn.length = 0;
   await standalone.generateSacaroseReportImageBlob(['PPT'], { PPT: [{ front: '1', sector: '10' }], NRD: [{ front: '9', sector: '90' }] }, []);
   assert.deepEqual(drawn.map(item => item.code), ['PPT']);

@@ -75,6 +75,31 @@ def _nonnegative_number(value: Any, field: str) -> int | float:
     return int(number) if number.is_integer() else number
 
 
+# Correções da imagem "Troca de Turno CTT" sobre os indicadores da balança (etapa Imagem CTT
+# do Preencher). Valem só para o fechamento em que foram feitas: ``ref`` é o "dados até" da
+# pesagem da unidade naquele momento; outra importação muda o fechamento e elas deixam de valer.
+IMAGE_OVERRIDE_KEYS = ("millingShift", "deliveryShift", "milling3h", "delivery3h", "stock", "atr", "day", "projection")
+
+
+def _image_overrides(raw: Any) -> dict[str, Any] | None:
+    if raw in (None, {}):
+        return None
+    if not isinstance(raw, dict) or not isinstance(raw.get("values"), dict):
+        raise ValueError("Correções da imagem inválidas.")
+    ref = raw.get("ref")
+    if isinstance(ref, bool) or not isinstance(ref, int) or not 0 < ref < 2 ** 40:
+        raise ValueError("Fechamento das correções da imagem inválido.")
+    values: dict[str, float] = {}
+    for key, value in raw["values"].items():
+        if key not in IMAGE_OVERRIDE_KEYS:
+            raise ValueError("Correção da imagem inválida.")
+        number = _nonnegative_number(value, "Correção da imagem")
+        if number > 10_000_000:
+            raise ValueError("Correção da imagem excede o valor permitido.")
+        values[key] = number
+    return {"ref": ref, "values": values} if values else None
+
+
 def _metric_value_text(value: Any, unit: str) -> str:
     number = _nonnegative_number(value, "Valor do indicador")
     if isinstance(number, int):
@@ -146,6 +171,8 @@ def _normalize_unit_payload(unit: dict[str, Any], position: int) -> dict[str, An
         if last_note_id is not None:
             observation_period["last_note_id"] = last_note_id
 
+    image_overrides = _image_overrides(unit.get("image_overrides"))
+
     raw_rain = unit.get("rain", [])
     if not isinstance(raw_rain, list) or len(raw_rain) > 100:
         raise ValueError("Dados de precipitação inválidos.")
@@ -175,6 +202,7 @@ def _normalize_unit_payload(unit: dict[str, Any], position: int) -> dict[str, An
         "support": support,
         "rain": standardize_rain_labels(code, rows, rain),
         **({"observation_period": observation_period} if observation_period is not None else {}),
+        **({"image_overrides": image_overrides} if image_overrides is not None else {}),
     }
 
 

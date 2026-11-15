@@ -35,8 +35,9 @@ async function main() {
       for (const [index, values] of expected) {
         const front = drawn.find(item => item.text === index);
         assert(front, `A frente ${index} deve aparecer na imagem`);
-        // Colunas TURNO e ACUM. ficam no fim do mesmo card (largura 340).
-        const rainCells = drawn.filter(item => item.y === front.y && item.x > front.x + 270 && item.x < front.x + 320)
+        // Colunas TURNO e ACUM. ficam presas à margem direita do mesmo card (largura 340),
+        // depois do ATR e antes da borda.
+        const rainCells = drawn.filter(item => item.y === front.y && item.x > front.x + 240 && item.x < front.x + 300)
           .map(item => Number(item.text.replace(',', '.')));
         assert.deepEqual(rainCells, values,
           `A emissão ${global ? 'global' : 'individual'} deve associar a chuva à frente ${index}`);

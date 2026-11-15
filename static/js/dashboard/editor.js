@@ -172,14 +172,16 @@ function renderMetricsForm(unit) {
   const container = document.querySelector('#metrics-form');
   // Com pesagem importada, moagem/entrega/estoque já vêm preenchidos pela balança.
   const metrics = displayMetrics(unit);
-  const note = unitWeighing(unit.code)
-    ? `<p class="metrics-weighing-note">Moagem, entrega e estoque preenchidos pela pesagem da balança (dados até ${escapeHtml(weighingReferenceTime(unit.code))}). Confira antes de salvar.</p>` : '';
+  const weighing = unitWeighing(unit.code);
+  // Com pesagem, moagem/entrega/estoque vêm da balança: corrigir na etapa "Imagem CTT".
+  const note = weighing
+    ? `<p class="metrics-weighing-note">Moagem, entrega e estoque vêm da pesagem da balança (dados até ${escapeHtml(weighingReferenceTime(unit.code))}). Para corrigir uma inconsistência, use a etapa Imagem CTT.</p>` : '';
   container.innerHTML = note + metricDefinitions.map((definition, index) => `
     <div class="metric-field">
       <label>
         <span>${escapeHtml(definition.label)}</span>
         <div class="metric-input-wrap">
-          <input class="metric-input" data-metric-index="${index}" type="number" step="0.01" min="0" value="${metricNumber(metrics[index]?.[2])}" />
+          <input class="metric-input" data-metric-index="${index}" type="number" step="0.01" min="0" value="${metricNumber(metrics[index]?.[2])}"${weighing && WEIGHING_METRIC_FIELDS[index] ? ' readonly' : ''} />
           <small>${escapeHtml(definition.unit)}</small>
         </div>
       </label>
@@ -225,32 +227,72 @@ function reorderRainForm() {
   renderRainForm(collectRainRows());
 }
 
-// Etapa "Imagem CTT": o que vai para o card da unidade na imagem (somente leitura), pelo
-// mesmo cálculo da imagem e do relatório (core/field-indicators.js), e a troca de cana.
-// Indústria é editada na etapa Produção.
+// Etapa "Imagem CTT": os indicadores que vão para o card da unidade na imagem, pelo mesmo
+// cálculo da imagem e do relatório (core/field-indicators.js), já preenchidos pela balança.
+// Se a balança tiver inconsistência, o valor pode ser corrigido aqui: a correção vale só para
+// este fechamento (some quando outro SELECT é importado). Indústria é editada na etapa Produção.
+const IMAGE_STEP_FIELDS = [
+  ['millingShift', 'Moagem turno', 't/h', 0], ['deliveryShift', 'Entrega turno', 't/h', 0],
+  ['milling3h', 'Moagem últ. 3 h', 't/h', 0], ['delivery3h', 'Entrega últ. 3 h', 't/h', 0],
+  ['stock', 'Estoque', 'cargas', 0], ['atr', 'ATR parcial', 'kg/t', 2],
+  ['day', 'Processado dia', 't', 0], ['projection', 'Projeção', 't', 0]
+];
+
+function imageStepInputValue(value) {
+  return value === null || value === undefined || !Number.isFinite(Number(value)) ? '' : String(Number(value));
+}
+
 function imageStepSummaryHtml(unit) {
   const summary = weighingSummary;
   const item = fieldUnitIndicators(unit, summary);
-  if (item.day === null) {
+  if (!item.closingRef) {
     return '<p class="image-step-empty">Sem pesagem importada para esta unidade: a imagem usa os indicadores da etapa Produção.</p>';
   }
   const number = fieldIndicatorNumber;
-  const cells = [['Moagem turno', `${number(item.millingShift)} t/h`], ['Entrega turno', `${number(item.deliveryShift)} t/h`],
-    ['Moagem últ. 3 h', `${number(item.milling3h)} t/h`], ['Entrega últ. 3 h', `${number(item.delivery3h)} t/h`],
-    ['Estoque', `${number(item.stock)} cargas`], ['ATR parcial', `${number(item.atr, 2)} kg/t`],
-    ['Processado dia', `${number(item.day)} t`], ['Projeção', `${number(item.projection)} t`]]
-    .map(([label, value]) => `<div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong></div>`).join('');
+  const cells = IMAGE_STEP_FIELDS.map(([key, label, suffix, digits]) => {
+    const corrected = item.corrected.includes(key);
+    return `<label class="image-step-field${corrected ? ' is-corrected' : ''}">
+      <small>${escapeHtml(label)}</small>
+      <span class="metric-input-wrap">
+        <input class="image-override-input" data-override-key="${key}" type="number" min="0" step="${digits ? '0.01' : '0.1'}"
+          value="${imageStepInputValue(item[key])}" data-balance="${imageStepInputValue(item.balance[key])}" />
+        <small>${escapeHtml(suffix)}</small>
+      </span>
+      <em>Balança: ${escapeHtml(number(item.balance[key], digits))}${corrected ? ' · corrigido' : ''}</em>
+    </label>`;
+  }).join('');
   const received = item.received.map(front => `FT${escapeHtml(fieldFrontNumber(front.front))} (${escapeHtml(front.home_unit)}) `
     + `${number(front.atr, 2)} · ${number(front.tons)} t`).join(' · ');
   // Frentes desta unidade pesadas em outra indústria: o ATR entra na média de lá.
   const sent = (summary?.support || []).filter(entry => entry.from_unit === unit.code).map(entry =>
     `FT${escapeHtml(fieldFrontNumber(entry.front))} → ${escapeHtml(entry.to_unit)} · ${number(entry.tons)} t · ATR ${number(entry.atr, 2)}`).join(' · ');
-  return `<p class="image-step-source">Da balança para a imagem · dados até ${escapeHtml(weighingReferenceTime(unit.code))}</p>
+  return `<div class="image-step-head">
+      <p class="image-step-source">Da balança para a imagem · dados até ${escapeHtml(weighingReferenceTime(unit.code))}. Corrija só se houver inconsistência: vale para este fechamento.</p>
+      <button id="image-overrides-reset" class="modal-button secondary" type="button">Usar valores da balança</button>
+    </div>
     <div class="image-step-grid">${cells}</div>
     <dl class="image-step-exchange">
       <dt>ATR recebido</dt><dd>${received || 'Nenhuma frente de outra unidade entregou aqui.'}</dd>
       <dt>Frentes desta unidade em outra indústria (ATR entra lá)</dt><dd>${sent || 'Nenhuma.'}</dd>
     </dl>`;
+}
+
+// Correções da etapa "Imagem CTT": só os campos diferentes do valor da balança, presos ao
+// fechamento atual (``ref``). Sem diferença, nada é gravado e a imagem segue a balança.
+function collectImageOverrides(unit) {
+  const ref = fieldUnitIndicators(unit, weighingSummary).closingRef;
+  if (!ref) return null;
+  const values = {};
+  document.querySelectorAll('.image-override-input').forEach(input => {
+    const text = input.value.trim();
+    if (!text) return;
+    const value = Number(text);
+    const balance = input.dataset.balance === '' ? null : Number(input.dataset.balance);
+    if (Number.isFinite(value) && value >= 0 && (balance === null || Math.abs(value - balance) > 1e-9)) {
+      values[input.dataset.overrideKey] = value;
+    }
+  });
+  return Object.keys(values).length ? { ref, values } : null;
 }
 
 function autoResizeTextarea(textarea) {
@@ -379,6 +421,12 @@ function setupEditorEvents() {
     setEditorStep(currentEditorStep + 1);
   });
 
+  document.querySelector('#image-step-summary')?.addEventListener('click', event => {
+    if (!event.target.closest('#image-overrides-reset')) return;
+    document.querySelectorAll('.image-override-input').forEach(input => { input.value = input.dataset.balance; });
+    refreshEditorSaveStatus();
+  });
+
   document.querySelector('#add-front-row').addEventListener('click', () => {
     document.querySelector('#front-rows').insertAdjacentHTML('beforeend', frontRowHtml());
     document.querySelector('#front-rows tr:last-child .front-input')?.focus();
@@ -461,6 +509,9 @@ function setupEditorEvents() {
     updatedUnit.changes = document.querySelector('#changes-input').value.trim() || '-';
     updatedUnit.rain = collectRainRows();
     updatedUnit.support = document.querySelector('#support-input')?.value.trim() || '-';
+    const imageOverrides = collectImageOverrides(updatedUnit);
+    if (imageOverrides) updatedUnit.image_overrides = imageOverrides;
+    else delete updatedUnit.image_overrides;
     selectedUnitIndex = index;
 
     try {

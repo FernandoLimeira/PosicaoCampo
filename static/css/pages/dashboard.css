@@ -107,9 +107,14 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 .image-step-summary { margin-top: 14px; display: grid; gap: 10px; }
 .image-step-source, .image-step-empty { margin: 0; color: #5b6168; font-size: 12px; }
 .image-step-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.image-step-grid > div { padding: 8px 10px; background: var(--data-surface); border: 1px solid var(--data-border); border-radius: var(--data-radius); }
-.image-step-grid small { display: block; color: #717c81; font-size: 10px; font-weight: 800; text-transform: uppercase; }
-.image-step-grid strong { color: #2d3f44; font-size: 15px; }
+.image-step-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.image-step-head .image-step-source { flex: 1 1 260px; }
+.image-step-field { display: grid; gap: 4px; padding: 8px 10px; background: var(--data-surface); border: 1px solid var(--data-border); border-radius: var(--data-radius); }
+.image-step-field > small { color: #717c81; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.image-step-field input { width: 100%; min-width: 0; color: #2d3f44; font-size: 15px; font-weight: 700; }
+.image-step-field em { color: #717c81; font-size: 11px; font-style: normal; }
+.image-step-field.is-corrected { border-color: #e4c257; background: #fff8df; }
+.image-step-field.is-corrected em { color: #9a7400; font-weight: 700; }
 .image-step-exchange { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 12px; }
 .image-step-exchange dt { color: #9a7400; font-weight: 800; }
 .image-step-exchange dd { margin: 0; color: #2d3f44; }

@@ -498,6 +498,19 @@ class DatabaseTests(unittest.TestCase):
         saved = db.save_unit(unit, 0, uid, current["meta"]["PPT"]["version"])
         self.assertEqual(saved["meta"]["updated_by"], "Operador")
         self.assertEqual(saved["unit"]["support"], "FT 402 virada 100% para RBR.")
+        self.assertNotIn("image_overrides", saved["unit"])
+        # Correções da imagem CTT: só chaves conhecidas e números >= 0, presas a um fechamento.
+        unit["image_overrides"] = {"ref": 1794772799, "values": {"millingShift": "850,5", "stock": 50}}
+        saved = db.save_unit(unit, 0, uid, saved["meta"]["version"])
+        self.assertEqual(saved["unit"]["image_overrides"], {"ref": 1794772799, "values": {"millingShift": 850.5, "stock": 50}})
+        for invalid in ({"ref": 1, "values": {"outro": 1}}, {"ref": 1, "values": {"stock": -1}},
+                        {"ref": "x", "values": {"stock": 1}}, {"values": {"stock": 1}}):
+            unit["image_overrides"] = invalid
+            with self.assertRaises(ValueError):
+                db.save_unit(unit, 0, uid, saved["meta"]["version"])
+        unit["image_overrides"] = None
+        saved = db.save_unit(unit, 0, uid, saved["meta"]["version"])
+        self.assertNotIn("image_overrides", saved["unit"])
         with self.assertRaises(db.UnitConflictError):
             db.save_unit(unit, 0, admin["id"], 0)
         db.save_return_analysis_layouts("PPT", [{"code": "02", "name": "Equipe", "equipment": [123]}], uid)

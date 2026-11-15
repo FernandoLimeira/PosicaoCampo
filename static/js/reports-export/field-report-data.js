@@ -24,6 +24,8 @@ function normalizeReportUnit(unit, index) {
     observation: String(cloned.observation || '-'),
     changes: String(cloned.changes || '-'),
     support: String(cloned.support || '-'),
+    // Correções da imagem (etapa Imagem CTT), válidas só no fechamento em que foram feitas.
+    ...(cloned.image_overrides ? { image_overrides: cloned.image_overrides } : {}),
     rain: standardizeFieldRainLabels(cloned.code || fallbackCodes[index], cloned.rows, cloned.rain)
   };
 

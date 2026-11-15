@@ -10,7 +10,12 @@ const GLOBAL_REFERENCE_WIDTH = 720;
 const GLOBAL_HEADER_HEIGHT = 252;
 const GLOBAL_LEGEND_Y = 224;
 const GLOBAL_CARD_TOP = 470;
-const GLOBAL_FONT = '"Arial Narrow", Arial, sans-serif';
+// Fontes do modelo aprovado (declaradas em css/base.css, servidas pelo sistema): Montserrat
+// nos textos e números; Barlow Condensed no cabeçalho (saudação, título, subtítulo e legenda).
+const GLOBAL_FONT = 'Montserrat, Arial, sans-serif';
+const GLOBAL_TITLE_FONT = '"Barlow Condensed", "Arial Narrow", sans-serif';
+const GLOBAL_FONT_FACES = ['500 16px Montserrat', '600 16px Montserrat', '700 16px Montserrat', '800 16px Montserrat',
+  '600 16px "Barlow Condensed"', '700 16px "Barlow Condensed"', '800 16px "Barlow Condensed"'];
 
 // Cores extraídas do modelo aprovado (print da "Troca de Turno CTT").
 const GLOBAL_COLORS = Object.freeze({
@@ -53,14 +58,29 @@ function globalStatusStyle(color) {
   return GLOBAL_STATUS_STYLE[color] || GLOBAL_STATUS_STYLE.gray;
 }
 
-function globalFont(size, weight = 'bold') {
-  return `${weight} ${size}px ${GLOBAL_FONT}`;
+function globalFont(size, weight = 'bold', family = GLOBAL_FONT) {
+  return `${weight} ${size}px ${family}`;
 }
 
-function globalDrawText(ctx, value, x, y, maxWidth, font, color = GLOBAL_COLORS.ink, align = 'left') {
+function globalTitleFont(size, weight = '800') {
+  return globalFont(size, weight, GLOBAL_TITLE_FONT);
+}
+
+// O canvas não espera a fonte: carrega as do modelo antes de medir e desenhar.
+async function globalLoadFonts() {
+  const fonts = typeof document !== 'undefined' ? document.fonts : null;
+  if (!fonts?.load) return;
+  await Promise.all(GLOBAL_FONT_FACES.map(face => fonts.load(face).catch(() => null)));
+}
+
+// Rótulos do modelo (MOAGEM TURNO, FRENTE, OBSERVAÇÃO...): maiúsculas com letras espaçadas.
+const GLOBAL_LABEL_SPACING = 0.7;
+
+function globalDrawText(ctx, value, x, y, maxWidth, font, color = GLOBAL_COLORS.ink, align = 'left', spacing = 0) {
   ctx.save();
   ctx.fillStyle = color;
   ctx.font = font;
+  if (spacing && 'letterSpacing' in ctx) ctx.letterSpacing = `${spacing}px`;
   ctx.textBaseline = 'middle';
   ctx.textAlign = align;
   // fillText com largura máxima: não desloca a posição das colunas adjacentes.
@@ -68,8 +88,9 @@ function globalDrawText(ctx, value, x, y, maxWidth, font, color = GLOBAL_COLORS.
   ctx.restore();
 }
 
-function globalTextWidth(ctx, text, font) {
+function globalTextWidth(ctx, text, font, spacing = 0) {
   ctx.save(); ctx.font = font;
+  if (spacing && 'letterSpacing' in ctx) ctx.letterSpacing = `${spacing}px`;
   const width = ctx.measureText(String(text ?? '')).width;
   ctx.restore();
   return width;
@@ -98,7 +119,7 @@ function globalDrawReportHeader(ctx, units, generatedAt) {
   ctx.fillRect(0, 0, W, GLOBAL_HEADER_HEIGHT);
 
   const { greeting, date } = getHeaderDataForExport(generatedAt);
-  const topFont = globalFont(24, '900');
+  const topFont = globalTitleFont(24);
   let x = 26;
   globalDrawText(ctx, greeting, x, 34, 150, topFont, GLOBAL_COLORS.white);
   x += Math.min(150, globalTextWidth(ctx, greeting, topFont)) + 16;
@@ -119,15 +140,15 @@ function globalDrawReportHeader(ctx, units, generatedAt) {
   globalDrawText(ctx, `TURNO ${globalShiftAt(generatedAt)}`, x, 34, 110, topFont, GLOBAL_COLORS.yellowHeader);
   ctx.fillStyle = GLOBAL_COLORS.headerRule; ctx.fillRect(0, 66, W, 1);
 
-  globalDrawText(ctx, 'TROCA DE TURNO', 26, 106, W - 52, globalFont(46, '900'), GLOBAL_COLORS.white);
-  globalDrawText(ctx, 'CTT', 26, 152, 200, globalFont(46, '900'), GLOBAL_COLORS.green);
+  globalDrawText(ctx, 'TROCA DE TURNO', 26, 106, W - 52, globalTitleFont(50), GLOBAL_COLORS.white);
+  globalDrawText(ctx, 'CTT', 26, 152, 200, globalTitleFont(50), GLOBAL_COLORS.green);
   globalDrawText(ctx, 'Colheita: frentes, indústria, moagem, entrega, estoque e ATR', 26, 192, W - 52,
-    globalFont(16, 'bold'), GLOBAL_COLORS.white);
+    globalTitleFont(17, '600'), GLOBAL_COLORS.white);
 
   // Legenda só com os status usados em alguma frente das quatro unidades
   // (ex.: "Solo úmido" só aparece se alguma frente estiver em solo úmido).
   const used = new Set(units.flatMap(unit => fieldFilledRows(unit).map(row => getFieldStatus(row[3]).color)));
-  const legendFont = globalFont(13.5, 'bold');
+  const legendFont = globalTitleFont(14.5, '600');
   let lx = 32;
   ['green', 'yellow', 'gray', 'red'].filter(color => used.has(color)).forEach(color => {
     const style = globalStatusStyle(color);
@@ -161,7 +182,7 @@ function globalDrawSummary(ctx, units, data) {
     return x + 14;
   };
   const label = (text, x, y, color = GLOBAL_COLORS.muted) =>
-    globalDrawText(ctx, text, x, y, width - 28, globalFont(11.5, 'bold'), color);
+    globalDrawText(ctx, text, x, y, width - 28, globalFont(10.5, '700'), color, 'left', GLOBAL_LABEL_SPACING);
 
   // 1. Frentes em atividade (verde).
   const totals = fieldIndicatorTotals(data);
@@ -170,11 +191,11 @@ function globalDrawSummary(ctx, units, data) {
   let x = card(0, GLOBAL_COLORS.green);
   label('FRENTES EM', x, top + 20, GLOBAL_COLORS.white);
   label('ATIVIDADE', x, top + 35, GLOBAL_COLORS.white);
-  const bigFont = globalFont(30, '900');
+  const bigFont = globalFont(30, '800');
   globalDrawText(ctx, String(activeFronts), x, top + 64, 60, bigFont, GLOBAL_COLORS.white);
   globalDrawText(ctx, `de ${totalFronts}`, x + Math.min(60, globalTextWidth(ctx, activeFronts, bigFont)) + 6, top + 67, 70,
     globalFont(17, 'bold'), GLOBAL_COLORS.white);
-  globalDrawText(ctx, `${units.length} unidades`, x, top + 89, width - 28, globalFont(13, 'normal'), GLOBAL_COLORS.white);
+  globalDrawText(ctx, `${units.length} unidades`, x, top + 89, width - 28, globalFont(12, '500'), GLOBAL_COLORS.white);
 
   // 2. Indústrias em operação (Indústria digitada maior que zero).
   const running = totals.running;
@@ -184,7 +205,7 @@ function globalDrawSummary(ctx, units, data) {
   globalDrawText(ctx, `de ${units.length}`, x + Math.min(50, globalTextWidth(ctx, running, bigFont)) + 6, top + 55, 60, globalFont(17, 'bold'));
   const stopped = units.length - running;
   globalDrawText(ctx, stopped ? `${stopped} ${stopped === 1 ? 'parada' : 'paradas'}` : 'todas em operação', x, top + 84,
-    width - 28, globalFont(13, 'normal'), stopped ? GLOBAL_COLORS.orangeText : GLOBAL_COLORS.muted);
+    width - 28, globalFont(12, '500'), stopped ? GLOBAL_COLORS.orangeText : GLOBAL_COLORS.muted);
 
   // 3. Moagem do turno somada (com entrega e estoque).
   const { milling, delivery, stock } = totals;
@@ -193,8 +214,8 @@ function globalDrawSummary(ctx, units, data) {
   const millingText = fieldIndicatorNumber(milling);
   globalDrawText(ctx, millingText, x, top + 50, width - 60, bigFont);
   globalDrawText(ctx, 't/h', x + Math.min(width - 60, globalTextWidth(ctx, millingText, bigFont)) + 5, top + 54, 30, globalFont(15, 'bold'));
-  globalDrawText(ctx, `entrega ${fieldIndicatorNumber(delivery)} t/h`, x, top + 77, width - 28, globalFont(12.5, 'normal'), GLOBAL_COLORS.muted);
-  globalDrawText(ctx, `estoque ${fieldIndicatorNumber(stock)} cargas`, x, top + 93, width - 28, globalFont(12.5, 'normal'), GLOBAL_COLORS.muted);
+  globalDrawText(ctx, `entrega ${fieldIndicatorNumber(delivery)} t/h`, x, top + 77, width - 28, globalFont(11.5, '500'), GLOBAL_COLORS.muted);
+  globalDrawText(ctx, `estoque ${fieldIndicatorNumber(stock)} cargas`, x, top + 93, width - 28, globalFont(11.5, '500'), GLOBAL_COLORS.muted);
 
   // 4. ATR médio geral: média do ATR das unidades com pesagem.
   const atr = totals.atr;
@@ -204,7 +225,7 @@ function globalDrawSummary(ctx, units, data) {
   globalDrawText(ctx, atrText, x, top + 50, width - 64, bigFont);
   globalDrawText(ctx, 'kg/t', x + Math.min(width - 64, globalTextWidth(ctx, atrText, bigFont)) + 5, top + 54, 34, globalFont(15, 'bold'));
   globalDrawText(ctx, totals.atrUnits ? `média das ${totals.atrUnits} unidades` : 'sem pesagem', x, top + 82,
-    width - 28, globalFont(13, 'normal'), GLOBAL_COLORS.muted);
+    width - 28, globalFont(12, '500'), GLOBAL_COLORS.muted);
 
   // Moagem do dia consolidada: total processado e projeção (média do dia × 24) por unidade.
   const rowTop = top + height + 10;
@@ -212,15 +233,15 @@ function globalDrawSummary(ctx, units, data) {
   fillRoundedRect(ctx, 14, rowTop, GLOBAL_REFERENCE_WIDTH - 28, rowHeight, 10, GLOBAL_COLORS.card);
   strokeRoundedRect(ctx, 14.5, rowTop + .5, GLOBAL_REFERENCE_WIDTH - 29, rowHeight - 1, 10, GLOBAL_COLORS.cardBorder, 1);
   fillRoundedRect(ctx, 14, rowTop, 5, rowHeight, 2.5, GLOBAL_COLORS.green);
-  globalDrawText(ctx, 'MOAGEM DO DIA · CONSOLIDADO', 32, rowTop + 18, 300, globalFont(11.5, 'bold'), GLOBAL_COLORS.muted);
+  globalDrawText(ctx, 'MOAGEM DO DIA · CONSOLIDADO', 32, rowTop + 18, 300, globalFont(10.5, '700'), GLOBAL_COLORS.muted, 'left', GLOBAL_LABEL_SPACING);
   const { day, projection } = totals;
-  const valueFont = globalFont(30, '900');
-  globalDrawText(ctx, 'Total processado dia', 32, rowTop + 38, 140, globalFont(13, 'normal'), GLOBAL_COLORS.muted);
+  const valueFont = globalFont(30, '800');
+  globalDrawText(ctx, 'Total processado dia', 32, rowTop + 38, 140, globalFont(12, '500'), GLOBAL_COLORS.muted);
   const dayText = fieldIndicatorNumber(day);
   globalDrawText(ctx, dayText, 32, rowTop + 64, 120, valueFont);
   globalDrawText(ctx, 't', 32 + Math.min(120, globalTextWidth(ctx, dayText, valueFont)) + 4, rowTop + 69, 14, globalFont(15, 'bold'));
   ctx.fillStyle = GLOBAL_COLORS.rule; ctx.fillRect(176, rowTop + 32, 1, 44);
-  globalDrawText(ctx, 'Projeção de moagem dia', 190, rowTop + 38, 160, globalFont(13, 'normal'), GLOBAL_COLORS.muted);
+  globalDrawText(ctx, 'Projeção de moagem dia', 190, rowTop + 38, 160, globalFont(12, '500'), GLOBAL_COLORS.muted);
   const projectionText = fieldIndicatorNumber(projection);
   globalDrawText(ctx, projectionText, 190, rowTop + 64, 120, valueFont, GLOBAL_COLORS.greenBright);
   globalDrawText(ctx, 't', 190 + Math.min(120, globalTextWidth(ctx, projectionText, valueFont)) + 4, rowTop + 69, 14,
@@ -231,7 +252,7 @@ function globalDrawSummary(ctx, units, data) {
     const ux = unitsLeft + index * unitWidth;
     fillRoundedRect(ctx, ux, rowTop + 8, unitWidth - 6, rowHeight - 16, 7, GLOBAL_COLORS.soft);
     globalDrawText(ctx, unit.code, ux + 9, rowTop + 22, unitWidth - 24, globalFont(13, 'bold'));
-    globalDrawText(ctx, fieldIndicatorNumber(data[index].day), ux + 9, rowTop + 44, unitWidth - 24, globalFont(20, '900'));
+    globalDrawText(ctx, fieldIndicatorNumber(data[index].day), ux + 9, rowTop + 44, unitWidth - 24, globalFont(20, '800'));
     globalDrawText(ctx, `proj. ${fieldIndicatorNumber(data[index].projection)}`, ux + 9, rowTop + 64, unitWidth - 24,
       globalFont(12, 'bold'), GLOBAL_COLORS.greenBright);
   });
@@ -276,28 +297,53 @@ function globalRainMean(unit) {
 // Observação, mudanças e apoio: rótulo à esquerda, texto quebrado à direita.
 function globalNoteBlocks(ctx, unit, item, width) {
   const textWidth = width - 120;
-  const font = globalFont(13, 'normal');
+  const font = globalFont(13, '500');
   const lines = (value, empty) => {
     const text = String(value ?? '').trim();
     const content = !text || text === '-' ? empty : text.split(/\r?\n/).map(line => line.trim().replace(/^[•*-]\s*/, '')).filter(Boolean).join('\n');
     return globalWrap(ctx, content, textWidth, font);
   };
   const blocks = [{ label: ['OBSERVAÇÃO'], color: GLOBAL_COLORS.orangeText, lines: lines(unit.observation, 'Sem observação.') }];
-  // Apoio entre unidades: o texto digitado no Preencher (etapa Imagem CTT); sem ele,
-  // o apoio que a balança identificou (troca de cana).
-  const typedSupport = String(unit.support ?? '').trim();
-  const support = typedSupport && typedSupport !== '-' ? typedSupport : item.support.join('\n');
-  if (support) {
+  // Apoio entre unidades: só o texto digitado no Preencher (etapa Imagem CTT), como o modelo.
+  // A troca de cana da balança aparece só no "ATR recebido"; sem texto, o bloco não sai.
+  const support = String(unit.support ?? '').trim();
+  if (support && support !== '-') {
     blocks.push({ label: ['APOIO ENTRE', 'UNIDADES'], color: GLOBAL_COLORS.greenText, lines: lines(support, '') });
   }
   blocks.push({ label: ['MUDANÇAS'], color: GLOBAL_COLORS.ink, lines: lines(unit.changes, 'Sem mudança prevista.') });
   return blocks.map(block => ({ ...block, height: Math.max(block.lines.length, block.label.length) * GLOBAL_CARD.noteLine + 14 }));
 }
 
+// "ATR RECEBIDO" como o modelo: frente em preto e ATR em dourado, separados por " · "; a 1ª
+// linha começa depois do rótulo e as seguintes voltam para a margem do quadro.
+const GLOBAL_RECEIVED_LABEL = 'ATR RECEBIDO';
+const GLOBAL_RECEIVED_LABEL_FONT = '700 10px ' + GLOBAL_FONT;
+const GLOBAL_RECEIVED_FONT = '700 12.5px ' + GLOBAL_FONT;
+
 function globalReceivedLines(ctx, item, width) {
   if (!item.received.length) return [];
-  const text = item.received.map(front => `FT${fieldFrontNumber(front.front)} (${front.home_unit}) ${front.atr != null ? fieldIndicatorNumber(front.atr, 2) : '—'}`).join(' · ');
-  return globalWrap(ctx, text, width - 128, globalFont(13, 'bold'));
+  const words = [];
+  item.received.forEach((front, index) => {
+    if (index) words.push({ text: '·', color: GLOBAL_COLORS.muted });
+    `FT${fieldFrontNumber(front.front)} (${front.home_unit})`.split(' ').forEach(text => words.push({ text, color: GLOBAL_COLORS.ink }));
+    words.push({ text: front.atr != null ? fieldIndicatorNumber(front.atr, 2) : '—', color: GLOBAL_COLORS.yellowText });
+  });
+  const space = globalTextWidth(ctx, ' ', GLOBAL_RECEIVED_FONT);
+  const labelEnd = globalTextWidth(ctx, GLOBAL_RECEIVED_LABEL, GLOBAL_RECEIVED_LABEL_FONT, GLOBAL_LABEL_SPACING) + 8;
+  const right = width - 52;  // relativo à margem do texto (x + 26), até a margem direita do quadro
+  const lines = [[]];
+  let cursor = labelEnd;
+  words.forEach(word => {
+    const wordWidth = globalTextWidth(ctx, word.text, GLOBAL_RECEIVED_FONT);
+    const line = lines[lines.length - 1];
+    if (line.length && cursor + wordWidth > right) {
+      lines.push([]);
+      cursor = 0;
+    }
+    lines[lines.length - 1].push({ ...word, x: cursor });
+    cursor += wordWidth + space;
+  });
+  return lines;
 }
 
 function globalUnitPlacement(ctx, unit, item, width) {
@@ -320,13 +366,13 @@ function globalDrawCardBase(ctx, layout, unit, item) {
   const { x, y, w, h } = layout;
   fillRoundedRect(ctx, x, y, w, h, 12, GLOBAL_COLORS.card);
   strokeRoundedRect(ctx, x + .5, y + .5, w - 1, h - 1, 12, GLOBAL_COLORS.cardBorder, 1);
-  globalDrawText(ctx, unit.code, x + 16, y + 30, 120, globalFont(32, '900'));
+  globalDrawText(ctx, unit.code, x + 16, y + 30, 120, globalFont(32, '800'));
   const name = String(unit.name || '').toLocaleLowerCase('pt-BR').replace(/(^|\s)\p{L}/gu, char => char.toUpperCase());
-  globalDrawText(ctx, name, x + 16, y + 56, w / 2 - 20, globalFont(14, 'normal'), GLOBAL_COLORS.muted);
+  globalDrawText(ctx, name, x + 16, y + 56, w / 2 - 20, globalFont(14, '500'), GLOBAL_COLORS.muted);
   const allActive = item.rows.length > 0 && item.active === item.rows.length;
-  globalDrawText(ctx, `${item.active}/${item.rows.length}`, x + w - 16, y + 30, 90, globalFont(28, '900'),
+  globalDrawText(ctx, `${item.active}/${item.rows.length}`, x + w - 16, y + 30, 90, globalFont(28, '800'),
     allActive ? GLOBAL_COLORS.green : GLOBAL_COLORS.yellowText, 'right');
-  globalDrawText(ctx, 'frentes em atividade', x + w - 16, y + 56, w / 2 - 20, globalFont(13, 'normal'), GLOBAL_COLORS.muted, 'right');
+  globalDrawText(ctx, 'frentes em atividade', x + w - 16, y + 56, w / 2 - 20, globalFont(13, '500'), GLOBAL_COLORS.muted, 'right');
   ctx.fillStyle = GLOBAL_COLORS.rule; ctx.fillRect(x + 14, y + 68, w - 28, 1);
 }
 
@@ -344,9 +390,9 @@ function globalDrawCardMetrics(ctx, layout, item) {
   const top = y + GLOBAL_CARD.metricsY;
   const widths = [.26, .26, .22, .26].map(part => (w - 28) * part);
   const columns = widths.map((_, index) => x + 14 + widths.slice(0, index).reduce((sum, value) => sum + value, 0));
-  const labelFont = globalFont(10.5, 'bold');
-  const valueFont = globalFont(21, '900');
-  const unitFont = globalFont(11, 'bold');
+  const labelFont = globalFont(9.5, '700');
+  const valueFont = globalFont(21, '800');
+  const unitFont = globalFont(9.5, '600');
   // Valor e unidade dentro da própria coluna (a unidade nunca invade a coluna seguinte).
   const value = (index, number, unitLabel, digits = 0) => {
     const text = fieldIndicatorNumber(number, digits);
@@ -356,9 +402,9 @@ function globalDrawCardMetrics(ctx, layout, item) {
     if (unitWidth) globalDrawText(ctx, unitLabel, columns[index] + valueWidth + 3, top + 25, unitWidth, unitFont, GLOBAL_COLORS.muted);
   };
   const small = (index, text, row, color = GLOBAL_COLORS.muted) =>
-    globalDrawText(ctx, text, columns[index], top + row, widths[index] - 6, globalFont(10.5, 'normal'), color);
+    globalDrawText(ctx, text, columns[index], top + row, widths[index] - 6, globalFont(10.5, '500'), color);
   ['MOAGEM TURNO', 'ENTREGA TURNO', 'ESTOQUE', 'ATR PARCIAL'].forEach((label, index) =>
-    globalDrawText(ctx, label, columns[index], top + 2, widths[index] - 6, labelFont, GLOBAL_COLORS.muted));
+    globalDrawText(ctx, label, columns[index], top + 2, widths[index] - 4, labelFont, GLOBAL_COLORS.muted, 'left', .5));
 
   value(0, item.millingShift, 't/h');
   const share = globalIndustryShare(item);
@@ -382,44 +428,57 @@ function globalDrawCardMetrics(ctx, layout, item) {
 function globalDrawProcessed(ctx, layout, item) {
   const { x, y, w } = layout;
   const top = y + GLOBAL_CARD.processedY;
-  fillRoundedRect(ctx, x + 14, top, w - 28, 32, 8, GLOBAL_COLORS.soft);
-  // Rótulo e valor lado a lado em cada metade, sem sobreposição.
-  const labelFont = globalFont(10, 'bold');
-  const valueFont = globalFont(17, '900');
-  const middle = x + w / 2;
-  const pair = (label, text, left, right, color) => {
-    const labelWidth = Math.min(90, globalTextWidth(ctx, label, labelFont));
-    globalDrawText(ctx, label, left, top + 16, labelWidth, labelFont, GLOBAL_COLORS.muted);
-    globalDrawText(ctx, text, right, top + 16, right - (left + labelWidth + 6), valueFont, color, 'right');
+  const gap = 6;
+  const leftWidth = Math.round((w - 28 - gap) * .56);
+  const boxes = [[x + 14, leftWidth], [x + 14 + leftWidth + gap, w - 28 - gap - leftWidth]];
+  boxes.forEach(([left, width]) => fillRoundedRect(ctx, left, top, width, 32, 8, GLOBAL_COLORS.soft));
+  // Rótulo à esquerda e valor à direita de cada quadro, sem sobreposição; "t" menor.
+  const labelFont = globalFont(9.5, '700');
+  const valueFont = globalFont(17, '800');
+  const unitFont = globalFont(10, '700');
+  const pair = ([left, width], label, number, color) => {
+    const labelWidth = Math.min(width * .55, globalTextWidth(ctx, label, labelFont, GLOBAL_LABEL_SPACING));
+    globalDrawText(ctx, label, left + 10, top + 17, labelWidth, labelFont, GLOBAL_COLORS.muted, 'left', GLOBAL_LABEL_SPACING);
+    const right = left + width - 9;
+    const unitWidth = globalTextWidth(ctx, 't', unitFont);
+    const room = right - unitWidth - 3 - (left + 10 + labelWidth + 6);
+    globalDrawText(ctx, 't', right, top + 19, unitWidth, unitFont, color, 'right');
+    globalDrawText(ctx, number, right - unitWidth - 3, top + 16, room, valueFont, color, 'right');
   };
-  pair('PROCESSADO DIA', `${fieldIndicatorNumber(item.day)} t`, x + 22, middle - 8, GLOBAL_COLORS.ink);
-  pair('PROJEÇÃO', `${fieldIndicatorNumber(item.projection)} t`, middle + 8, x + w - 22, GLOBAL_COLORS.greenBright);
+  pair(boxes[0], 'PROCESSADO DIA', fieldIndicatorNumber(item.day), GLOBAL_COLORS.ink);
+  pair(boxes[1], 'PROJEÇÃO', fieldIndicatorNumber(item.projection), GLOBAL_COLORS.greenBright);
 }
 
 function globalDrawCardTable(ctx, layout, unit, item, placing) {
   const { x, y, w } = layout;
   const hasRain = placing.hasRain;
+  // Com chuva, as colunas TURNO e ACUM. ficam presas à margem direita do card (como o ATR sem
+  // chuva), nunca além dela; as demais colunas e fontes ficam compactas para caber no card.
+  const accum = x + w - 32;
   const col = hasRain
-    ? { front: x + 22, sector: x + 66, status: x + 114, atr: x + 266, turn: x + 296, accum: x + 324 }
-    : { front: x + 22, sector: x + 88, status: x + 156, atr: x + w - 18 };
+    ? { front: x + 26, sector: x + 70, status: x + 114, atr: accum - 60, turn: accum - 31, accum }
+    : { front: x + 30, sector: x + 96, status: x + 160, atr: x + w - 18 };
+  const size = hasRain
+    ? { title: 9.5, spacing: 0, front: 13, sector: 12.5, status: 12, atr: 12.5, gap: 46 }
+    : { title: 10, spacing: GLOBAL_LABEL_SPACING, front: 14, sector: 13.5, status: 13.5, atr: 13.5, gap: 46 };
   const rain = hasRain ? globalFrontRainMap(unit) : null;
   const headerY = y + GLOBAL_CARD.tableHeaderY;
-  const titleFont = globalFont(11, 'bold');
-  globalDrawText(ctx, 'FRENTE', col.front, headerY, 54, titleFont, GLOBAL_COLORS.muted);
-  globalDrawText(ctx, 'SETOR', col.sector, headerY, 50, titleFont, GLOBAL_COLORS.muted);
-  globalDrawText(ctx, 'STATUS', col.status, headerY, 80, titleFont, GLOBAL_COLORS.muted);
+  const titleFont = globalFont(size.title, '700');
+  globalDrawText(ctx, 'FRENTE', col.front, headerY, col.sector - col.front - 4, titleFont, GLOBAL_COLORS.muted, 'left', size.spacing);
+  globalDrawText(ctx, 'SETOR', col.sector, headerY, col.status - col.sector - 4, titleFont, GLOBAL_COLORS.muted, 'left', size.spacing);
+  globalDrawText(ctx, 'STATUS', col.status, headerY, 80, titleFont, GLOBAL_COLORS.muted, 'left', size.spacing);
   globalDrawText(ctx, 'ATR', col.atr, headerY - 6, 40, titleFont, GLOBAL_COLORS.muted, 'right');
-  globalDrawText(ctx, 'kg/t', col.atr, headerY + 7, 40, globalFont(9.5, 'normal'), GLOBAL_COLORS.muted, 'right');
+  globalDrawText(ctx, 'kg/t', col.atr, headerY + 7, 40, globalFont(9.5, '500'), GLOBAL_COLORS.muted, 'right');
   if (hasRain) {
-    globalDrawText(ctx, 'CHUVA', (col.turn + col.accum) / 2, headerY - 19, 56, globalFont(10, 'bold'), GLOBAL_COLORS.rain, 'center');
-    globalDrawText(ctx, 'TURNO', col.turn, headerY - 6, 25, globalFont(8.5, 'bold'), GLOBAL_COLORS.muted, 'center');
-    globalDrawText(ctx, 'mm', col.turn, headerY + 7, 22, globalFont(9, 'normal'), GLOBAL_COLORS.muted, 'center');
-    globalDrawText(ctx, 'ACUM.', col.accum, headerY - 6, 25, globalFont(8.5, 'bold'), GLOBAL_COLORS.muted, 'center');
-    globalDrawText(ctx, 'mm', col.accum, headerY + 7, 22, globalFont(9, 'normal'), GLOBAL_COLORS.muted, 'center');
+    // Chuva (mm) em duas linhas, na altura do cabeçalho do ATR (sem invadir o quadro de cima):
+    // "CHUVA" sobre as duas colunas e, abaixo, TURNO e ACUM.
+    globalDrawText(ctx, 'CHUVA', (col.turn + col.accum) / 2, headerY - 6, 58, globalFont(10, 'bold'), GLOBAL_COLORS.rain, 'center');
+    [[col.turn, 'TURNO'], [col.accum, 'ACUM.']].forEach(([center, label]) =>
+      globalDrawText(ctx, label, center, headerY + 7, 28, globalFont(8.5, 'bold'), GLOBAL_COLORS.muted, 'center'));
   }
   ctx.fillStyle = GLOBAL_COLORS.rule; ctx.fillRect(x + 14, headerY + 15, w - 28, 1);
 
-  const rowFont = globalFont(15, 'bold');
+  const rowFont = globalFont(size.front, '700');
   item.rows.forEach((row, index) => {
     const [front = '', sector = '', , status = ''] = row;
     const style = globalStatusStyle(getFieldStatus(status).color);
@@ -429,10 +488,10 @@ function globalDrawCardTable(ctx, layout, unit, item, placing) {
       ctx.fillRect(x + 10, cy - 10, w - 20, 20);
     }
     ctx.save(); ctx.fillStyle = style.dot;
-    ctx.beginPath(); ctx.arc(x + 16, cy, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-    globalDrawText(ctx, fieldFrontNumber(front), col.front, cy, 40, rowFont);
-    globalDrawText(ctx, sector, col.sector, cy, col.status - col.sector - 6, globalFont(14, 'normal'));
-    const statusWidth = (hasRain ? col.atr - 34 : col.atr - 46) - col.status;
+    ctx.beginPath(); ctx.arc(col.front - 11, cy, 3.5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    globalDrawText(ctx, fieldFrontNumber(front), col.front, cy, col.sector - col.front - 4, rowFont);
+    globalDrawText(ctx, sector, col.sector, cy, col.status - col.sector - 6, globalFont(size.sector, '500'));
+    const statusWidth = col.atr - size.gap - col.status;
     const label = String(getFieldStatus(status).image_status || status);
     if (style.pill) {
       const pillFont = globalFont(10.5, 'bold');
@@ -441,9 +500,9 @@ function globalDrawCardTable(ctx, layout, unit, item, placing) {
       globalDrawText(ctx, label, col.status + 5, cy + .5, pillWidth - 10, pillFont, GLOBAL_COLORS.ink);
     } else {
       const display = label.charAt(0) + label.slice(1).toLocaleLowerCase('pt-BR');
-      globalDrawText(ctx, display, col.status, cy, statusWidth, globalFont(14.5, 'bold'), style.text);
+      globalDrawText(ctx, display, col.status, cy, statusWidth, globalFont(size.status, '700'), style.text);
     }
-    globalDrawText(ctx, item.frontAtr(row) || '—', col.atr, cy, 52, globalFont(14, 'normal'), GLOBAL_COLORS.ink, 'right');
+    globalDrawText(ctx, item.frontAtr(row) || '—', col.atr, cy, size.gap - 4, globalFont(size.atr, '500'), GLOBAL_COLORS.ink, 'right');
     if (hasRain) {
       const rainfall = rain.get(canonicalFieldFrontKey(front));
       globalDrawText(ctx, rainfall ? globalRainCell(rainfall.turn) : '—', col.turn, cy, 26, globalFont(13.5, 'bold'), GLOBAL_COLORS.rain, 'center');
@@ -451,7 +510,7 @@ function globalDrawCardTable(ctx, layout, unit, item, placing) {
     }
   });
   if (!item.rows.length) {
-    globalDrawText(ctx, 'Aguardando preenchimento do turno', col.front, y + GLOBAL_CARD.firstRow, w - 44, globalFont(13, 'normal'), GLOBAL_COLORS.muted);
+    globalDrawText(ctx, 'Aguardando preenchimento do turno', col.front, y + GLOBAL_CARD.firstRow, w - 44, globalFont(13, '500'), GLOBAL_COLORS.muted);
   }
 
   if (hasRain) {
@@ -460,7 +519,7 @@ function globalDrawCardTable(ctx, layout, unit, item, placing) {
     const mean = globalRainMean(unit);
     globalDrawText(ctx, `Média: Turno ${mean.turn} mm | Acum ${mean.accum} mm`, x + 26, barY + 14, w - 150, globalFont(13, 'bold'), GLOBAL_COLORS.rain);
     const startDate = unit.rainStartDate || unit.rain_start_date || unit.rainStart || '';
-    if (startDate) globalDrawText(ctx, `acum.: desde ${startDate}`, x + w - 24, barY + 14, 110, globalFont(10, 'normal'), GLOBAL_COLORS.muted, 'right');
+    if (startDate) globalDrawText(ctx, `acum.: desde ${startDate}`, x + w - 24, barY + 14, 110, globalFont(10, '500'), GLOBAL_COLORS.muted, 'right');
   }
 }
 
@@ -470,9 +529,9 @@ function globalDrawReceived(ctx, layout, placing) {
   const { x, y, w } = layout;
   const top = y + received.y;
   fillRoundedRect(ctx, x + 14, top, w - 28, received.height, 8, GLOBAL_COLORS.yellowSoft);
-  globalDrawText(ctx, 'ATR RECEBIDO', x + 26, top + 17, 100, globalFont(11, 'bold'), GLOBAL_COLORS.yellowText);
-  received.lines.forEach((line, index) =>
-    globalDrawText(ctx, line, x + 116, top + 17 + index * 18, w - 140, globalFont(13, 'bold'), GLOBAL_COLORS.ink));
+  globalDrawText(ctx, GLOBAL_RECEIVED_LABEL, x + 26, top + 17, 110, GLOBAL_RECEIVED_LABEL_FONT, GLOBAL_COLORS.yellowText, 'left', GLOBAL_LABEL_SPACING);
+  received.lines.forEach((line, index) => line.forEach(word =>
+    globalDrawText(ctx, word.text, x + 26 + word.x, top + 17 + index * 18, w - 52 - word.x, GLOBAL_RECEIVED_FONT, word.color)));
 }
 
 function globalDrawCardNotes(ctx, layout, placing) {
@@ -481,9 +540,9 @@ function globalDrawCardNotes(ctx, layout, placing) {
   placing.notes.forEach((block, index) => {
     if (index) { ctx.fillStyle = GLOBAL_COLORS.rule; ctx.fillRect(x + 14, top - 6, w - 28, 1); }
     block.label.forEach((part, line) => globalDrawText(ctx, part, x + 16, top + 6 + line * GLOBAL_CARD.noteLine, 92,
-      globalFont(11, 'bold'), block.color));
+      globalFont(10, '700'), block.color, 'left', GLOBAL_LABEL_SPACING));
     block.lines.forEach((line, row) => globalDrawText(ctx, line, x + 106, top + 6 + row * GLOBAL_CARD.noteLine, w - 120,
-      globalFont(13, 'normal'), GLOBAL_COLORS.ink));
+      globalFont(13, '500'), GLOBAL_COLORS.ink));
     top += block.height;
   });
 }
@@ -499,17 +558,17 @@ function globalDrawCard(ctx, layout, unit, placing, item) {
 
 function globalDrawFooter(ctx, top, generatedAt) {
   const W = GLOBAL_REFERENCE_WIDTH;
-  const font = globalFont(11, 'normal');
+  const font = globalFont(11, '500');
   globalDrawText(ctx, 'Barra da moagem: verde ≥ 100% · amarelo 90–99% · laranja < 90% da indústria · “—” = sem dado enviado · Total processado dia:',
     18, top + 12, W - 36, font, GLOBAL_COLORS.footer);
   globalDrawText(ctx, 'toneladas moídas no dia até o momento · Projeção de moagem dia: toneladas previstas para o fim do dia.',
     18, top + 27, W - 36, font, GLOBAL_COLORS.footer);
   ctx.fillStyle = GLOBAL_COLORS.rule; ctx.fillRect(18, top + 40, W - 36, 1);
   globalDrawText(ctx, 'Segurança sempre · Operação com qualidade · Pessoas que fazem a diferença · Resultados sustentáveis',
-    W / 2, top + 58, W - 36, globalFont(13, 'bold'), GLOBAL_COLORS.ink, 'center');
+    W / 2, top + 58, W - 36, globalFont(12.5, '600'), GLOBAL_COLORS.ink, 'center');
   const prefix = `COA · Safra ${saoPauloDateParts(generatedAt).year} · `;
   const slogan = 'Juntos fazemos mais!';
-  const sloganFont = globalFont(13, 'bold');
+  const sloganFont = globalFont(12.5, '600');
   const total = globalTextWidth(ctx, prefix, sloganFont) + globalTextWidth(ctx, slogan, sloganFont);
   const start = (W - total) / 2;
   globalDrawText(ctx, prefix, start, top + 78, W, sloganFont, GLOBAL_COLORS.ink);
@@ -527,6 +586,7 @@ async function globalGenerateApprovedImage(sourceUnits, weighingSummary = null, 
   const ordered = ['PPT', 'NRD', 'RBR', 'PST'].map((code, index) => unitByCode.get(code) || normalized[index]);
   const data = ordered.map(unit => fieldUnitIndicators(unit, weighingSummary));
 
+  await globalLoadFonts();
   const measure = document.createElement('canvas').getContext('2d');
   const cardWidth = (GLOBAL_REFERENCE_WIDTH - 28 - 12) / 2;
   const placements = ordered.map((unit, index) => globalUnitPlacement(measure, unit, data[index], cardWidth));
