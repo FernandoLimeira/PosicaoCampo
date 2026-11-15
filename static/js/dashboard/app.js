@@ -27,6 +27,7 @@ async function initializeApp() {
 
   try {
     await loadServerState();
+    if (await loadWeighingSummary()) renderDashboard();
     try {
       await loadSectorBase({ render: true });
     } catch (sectorError) {
@@ -48,7 +49,11 @@ async function initializeApp() {
 // Compartilha o acompanhamento entre analistas sem recarregar o formulário aberto.
 // startVisiblePolling (core/api.js) pausa a consulta enquanto a aba está oculta.
 function refreshVisibleFieldNotes() {
-  return refreshFieldFrontNotes().catch(error => console.warn('Não foi possível atualizar o acompanhamento.', error));
+  return Promise.all([
+    refreshFieldFrontNotes().catch(error => console.warn('Não foi possível atualizar o acompanhamento.', error)),
+    // Nova importação de pesagem aparece sem recarregar a página.
+    loadWeighingSummary().then(summary => { if (summary && serverStateReady) renderDashboard(); })
+  ]);
 }
 
 startVisiblePolling(refreshVisibleFieldNotes, 30000);

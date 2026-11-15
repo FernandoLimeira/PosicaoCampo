@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Posição de Campo{% endblock %}
 {% block styles %}
-  <link rel="stylesheet" href="/css/pages/dashboard.css?v={{ asset_version }}-weighing" />
-  <link rel="stylesheet" href="/css/pages/dashboard.dark.css?v={{ asset_version }}-weighing" media="(prefers-color-scheme: dark)" />
+  <link rel="stylesheet" href="/css/pages/dashboard.css?v={{ asset_version }}-weighing-v2" />
+  <link rel="stylesheet" href="/css/pages/dashboard.dark.css?v={{ asset_version }}-weighing-v2" media="(prefers-color-scheme: dark)" />
 {% endblock %}
 {% block content %}
 <div id="dashboard-view" class="app-view is-active" aria-hidden="false">
@@ -161,8 +161,8 @@
 {% block scripts %}
   <script src="/js/core/field-fronts.js?v={{ asset_version }}"></script>
   <script src="/js/core/sector-base.js?v={{ asset_version }}"></script>
-  <script src="/js/dashboard/dashboard.js?v={{ asset_version }}"></script>
+  <script src="/js/dashboard/dashboard.js?v={{ asset_version }}-weighing"></script>
   <script src="/js/dashboard/field-notes.js?v={{ asset_version }}"></script>
-  <script src="/js/dashboard/editor.js?v={{ asset_version }}"></script>
-  <script src="/js/dashboard/app.js?v={{ asset_version }}-weighing"></script>
+  <script src="/js/dashboard/editor.js?v={{ asset_version }}-weighing"></script>
+  <script src="/js/dashboard/app.js?v={{ asset_version }}-weighing-v2"></script>
 {% endblock %}

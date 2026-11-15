@@ -93,6 +93,8 @@ body[data-page="dashboard"] { --page: #202020; --data-border: #484848; }
 .field-data-table .field-status-chip.is-waiting { color: #9a74be; background: #241f2a; border-color: #48424d; }
 .field-data-table .field-table-empty td, .field-data-table .field-filter-empty td { color: #999999; background: #292929; }
 .field-subsection-title { color: #bbbbbb; }
+.field-subsection-title .metrics-source { color: #999999; }
+.metrics-weighing-note { background: #22261c; color: #c5e8a3; }
 .field-note-empty { color: #999999 !important; }
 .field-note-details summary { color: #9cc0cb; }
 .field-note-details summary:focus-visible { outline: 2px solid #616161; }

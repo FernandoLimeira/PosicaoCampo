@@ -1080,6 +1080,9 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 .field-data-table .field-status-chip.is-waiting { color: #6e4595; background: #f3edfa; border-color: #d8c5eb; }
 .field-data-table .field-table-empty td, .field-data-table .field-filter-empty td { padding: 23px 12px; text-align: center; color: #75858d; background: #fbfdfc; font-size: 11px; }
 .field-subsection-title { margin-bottom: 12px; color: #3c5157; font-size: 11px; font-weight: 850; letter-spacing: .3px; }
+.field-subsection-title .metrics-source { margin-left: 8px; color: #6c777d; font-size: 10px; font-weight: 600; letter-spacing: 0; }
+.metric.is-weighing { box-shadow: inset 3px 0 0 #76b82a; }
+.metrics-weighing-note { grid-column: 1 / -1; margin: 0 0 4px; padding: 8px 10px; border-radius: 8px; background: #eef7e3; color: #3e6b12; font-size: 12px; }
 .field-note-empty { color: #839299 !important; font-style: italic; }
 .field-note-preview { margin-bottom: 8px !important; }
 .field-note-details summary { display: inline-flex; align-items: center; cursor: pointer; color: #375e6a; font-size: 11px; font-weight: 800; }

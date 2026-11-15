@@ -47,6 +47,58 @@ function makeMetrics(values = []) {
   ]);
 }
 
+// Pesagem da balança (Entrega CTT): moagem, entrega e estoque calculados a partir
+// do Excel importado. Quando a unidade tem cargas no dia, esses indicadores vêm da
+// balança; "Indústria" continua sendo o valor digitado no Preencher.
+let weighingSummary = null;
+const WEIGHING_METRIC_FIELDS = {
+  1: 'milling_shift_tph', 2: 'delivery_shift_tph', 3: 'stock_loads',
+  4: 'milling_last3h_tph', 5: 'delivery_last3h_tph'
+};
+
+async function loadWeighingSummary() {
+  try {
+    weighingSummary = await apiRequest(`/api/weighings/summary?date=${encodeURIComponent(saoPauloIsoDate())}`);
+  } catch (error) {
+    console.warn('Não foi possível consultar a pesagem.', error);
+    weighingSummary = null;
+  }
+  return weighingSummary;
+}
+
+function unitWeighing(code) {
+  if (!weighingSummary?.reference_at) return null;
+  const unit = (weighingSummary.units || []).find(item => item.code === code);
+  return unit && unit.loads_day > 0 ? unit : null;
+}
+
+function weighingReferenceTime() {
+  return weighingSummary?.reference_at ? new Date(weighingSummary.reference_at * 1000).toLocaleTimeString('pt-BR', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit'
+  }) : '';
+}
+
+// Indicadores exibidos (e sugeridos no Preencher): os da balança substituem os digitados.
+function displayMetrics(unit) {
+  const weighing = unitWeighing(unit.code);
+  if (!weighing) return unit.metrics;
+  return unit.metrics.map((metric, index) => {
+    const value = weighing[WEIGHING_METRIC_FIELDS[index]];
+    if (value === null || value === undefined) return metric;
+    // Sem separador de milhar: "1.243" seria lido como 1,243 no Preencher (metricNumber).
+    const text = String(Math.round(value));
+    return [metric[0], metric[1], `${text} ${metricDefinitions[index].unit}`, metric[3]];
+  });
+}
+
+// ATR da frente pela balança (média ponderada pelo peso), usado quando não foi digitado.
+function weighingFrontAtr(unitCode, front) {
+  const weighing = unitWeighing(unitCode);
+  const key = canonicalFieldFrontKey(front);
+  const match = key && weighing?.fronts?.find(item => canonicalFieldFrontKey(item.front) === key);
+  return match?.atr ? match.atr.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+}
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -248,15 +300,16 @@ function unitCard(unit) {
         <td data-label="Setor" class="field-sector-cell">${escapeHtml(sector)}</td>
         <td data-label="Fazenda" class="field-farm-cell" title="${escapeHtml(farm.note || farm.name)}">${escapeHtml(farm.name)}</td>
         <td data-label="Status"><span class="field-status-chip ${statusClass}">${escapeHtml(status)}</span></td>
-        <td data-label="ATR" class="field-atr-cell">${escapeHtml(atr || '—')}</td>
+        <td data-label="ATR" class="field-atr-cell"${!atr && weighingFrontAtr(unit.code, front) ? ' title="ATR da balança (Entrega CTT)"' : ''}>${escapeHtml(atr || weighingFrontAtr(unit.code, front) || '—')}</td>
         <td data-label="Observações" class="field-observation-cell" data-field-summary-index="${index}" tabindex="0" aria-label="Ver acontecimentos em aberto da Frente ${escapeHtml(front)}">${fieldNotePreview(front)}</td>
         <td data-label="Detalhes" class="field-front-action-cell"><button type="button" class="field-front-details-button" data-field-front-index="${index}" aria-label="Ver detalhes da Frente ${escapeHtml(front)}" title="Ver detalhes da Frente ${escapeHtml(front)}">Ver</button></td>
       </tr>`;
     }).join('')
     : '';
 
-  const metrics = unit.metrics.map(([, label, value, extra = '']) => `
-    <div class="metric ${escapeHtml(extra)}">
+  const weighing = unitWeighing(unit.code);
+  const metrics = displayMetrics(unit).map(([, label, value, extra = ''], index) => `
+    <div class="metric ${escapeHtml(extra)}${weighing && WEIGHING_METRIC_FIELDS[index] ? ' is-weighing' : ''}">
       <div class="metric-info">
         <small>${escapeHtml(label)}</small>
         <strong>${escapeHtml(value)}</strong>
@@ -307,7 +360,8 @@ function unitCard(unit) {
           </div>
 
           <div class="unit-metrics-strip" aria-label="Indicadores da unidade">
-            <div class="field-subsection-title">Indicadores de produção</div>
+            <div class="field-subsection-title">Indicadores de produção${weighing
+              ? ` <small class="metrics-source">Moagem, entrega e estoque da balança · dados até ${escapeHtml(weighingReferenceTime())}</small>` : ''}</div>
             <div class="metrics-grid">${metrics}</div>
           </div>
         </section>

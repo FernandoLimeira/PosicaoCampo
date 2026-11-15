@@ -170,12 +170,16 @@ function reorderFrontForm() {
 
 function renderMetricsForm(unit) {
   const container = document.querySelector('#metrics-form');
-  container.innerHTML = metricDefinitions.map((definition, index) => `
+  // Com pesagem importada, moagem/entrega/estoque já vêm preenchidos pela balança.
+  const metrics = displayMetrics(unit);
+  const note = unitWeighing(unit.code)
+    ? `<p class="metrics-weighing-note">Moagem, entrega e estoque preenchidos pela pesagem da balança (dados até ${escapeHtml(weighingReferenceTime())}). Confira antes de salvar.</p>` : '';
+  container.innerHTML = note + metricDefinitions.map((definition, index) => `
     <div class="metric-field">
       <label>
         <span>${escapeHtml(definition.label)}</span>
         <div class="metric-input-wrap">
-          <input class="metric-input" data-metric-index="${index}" type="number" step="0.01" min="0" value="${metricNumber(unit.metrics[index]?.[2])}" />
+          <input class="metric-input" data-metric-index="${index}" type="number" step="0.01" min="0" value="${metricNumber(metrics[index]?.[2])}" />
           <small>${escapeHtml(definition.unit)}</small>
         </div>
       </label>
