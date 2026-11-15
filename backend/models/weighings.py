@@ -1,6 +1,8 @@
 """Pesagem de cana do CTT: importação das cargas da balança e resumo por unidade/frente.
 
-Mesma lógica da planilha "Controle de entrega x Moagem" (validada com a NRD), hora a hora:
+Mesma lógica da planilha "Controle de entrega x Moagem", hora a hora. Conferida com a NRD
+em 14/11/2026: moagem, densidade, CVs e entrega batem nas 18 horas fechadas quando o
+arquivo traz a guarita (sem ela, os CVs pela entrada no pátio variam ±2 por hora):
 - Moagem da hora: soma do peso líquido (QT_LIQUIDO) das cargas com saída da balança
   na hora. Moagem do dia: soma do dia até a referência.
 - Densidade da hora: peso médio das julietas pesadas na hora (moagem ÷ cargas).

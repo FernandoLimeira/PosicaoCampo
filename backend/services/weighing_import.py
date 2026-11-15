@@ -4,7 +4,8 @@ Uma linha por carga (caminhão + julieta) que passou pela balança, com as colun
 (a ordem não importa, cabeçalhos comparados sem acento/maiúsculas/pontuação):
 ``INSTANCIA_ORIGEM | DT_MOVIMENTO | NO_LIBERACAO | CAMINHAO | JULIETA | CD_UPNIVEL1 |
 CD_UPNIVEL2 | CD_FREN_TRAN | QT_LIQUIDO | ATR | HR_ENTRADA_PATIO | HR_ENTRADA_BALANCA |
-HR_SAIDA_BALANCA``.
+HR_SAIDA_BALANCA``, e opcionalmente ``DT_REG_GUARITA`` (ou ``DATA_HORA_GUARITA``), a chegada
+na guarita que a planilha "Controle de entrega x Moagem" usa para contar os CVs da hora.
 
 ``INSTANCIA_ORIGEM`` é a indústria que recebeu a carga (201 PPT, 204 NRD, 402 RBR,
 401 PST). No Polo SP o setor vem em ``CD_UPNIVEL2``; no Polo MS o setor vem em
