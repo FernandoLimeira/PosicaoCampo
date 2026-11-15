@@ -17,11 +17,18 @@ document.querySelector('#emit-global-position')?.addEventListener('click', async
   button.disabled = true;
   status.textContent = 'Carregando a posição atual de todas as unidades…';
   try {
-    const payload = await apiRequest('/api/units');
+    // Pesagem da balança do dia pela regra "hora atual − 1 h" (a mesma da Posição de Campo).
+    const [payload, weighing] = await Promise.all([
+      apiRequest('/api/units'),
+      apiRequest(`/api/weighings/summary?date=${encodeURIComponent(weighingWorkDate())}`).catch(error => {
+        console.warn('Pesagem indisponível; a imagem usa os indicadores digitados.', error);
+        return null;
+      })
+    ]);
     const ordered = ['NRD', 'PPT', 'RBR', 'PST'].map(code => payload.units?.find(unit => unit.code === code));
     if (ordered.some(unit => !unit)) throw new Error('Cadastre as quatro unidades antes de emitir a Posição de Campo.');
     status.textContent = 'Gerando imagem em alta definição…';
-    const blob = await generateReportImageBlob(ordered);
+    const blob = await generateReportImageBlob(ordered, weighing);
     downloadBlobFile(blob, `Posicao-de-Campo-Global-${saoPauloDateParts().isoDate.split('-').reverse().join('-')}.png`);
     status.textContent = 'Posição de Campo emitida com sucesso.';
   } catch (error) {

@@ -174,8 +174,8 @@ static/
     │   └── app.js                setupEvents, initializeApp e atualização periódica
     ├── reports-export/           geração das imagens PNG
     │   ├── shared-drawing.js     primitivas de canvas, loadImageAsset, cabeçalho
-    │   ├── field-report-data.js  normalização das unidades, chuva por frente, ícones
-    │   ├── global-report.js      emissão global (quatro unidades)
+    │   ├── field-report-data.js  normalização das unidades e chuva por frente
+    │   ├── global-report.js      emissão "Troca de Turno CTT" (quatro unidades + balança)
     │   ├── sacarose-export.js    imagem da Sacarose
     ├── producao/                 production-consolidation.js, production-config.js,
     │                             producao.js, service-orders.js, production-sheet.js, production-dashboard.js, production-catalog.js, production-queries.js, production-export.js

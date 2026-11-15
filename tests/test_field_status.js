@@ -58,9 +58,6 @@ async function main() {
   }, { get: (target, key) => key in target ? target[key] : () => {} });
   ctx.document.createElement = () => ({ width: 0, height: 0, getContext: () => canvasContext,
     toBlob(callback) { callback({ width: this.width, height: this.height }); } });
-  ctx.loadImageAsset = async () => null;
-  ctx.loadEmbeddedReportUnitSymbol = async () => null;
-  ctx.loadReportUnitIconImage = async () => null;
   for (const generate of [
     () => ctx.generateReportImageBlob(['PPT', 'NRD', 'RBR', 'PST'].map(code => ({ ...source, code })))]) {
     drawn.length = 0;
@@ -68,26 +65,26 @@ async function main() {
     assert(image.width > 0 && image.height > 0);
     assert(drawn.some(item => item.text.toUpperCase() === 'EM ATIVIDADE'));
     assert(drawn.some(item => item.text.toUpperCase() === 'SOLO ÚMIDO'));
-    assert(drawn.some(item => item.text.toUpperCase() === 'PARADA' && item.color === '#ff6b57'));
+    assert(drawn.some(item => item.text.toUpperCase() === 'PARADA' && item.color === '#ee7f2d'));
     for (const item of catalog.filter(item => item.image_status !== item.label)) {
       assert(!drawn.some(drawing => drawing.text.toUpperCase() === item.label));
     }
     assert.equal(JSON.stringify(source), original, 'Emitir não pode alterar os detalhes salvos no painel');
   }
-  assert(drawn.some(item => item.text === 'Solo úmido'));
+  assert(drawn.some(item => item.text === 'SOLO ÚMIDO'), 'Solo úmido aparece em destaque (pílula amarela)');
   assert(drawn.some(item => item.text === 'Parada'));
   assert(!drawn.some(item => /situação crítica/i.test(item.text)));
-  const legend = drawn.filter(item => item.y === 270);
-  assert.deepEqual(legend.map(item => item.text), ['Em atividade', 'Solo úmido', 'Parada']);
+  const legend = drawn.filter(item => item.y === vm.runInContext('GLOBAL_LEGEND_Y', ctx));
+  assert.deepEqual(legend.map(item => item.text), ['Em atividade', 'Solo úmido / mudança / teste', 'Parado / oficina / crítico']);
   assert(legend.every((item, index) => index === legend.length - 1
     || item.x + item.maxWidth < legend[index + 1].x), 'A legenda deve ficar alinhada sem sobreposição');
-  assert(drawn.some(item => item.text === 'CTT' && item.color === '#80b82e'));
+  assert(drawn.some(item => item.text === 'CTT' && item.color === '#7cc23f'));
 
   // A legenda mostra só os status usados em alguma frente (sem solo úmido, ele não aparece).
   const onlyActive = { ...source, rows: source.rows.filter(row => ctx.getFieldStatus(row[3]).image_status === 'EM ATIVIDADE') };
   drawn.length = 0;
   await ctx.generateReportImageBlob(['PPT', 'NRD', 'RBR', 'PST'].map(code => ({ ...onlyActive, code })));
-  assert.deepEqual(drawn.filter(item => item.y === 270).map(item => item.text), ['Em atividade']);
+  assert.deepEqual(drawn.filter(item => item.y === vm.runInContext('GLOBAL_LEGEND_Y', ctx)).map(item => item.text), ['Em atividade']);
   assert(!drawn.some(item => /mudança ou teste/i.test(item.text)));
 
   // Salvar em Ver usa a versão aberta e mantém observações, chuva, ATR e demais frentes/unidades.

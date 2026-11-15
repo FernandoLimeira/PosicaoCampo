@@ -1297,3 +1297,60 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
   .field-front-note-form { display: none; }
   .field-front-status-form { display: none; }
 }
+
+/* Painel gerencial da balança (Posição de Campo). Séries: moagem = azul, entrega = laranja. */
+.weighing-panel { margin-top: 14px; display: grid; gap: 14px; }
+.wp-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.wp-header h3 { margin: 0; color: var(--green-strong); font-size: 15px; }
+.wp-header p { margin: 4px 0 0; color: #5b6168; font-size: 12px; }
+.wp-side-stats { display: flex; flex-wrap: wrap; gap: 10px; }
+.wp-side-stats > div, .wp-kpi-group { min-width: 0; padding: 10px 14px; background: var(--data-surface); border: 1px solid var(--data-border); border-radius: var(--data-radius); }
+.wp-side-stats small, .wp-kpi-values small { display: flex; align-items: center; gap: 6px; color: #717c81; font-size: 9px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; }
+.wp-side-stats strong { display: block; margin-top: 2px; color: #2d3f44; font-size: 18px; }
+.wp-side-stats span { color: #5b6168; font-size: 11px; }
+.wp-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.wp-kpi-group { display: grid; gap: 8px; }
+.wp-kpi-title { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.wp-kpi-title strong { color: var(--green-strong); font-size: 12px; }
+.wp-kpi-title small { color: #717c81; font-size: 10px; }
+.wp-kpi-values { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.wp-kpi-values strong { display: inline-block; margin-top: 2px; color: #2d3f44; font-size: 20px; line-height: 1.1; }
+.wp-kpi-values span { margin-left: 3px; color: #5b6168; font-size: 11px; }
+.wp-diff { display: inline-flex; align-items: center; gap: 5px; color: #4a5d66; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.wp-diff i { font-size: 9px; font-style: normal; }
+.wp-diff.is-up { color: #1d6b52; }
+.wp-diff.is-down { color: #9f2f39; }
+.wp-trend { margin-left: 4px; font-size: 11px; }
+.wp-key { display: inline-block; flex: none; }
+.wp-chart { margin: 0; padding: 12px 14px 6px; background: var(--data-surface); border: 1px solid var(--data-border); border-radius: var(--data-radius); }
+.wp-chart figcaption { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; color: #2d3f44; font-size: 12px; }
+.wp-legend { display: inline-flex; flex-wrap: wrap; gap: 14px; color: #4a5d66; font-size: 11px; }
+.wp-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.wp-chart-wrap { overflow-x: auto; }
+.wp-chart-svg { display: block; width: 100%; min-width: 560px; height: auto; }
+.wp-band { fill: #000000; fill-opacity: 0; }
+.wp-band-B { fill-opacity: .025; }
+.wp-band-label { fill: #8a969c; font-size: 11px; font-weight: 700; }
+.wp-grid { stroke: #e3e8eb; stroke-width: 1; }
+.wp-baseline { stroke: #b9c2c7; stroke-width: 1; }
+.wp-axis { fill: #717c81; font-size: 11px; }
+.wp-bar { fill: #2a78d6; }
+.wp-line { fill: none; stroke: #eb6834; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.wp-dot { fill: #eb6834; stroke: #ffffff; stroke-width: 2; }
+.wp-direct { fill: #2d3f44; font-size: 11px; font-weight: 700; }
+.wp-hit { fill: transparent; cursor: default; outline: none; }
+.wp-hit:hover, .wp-hit:focus-visible { fill: #000000; fill-opacity: .05; }
+.wp-bottom { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.wp-table th small { display: block; color: #717c81; font-size: 10px; font-weight: 600; }
+.wp-table tr.is-current th, .wp-table tr.is-current td { background: #eef4fb; }
+.wp-table tr.is-total th, .wp-table tr.is-total td { font-weight: 700; background: #f2f4f5; }
+.wp-support { padding: 10px 14px; background: var(--data-surface); border: 1px solid var(--data-border); border-radius: var(--data-radius); }
+.wp-support h4 { margin: 0 0 6px; color: var(--green-strong); font-size: 10px; letter-spacing: .7px; text-transform: uppercase; }
+.wp-support ul { margin: 0; padding-left: 16px; color: #4e5b62; font-size: 12px; line-height: 1.6; }
+.wp-hours summary { cursor: pointer; color: var(--green); font-size: 12px; font-weight: 700; }
+.wp-hours .table-wrap { margin-top: 8px; }
+@media (max-width: 1120px) { .wp-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) {
+  .wp-kpis, .wp-bottom { grid-template-columns: 1fr; }
+  .wp-side-stats > div { flex: 1 1 140px; }
+}

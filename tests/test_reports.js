@@ -143,21 +143,42 @@ async function main() {
   };
   // Emissões sem o painel: só os scripts de emissão (global e Sacarose).
   loadScripts(standalone, [...EXPORT_SCRIPTS, 'reports-export/sacarose-export.js']);
-  standalone.loadReportUnitIconImage = async () => null;
   standalone.loadSacaroseHeaderIconImage = async () => null;
-  // A emissão global carrega a arte de referência direto por loadImageAsset.
-  standalone.loadImageAsset = async () => ({ width: 4096, height: 2304, close() {} });
-  standalone.loadEmbeddedReportUnitSymbol = async () => null;
   standalone.drawSacaroseExportUnit = (ctx, code) => { drawn.push({ code }); return 200; };
   const unit = { code: 'NRD', name: 'Narandiba', rows: [['1', '10', 'green', 'EM ATIVIDADE']], rain: [] };
   const global = ['PPT', 'NRD', 'RBR', 'PST'].map(code => ({ ...unit, code }));
-  // A emissão global usa o layout aprovado (900 px de referência, escala 2x)
+  // A emissão global usa o layout aprovado (720 px de referência, escala 2,5x)
   // e desenha cada unidade em globalDrawCard.
   standalone.globalDrawCard = (ctx, layout, unit) => drawn.push({ code: unit.code, layout });
   const globalImage = await standalone.generateReportImageBlob(global);
   assert.equal(globalImage.width, 1800);
   assert.deepEqual(drawn.map(item => item.code).sort(), ['NRD', 'PPT', 'PST', 'RBR']);
   await assert.rejects(standalone.generateReportImageBlob([unit]), /quatro unidades/);
+
+  // Dados da imagem "Troca de Turno CTT": a balança substitui o digitado; sem pesagem, vale o digitado.
+  const typed = [['', 'INDÚSTRIA', '850 TN/H'], ['', 'MOAGEM TURNO', '700 TN/H'], ['', 'ENTREGA TURNO', '690 TN/H'],
+    ['', 'ESTOQUE', '40 CARGAS', 'stock'], ['', 'MOAGEM ÚLT. 3 H', '710 TN/H'], ['', 'ENTREGA ÚLT. 3 H', '705 TN/H']];
+  const ppt = standalone.normalizeReportUnit({ code: 'PPT', name: 'PARAGUAÇU PAULISTA', metrics: typed,
+    rows: [['FT 02', '1631', '', 'EM ATIVIDADE', ''], ['FT 19', '3432', '', 'SOLO ÚMIDO', '125']] }, 0);
+  const summary = { reference_at: 1, support: [
+    { front: '19', from_unit: 'NRD', to_unit: 'PPT', loads: 12, tons: 410.5, atr: 127.91 },
+    { front: '05', from_unit: 'PPT', to_unit: 'RBR', loads: 3, tons: 98 }],
+    units: [{ code: 'PPT', loads_day: 300, milling_shift_tph: 846.6, delivery_shift_tph: 818, stock_loads: 48,
+      milling_last3h_tph: 832, delivery_last3h_tph: 878, atr: 118.64, milling_day_t: 11763, milling_projection_t: 18822,
+      fronts: [{ front: '02', atr: 121.06 }], received: [{ front: '19', home_unit: 'NRD', atr: 127.91 }] }] };
+  const data = standalone.globalUnitData(ppt, summary);
+  assert.deepEqual([data.industry, data.millingShift, data.deliveryShift, data.stock, data.milling3h, data.delivery3h,
+    data.atr, data.day, data.projection], [850, 846.6, 818, 48, 832, 878, 118.64, 11763, 18822]);
+  assert.equal(data.active, 1, 'Solo úmido não conta como frente em atividade');
+  assert.equal(data.frontAtr(ppt.rows[0]), '121,06', 'Sem ATR digitado, usa o ATR da balança da frente');
+  assert.equal(data.frontAtr(ppt.rows[1]), '125', 'O ATR digitado tem prioridade');
+  assert.deepEqual(Array.from(data.support), ['FT 19 (NRD) entregando aqui: 12 cargas · 411 t.',
+    'FT 05 apoiando a RBR: 3 cargas · 98 t.']);
+  // 846,6 ÷ 850 = 99,6%: amarelo e "99%" (verde só a partir de 100%).
+  assert.equal(standalone.globalIndustryShare(data).color, '#f2c230');
+  const fallback = standalone.globalUnitData(ppt, null);
+  assert.deepEqual([fallback.millingShift, fallback.stock, fallback.atr, fallback.day], [700, 40, null, null]);
+  assert.deepEqual(Array.from(fallback.support), []);
   drawn.length = 0;
   await standalone.generateSacaroseReportImageBlob(['PPT'], { PPT: [{ front: '1', sector: '10' }], NRD: [{ front: '9', sector: '90' }] }, []);
   assert.deepEqual(drawn.map(item => item.code), ['PPT']);

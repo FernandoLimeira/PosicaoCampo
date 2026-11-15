@@ -25,9 +25,6 @@ async function main() {
   }, { get: (target, key) => key in target ? target[key] : () => {} });
   ctx.document.createElement = () => ({ width: 0, height: 0, getContext: () => canvasContext,
     toBlob(callback) { callback({ width: this.width, height: this.height }); } });
-  ctx.loadImageAsset = async () => null;
-  ctx.loadEmbeddedReportUnitSymbol = async () => null;
-  ctx.loadReportUnitIconImage = async () => null;
   ctx.drawFittedText = (_canvas, text, x, y) => drawn.push({ text: String(text), x, y });
 
   async function checkImages(source, expected) {
@@ -39,7 +36,8 @@ async function main() {
       for (const [index, values] of expected) {
         const front = drawn.find(item => item.text === index);
         assert(front, `A frente ${index} deve aparecer na imagem`);
-        const rainCells = drawn.filter(item => item.y === front.y && item.x > front.x + 270)
+        // Colunas TURNO e ACUM. ficam no fim do mesmo card (largura 340).
+        const rainCells = drawn.filter(item => item.y === front.y && item.x > front.x + 270 && item.x < front.x + 320)
           .map(item => Number(item.text.replace(',', '.')));
         assert.deepEqual(rainCells, values,
           `A emissão ${global ? 'global' : 'individual'} deve associar a chuva à frente ${index}`);

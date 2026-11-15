@@ -180,6 +180,9 @@ class WeighingTests(unittest.TestCase):
         self.assertEqual(ppt["milling_last3h_tph"], round((0 + 60 + 70) / 3, 1))
         self.assertEqual(ppt["delivery_shift_tph"], round((65 + 60 + 140) / 3, 1))
         self.assertEqual(ppt["delivery_day_t"], 265.0)
+        # Projeção do dia: média por hora (10 horas fechadas: 00h a 09h) × 24.
+        self.assertEqual(ppt["milling_projection_t"], round(130 / 10 * 24, 1))
+        self.assertEqual(ppt["delivery_projection_t"], round(265 / 10 * 24, 1))
         # Pátio: D (pesado só às 10:01), as 2 julietas de C e a de E.
         self.assertEqual(ppt["stock_loads"], 4)
 

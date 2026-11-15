@@ -118,7 +118,7 @@ function renderDeliveryHours(summary = deliveryLastSummary) {
 
 async function loadDeliverySummary() {
   const input = document.querySelector('#delivery-date');
-  const day = input?.value || saoPauloIsoDate(new Date(Date.now() - 3600 * 1000));
+  const day = input?.value || weighingWorkDate();
   // "Fechamento às": o dia como estava naquele horário (para conferir com a planilha).
   const time = document.querySelector('#delivery-time')?.value || '';
   const summary = await apiRequest(`/api/weighings/summary?date=${encodeURIComponent(day)}${
@@ -312,7 +312,7 @@ document.querySelector('#delivery-query-sql')?.addEventListener('keydown', event
 if (document.querySelector('#delivery-units')) {
   const dateInput = document.querySelector('#delivery-date');
   // Hora atual − 1 h: entre 00:00 e 00:59 abre no dia anterior, ainda em fechamento.
-  if (dateInput && !dateInput.value) dateInput.value = saoPauloIsoDate(new Date(Date.now() - 3600 * 1000));
+  if (dateInput && !dateInput.value) dateInput.value = weighingWorkDate();
   loadDeliverySummary().catch(error => {
     console.error(error);
     showToast(error.message || 'Não foi possível carregar a pesagem.', true);

@@ -134,3 +134,27 @@ body[data-page="dashboard"] { --page: #202020; --data-border: #484848; }
 .field-front-note-copy .field-observation-text, .field-front-note-copy .field-observation-excerpt { color: #e6e6e6; }
 .field-notes-pagination small { color: #a5a5a5; }
 .field-front-note-empty, .field-note-readonly { color: #a5a5a5; }
+.wp-header p { color: #a3a3a3; }
+.wp-side-stats small, .wp-kpi-values small { color: #999999; }
+.wp-side-stats strong { color: #cccccc; }
+.wp-side-stats span { color: #a3a3a3; }
+.wp-kpi-title small { color: #999999; }
+.wp-kpi-values strong { color: #cccccc; }
+.wp-kpi-values span { color: #a3a3a3; }
+.wp-diff { color: #acacac; }
+.wp-diff.is-up { color: #9ce4cd; }
+.wp-diff.is-down { color: #d26871; }
+.wp-chart figcaption { color: #cccccc; }
+.wp-legend { color: #acacac; }
+.wp-band { fill: #e6e6e6; }
+.wp-band-label { fill: #999999; }
+.wp-axis { fill: #999999; }
+.wp-bar { fill: #5c93d6; }
+.wp-line { stroke: #d67f5c; }
+.wp-dot { fill: #d67f5c; }
+.wp-direct { fill: #cccccc; }
+.wp-hit:hover, .wp-hit:focus-visible { fill: #e6e6e6; }
+.wp-table th small { color: #999999; }
+.wp-table tr.is-current th, .wp-table tr.is-current td { background: #1f242b; }
+.wp-table tr.is-total th, .wp-table tr.is-total td { background: #242424; }
+.wp-support ul { color: #acacac; }

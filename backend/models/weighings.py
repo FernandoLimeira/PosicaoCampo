@@ -315,6 +315,10 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
             "milling_last3h_tph": _round(_average(item["milling_t"] for item in recent_hours)),
             "delivery_shift_tph": _round(_average(item["delivery_t"] for item in shift_hours)),
             "delivery_last3h_tph": _round(_average(item["delivery_t"] for item in recent_hours)),
+            # Projeção do dia (quadro "Projeções" da planilha): média por hora do dia × 24.
+            "milling_projection_t": _round(_average(item["milling_t"] for item in hours) * 24) if hours else None,
+            "delivery_projection_t": _round(_average(item["delivery_t"] for item in hours) * 24)
+            if any(item["delivery_t"] is not None for item in hours) else None,
             "stock_loads": len(stock),
             "atr": _weighted_atr(rows),
             "hours": hours,
