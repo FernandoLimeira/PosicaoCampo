@@ -126,6 +126,18 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
   padding: 16px clamp(14px, 2vw, 26px) 28px;
 }
 
+/* Dashboard das 4 unidades no topo; o card da unidade vem logo abaixo. */
+.field-overview-grid { padding-bottom: 0; }
+.field-overview-grid:empty { display: none; }
+.mr-unit-row { cursor: pointer; }
+.mr-unit-row:hover th, .mr-unit-row:hover td, .mr-unit-row:focus-visible th, .mr-unit-row:focus-visible td { background: #eef4f6; }
+.mr-unit-row:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
+.mr-unit-row.is-selected th, .mr-unit-row.is-selected td { background: #e3eef1; }
+.mr-unit-row.is-selected th:first-child { box-shadow: inset 4px 0 0 var(--green); }
+.mr-details { display: grid; gap: 12px; }
+.mr-details > summary { cursor: pointer; padding: 10px 12px; border: 1px solid var(--data-border); border-radius: var(--data-radius); background: var(--data-surface); color: var(--green); font-size: 12.5px; font-weight: 800; }
+.mr-details[open] > summary { margin-bottom: 12px; }
+
 .unit-card {
   --unit-accent: #66909c;
   min-width: 0;

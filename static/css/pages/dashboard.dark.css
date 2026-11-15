@@ -19,6 +19,8 @@ body[data-page="dashboard"] { --page: #202020; --data-border: #484848; }
 .image-step-exchange dt { color: #e2cd8c; }
 .image-step-exchange dd { color: #cccccc; }
 .dashboard-import-button { background: #2a2a2a; }
+.mr-unit-row:hover th, .mr-unit-row:hover td, .mr-unit-row:focus-visible th, .mr-unit-row:focus-visible td { background: #242424; }
+.mr-unit-row.is-selected th, .mr-unit-row.is-selected td { background: #1b2225; }
 .unit-card { --unit-accent: #3d3d3d; }
 .unit-card.attention { --unit-accent: #cba74d; }
 .unit-card.critical { --unit-accent: #cb4d4d; }

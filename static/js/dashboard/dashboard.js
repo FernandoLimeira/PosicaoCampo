@@ -440,12 +440,10 @@ function renderDashboard() {
     fieldViewFilter = 'all';
     fieldSearchQuery = '';
   }
-  // Relatório gerencial (dashboard/management-report.js): as 4 unidades no lugar do card.
-  if (managementReportOpen) renderManagementReport();
-  else {
-    document.querySelector('#units-grid').innerHTML = unitCard(selectedUnit);
-    applyFieldViewFilters();
-  }
+  // Dashboard das 4 unidades no topo (dashboard/management-report.js) e o card da unidade.
+  renderManagementReport();
+  document.querySelector('#units-grid').innerHTML = unitCard(selectedUnit);
+  applyFieldViewFilters();
   renderUnitSelection();
   document.querySelectorAll('[data-unit-context]').forEach(link => {
     link.href = `${link.pathname}?unit=${encodeURIComponent(selectedUnit.code)}`;

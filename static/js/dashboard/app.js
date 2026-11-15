@@ -31,8 +31,6 @@ function setupEvents() {
   });
 
   document.addEventListener('report-unit-change', () => {
-    // Escolher uma unidade no menu volta do relatório gerencial para o card dela.
-    managementReportOpen = false;
     editorObservationContext = null;
     editorObservationRequest += 1;
     closeAllModals();

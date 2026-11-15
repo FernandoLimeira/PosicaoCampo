@@ -18,12 +18,13 @@
           </div>
           <div class="dashboard-heading-actions">
             <span id="preview-unit-state" class="unit-state dashboard-unit-state"></span>
-            <button id="open-management-report" class="dashboard-fill-button dashboard-import-button" type="button">Relatório gerencial</button>
-            {% if user.module_access.dashboard.edit %}<label id="dashboard-import-label" class="dashboard-fill-button dashboard-import-button" title="Excel de pesagem da balança (o mesmo da Entrega CTT)">Importar pesagem<input id="dashboard-import-file" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" hidden /></label>
+            <button id="management-report-export" class="dashboard-fill-button dashboard-import-button" type="button" title="Indicadores das 4 unidades, hora a hora, turnos, troca de cana e frentes">Exportar Excel</button>
+            {% if user.module_access.dashboard.edit %}<label id="dashboard-import-label" class="dashboard-fill-button dashboard-import-button" title="Excel do SELECT da balança (Entrega CTT → Consultas SQL); substitui a pesagem anterior">Importar pesagem<input id="dashboard-import-file" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" hidden /></label>
             <button id="open-data-modal" class="dashboard-fill-button" type="button">Preencher</button>{% endif %}
           </div>
         </section>
 
+        <section id="field-overview" class="units-grid field-overview-grid" aria-label="Indicadores das 4 unidades"></section>
         <section id="units-grid" class="units-grid" aria-live="polite"></section>
       </div>
 {% endblock %}
