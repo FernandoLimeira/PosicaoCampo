@@ -114,7 +114,8 @@ Excel do SELECT ──► services/weighing_import ──► models/weighings.im
   entrega = CVs × 2 × densidade da hora (3 casas); CVs pela chegada na guarita, Polo SP
   pelo `DT_REG_GUARITA` e Polo MS pelo `HR_GUARITA` (julietas ÷ 2), como a planilha de cada
   polo; turno, últimas 3 h e projeção (média por hora do dia × 24) saem dos valores sem
-  arredondar das horas fechadas; troca de cana:
+  arredondar das horas fechadas; com `DT_EXTRACAO` no SELECT, fecha até a última hora cheia
+  da extração e ignora o que chegou ou saiu depois (inclusive no estoque); troca de cana:
   o ATR entra na média da unidade que recebeu a cana.
 
 ## Compatibilidade mantida

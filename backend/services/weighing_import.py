@@ -5,7 +5,9 @@ Uma linha por carga (caminhão + julieta) que passou pela balança, com as colun
 ``INSTANCIA_ORIGEM | DT_MOVIMENTO | NO_LIBERACAO | CAMINHAO | JULIETA | CD_UPNIVEL1 |
 CD_UPNIVEL2 | CD_FREN_TRAN | QT_LIQUIDO | ATR | HR_ENTRADA_PATIO | HR_ENTRADA_BALANCA |
 HR_SAIDA_BALANCA``, e opcionalmente ``DT_REG_GUARITA`` (ou ``DATA_HORA_GUARITA``), a chegada
-na guarita que a planilha "Controle de entrega x Moagem" usa para contar os CVs da hora.
+na guarita que a planilha "Controle de entrega x Moagem" usa para contar os CVs da hora, e
+``DT_EXTRACAO`` (``SYSDATE``, horário de Brasília), o momento em que o SELECT rodou: o
+fechamento vai até a última hora cheia encerrada nele.
 
 ``INSTANCIA_ORIGEM`` é a indústria que recebeu a carga (201 PPT, 204 NRD, 402 RBR,
 401 PST). No Polo SP o setor vem em ``CD_UPNIVEL2``; no Polo MS o setor vem em
@@ -53,6 +55,9 @@ HEADER_ALIASES = {
     "scale_out_at": {"hr saida balanca"},
     # Chegada na guarita (opcional): usada na entrega no lugar da entrada no pátio.
     "guarita_at": {"data hora guarita", "dt reg guarita", "hr guarita", "guarita"},
+    # Momento em que o SELECT foi rodado (opcional; SYSDATE, horário de Brasília): o
+    # fechamento vai até a última hora encerrada nele e ignora o que veio depois.
+    "extracted_at": {"dt extracao", "data extracao", "hr extracao"},
 }
 REQUIRED_FIELDS = ("instance", "release", "front", "net_kg", "scale_out_at")
 FIELD_LABELS = {
@@ -183,6 +188,7 @@ def _parse_rows(rows):
             "atr": atr if atr is not None and 0 < atr < 1000 else None,
             "patio_at": _timestamp(values["patio_at"], tz), "scale_in_at": _timestamp(values["scale_in_at"], tz),
             "scale_out_at": out_at, "guarita_at": _timestamp(values["guarita_at"], tz),
+            "extracted_at": _timestamp(values["extracted_at"], FIELD_TIMEZONE),
         })
     return {"records": records, "ignored_units": ignored_units, "invalid_rows": invalid_rows,
             "ignored_instances": dict(sorted(ignored_instances.items(), key=lambda item: -item[1])[:20])}

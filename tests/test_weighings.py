@@ -308,6 +308,41 @@ class WeighingTests(unittest.TestCase):
         self.assertEqual((ppt8["trucks"], ppt8["delivery_t"]), (2, 120.0))   # 2 × 2 × 30 t
         self.assertEqual((pst8["trucks"], pst8["delivery_t"]), (1.5, 90.0))  # 1,5 × 2 × 30 t
 
+    def test_extraction_time_closes_hours_and_ignores_later_loads(self):
+        # SELECT rodado às 17:20 de Brasília (DT_EXTRACAO), sem corte de horário: fecha até a
+        # hora 16 no Polo SP e até a 15 no MS; o que chegou ou saiu depois fica de fora.
+        extraction = "14/11/2026 17:20:00"
+        rows = [HEADER + ["DT_EXTRACAO"]] + [row + [extraction] for row in (
+            load("201", "1", "5", "361", "1173", "30000", "14/11/2026 16:30:00", patio="14/11/2026 16:10:00"),
+            # Chegou 17:05 e saiu 17:15 (Brasília): depois do fechamento, não conta em nada.
+            load("201", "2", "5", "361", "1173", "30000", "14/11/2026 17:15:00", patio="14/11/2026 17:05:00"),
+            # No pátio desde 16:50: estoque no fechamento.
+            load("201", "3", "5", "361", "1173", "", "", patio="14/11/2026 16:50:00"),
+            # Chegou 16:40 e saiu 17:10: no fechamento (17:00) ainda estava no pátio.
+            load("201", "4", "5", "361", "1173", "30000", "14/11/2026 17:10:00", patio="14/11/2026 16:40:00"),
+            # PST (horário do MS): hora 15 fechada; a das 16:02 e a saída das 16:10 ficam fora.
+            load("401", "5", "404", "90428", "1", "30000", "14/11/2026 15:40:00", patio="14/11/2026 15:10:00"),
+            load("401", "6", "404", "90428", "1", "", "", patio="14/11/2026 16:02:00"),
+            load("401", "7", "404", "90428", "1", "30000", "14/11/2026 16:10:00", patio="14/11/2026 15:30:00"),
+        )]
+        result = weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx(rows), "a.xlsx")["records"])
+        self.assertEqual(result["extracted_at"], clock("17:20"))
+        units = {unit["code"]: unit for unit in weighings.weighing_summary()["units"]}
+        ppt, pst = units["PPT"], units["PST"]
+        self.assertEqual((ppt["closed_hours"], ppt["closed_until"], ppt["data_until"]), (17, clock("17:00"), clock("17:00") - 1))
+        # Mesma placa: 16:10 e 16:40 são um CV (janela de 30 min); 16:50 é outro; 17:05 fica fora.
+        self.assertEqual((ppt["milling_day_t"], ppt["loads_day"], ppt["hours"][16]["trucks"]), (30.0, 1, 2))
+        self.assertEqual(ppt["stock_loads"], 2)  # liberações 3 e 4
+        self.assertEqual((pst["closed_hours"], pst["closed_until"]), (16, clock("17:00")))
+        self.assertEqual((pst["milling_day_t"], pst["hours"][15]["trucks"]), (30.0, 1.0))
+        self.assertEqual(pst["stock_loads"], 1)  # liberação 7 (a 6 chegou depois do fechamento)
+        # 00:20 fecha a hora 23 do dia anterior.
+        rows = [HEADER + ["DT_EXTRACAO"], load("201", "1", "5", "361", "1173", "30000", "14/11/2026 23:30:00",
+                                               patio="14/11/2026 23:10:00") + ["15/11/2026 00:20:00"]]
+        weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx(rows), "a.xlsx")["records"])
+        summary = weighings.weighing_summary()
+        self.assertEqual((summary["work_date"], summary["units"][0]["closed_hours"]), ("2026-11-14", 24))
+
     def test_ms_arrival_hour_comes_from_hr_guarita(self):
         # A planilha de PST conta a hora pelo HR_GUARITA (HR_ENTRADA_PATIO do SELECT); a da NRD,
         # pelo DT_REG_GUARITA. Mesma carga: HR_GUARITA 07:59 e DT_REG_GUARITA 08:00.

@@ -4,7 +4,9 @@ Mesma lógica da aba "Chegada" da planilha "Controle de entrega x Moagem", hora 
 Conferida com a NRD em 14/11/2026: moagem, CVs e entrega batem nas horas 00h-21h quando
 o arquivo traz DT_REG_GUARITA (sem ela, os CVs pela entrada no pátio variam ±2 por hora):
 - Horas: de 00:00 até a última hora do SELECT importado (vale até a próxima importação,
-  independente do relógio); o dia é o mais recente do arquivo.
+  independente do relógio); o dia é o mais recente do arquivo. Com a coluna DT_EXTRACAO
+  (SYSDATE do SELECT), fecha até a última hora cheia encerrada na extração (rodou às 17:20 de
+  Brasília: até 16:59:59 no Polo SP e 15:59:59 no MS) e ignora o que chegou ou saiu depois.
 - Moagem da hora: soma do peso líquido (QT_LIQUIDO) das cargas com saída da balança
   na hora. Moagem do dia: soma das horas fechadas, desde 00:00:00.
 - Densidade da hora: peso médio das julietas pesadas na hora (moagem ÷ cargas).
@@ -16,7 +18,8 @@ o arquivo traz DT_REG_GUARITA (sem ela, os CVs pela entrada no pátio variam ±2
   B 07h-14h, C 15h-23h (como a planilha de cada polo).
 - Últimas 3 h: média das 3 últimas horas fechadas.
 - Referência ("dados até"): última saída da balança, limitada à última chegada (até
-  onde o arquivo está completo); é o momento do estoque.
+  onde o arquivo está completo); com DT_EXTRACAO, o fim da última hora fechada. É o
+  momento do estoque.
 - Estoque: cargas que chegaram (nas 24 h até a referência) e ainda não tinham saído
   da balança na referência.
 - Fuso: o Polo MS (RBR e PST) registra no horário local, uma hora a menos que Brasília.
@@ -212,12 +215,20 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
     relógio: a importação vale até a próxima. ``at_time`` ("HH:MM") ou ``now`` (epoch)
     limitam às horas encerradas até aquele momento (hora − 1 h), para conferir com uma
     planilha de fechamento tirada nele."""
+    with connection() as conn:
+        extracted = conn.execute("SELECT MAX(extracted_at) FROM field_weighings").fetchone()[0]
+        latest = conn.execute(
+            "SELECT MAX(movement_date) FROM field_weighings WHERE scale_out_at IS NOT NULL AND movement_date <> ''"
+        ).fetchone()[0]
+    # Com DT_EXTRACAO: fecha até a última hora cheia encerrada quando o SELECT rodou (os fusos
+    # dos polos diferem em horas inteiras, então a hora cheia é a mesma nos dois).
+    extraction_cut = extracted - extracted % 3600 if extracted else None
     if work_date in (None, ""):
-        with connection() as conn:
-            latest = conn.execute(
-                "SELECT MAX(movement_date) FROM field_weighings WHERE scale_out_at IS NOT NULL AND movement_date <> ''"
-            ).fetchone()[0]
-        selected = date.fromisoformat(latest) if latest else datetime.now(FIELD_TIMEZONE).date()
+        if extraction_cut:
+            # Dia da última hora fechada (00:20 fecha a hora 23 do dia anterior).
+            selected = datetime.fromtimestamp(extraction_cut - 1, FIELD_TIMEZONE).date()
+        else:
+            selected = date.fromisoformat(latest) if latest else datetime.now(FIELD_TIMEZONE).date()
     else:
         try:
             selected = date.fromisoformat(str(work_date))
@@ -271,6 +282,12 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
         moments = [row["scale_out_at"] for row in weighed if row["unit_code"] in codes]
         moments += [_arrival(row) for row in arrival_rows if row["unit_code"] in codes and _arrival(row) >= day_start]
         data_until[polo] = max(moments, default=None) if references[polo] else None
+        if extraction_cut and references[polo]:
+            # Com DT_EXTRACAO o fechamento é o último segundo da última hora encerrada: o que
+            # chegou ou saiu depois fica fora (horas, turno, 3 h e estoque).
+            data_until[polo] = references[polo] = extraction_cut - 1
+    if extraction_cut:
+        reference = references.get(polo_of("PPT")) or next((value for value in references.values() if value), None)
 
     def closing(unit_start: int, polo: str) -> tuple[list[int], int | None]:
         """Horas de 00:00 até a hora do último dado do SELECT (no fuso da unidade): a
