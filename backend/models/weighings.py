@@ -1,17 +1,18 @@
 """Pesagem de cana do CTT: importação das cargas da balança e resumo por unidade/frente.
 
-Mesma lógica da planilha "Controle de entrega x Moagem", hora a hora. Conferida com a NRD
-em 14/11/2026: moagem, densidade, CVs e entrega batem nas 18 horas fechadas quando o
-arquivo traz a guarita (sem ela, os CVs pela entrada no pátio variam ±2 por hora):
+Mesma lógica da aba "Chegada" da planilha "Controle de entrega x Moagem", hora a hora.
+Conferida com a NRD em 14/11/2026: moagem, CVs e entrega batem nas horas 00h-21h quando
+o arquivo traz DT_REG_GUARITA (sem ela, os CVs pela entrada no pátio variam ±2 por hora):
+- Horas fechadas: pelo relógio, hora atual − 1 h (às 23:35 entram 00:00:00 a 22:59:59).
 - Moagem da hora: soma do peso líquido (QT_LIQUIDO) das cargas com saída da balança
-  na hora. Moagem do dia: soma do dia até a referência.
+  na hora. Moagem do dia: soma das horas fechadas, desde 00:00:00.
 - Densidade da hora: peso médio das julietas pesadas na hora (moagem ÷ cargas).
 - Entrega da hora: CVs (caminhões) que chegaram na hora × 2 julietas × densidade da hora.
   Chegada = guarita (DATA_HORA_GUARITA), quando o arquivo traz; senão a entrada no pátio.
 - Turno: média das horas fechadas do turno (A 00h-06h, B 07h-15h, C 16h-23h).
 - Últimas 3 h: média das 3 últimas horas fechadas.
 - Referência ("dados até"): última saída da balança, limitada à última chegada (até
-  onde o arquivo está completo). Só entram nas médias as horas já fechadas.
+  onde o arquivo está completo); é o momento do estoque.
 - Estoque: cargas que chegaram (nas 24 h até a referência) e ainda não tinham saído
   da balança na referência.
 - Todas as unidades (inclusive o Polo MS) usam o mesmo horário e os mesmos turnos.
@@ -183,7 +184,8 @@ def _truck_arrivals(rows) -> list[int]:
     return starts
 
 
-def weighing_summary(work_date: Any = None) -> dict[str, Any]:
+def weighing_summary(work_date: Any = None, *, now: float | None = None) -> dict[str, Any]:
+    """Resumo do dia; ``now`` (epoch) substitui o relógio, para testes."""
     if work_date in (None, ""):
         selected = datetime.now(FIELD_TIMEZONE).date()
     else:
@@ -214,16 +216,15 @@ def weighing_summary(work_date: Any = None) -> dict[str, Any]:
     last_exit = max((row["scale_out_at"] for row in weighed), default=None)
     last_arrival = max((_arrival(row) for row in arrival_rows if _arrival(row) >= day_start), default=None)
     reference = min(value for value in (last_exit, last_arrival) if value) if last_exit else None
-    weighed = [row for row in weighed if reference and row["scale_out_at"] <= reference]
-    arrival_rows = [row for row in arrival_rows if reference and _arrival(row) <= reference]
-    # Horas fechadas: a hora (ex.: 20:00:00 a 20:59:59) só entra quando os dados passaram
-    # do último segundo dela; com dados até 21:59:07 a hora 21 ainda está aberta.
-    closed_hours = [hour for hour in range(24)
-                    if reference and day_start + (hour + 1) * 3600 <= reference]
+    # Fechamento pelo relógio: hora atual − 1 h. Às 23:35 fecham as horas até 22:59:59
+    # (00h a 22h); o dia conta desde 00:00:00 e o turno desde o início dele (ex.: 16h).
+    # Data passada: as 24 horas; sem nenhuma carga no dia, nenhuma hora.
+    now_at = int(time.time() if now is None else now)
+    cutoff = min(day_end, day_start + max(0, (now_at - day_start) // 3600) * 3600) if reference else day_start
+    closed_hours = [hour for hour in range(24) if day_start + (hour + 1) * 3600 <= cutoff]
     shift_code = _shift_of_hour(closed_hours[-1]) if closed_hours else None
-    # Fechamento: moagem, cargas e frentes param no último segundo da última hora fechada
-    # (ex.: 20:59:59), como a planilha. O estoque continua na referência (o que está no pátio).
-    closed_until = day_start + (closed_hours[-1] + 1) * 3600 if closed_hours else None
+    # Moagem, cargas e frentes param no último segundo da última hora fechada.
+    closed_until = day_start + len(closed_hours) * 3600 if closed_hours else None
     weighed = [row for row in weighed if closed_until and row["scale_out_at"] < closed_until]
 
     units = []
@@ -232,7 +233,8 @@ def weighing_summary(work_date: Any = None) -> dict[str, Any]:
         rows = [row for row in weighed if row["unit_code"] == code]
         arrivals = [row for row in arrival_rows if row["unit_code"] == code]
         # Estoque: chegou nas 24 h até a referência e ainda não tinha saído da balança nela.
-        stock = [row for row in arrivals if _arrival(row) >= reference - STOCK_WINDOW_SECONDS
+        stock = [row for row in arrivals
+                 if reference and reference - STOCK_WINDOW_SECONDS <= _arrival(row) <= reference
                  and (row["scale_out_at"] is None or row["scale_out_at"] > reference)]
         day_density = _tons(rows) / len(rows) if rows else None
         truck_arrivals = _truck_arrivals(arrivals)

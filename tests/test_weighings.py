@@ -1,6 +1,7 @@
 import io
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 from xml.sax.saxutils import escape
@@ -11,6 +12,7 @@ from backend.models import database as db
 from backend.models import module_access
 from backend.models import weighings
 from backend.models.units import initialize_units
+from backend.services.operational_shifts import FIELD_TIMEZONE
 from backend.services.weighing_import import parse_weighing_file
 
 HEADER = ["INSTANCIA_ORIGEM", "DT_MOVIMENTO", "NO_LIBERACAO", "CAMINHAO", "JULIETA", "CD_UPNIVEL1",
@@ -29,6 +31,11 @@ def xlsx(rows):
         archive.writestr("xl/_rels/workbook.xml.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>')
         archive.writestr("xl/worksheets/sheet1.xml", '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' + xml_rows + '</sheetData></worksheet>')
     return data.getvalue()
+
+
+def clock(hhmm, day="14/11/2026"):
+    """Relógio dos testes: o resumo fecha as horas até a hora atual − 1 h."""
+    return int(datetime.strptime(f"{day} {hhmm}", "%d/%m/%Y %H:%M").replace(tzinfo=FIELD_TIMEZONE).timestamp())
 
 
 def load(instance, release, front, level1, level2, kg, out, atr="", patio="14/11/2026 08:00:00"):
@@ -113,7 +120,7 @@ class WeighingTests(unittest.TestCase):
         weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx([HEADER,
             load("204", "10", "20", "300", "3500", "30000", "14/11/2026 16:05:00", patio="14/11/2026 16:01:00"),
         ]), "b.xlsx")["records"])
-        summary = weighings.weighing_summary("2026-11-14")
+        summary = weighings.weighing_summary("2026-11-14", now=clock("16:30"))
         units = {unit["code"]: unit for unit in summary["units"]}
         ppt, pst = units["PPT"], units["PST"]
         self.assertEqual(ppt["milling_day_t"], 100.0)
@@ -152,7 +159,7 @@ class WeighingTests(unittest.TestCase):
             truck("7", "C", "09:59:30"),
             truck("8", "E", "10:00:10"),                                   # CV E: passou das 10:00
         ]), "a.xlsx")["records"])
-        summary = weighings.weighing_summary("2026-11-14")
+        summary = weighings.weighing_summary("2026-11-14", now=clock("10:30"))
         ppt = summary["units"][0]
         # Referência = última chegada (10:00:10): a hora 09 fechou (passou de 09:59:59);
         # a saída das 10:01 fica para a próxima importação.
@@ -175,14 +182,21 @@ class WeighingTests(unittest.TestCase):
         # Pátio: D (pesado só às 10:01), as 2 julietas de C e a de E.
         self.assertEqual(ppt["stock_loads"], 4)
 
-    def test_hour_closes_only_after_its_last_second(self):
-        # Dados até 21:59:07: a hora 21 (21:00:00-21:59:59) ainda está aberta e não entra
-        # nas médias do turno (fechamento da NRD de 14/11: turno C = 16h a 20h).
+    def test_hours_close_by_the_clock_minus_one_hour(self):
+        # Hora atual − 1 h: às 21:35 fecham 00:00:00 a 20:59:59; a hora 21 está em andamento
+        # e não entra nas médias do turno (turno C = 16h a 20h).
         weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx([HEADER,
             load("204", "1", "20", "300", "3500", "35000", "14/11/2026 20:30:00", patio="14/11/2026 19:50:00"),
             load("204", "2", "20", "300", "3500", "20000", "14/11/2026 21:59:07", patio="14/11/2026 21:59:07"),
         ]), "a.xlsx")["records"])
-        summary = weighings.weighing_summary("2026-11-14")
+        # Às 23:35 fecham 00h a 22h, mesmo que o arquivo vá só até 21:59 (a hora 22 fica zerada).
+        late = weighings.weighing_summary("2026-11-14", now=clock("23:35"))
+        self.assertEqual((late["closed_hours"], late["closed_until"]), (23, clock("23:00")))
+        self.assertEqual(late["units"][1]["milling_day_t"], 55.0)
+        self.assertEqual([item["milling_t"] for item in late["units"][1]["hours"][-3:]], [35.0, 20.0, 0.0])
+        # Data já encerrada: as 24 horas.
+        self.assertEqual(weighings.weighing_summary("2026-11-14", now=clock("08:00", "15/11/2026"))["closed_hours"], 24)
+        summary = weighings.weighing_summary("2026-11-14", now=clock("21:35"))
         self.assertEqual(summary["closed_hours"], 21)  # 00h a 20h
         nrd = summary["units"][1]
         self.assertEqual(nrd["hours"][-1]["hour"], 20)
@@ -204,7 +218,7 @@ class WeighingTests(unittest.TestCase):
                 load("201", "4", "5", "361", "1173", "", "", patio="13/11/2026 06:10:00") + ["13/11/2026 06:00:00"]]
         records = parse_weighing_file(xlsx(rows), "a.xlsx")["records"]
         weighings.import_weighings(self.admin["id"], records)
-        summary = weighings.weighing_summary("2026-11-14")
+        summary = weighings.weighing_summary("2026-11-14", now=clock("09:30"))
         self.assertEqual(summary["reference_at"], 1794658200)  # 14/11/2026 09:10 (Brasília)
         ppt = summary["units"][0]
         hours = {item["hour"]: item for item in ppt["hours"]}
@@ -227,7 +241,7 @@ class WeighingTests(unittest.TestCase):
             julieta("5", "Y", "09:20:00"), julieta("6", "Y", "09:21:00"),
             julieta("7", "Z", "10:30:00"),  # fecha as horas até 09
         ]), "a.xlsx")["records"])
-        hours = {item["hour"]: item for item in weighings.weighing_summary("2026-11-14")["units"][0]["hours"]}
+        hours = {item["hour"]: item for item in weighings.weighing_summary("2026-11-14", now=clock("10:40"))["units"][0]["hours"]}
         self.assertEqual((hours[7]["trucks"], hours[8]["trucks"], hours[9]["trucks"]), (2, 0, 1))
 
     def test_summary_without_data(self):
