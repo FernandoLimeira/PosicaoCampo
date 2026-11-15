@@ -190,6 +190,22 @@ class WeighingTests(unittest.TestCase):
         # Pátio: a liberação 2 (sem pesagem) e a 3 (pesada depois da referência).
         self.assertEqual(ppt["stock_loads"], 2)
 
+    def test_julietas_of_the_same_truck_are_one_cv(self):
+        # Caminhão X: julieta 1 na guarita às 07:59 e julieta 2 às 08:01 -> 1 CV na hora 07
+        # (como a planilha, que conta a julieta de sequência 1). Caminhão Y volta 2 h depois.
+        def julieta(release, plate, guarita, out="14/11/2026 10:30:00"):
+            row = load("201", release, "5", "361", "1173", "30000", out, patio=f"14/11/2026 {guarita}")
+            row[3] = plate
+            return row + [f"14/11/2026 {guarita}"]
+        weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx([HEADER + ["DT_REG_GUARITA"],
+            julieta("1", "X", "07:59:00"), julieta("2", "X", "08:01:00"),
+            julieta("3", "Y", "07:10:00"), julieta("4", "Y", "07:12:00"),
+            julieta("5", "Y", "09:20:00"), julieta("6", "Y", "09:21:00"),
+            julieta("7", "Z", "10:30:00"),  # fecha as horas até 09
+        ]), "a.xlsx")["records"])
+        hours = {item["hour"]: item for item in weighings.weighing_summary("2026-11-14")["units"][0]["hours"]}
+        self.assertEqual((hours[7]["trucks"], hours[8]["trucks"], hours[9]["trucks"]), (2, 0, 1))
+
     def test_summary_without_data(self):
         summary = weighings.weighing_summary("2026-11-13")
         self.assertIsNone(summary["reference_at"])

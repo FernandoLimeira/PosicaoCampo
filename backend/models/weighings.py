@@ -34,6 +34,8 @@ MAX_WEIGHING_RECORDS = 150_000
 STOCK_WINDOW_SECONDS = 24 * 3600
 LAST_HOURS = 3
 JULIETAS_PER_TRUCK = 2
+# Julietas do mesmo caminhão que chegam até 30 min depois da primeira são o mesmo CV.
+CV_JULIETA_WINDOW = 30 * 60
 # Turnos da planilha, por hora cheia.
 SHIFT_HOURS = {"A": range(0, 7), "B": range(7, 16), "C": range(16, 24)}
 
@@ -162,6 +164,25 @@ def _arrival(row) -> int | None:
     return row["guarita_at"] or row["patio_at"]
 
 
+def _truck_arrivals(rows) -> list[int]:
+    """Chegada de cada CV (caminhão). As julietas do mesmo caminhão podem passar na guarita
+    com alguns minutos de diferença (ex.: 19:06 e 19:07): as que chegam até
+    ``CV_JULIETA_WINDOW`` depois da primeira formam um só CV, contado na hora da primeira,
+    como a planilha, que conta a julieta de sequência 1."""
+    starts: list[int] = []
+    first_by_truck: dict[Any, int] = {}
+    for row in sorted(rows, key=_arrival):
+        arrival = _arrival(row)
+        # Sem placa do caminhão, junta só as julietas com a mesma chegada.
+        key = row["truck"] or ("", arrival)
+        first = first_by_truck.get(key)
+        if first is not None and arrival - first <= CV_JULIETA_WINDOW:
+            continue
+        first_by_truck[key] = arrival
+        starts.append(arrival)
+    return starts
+
+
 def weighing_summary(work_date: Any = None) -> dict[str, Any]:
     if work_date in (None, ""):
         selected = datetime.now(FIELD_TIMEZONE).date()
@@ -209,12 +230,12 @@ def weighing_summary(work_date: Any = None) -> dict[str, Any]:
         stock = [row for row in arrivals if _arrival(row) >= reference - STOCK_WINDOW_SECONDS
                  and (row["scale_out_at"] is None or row["scale_out_at"] > reference)]
         day_density = _tons(rows) / len(rows) if rows else None
+        truck_arrivals = _truck_arrivals(arrivals)
         hours = []
         for hour in closed_hours:
             start, end = day_start + hour * 3600, day_start + (hour + 1) * 3600
             milled = [row for row in rows if start <= row["scale_out_at"] < end]
-            # CV = caminhão: as julietas do mesmo caminhão chegam juntas.
-            trucks = {(row["truck"], _arrival(row)) for row in arrivals if start <= _arrival(row) < end}
+            trucks = [arrival for arrival in truck_arrivals if start <= arrival < end]
             density = _tons(milled) / len(milled) if milled else day_density
             hours.append({
                 "hour": hour, "shift": _shift_of_hour(hour), "milling_t": _round(_tons(milled)),
