@@ -284,6 +284,10 @@ class WeighingTests(unittest.TestCase):
         self.assertEqual(rbr["hours"][-1]["hour"], 21)
         self.assertEqual(rbr["hours"][-1]["milling_t"], 32.0)    # a das 22:20 (MS) é da hora 22, aberta
         self.assertEqual(rbr["milling_day_t"], 32.0)
+        # Turnos de cada polo (como as planilhas): no MS a hora 15:00 já é do turno C; no SP, do B.
+        self.assertEqual((rbr["hours"][14]["shift"], rbr["hours"][15]["shift"]), ("B", "C"))
+        self.assertEqual((units["NRD"]["hours"][15]["shift"], units["NRD"]["hours"][16]["shift"]), ("B", "C"))
+        self.assertEqual((rbr["shift_hours"]["C"], units["NRD"]["shift_hours"]["C"]), ([15, 24], [16, 24]))
 
     def test_cvs_follow_each_polo_spreadsheet(self):
         # Mesmas cargas na PPT (Polo SP) e na PST (Polo MS), horário local de cada uma:

@@ -90,7 +90,7 @@ function managementReportHtml() {
     return `<figure class="wp-chart mr-chart"><figcaption><strong>${escapeHtml(unit.code)} · hora a hora (t)</strong>
         <span class="wp-legend"><span><svg class="wp-key" width="10" height="10" aria-hidden="true"><rect class="wp-bar" width="10" height="10" rx="2"></rect></svg>Moagem</span>
         <span><svg class="wp-key" width="14" height="10" aria-hidden="true"><line class="wp-line" x1="1" x2="13" y1="5" y2="5"></line></svg>Cana entregue</span></span></figcaption>
-      ${hours.length ? `<div class="wp-chart-wrap">${weighingHourChart(hours)}</div>` : '<p class="mr-empty">Sem pesagem fechada.</p>'}</figure>`;
+      ${hours.length ? `<div class="wp-chart-wrap">${weighingHourChart(hours, weighingByCode.get(unit.code)?.shift_hours)}</div>` : '<p class="mr-empty">Sem pesagem fechada.</p>'}</figure>`;
   }).join('');
 
   const exchange = (summary?.support || []).map(item => `<tr><th scope="row">FT ${escapeHtml(fieldFrontNumber(item.front))}</th>

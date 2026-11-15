@@ -11,7 +11,8 @@ o arquivo traz DT_REG_GUARITA (sem ela, os CVs pela entrada no pátio variam ±2
 - Entrega da hora: CVs que chegaram na hora × 2 julietas × densidade da hora. CVs pelo padrão
   da planilha de cada polo: Polo SP conta caminhões; Polo MS conta cada julieta como 0,5 CV.
   Chegada = guarita (DATA_HORA_GUARITA), quando o arquivo traz; senão a entrada no pátio.
-- Turno: média das horas fechadas do turno (A 00h-06h, B 07h-15h, C 16h-23h).
+- Turno: média das horas do turno. Polo SP: A 00h-06h, B 07h-15h, C 16h-23h; Polo MS: A 00h-06h,
+  B 07h-14h, C 15h-23h (como a planilha de cada polo).
 - Últimas 3 h: média das 3 últimas horas fechadas.
 - Referência ("dados até"): última saída da balança, limitada à última chegada (até
   onde o arquivo está completo); é o momento do estoque.
@@ -42,8 +43,10 @@ LAST_HOURS = 3
 JULIETAS_PER_TRUCK = 2
 # Julietas do mesmo caminhão que chegam até 30 min depois da primeira são o mesmo CV.
 CV_JULIETA_WINDOW = 30 * 60
-# Turnos da planilha, por hora cheia.
+# Turnos da planilha de cada polo, por hora cheia (horário local da unidade): no Polo MS a
+# hora 15:00 já é do turno C (planilha da PST); no Polo SP o turno C começa às 16:00.
 SHIFT_HOURS = {"A": range(0, 7), "B": range(7, 16), "C": range(16, 24)}
+MS_SHIFT_HOURS = {"A": range(0, 7), "B": range(7, 15), "C": range(15, 24)}
 
 _COLUMNS = (
     "unit_code", "release_no", "movement_date", "truck", "trailer", "front", "sector", "section",
@@ -158,8 +161,12 @@ def _round(value: float | None, digits: int = 1) -> float | None:
     return None if value is None else round(value, digits)
 
 
-def _shift_of_hour(hour: int) -> str:
-    return next(code for code, hours in SHIFT_HOURS.items() if hour in hours)
+def _shift_table(unit_code: str | None = None) -> dict[str, range]:
+    return MS_SHIFT_HOURS if unit_code in MS_UNIT_CODES else SHIFT_HOURS
+
+
+def _shift_of_hour(hour: int, unit_code: str | None = None) -> str:
+    return next(code for code, hours in _shift_table(unit_code).items() if hour in hours)
 
 
 def _average(values) -> float | None:
@@ -281,7 +288,7 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
         tz = unit_timezone(code)
         unit_start = int(datetime.combine(selected, dtime.min, tz).timestamp())
         unit_hours, unit_closed_until = closing(unit_start, polo_of(code))
-        unit_shift = _shift_of_hour(unit_hours[-1]) if unit_hours else None
+        unit_shift = _shift_of_hour(unit_hours[-1], code) if unit_hours else None
         # Moagem, cargas e frentes param no último segundo da última hora fechada.
         rows = [row for row in weighed if row["unit_code"] == code
                 and unit_closed_until and row["scale_out_at"] < unit_closed_until]
@@ -303,7 +310,7 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
             trucks = sum(weight for arrival, weight in cv_arrivals if start <= arrival < end)
             density = _tons(milled) / len(milled) if milled else day_density
             hours.append({
-                "hour": hour, "shift": _shift_of_hour(hour), "milling_t": _round(_tons(milled)),
+                "hour": hour, "shift": _shift_of_hour(hour, code), "milling_t": _round(_tons(milled)),
                 "loads": len(milled), "density_t": _round(density, 3), "trucks": trucks,
                 "delivery_t": _round(trucks * JULIETAS_PER_TRUCK * density) if density else None,
             })
@@ -336,6 +343,8 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
             "closed_hours": len(unit_hours),
             "closed_until": unit_closed_until,
             "shift": unit_shift,
+            # Faixas dos turnos A, B e C da unidade ([início, fim) em horas), para o gráfico.
+            "shift_hours": {shift: [span.start, span.stop] for shift, span in _shift_table(code).items()},
             "milling_day_t": _round(_tons(rows)),
             "delivery_day_t": _round(sum(item["delivery_t"] or 0 for item in hours)),
             "loads_day": len(rows),

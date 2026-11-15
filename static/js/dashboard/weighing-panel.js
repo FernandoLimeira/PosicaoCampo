@@ -16,7 +16,10 @@ function panelAverage(hours, key) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
 }
 
-function weighingHourChart(hours) {
+// Faixas dos turnos da unidade (shift_hours do resumo; Polo MS: turno C a partir das 15h).
+const DEFAULT_SHIFT_HOURS = { A: [0, 7], B: [7, 16], C: [16, 24] };
+
+function weighingHourChart(hours, shiftHours = DEFAULT_SHIFT_HOURS) {
   const width = 960, height = 250, left = 46, right = 12, top = 14, bottom = 34;
   const plotWidth = width - left - right, plotHeight = height - top - bottom;
   const slot = plotWidth / 24;
@@ -25,7 +28,7 @@ function weighingHourChart(hours) {
   const yMax = Math.max(step, Math.ceil((maxValue * 1.08) / step) * step);
   const y = value => top + plotHeight - (value / yMax) * plotHeight;
   const x = hour => left + hour * slot;
-  const bands = [['A', 0, 7], ['B', 7, 16], ['C', 16, 24]].map(([code, from, to]) => `
+  const bands = Object.entries(shiftHours).map(([code, [from, to]]) => `
     <rect class="wp-band wp-band-${code}" x="${x(from)}" y="${top}" width="${(to - from) * slot}" height="${plotHeight}"></rect>
     <text class="wp-band-label" x="${x(from) + 6}" y="${top + 12}">Turno ${code}</text>`).join('');
   const grid = Array.from({ length: Math.floor(yMax / step) + 1 }, (_, index) => index * step).map(value => `
@@ -117,7 +120,7 @@ function weighingPanel(unit) {
       <figure class="wp-chart">
         <figcaption><strong>Hora a hora (t)</strong>
           <span class="wp-legend"><span><svg class="wp-key" width="10" height="10" aria-hidden="true"><rect class="wp-bar" width="10" height="10" rx="2"></rect></svg>Moagem</span><span><svg class="wp-key" width="14" height="10" aria-hidden="true"><line class="wp-line" x1="1" x2="13" y1="5" y2="5"></line></svg>Cana entregue</span></span></figcaption>
-        <div class="wp-chart-wrap">${weighingHourChart(hours)}</div>
+        <div class="wp-chart-wrap">${weighingHourChart(hours, weighing.shift_hours)}</div>
       </figure>
       <div class="wp-bottom">
         <div class="table-wrap"><table class="wp-table">
