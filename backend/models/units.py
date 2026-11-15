@@ -75,8 +75,8 @@ def _nonnegative_number(value: Any, field: str) -> int | float:
     return int(number) if number.is_integer() else number
 
 
-# Correções da imagem "Troca de Turno CTT" sobre os indicadores da balança (etapa Imagem CTT
-# do Preencher). Valem só para o fechamento em que foram feitas: ``ref`` é o "dados até" da
+# Correções da imagem "Troca de Turno CTT" sobre os indicadores da balança ("Indicadores do
+# turno" do Preencher). Valem só para o fechamento em que foram feitas: ``ref`` é o "dados até" da
 # pesagem da unidade naquele momento; outra importação muda o fechamento e elas deixam de valer.
 IMAGE_OVERRIDE_KEYS = ("millingShift", "deliveryShift", "milling3h", "delivery3h", "stock", "atr", "day", "projection")
 

@@ -175,7 +175,7 @@ async function main() {
   assert.equal(data.frontAtr(ppt.rows[1]), '125', 'O ATR digitado tem prioridade');
   // 846,6 ÷ 850 = 99,6%: amarelo e "99%" (verde só a partir de 100%).
   assert.equal(standalone.globalIndustryShare(data).color, '#fdcc05');
-  // Correção da etapa "Imagem CTT": vale só no fechamento em que foi feita (ref = data_until).
+  // Correção dos "Indicadores do turno": vale só no fechamento em que foi feita (ref = data_until).
   summary.units[0].data_until = 1794772799;
   const corrected = standalone.normalizeReportUnit({ ...ppt, image_overrides: { ref: 1794772799, values: { millingShift: 850.5, stock: 50 } } }, 0);
   const fixed = standalone.fieldUnitIndicators(corrected, summary);

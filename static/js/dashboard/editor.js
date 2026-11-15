@@ -3,7 +3,7 @@ let currentEditorStep = 0;
 let editorInitialSnapshot = null;
 let editorObservationContext = null;
 let editorObservationRequest = 0;
-const editorSteps = ['Campo', 'Produção', 'Apontamentos e Mudanças', 'Precipitação', 'Imagem CTT'];
+const editorSteps = ['Campo', 'Produção', 'Apontamentos e Mudanças', 'Precipitação'];
 
 function buildUnitSelect() {
   const input = document.querySelector('#unit-select');
@@ -205,7 +205,6 @@ function renderMetricsForm(unit) {
     return;
   }
   const note = `<div class="metrics-weighing-note">
-      <p>Valores da pesagem da balança (dados até ${escapeHtml(weighingReferenceTime(unit.code))}). Se houver inconsistência, corrija o campo: a correção vale só para este fechamento.</p>
       <button id="metrics-balance-reset" class="modal-button secondary" type="button">Usar valores da balança</button>
     </div>`;
   const typed = metricDefinitions.map((definition, index) => {

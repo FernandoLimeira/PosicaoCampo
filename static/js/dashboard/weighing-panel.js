@@ -1,6 +1,7 @@
-// Posição de Campo: painel gerencial da balança no card da unidade (dia, turno e últimas
-// 3 h, projeção, gráfico hora a hora com os turnos, resumo A/B/C e frentes de apoio).
-// O gráfico e a diferença também são usados pelo relatório gerencial das 4 unidades.
+// Posição de Campo: painel da balança no card da unidade (processado e projeção do dia,
+// gráfico hora a hora animado com os turnos, resumo A/B/C e frentes de apoio). Moagem,
+// entrega e estoque do turno ficam nos "Indicadores do turno" do card, sem repetir aqui.
+// A barra animada (panelGauge) e a diferença também são usadas pela visão das 4 unidades.
 // Depende de core/field-indicators.js e dashboard/dashboard.js (resumo da pesagem).
 function panelDiff(value, unitLabel) {
   if (value === null || value === undefined || !Number.isFinite(value)) return '<span class="wp-diff">—</span>';
@@ -9,6 +10,16 @@ function panelDiff(value, unitLabel) {
   const icon = tone === 'is-up' ? '▲' : tone === 'is-down' ? '▼' : '●';
   const text = tone === 'is-up' ? 'entrega acima' : tone === 'is-down' ? 'entrega abaixo' : 'equilibrado';
   return `<span class="wp-diff ${tone}" title="Entrega − moagem: ${text}"><i aria-hidden="true">${icon}</i>${sign}${fieldIndicatorNumber(value)} ${unitLabel}</span>`;
+}
+
+// Barra horizontal animada (cresce da esquerda ao desenhar): fração 0–1 com o tom da faixa
+// (good/warning/low da indústria, "day" para processado × projeção). SVG porque a CSP não
+// permite largura em style inline.
+function panelGauge(fraction, tone) {
+  const width = Math.max(0, Math.min(100, (Number(fraction) || 0) * 100));
+  return `<svg class="dash-gauge" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
+    <rect class="dash-gauge-track" width="100" height="8" rx="1.6" ry="4"></rect>
+    ${width ? `<rect class="dash-gauge-fill is-${escapeHtml(tone)}" width="${width.toFixed(1)}" height="8" rx="1.6" ry="4"></rect>` : ''}</svg>`;
 }
 
 function panelAverage(hours, key) {
@@ -46,7 +57,7 @@ function weighingHourChart(hours, shiftHours = DEFAULT_SHIFT_HOURS) {
   }).join('');
   const points = hours.filter(item => item.delivery_t !== null && item.delivery_t !== undefined)
     .map(item => [x(item.hour) + slot / 2, y(item.delivery_t), item]);
-  const line = points.length > 1 ? `<polyline class="wp-line" points="${points.map(([px, py]) => `${px},${py}`).join(' ')}"></polyline>` : '';
+  const line = points.length > 1 ? `<polyline class="wp-line" pathLength="1" points="${points.map(([px, py]) => `${px},${py}`).join(' ')}"></polyline>` : '';
   const dots = points.map(([px, py]) => `<circle class="wp-dot" cx="${px}" cy="${py}" r="4"></circle>`).join('');
   const last = points.at(-1);
   const lastBar = hours.at(-1);
@@ -63,7 +74,7 @@ Cana entregue ${fieldIndicatorNumber(item.delivery_t, 1)} t (${fieldIndicatorNum
 Densidade ${fieldIndicatorNumber(item.density_t, 2)} t</title></rect>`).join('');
   return `<svg class="wp-chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Moagem e cana entregue por hora (t)">
     ${bands}${grid}<line class="wp-baseline" x1="${left}" x2="${width - right}" y1="${top + plotHeight}" y2="${top + plotHeight}"></line>
-    ${bars}${line}${dots}${labels}${ticks}${hits}</svg>`;
+    <g class="wp-bars">${bars}</g>${line}<g class="wp-dots">${dots}</g>${labels}${ticks}${hits}</svg>`;
 }
 
 function weighingPanel(unit) {
@@ -71,13 +82,9 @@ function weighingPanel(unit) {
   if (!weighing?.hours?.length) return '';
   const hours = weighing.hours;
   const shiftCode = weighing.shift || hours.at(-1).shift;
-  const shiftHours = hours.filter(item => item.shift === shiftCode);
-  const recent = hours.slice(-3);
   const total = key => hours.reduce((sum, item) => sum + (item[key] || 0), 0);
   const groups = [
     ['Dia', `00h às ${String(hours.at(-1).hour).padStart(2, '0')}h`, weighing.milling_day_t, weighing.delivery_day_t, 't'],
-    [`Turno ${shiftCode}`, 'média por hora', weighing.milling_shift_tph, weighing.delivery_shift_tph, 't/h'],
-    ['Últimas 3 h', 'média por hora', weighing.milling_last3h_tph, weighing.delivery_last3h_tph, 't/h'],
     // Projeção (quadro "Projeções" da planilha): média por hora do dia × 24.
     ['Projeção do dia', 'média do dia × 24 h', weighing.milling_projection_t, weighing.delivery_projection_t, 't'],
   ].map(([title, hint, milling, delivery, unitLabel]) => `
@@ -110,13 +117,12 @@ function weighingPanel(unit) {
       <header class="wp-header">
         <div><h3 id="weighing-panel-title">Painel gerencial · Balança</h3>
           <p>Moagem pela saída da balança e entrega pelos CVs × 2 × densidade · dados até ${escapeHtml(weighingReferenceTime(unit.code))}</p></div>
-        <div class="wp-side-stats">
-          <div><small>Estoque no pátio</small><strong>${fieldIndicatorNumber(weighing.stock_loads)}</strong><span>cargas</span></div>
-          <div><small>Última hora (${String(lastHour.hour).padStart(2, '0')}h)</small><strong>${fieldIndicatorNumber(lastHour.milling_t)}</strong><span>t ${trend === null ? '' : panelDiff(trend, 't').replace('wp-diff', 'wp-diff wp-trend').replace(/title="[^"]*"/, 'title="Moagem da última hora em relação à anterior"')}</span></div>
-          <div><small>ATR do dia</small><strong>${fieldIndicatorNumber(weighing.atr, 2)}</strong><span>kg/t</span></div>
-        </div>
       </header>
-      <div class="wp-kpis">${groups}</div>
+      <div class="wp-kpis">${groups}
+        <div class="wp-kpi-group wp-kpi-stat"><small>Última hora (${String(lastHour.hour).padStart(2, '0')}h)</small>
+          <strong>${fieldIndicatorNumber(lastHour.milling_t)}<span>t</span></strong>${trend === null ? '' : panelDiff(trend, 't').replace(/title="[^"]*"/, 'title="Moagem da última hora em relação à anterior"')}</div>
+        <div class="wp-kpi-group wp-kpi-stat"><small>ATR do dia</small><strong>${fieldIndicatorNumber(weighing.atr, 2)}<span>kg/t</span></strong></div>
+      </div>
       <figure class="wp-chart">
         <figcaption><strong>Hora a hora (t)</strong>
           <span class="wp-legend"><span><svg class="wp-key" width="10" height="10" aria-hidden="true"><rect class="wp-bar" width="10" height="10" rx="2"></rect></svg>Moagem</span><span><svg class="wp-key" width="14" height="10" aria-hidden="true"><line class="wp-line" x1="1" x2="13" y1="5" y2="5"></line></svg>Cana entregue</span></span></figcaption>

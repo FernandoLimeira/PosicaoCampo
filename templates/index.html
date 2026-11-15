@@ -24,7 +24,7 @@
           </div>
         </section>
 
-        <section id="field-overview" class="units-grid field-overview-grid" aria-label="Indicadores das 4 unidades"></section>
+        <section id="field-overview" class="units-grid field-overview-grid" aria-label="Visão geral das 4 unidades"></section>
         <section id="units-grid" class="units-grid" aria-live="polite"></section>
       </div>
 {% endblock %}
@@ -68,15 +68,11 @@
           </div>
           <div class="form-step" data-step-indicator="2">
             <span class="form-step-number">3</span>
-            <span class="form-step-copy"><strong>Apontamentos</strong><small>Observação e mudanças</small></span>
+            <span class="form-step-copy"><strong>Apontamentos</strong><small>Observação, mudanças e apoio</small></span>
           </div>
           <div class="form-step" data-step-indicator="3">
             <span class="form-step-number">4</span>
             <span class="form-step-copy"><strong>Precipitação</strong><small>Chuva e acumulado</small></span>
-          </div>
-          <div class="form-step" data-step-indicator="4">
-            <span class="form-step-number">5</span>
-            <span class="form-step-copy"><strong>Imagem CTT</strong><small>Apoio entre unidades</small></span>
           </div>
         </nav>
 
@@ -84,7 +80,7 @@
           <section class="form-section form-section-wide form-step-panel is-active" data-step-panel="0">
             <div class="section-heading">
               <div>
-                <span>Etapa 1 de 5 · Campo</span>
+                <span>Etapa 1 de 4 · Campo</span>
                 <h3>Frentes, setores e status</h3>
               </div>
               <button id="add-front-row" class="section-action" type="button">Adicionar frente</button>
@@ -109,7 +105,7 @@
           <section class="form-section form-section-wide form-step-panel" data-step-panel="1" hidden>
             <div class="section-heading">
               <div>
-                <span>Etapa 2 de 5 · Produção</span>
+                <span>Etapa 2 de 4 · Produção</span>
                 <h3>Indicadores do turno</h3>
               </div>
             </div>
@@ -119,7 +115,7 @@
           <section class="form-section form-section-wide form-step-panel" data-step-panel="2" hidden>
             <div class="section-heading">
               <div>
-                <span>Etapa 3 de 5 · Apontamentos e Mudanças</span>
+                <span>Etapa 3 de 4 · Apontamentos e Mudanças</span>
                 <h3>Observações e mudanças</h3>
               </div>
             </div>
@@ -134,37 +130,29 @@
                 <span>Mudanças</span>
                 <textarea id="changes-input" rows="3" placeholder="Digite mudanças previstas ou realizadas"></textarea>
               </label>
+
+              <label class="field notes-form-wide">
+                <span>Apoio entre unidades</span>
+                <textarea id="support-input" rows="3" placeholder="Ex.: FT 402 virada 100% para RBR. 5 frotas viradas para RBR, fixas na FT 402 e FT 404."></textarea>
+              </label>
             </div>
           </section>
 
           <section class="form-section form-section-wide form-step-panel" data-step-panel="3" hidden>
             <div class="section-heading">
               <div>
-                <span>Etapa 4 de 5 · Precipitação</span>
+                <span>Etapa 4 de 4 · Precipitação</span>
                 <h3>Chuva do turno e acumulado</h3>
               </div>
               <button id="add-rain-row" class="section-action" type="button">Adicionar equipamento</button>
             </div>
             <div id="rain-form" class="rain-form"></div>
           </section>
-
-          <section class="form-section form-section-wide form-step-panel" data-step-panel="4" hidden>
-            <div class="section-heading">
-              <div>
-                <span>Etapa 5 de 5 · Imagem CTT</span>
-                <h3>Troca de turno: apoio entre unidades</h3>
-              </div>
-            </div>
-            <label class="field">
-              <span>Apoio entre unidades</span>
-              <textarea id="support-input" rows="3" placeholder="Ex.: FT 402 virada 100% para RBR. 5 frotas viradas para RBR, fixas na FT 402 e FT 404."></textarea>
-            </label>
-          </section>
         </div>
 
         <footer class="modal-footer wizard-footer">
           <div class="wizard-footer-info">
-            <strong id="wizard-step-label">Etapa 1 de 5 · Campo</strong>
+            <strong id="wizard-step-label">Etapa 1 de 4 · Campo</strong>
             <p>Revise a etapa atual antes de avançar.</p>
           </div>
           <div class="modal-footer-actions wizard-actions">

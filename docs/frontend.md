@@ -171,10 +171,10 @@ static/
     │   └── sector-base.js        estado e índice da base de setores
     ├── dashboard/                Posição de Campo (/)
     │   ├── dashboard.js          estado das unidades, tabela de frentes e filtros
-    │   ├── weighing-panel.js     painel da balança no card da unidade e gráfico por hora
+    │   ├── weighing-panel.js     painel da balança no card da unidade, gráfico por hora e barras animadas
     │   ├── field-notes.js        observações e modal de detalhes da frente
     │   ├── editor.js             assistente "Preencher" (5 etapas, linhas, gravação)
-    │   ├── management-report.js  relatório gerencial das 4 unidades e exportação Excel
+    │   ├── management-report.js  visão geral das 4 unidades (cards clicáveis) e exportação Excel
     │   └── app.js                setupEvents, importação da pesagem, initializeApp e atualização periódica
     ├── reports-export/           geração das imagens PNG
     │   ├── shared-drawing.js     primitivas de canvas, loadImageAsset, cabeçalho

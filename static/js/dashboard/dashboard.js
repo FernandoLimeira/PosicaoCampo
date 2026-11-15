@@ -48,15 +48,10 @@ function makeMetrics(values = []) {
   ]);
 }
 
-// Pesagem da balança (Entrega CTT): moagem, entrega e estoque calculados a partir
-// do Excel importado. Quando a unidade tem cargas no dia, esses indicadores vêm da
-// balança; "Indústria" continua sendo o valor digitado no Preencher.
+// Pesagem da balança: moagem, entrega e estoque calculados a partir do Excel importado.
+// Quando a unidade tem cargas no dia, esses indicadores vêm da balança (core/field-indicators.js);
+// "Indústria" continua sendo o valor digitado no Preencher.
 let weighingSummary = null;
-const WEIGHING_METRIC_FIELDS = {
-  1: 'milling_shift_tph', 2: 'delivery_shift_tph', 3: 'stock_loads',
-  4: 'milling_last3h_tph', 5: 'delivery_last3h_tph'
-};
-
 // Sem data, o servidor devolve o dia da última pesagem importada, até a última hora do
 // SELECT: a importação vale até a próxima, a qualquer hora (inclusive depois da meia-noite).
 async function loadWeighingSummary() {
@@ -84,24 +79,6 @@ function weighingReferenceTime(code) {
   const text = moment ? new Date(moment * 1000).toLocaleString('pt-BR', {
     timeZone, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '') : '';
   return text && timeZone !== 'America/Sao_Paulo' ? `${text} (horário do MS)` : text;
-}
-
-// Indicadores exibidos (e sugeridos no Preencher): os da balança substituem os digitados.
-// Correções da etapa "Imagem CTT" (mesmo fechamento da balança) valem também no card.
-const WEIGHING_METRIC_OVERRIDES = { 1: 'millingShift', 2: 'deliveryShift', 3: 'stock', 4: 'milling3h', 5: 'delivery3h' };
-
-function displayMetrics(unit) {
-  const weighing = unitWeighing(unit.code);
-  if (!weighing) return unit.metrics;
-  const overrides = fieldImageOverrides(unit, weighing);
-  return unit.metrics.map((metric, index) => {
-    const corrected = overrides[WEIGHING_METRIC_OVERRIDES[index]];
-    const value = corrected !== undefined ? corrected : weighing[WEIGHING_METRIC_FIELDS[index]];
-    if (value === null || value === undefined) return metric;
-    // Sem separador de milhar: "1.243" seria lido como 1,243 no Preencher (metricNumber).
-    const text = String(Math.round(value));
-    return [metric[0], metric[1], `${text} ${metricDefinitions[index].unit}`, metric[3]];
-  });
 }
 
 // ATR da frente pela balança desta unidade (média ponderada pelo peso), usado quando não foi
@@ -300,6 +277,35 @@ function fieldDashboardStatusClass(status) {
   return fieldStatusClass(normalized);
 }
 
+// "Indicadores do turno" do card: moagem do turno contra a indústria (barra animada), entrega
+// (com a diferença para a moagem), estoque e últimas 3 h. Da balança quando há pesagem (com as
+// correções do Preencher); senão, os digitados.
+function unitIndicatorsHtml(unit) {
+  const item = fieldUnitIndicators(unit, weighingSummary);
+  const number = fieldIndicatorNumber;
+  const share = fieldIndustryShare(item);
+  const corrected = key => (item.corrected?.includes(key) ? ' <span class="uc-corrected" title="Corrigido no Preencher">corrigido</span>' : '');
+  const diff = (delivery, milling) => (delivery !== null && delivery !== undefined && milling !== null && milling !== undefined
+    ? panelDiff(delivery - milling, 't/h') : '');
+  const cell = (label, value, unitLabel, key, extra = '') => `<div class="uc-metric"><small>${escapeHtml(label)}${corrected(key)}</small>
+      <strong>${number(value)} <em>${escapeHtml(unitLabel)}</em></strong>${extra}</div>`;
+  const source = item.closingRef ? `Balança até ${escapeHtml(weighingReferenceTime(unit.code))}` : 'Digitados no Preencher';
+  return `<section class="dashboard-block uc-indicators" aria-label="Indicadores do turno">
+      <header class="uc-indicators-head"><h3>Indicadores do turno</h3><small>${source}</small></header>
+      <div class="uc-milling">
+        <div><small>Moagem turno${corrected('millingShift')}</small><strong>${number(item.millingShift)} <em>t/h</em></strong></div>
+        <span class="ov-share is-${share?.level || 'none'}">${share ? `${share.percent}% da indústria` : 'indústria'} · ${number(item.industry)} t/h</span>
+      </div>
+      ${panelGauge(share ? share.share : 0, share?.level || 'none')}
+      <div class="uc-metric-grid">
+        ${cell('Entrega turno', item.deliveryShift, 't/h', 'deliveryShift', diff(item.deliveryShift, item.millingShift))}
+        ${cell('Estoque', item.stock, 'cargas', 'stock')}
+        ${cell('Moagem últ. 3 h', item.milling3h, 't/h', 'milling3h')}
+        ${cell('Entrega últ. 3 h', item.delivery3h, 't/h', 'delivery3h', diff(item.delivery3h, item.milling3h))}
+      </div>
+    </section>`;
+}
+
 function unitCard(unit) {
   const summary = fieldUnitSummary(unit);
   const rainVisible = fieldHasRain(unit);
@@ -321,15 +327,7 @@ function unitCard(unit) {
     }).join('')
     : '';
 
-  const weighing = unitWeighing(unit.code);
-  const metrics = displayMetrics(unit).map(([, label, value, extra = ''], index) => `
-    <div class="metric ${escapeHtml(extra)}${weighing && WEIGHING_METRIC_FIELDS[index] ? ' is-weighing' : ''}">
-      <div class="metric-info">
-        <small>${escapeHtml(label)}</small>
-        <strong>${escapeHtml(value)}</strong>
-      </div>
-    </div>
-  `).join('');
+  const indicators = unitIndicatorsHtml(unit);
 
   const rain = rainVisible
     ? unit.rain.filter(([eq, turn, accum]) => String(eq ?? '').trim() || normalizeNumber(turn) > 0 || normalizeNumber(accum) > 0).map(([eq, turn, accum]) => `
@@ -340,15 +338,14 @@ function unitCard(unit) {
   return `
     <article class="unit-card ${escapeHtml(unit.border)}">
       <div class="unit-layout-grid">
-        <section class="dashboard-block unit-main-block" aria-label="Frentes e indicadores da unidade">
-          <div class="field-overview" aria-label="Resumo das frentes desta unidade">
-            <div class="field-overview-item is-total"><span>Total de frentes</span><strong>${summary.total}</strong></div>
-            <div class="field-overview-item is-active"><span>Em atividade</span><strong>${summary.active}</strong></div>
-            <div class="field-overview-item is-attention"><span>Em atenção</span><strong>${summary.attention}</strong></div>
-          </div>
-
+        <section class="dashboard-block unit-main-block" aria-label="Frentes da unidade">
           <div class="field-list-heading">
             <div><h3>Frentes de campo</h3><p>Frentes, setores e situação operacional.</p></div>
+            <div class="uc-counts" aria-label="Resumo das frentes desta unidade">
+              <span class="uc-count"><b>${summary.total}</b> frentes</span>
+              <span class="uc-count is-active"><b>${summary.active}</b> em atividade</span>
+              <span class="uc-count is-attention"><b>${summary.attention}</b> em atenção</span>
+            </div>
           </div>
           <div class="field-toolbar" role="search" aria-label="Filtrar frentes de campo">
             <label class="field-search-label" for="field-front-search">
@@ -373,14 +370,10 @@ function unitCard(unit) {
             </table>
           </div>
 
-          <div class="unit-metrics-strip" aria-label="Indicadores da unidade">
-            <div class="field-subsection-title">Indicadores de produção${weighing
-              ? ` <small class="metrics-source">Moagem, entrega e estoque da balança · dados até ${escapeHtml(weighingReferenceTime(unit.code))}</small>` : ''}</div>
-            <div class="metrics-grid">${metrics}</div>
-          </div>
         </section>
 
-        <div class="unit-side-stack ${rainVisible ? '' : 'has-no-rain'}">
+        <div class="unit-side-stack">
+          ${indicators}
           ${rainVisible ? `<section class="dashboard-block rain-turn-block">
             <div class="compact-block-title">Chuva turno / acum. (mm)</div>
             <div class="rain-box">${rain}</div>

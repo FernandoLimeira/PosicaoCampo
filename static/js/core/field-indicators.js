@@ -3,7 +3,7 @@
 // Moagem, entrega, estoque, ATR, processado e projeção vêm da pesagem da balança (resumo de
 // /api/weighings/summary: dia e horas do último SELECT importado); sem pesagem da unidade, valem
 // os indicadores digitados no Preencher. "Indústria" é sempre a digitada. Inconsistência na
-// balança: a etapa "Imagem CTT" do Preencher grava correções (unit.image_overrides) que valem
+// balança: os "Indicadores do turno" do Preencher gravam correções (unit.image_overrides) que valem
 // só para o fechamento em que foram feitas (``ref`` = "dados até" da pesagem da unidade).
 // Depende de core/format.js, core/common.js e core/field-fronts.js.
 
