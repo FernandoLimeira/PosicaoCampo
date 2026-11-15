@@ -53,10 +53,10 @@ function weighingHourChart(hours) {
     <text class="wp-direct" x="${Math.min(x(lastBar.hour) + slot / 2, width - right - 4)}" y="${y(lastBar.milling_t || 0) + 16}" text-anchor="middle">${fieldIndicatorNumber(lastBar.milling_t)}</text>` : '';
   // Áreas de toque maiores que as marcas: cada hora mostra moagem, entrega e CVs.
   const hits = hours.map(item => `<rect class="wp-hit" x="${x(item.hour)}" y="${top}" width="${slot}" height="${plotHeight}" tabindex="0"
-      aria-label="${String(item.hour).padStart(2, '0')}h: moagem ${fieldIndicatorNumber(item.milling_t)} t, entrega ${fieldIndicatorNumber(item.delivery_t)} t, ${fieldIndicatorNumber(item.trucks)} CVs">
+      aria-label="${String(item.hour).padStart(2, '0')}h: moagem ${fieldIndicatorNumber(item.milling_t)} t, entrega ${fieldIndicatorNumber(item.delivery_t)} t, ${fieldIndicatorNumber(item.trucks, Number.isInteger(item.trucks) ? 0 : 1)} CVs">
       <title>${String(item.hour).padStart(2, '0')}:00 · Turno ${item.shift}
 Moagem ${fieldIndicatorNumber(item.milling_t, 1)} t (${fieldIndicatorNumber(item.loads)} cargas)
-Cana entregue ${fieldIndicatorNumber(item.delivery_t, 1)} t (${fieldIndicatorNumber(item.trucks)} CVs)
+Cana entregue ${fieldIndicatorNumber(item.delivery_t, 1)} t (${fieldIndicatorNumber(item.trucks, Number.isInteger(item.trucks) ? 0 : 1)} CVs)
 Densidade ${fieldIndicatorNumber(item.density_t, 2)} t</title></rect>`).join('');
   return `<svg class="wp-chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Moagem e cana entregue por hora (t)">
     ${bands}${grid}<line class="wp-baseline" x1="${left}" x2="${width - right}" y1="${top + plotHeight}" y2="${top + plotHeight}"></line>
@@ -99,7 +99,7 @@ function weighingPanel(unit) {
       <td>${fieldIndicatorNumber(panelAverage(rows, 'milling_t'))}</td><td>${fieldIndicatorNumber(panelAverage(rows, 'delivery_t'))}</td></tr>`;
   }).join('');
   const hourRows = hours.map(item => `<tr><th scope="row">${String(item.hour).padStart(2, '0')}:00</th><td>${fieldIndicatorNumber(item.milling_t, 1)}</td>
-      <td>${fieldIndicatorNumber(item.loads)}</td><td>${fieldIndicatorNumber(item.density_t, 2)}</td><td>${fieldIndicatorNumber(item.trucks)}</td><td>${fieldIndicatorNumber(item.delivery_t, 1)}</td></tr>`).join('');
+      <td>${fieldIndicatorNumber(item.loads)}</td><td>${fieldIndicatorNumber(item.density_t, 2)}</td><td>${fieldIndicatorNumber(item.trucks, Number.isInteger(item.trucks) ? 0 : 1)}</td><td>${fieldIndicatorNumber(item.delivery_t, 1)}</td></tr>`).join('');
   const support = (weighing.received || []).map(front => `<li><strong>Frente ${escapeHtml(front.front)}</strong> de ${escapeHtml(front.home_unit)}
       · ${fieldIndicatorNumber(front.tons)} t · ${fieldIndicatorNumber(front.loads)} cargas${front.atr ? ` · ATR ${fieldIndicatorNumber(front.atr, 2)}` : ''}</li>`).join('');
   return `

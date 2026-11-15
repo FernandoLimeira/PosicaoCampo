@@ -8,7 +8,8 @@ o arquivo traz DT_REG_GUARITA (sem ela, os CVs pela entrada no pátio variam ±2
 - Moagem da hora: soma do peso líquido (QT_LIQUIDO) das cargas com saída da balança
   na hora. Moagem do dia: soma das horas fechadas, desde 00:00:00.
 - Densidade da hora: peso médio das julietas pesadas na hora (moagem ÷ cargas).
-- Entrega da hora: CVs (caminhões) que chegaram na hora × 2 julietas × densidade da hora.
+- Entrega da hora: CVs que chegaram na hora × 2 julietas × densidade da hora. CVs pelo padrão
+  da planilha de cada polo: Polo SP conta caminhões; Polo MS conta cada julieta como 0,5 CV.
   Chegada = guarita (DATA_HORA_GUARITA), quando o arquivo traz; senão a entrada no pátio.
 - Turno: média das horas fechadas do turno (A 00h-06h, B 07h-15h, C 16h-23h).
 - Últimas 3 h: média das 3 últimas horas fechadas.
@@ -31,7 +32,7 @@ from datetime import date, datetime, time as dtime
 from typing import Any
 
 from ..services.front_identifiers import front_key, natural_key
-from ..services.operational_shifts import FIELD_TIMEZONE, unit_timezone
+from ..services.operational_shifts import FIELD_TIMEZONE, MS_UNIT_CODES, unit_timezone
 from .constants import ALLOWED_UNIT_CODES
 from .storage import connection, validate_actor
 
@@ -291,17 +292,20 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
                  if unit_reference and unit_reference - STOCK_WINDOW_SECONDS <= _arrival(row) <= unit_reference
                  and (row["scale_out_at"] is None or row["scale_out_at"] > unit_reference)]
         day_density = _tons(rows) / len(rows) if rows else None
-        truck_arrivals = _truck_arrivals(arrivals)
+        # CVs da hora pelo padrão da planilha de cada polo: no Polo SP, caminhões (a julieta de
+        # sequência 1); no Polo MS, cada julieta que chegou vale meio CV (6,5 · 5,5 ...).
+        cv_arrivals = ([(_arrival(row), 1 / JULIETAS_PER_TRUCK) for row in arrivals] if code in MS_UNIT_CODES
+                       else [(arrival, 1) for arrival in _truck_arrivals(arrivals)])
         hours = []
         for hour in unit_hours:
             start, end = unit_start + hour * 3600, unit_start + (hour + 1) * 3600
             milled = [row for row in rows if start <= row["scale_out_at"] < end]
-            trucks = [arrival for arrival in truck_arrivals if start <= arrival < end]
+            trucks = sum(weight for arrival, weight in cv_arrivals if start <= arrival < end)
             density = _tons(milled) / len(milled) if milled else day_density
             hours.append({
                 "hour": hour, "shift": _shift_of_hour(hour), "milling_t": _round(_tons(milled)),
-                "loads": len(milled), "density_t": _round(density, 3), "trucks": len(trucks),
-                "delivery_t": _round(len(trucks) * JULIETAS_PER_TRUCK * density) if density else None,
+                "loads": len(milled), "density_t": _round(density, 3), "trucks": trucks,
+                "delivery_t": _round(trucks * JULIETAS_PER_TRUCK * density) if density else None,
             })
         shift_hours = [item for item in hours if item["shift"] == unit_shift]
         recent_hours = hours[-LAST_HOURS:]

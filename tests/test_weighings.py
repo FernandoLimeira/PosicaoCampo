@@ -285,6 +285,25 @@ class WeighingTests(unittest.TestCase):
         self.assertEqual(rbr["hours"][-1]["milling_t"], 32.0)    # a das 22:20 (MS) é da hora 22, aberta
         self.assertEqual(rbr["milling_day_t"], 32.0)
 
+    def test_cvs_follow_each_polo_spreadsheet(self):
+        # Mesmas cargas na PPT (Polo SP) e na PST (Polo MS), horário local de cada uma:
+        # caminhão X com 2 julietas e caminhão Y com 1 julieta chegando às 08h; 3 cargas de 30 t
+        # pesadas às 08h (densidade 30 t). SP conta caminhões (2 CVs); MS conta julietas × 0,5 (1,5).
+        def julieta(instance, release, plate, out, arrival="08:10:00"):
+            row = load(instance, release, "5", "361", "1173", "30000", f"14/11/2026 {out}", patio=f"14/11/2026 {arrival}")
+            row[3] = plate
+            return row
+        weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx([HEADER,
+            julieta("201", "1", "X", "08:40:00"), julieta("201", "2", "X", "08:41:00"), julieta("201", "3", "Y", "08:50:00"),
+            julieta("401", "4", "X", "08:40:00"), julieta("401", "5", "X", "08:41:00"), julieta("401", "6", "Y", "08:50:00"),
+            julieta("201", "7", "Z", "10:30:00", "10:00:00"), julieta("401", "8", "Z", "10:30:00", "10:00:00"),  # fecham até 09h
+        ]), "a.xlsx")["records"])
+        units = {unit["code"]: unit for unit in weighings.weighing_summary("2026-11-14")["units"]}
+        ppt8 = next(item for item in units["PPT"]["hours"] if item["hour"] == 8)
+        pst8 = next(item for item in units["PST"]["hours"] if item["hour"] == 8)
+        self.assertEqual((ppt8["trucks"], ppt8["delivery_t"]), (2, 120.0))   # 2 × 2 × 30 t
+        self.assertEqual((pst8["trucks"], pst8["delivery_t"]), (1.5, 90.0))  # 1,5 × 2 × 30 t
+
     def test_closing_at_a_chosen_time(self):
         # "Fechamento às 23:35": o dia como estava às 23:35 de Brasília, mesmo consultado depois.
         weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx([HEADER,
