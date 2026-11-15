@@ -120,7 +120,8 @@ class WeighingTests(unittest.TestCase):
         weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx([HEADER,
             load("204", "10", "20", "300", "3500", "30000", "14/11/2026 16:05:00", patio="14/11/2026 16:01:00"),
         ]), "b.xlsx")["records"])
-        summary = weighings.weighing_summary("2026-11-14", now=clock("16:30"))
+        # 17:00 em Brasília (16:00 no MS): fecham as cargas da PST das 15:20 e 15:35 (horário do MS).
+        summary = weighings.weighing_summary("2026-11-14", now=clock("17:00"))
         units = {unit["code"]: unit for unit in summary["units"]}
         ppt, pst = units["PPT"], units["PST"]
         self.assertEqual(ppt["milling_day_t"], 100.0)
@@ -139,7 +140,7 @@ class WeighingTests(unittest.TestCase):
         support = {(item["front"], item["from_unit"], item["to_unit"]) for item in summary["support"]}
         self.assertEqual(support, {("19", "NRD", "PPT"), ("402", "RBR", "PST")})
         self.assertEqual(summary["last_import"]["imported_by_name"], "Admin")
-        self.assertEqual(units["NRD"]["loads_day"], 0)  # a saída das 16:05 é da hora 16, ainda aberta
+        self.assertEqual(units["NRD"]["loads_day"], 1)  # a saída das 16:05 entra: a hora 16 fechou às 17:00
 
     def test_hourly_logic_of_the_spreadsheet(self):
         # Mesma lógica da planilha "Controle de entrega x Moagem" (validada com a NRD):
@@ -243,6 +244,41 @@ class WeighingTests(unittest.TestCase):
         ]), "a.xlsx")["records"])
         hours = {item["hour"]: item for item in weighings.weighing_summary("2026-11-14", now=clock("10:40"))["units"][0]["hours"]}
         self.assertEqual((hours[7]["trucks"], hours[8]["trucks"], hours[9]["trucks"]), (2, 0, 1))
+
+    def test_ms_units_use_local_time_one_hour_behind(self):
+        # A balança do Polo MS registra no horário local (uma hora a menos que Brasília).
+        # Às 23:35 de Brasília são 22:35 no MS: fecham 00h a 22h na NRD e 00h a 21h na RBR.
+        weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx([HEADER,
+            load("204", "1", "20", "300", "3500", "30000", "14/11/2026 22:40:00", patio="14/11/2026 22:00:00"),
+            load("402", "2", "611", "90441", "2", "32000", "14/11/2026 21:40:00", patio="14/11/2026 21:00:00"),
+            load("402", "3", "611", "90441", "2", "33000", "14/11/2026 22:20:00", patio="14/11/2026 22:00:00"),
+        ]), "a.xlsx")["records"])
+        rbr_record = next(r for r in parse_weighing_file(xlsx([HEADER,
+            load("402", "2", "611", "90441", "2", "32000", "14/11/2026 21:40:00")]), "a.xlsx")["records"])
+        self.assertEqual(rbr_record["scale_out_at"], clock("22:40"))  # 21:40 no MS = 22:40 em Brasília
+        summary = weighings.weighing_summary("2026-11-14", now=clock("23:35"))
+        units = {unit["code"]: unit for unit in summary["units"]}
+        self.assertEqual((units["NRD"]["closed_hours"], units["NRD"]["hours"][-1]["milling_t"]), (23, 30.0))
+        rbr = units["RBR"]
+        self.assertEqual(rbr["timezone"], "America/Campo_Grande")
+        self.assertEqual(rbr["closed_hours"], 22)                # 00h a 21h (horário do MS)
+        self.assertEqual(rbr["closed_until"], clock("23:00"))    # 22:00 no MS
+        self.assertEqual(rbr["hours"][-1]["hour"], 21)
+        self.assertEqual(rbr["hours"][-1]["milling_t"], 32.0)    # a das 22:20 (MS) é da hora 22, aberta
+        self.assertEqual(rbr["milling_day_t"], 32.0)
+
+    def test_closing_at_a_chosen_time(self):
+        # "Fechamento às 23:35": o dia como estava às 23:35 de Brasília, mesmo consultado depois.
+        weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx([HEADER,
+            load("204", "1", "20", "300", "3500", "30000", "14/11/2026 22:40:00", patio="14/11/2026 22:00:00"),
+            load("204", "2", "20", "300", "3500", "20000", "14/11/2026 23:10:00", patio="14/11/2026 22:59:00"),
+        ]), "a.xlsx")["records"])
+        later = clock("08:00", "15/11/2026")
+        self.assertEqual(weighings.weighing_summary("2026-11-14", now=later)["units"][1]["milling_day_t"], 50.0)
+        at = weighings.weighing_summary("2026-11-14", now=later, at_time="23:35")
+        self.assertEqual((at["closed_hours"], at["units"][1]["milling_day_t"]), (23, 30.0))
+        with self.assertRaisesRegex(ValueError, "HH:MM"):
+            weighings.weighing_summary("2026-11-14", at_time="25:00")
 
     def test_summary_without_data(self):
         summary = weighings.weighing_summary("2026-11-13")

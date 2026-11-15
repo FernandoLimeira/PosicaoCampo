@@ -16,6 +16,7 @@
     {% if page == 'delivery' %}
     <div class="delivery-header-actions">
       <label class="field delivery-date"><span>Dia</span><input id="delivery-date" type="date" /></label>
+      <label class="field delivery-date" title="Mostra o dia como estava neste horário (hora atual − 1 h), para conferir com a planilha de fechamento tirada nele. Em branco: agora."><span>Fechamento às</span><input id="delivery-time" type="time" /></label>
       {% if user.module_access.dashboard.edit %}<label class="modal-button save delivery-import" id="delivery-import-label">Importar pesagem<input id="delivery-import-file" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" hidden /></label>{% endif %}
     </div>
     {% else %}
@@ -37,6 +38,17 @@
             <th scope="col">Turno<small>t/h</small></th><th scope="col">Últ. 3 h<small>t/h</small></th></tr>
         </thead>
         <tbody id="delivery-units"></tbody>
+      </table>
+    </div>
+  </section>
+  <section class="delivery-card" aria-labelledby="delivery-hours-title">
+    <header><h2 id="delivery-hours-title">Hora a hora <small>(mesmas colunas da aba Chegada)</small></h2>
+      <label class="field delivery-date"><span>Unidade</span><select id="delivery-hours-unit"></select></label></header>
+    <div class="delivery-table-wrap">
+      <table class="delivery-table">
+        <thead><tr><th scope="col">Hora</th><th scope="col">Moagem<small>t</small></th><th scope="col">Cargas</th>
+          <th scope="col">Densidade<small>t</small></th><th scope="col">Qtd. CVs</th><th scope="col">Cana entregue<small>t</small></th></tr></thead>
+        <tbody id="delivery-hours"></tbody>
       </table>
     </div>
   </section>

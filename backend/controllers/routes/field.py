@@ -97,7 +97,7 @@ def handle(req):
     if path == "/api/weighings/summary" and method == "GET":
         if not user:
             return req.unauthorized()
-        return req.guarded(lambda: req.json(HTTPStatus.OK, weighing_summary(req.param("date"))),
+        return req.guarded(lambda: req.json(HTTPStatus.OK, weighing_summary(req.param("date"), at_time=req.param("hora"))),
                            bad_request=ValueError)
 
     # Consultas SQL salvas da Entrega CTT (só guardadas, não executadas).

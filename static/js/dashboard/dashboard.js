@@ -56,9 +56,15 @@ const WEIGHING_METRIC_FIELDS = {
   4: 'milling_last3h_tph', 5: 'delivery_last3h_tph'
 };
 
+// Dia da pesagem pela regra "hora atual − 1 h": às 00:31 ainda vale o dia anterior,
+// fechado até 23:59:59 (sem isso, a tela voltava aos valores digitados no Preencher).
+function weighingWorkDate(now = new Date()) {
+  return saoPauloIsoDate(new Date(now.getTime() - 3600 * 1000));
+}
+
 async function loadWeighingSummary() {
   try {
-    weighingSummary = await apiRequest(`/api/weighings/summary?date=${encodeURIComponent(saoPauloIsoDate())}`);
+    weighingSummary = await apiRequest(`/api/weighings/summary?date=${encodeURIComponent(weighingWorkDate())}`);
   } catch (error) {
     console.warn('Não foi possível consultar a pesagem.', error);
     weighingSummary = null;
@@ -72,12 +78,15 @@ function unitWeighing(code) {
   return unit && unit.loads_day > 0 ? unit : null;
 }
 
-// Fechamento: último segundo da última hora fechada (ex.: 20:59); sem ele, a referência.
-function weighingReferenceTime() {
-  const closed = weighingSummary?.closed_until ? weighingSummary.closed_until - 1 : weighingSummary?.reference_at;
-  return closed ? new Date(closed * 1000).toLocaleTimeString('pt-BR', {
-    timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit'
-  }) : '';
+// Fechamento: último segundo da última hora fechada (ex.: 20:59), no horário local da
+// unidade (Polo MS: uma hora a menos que Brasília); sem ele, a referência.
+function weighingReferenceTime(code) {
+  const unit = code ? (weighingSummary?.units || []).find(item => item.code === code) : null;
+  const closedUntil = unit ? unit.closed_until : weighingSummary?.closed_until;
+  const closed = closedUntil ? closedUntil - 1 : weighingSummary?.reference_at;
+  const timeZone = unit?.timezone || 'America/Sao_Paulo';
+  const text = closed ? new Date(closed * 1000).toLocaleTimeString('pt-BR', { timeZone, hour: '2-digit', minute: '2-digit' }) : '';
+  return text && timeZone !== 'America/Sao_Paulo' ? `${text} (horário do MS)` : text;
 }
 
 // Indicadores exibidos (e sugeridos no Preencher): os da balança substituem os digitados.
@@ -363,7 +372,7 @@ function unitCard(unit) {
 
           <div class="unit-metrics-strip" aria-label="Indicadores da unidade">
             <div class="field-subsection-title">Indicadores de produção${weighing
-              ? ` <small class="metrics-source">Moagem, entrega e estoque da balança · dados até ${escapeHtml(weighingReferenceTime())}</small>` : ''}</div>
+              ? ` <small class="metrics-source">Moagem, entrega e estoque da balança · dados até ${escapeHtml(weighingReferenceTime(unit.code))}</small>` : ''}</div>
             <div class="metrics-grid">${metrics}</div>
           </div>
         </section>

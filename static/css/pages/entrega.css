@@ -55,3 +55,7 @@
   .delivery-fronts { grid-template-columns: minmax(0, 1fr); }
   .delivery-header-actions { width: 100%; }
 }
+
+/* Hora a hora: totais, médias dos turnos e últimas 3 h. */
+.delivery-table tr.is-total th, .delivery-table tr.is-total td { background: #f1f4f5; font-weight: 600; }
+.delivery-card > header h2 small { font-weight: 400; }

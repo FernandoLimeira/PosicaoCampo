@@ -173,7 +173,7 @@ function renderMetricsForm(unit) {
   // Com pesagem importada, moagem/entrega/estoque já vêm preenchidos pela balança.
   const metrics = displayMetrics(unit);
   const note = unitWeighing(unit.code)
-    ? `<p class="metrics-weighing-note">Moagem, entrega e estoque preenchidos pela pesagem da balança (dados até ${escapeHtml(weighingReferenceTime())}). Confira antes de salvar.</p>` : '';
+    ? `<p class="metrics-weighing-note">Moagem, entrega e estoque preenchidos pela pesagem da balança (dados até ${escapeHtml(weighingReferenceTime(unit.code))}). Confira antes de salvar.</p>` : '';
   container.innerHTML = note + metricDefinitions.map((definition, index) => `
     <div class="metric-field">
       <label>

@@ -8,7 +8,22 @@ except ZoneInfoNotFoundError:
     # Windows pode não fornecer a base IANA. Brasília usa UTC-3 nestes turnos.
     FIELD_TIMEZONE = timezone(timedelta(hours=-3), 'America/Sao_Paulo')
 
-SHIFT_MINUTES = {'A': (0, 440), 'B': (440, 940), 'C': (940, 1440)}
+try:
+    MS_TIMEZONE = ZoneInfo('America/Campo_Grande')
+except ZoneInfoNotFoundError:
+    # Mato Grosso do Sul: uma hora a menos que Brasília (UTC-4, sem horário de verão).
+    MS_TIMEZONE = timezone(timedelta(hours=-4), 'America/Campo_Grande')
+
+# Unidades do Polo MS: a balança registra no horário local (uma hora a menos que Brasília).
+MS_UNIT_CODES = frozenset({'RBR', 'PST'})
+
+
+def unit_timezone(unit_code):
+    """Fuso do horário local da unidade (Polo MS: Campo Grande; Polo SP: Brasília)."""
+    return MS_TIMEZONE if str(unit_code or '').upper() in MS_UNIT_CODES else FIELD_TIMEZONE
+
+
+SHIFT_MINUTES ={'A': (0, 440), 'B': (440, 940), 'C': (940, 1440)}
 
 
 def shift_period(work_date, shift):

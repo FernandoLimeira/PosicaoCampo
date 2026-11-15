@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from .front_identifiers import normalize_label
-from .operational_shifts import FIELD_TIMEZONE
+from .operational_shifts import FIELD_TIMEZONE, unit_timezone
 from .sector_base_import import MAX_SHARED_STRINGS, MAX_XLSX_COLUMNS, XLSX_LIMITS
 from .xlsx_reader import (
     corrupt_file_guard,
@@ -96,8 +96,9 @@ def _number(value: str) -> float | None:
     return number if number == number and abs(number) < 1e12 else None
 
 
-def _timestamp(value: str) -> int | None:
-    """Data/hora do arquivo (texto dd/mm/aaaa hh:mm:ss ou serial do Excel) em epoch, horário de Brasília."""
+def _timestamp(value: str, tz=FIELD_TIMEZONE) -> int | None:
+    """Data/hora do arquivo (texto dd/mm/aaaa hh:mm:ss ou serial do Excel) em epoch, no
+    horário local da unidade (Polo MS: uma hora a menos que Brasília)."""
     text = str(value or "").strip()
     if not text:
         return None
@@ -113,7 +114,7 @@ def _timestamp(value: str) -> int | None:
             moment = excel_serial_to_datetime(float(text.replace(",", ".")))
         except ValueError:
             return None
-    return int(moment.replace(tzinfo=FIELD_TIMEZONE).timestamp())
+    return int(moment.replace(tzinfo=tz).timestamp())
 
 
 def _iso_date(value: str) -> str:
@@ -159,7 +160,9 @@ def _parse_rows(rows):
         if not release or not front:
             invalid_rows += 1
             continue
-        out_at = _timestamp(values["scale_out_at"])
+        # Horários no fuso local da unidade: a balança do Polo MS registra uma hora a menos.
+        tz = unit_timezone(unit)
+        out_at = _timestamp(values["scale_out_at"], tz)
         net_kg = _number(values["net_kg"])
         if out_at is not None and (net_kg is None or net_kg < 0):
             invalid_rows += 1
@@ -171,15 +174,15 @@ def _parse_rows(rows):
             sector, section = values["level2"], ""
         movement_date = _iso_date(values["movement_date"])
         if not movement_date and out_at is not None:
-            movement_date = datetime.fromtimestamp(out_at, FIELD_TIMEZONE).date().isoformat()
+            movement_date = datetime.fromtimestamp(out_at, tz).date().isoformat()
         records.append({
             "unit_code": unit, "release_no": release, "movement_date": movement_date,
             "truck": values["truck"][:20], "trailer": values["trailer"][:20],
             "front": front, "sector": sector[:20], "section": section[:20],
             "net_kg": net_kg if out_at is not None else None,
             "atr": atr if atr is not None and 0 < atr < 1000 else None,
-            "patio_at": _timestamp(values["patio_at"]), "scale_in_at": _timestamp(values["scale_in_at"]),
-            "scale_out_at": out_at, "guarita_at": _timestamp(values["guarita_at"]),
+            "patio_at": _timestamp(values["patio_at"], tz), "scale_in_at": _timestamp(values["scale_in_at"], tz),
+            "scale_out_at": out_at, "guarita_at": _timestamp(values["guarita_at"], tz),
         })
     return {"records": records, "ignored_units": ignored_units, "invalid_rows": invalid_rows,
             "ignored_instances": dict(sorted(ignored_instances.items(), key=lambda item: -item[1])[:20])}

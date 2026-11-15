@@ -10,9 +10,9 @@ function deliveryNumber(value, digits = 0) {
   return Number(value).toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
-function deliveryTime(timestamp) {
+function deliveryTime(timestamp, timeZone = 'America/Sao_Paulo') {
   return new Date(timestamp * 1000).toLocaleString('pt-BR', {
-    timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+    timeZone, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
   });
 }
 
@@ -30,6 +30,11 @@ function renderDeliverySummary(summary) {
       parts.push(summary.closed_until
         ? `fechamento até ${escapeHtml(deliveryTime(summary.closed_until - 1))}`
         : 'nenhuma hora fechada ainda');
+      // Polo MS: horário local, uma hora a menos que Brasília.
+      const ms = (summary.units || []).find(unit => unit.timezone && unit.timezone !== 'America/Sao_Paulo');
+      if (ms?.closed_until) {
+        parts.push(`Polo MS até ${escapeHtml(deliveryTime(ms.closed_until - 1, ms.timezone))} (horário do MS)`);
+      }
       if (summary.shift) parts.push(`turno ${escapeHtml(summary.shift.code)}`);
     } else {
       parts.push(`Nenhuma carga pesada em ${escapeHtml(formatIsoDateBr(summary.work_date))}`);
@@ -72,11 +77,55 @@ function renderDeliverySummary(summary) {
   }).join('');
 }
 
+// Hora a hora da unidade escolhida, nas colunas da aba Chegada, com turnos e últimas 3 h.
+let deliveryLastSummary = null;
+function renderDeliveryHours(summary = deliveryLastSummary) {
+  const select = document.querySelector('#delivery-hours-unit');
+  const body = document.querySelector('#delivery-hours');
+  if (!select || !body || !summary) return;
+  if (!select.options.length) {
+    select.innerHTML = summary.units.map(unit => `<option value="${escapeHtml(unit.code)}">${escapeHtml(unit.code)}</option>`).join('');
+  }
+  const unit = summary.units.find(item => item.code === select.value) || summary.units[0];
+  const title = document.querySelector('#delivery-hours-title small');
+  if (title) {
+    title.textContent = unit?.timezone && unit.timezone !== 'America/Sao_Paulo'
+      ? '(mesmas colunas da aba Chegada · horário do MS, uma hora a menos)' : '(mesmas colunas da aba Chegada)';
+  }
+  if (!unit?.hours?.length) {
+    body.innerHTML = '<tr><td colspan="6">Nenhuma hora fechada.</td></tr>';
+    return;
+  }
+  const label = hour => `${String(hour).padStart(2, '0')}:00`;
+  const rows = unit.hours.map(item => `<tr><th scope="row">${label(item.hour)}</th>
+      <td>${deliveryNumber(item.milling_t, 3)}</td><td>${deliveryNumber(item.loads)}</td>
+      <td>${deliveryNumber(item.density_t, 2)}</td><td>${deliveryNumber(item.trucks)}</td>
+      <td>${deliveryNumber(item.delivery_t, 3)}</td></tr>`).join('');
+  const total = (key) => unit.hours.reduce((sum, item) => sum + (item[key] || 0), 0);
+  const shiftRows = ['A', 'B', 'C'].map(code => {
+    const hours = unit.hours.filter(item => item.shift === code);
+    if (!hours.length) return '';
+    const average = key => hours.reduce((sum, item) => sum + (item[key] || 0), 0) / hours.length;
+    return `<tr class="is-total"><th scope="row">Turno ${code}<small>média</small></th><td>${deliveryNumber(average('milling_t'), 3)}</td>
+      <td></td><td></td><td></td><td>${deliveryNumber(average('delivery_t'), 3)}</td></tr>`;
+  }).join('');
+  body.innerHTML = rows + `<tr class="is-total"><th scope="row">Totais</th><td>${deliveryNumber(total('milling_t'), 3)}</td>
+      <td>${deliveryNumber(total('loads'))}</td><td></td><td>${deliveryNumber(total('trucks'))}</td><td>${deliveryNumber(total('delivery_t'), 3)}</td></tr>`
+    + shiftRows
+    + `<tr class="is-total"><th scope="row">Últimas 3 h<small>média</small></th><td>${deliveryNumber(unit.milling_last3h_tph, 1)}</td>
+      <td></td><td></td><td></td><td>${deliveryNumber(unit.delivery_last3h_tph, 1)}</td></tr>`;
+}
+
 async function loadDeliverySummary() {
   const input = document.querySelector('#delivery-date');
-  const day = input?.value || saoPauloIsoDate();
-  const summary = await apiRequest(`/api/weighings/summary?date=${encodeURIComponent(day)}`);
+  const day = input?.value || saoPauloIsoDate(new Date(Date.now() - 3600 * 1000));
+  // "Fechamento às": o dia como estava naquele horário (para conferir com a planilha).
+  const time = document.querySelector('#delivery-time')?.value || '';
+  const summary = await apiRequest(`/api/weighings/summary?date=${encodeURIComponent(day)}${
+    time ? `&hora=${encodeURIComponent(time)}` : ''}`);
+  deliveryLastSummary = summary;
   renderDeliverySummary(summary);
+  renderDeliveryHours(summary);
 }
 
 // Quadro da última importação: cargas por unidade e data, unidades sem cargas e
@@ -232,6 +281,10 @@ document.querySelector('#delivery-import-file')?.addEventListener('change', impo
 document.querySelector('#delivery-date')?.addEventListener('change', () => {
   loadDeliverySummary().catch(error => showToast(error.message || 'Não foi possível carregar a pesagem.', true));
 });
+document.querySelector('#delivery-time')?.addEventListener('change', () => {
+  loadDeliverySummary().catch(error => showToast(error.message || 'Não foi possível carregar a pesagem.', true));
+});
+document.querySelector('#delivery-hours-unit')?.addEventListener('change', () => renderDeliveryHours());
 document.querySelector('#delivery-query-new')?.addEventListener('click', () => openDeliveryQueryModal());
 document.querySelector('#delivery-query-form')?.addEventListener('submit', saveDeliveryQuery);
 document.querySelector('#delivery-queries')?.addEventListener('click', event => {
@@ -258,7 +311,8 @@ document.querySelector('#delivery-query-sql')?.addEventListener('keydown', event
 
 if (document.querySelector('#delivery-units')) {
   const dateInput = document.querySelector('#delivery-date');
-  if (dateInput && !dateInput.value) dateInput.value = saoPauloIsoDate();
+  // Hora atual − 1 h: entre 00:00 e 00:59 abre no dia anterior, ainda em fechamento.
+  if (dateInput && !dateInput.value) dateInput.value = saoPauloIsoDate(new Date(Date.now() - 3600 * 1000));
   loadDeliverySummary().catch(error => {
     console.error(error);
     showToast(error.message || 'Não foi possível carregar a pesagem.', true);

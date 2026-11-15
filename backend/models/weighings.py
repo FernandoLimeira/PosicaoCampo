@@ -15,7 +15,9 @@ o arquivo traz DT_REG_GUARITA (sem ela, os CVs pela entrada no pátio variam ±2
   onde o arquivo está completo); é o momento do estoque.
 - Estoque: cargas que chegaram (nas 24 h até a referência) e ainda não tinham saído
   da balança na referência.
-- Todas as unidades (inclusive o Polo MS) usam o mesmo horário e os mesmos turnos.
+- Fuso: o Polo MS (RBR e PST) registra no horário local, uma hora a menos que Brasília.
+  Os horários do arquivo, as horas, os turnos e o relógio do fechamento de cada unidade
+  seguem o horário local dela; os turnos (A 00h-06h, B 07h-15h, C 16h-23h) são os mesmos.
 - Frente de outra unidade: a frente é procurada nas frentes da Posição de Campo de
   cada unidade; se pertence a outra, conta como ATR recebido nesta e apoio daquela.
 """
@@ -27,7 +29,7 @@ from datetime import date, datetime, time as dtime
 from typing import Any
 
 from ..services.front_identifiers import front_key, natural_key
-from ..services.operational_shifts import FIELD_TIMEZONE
+from ..services.operational_shifts import FIELD_TIMEZONE, unit_timezone
 from .constants import ALLOWED_UNIT_CODES
 from .storage import connection, validate_actor
 
@@ -184,8 +186,9 @@ def _truck_arrivals(rows) -> list[int]:
     return starts
 
 
-def weighing_summary(work_date: Any = None, *, now: float | None = None) -> dict[str, Any]:
-    """Resumo do dia; ``now`` (epoch) substitui o relógio, para testes."""
+def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time: Any = None) -> dict[str, Any]:
+    """Resumo do dia. ``at_time`` ("HH:MM") mostra o dia como estava naquele horário, para
+    conferir com a planilha de fechamento tirada nele; ``now`` (epoch) substitui o relógio."""
     if work_date in (None, ""):
         selected = datetime.now(FIELD_TIMEZONE).date()
     else:
@@ -196,14 +199,23 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None) -> dict
     day = selected.isoformat()
     day_start = int(datetime.combine(selected, dtime.min, FIELD_TIMEZONE).timestamp())
     day_end = day_start + 86400
+    if at_time not in (None, ""):
+        try:
+            hour, minute = (int(part) for part in str(at_time).split(":"))
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                raise ValueError
+        except ValueError as exc:
+            raise ValueError("Horário de fechamento inválido (use HH:MM).") from exc
+        now = day_start + hour * 3600 + minute * 60
     with connection() as conn:
         owners = _front_owners(conn)
         weighed = conn.execute(
             "SELECT * FROM field_weighings WHERE scale_out_at IS NOT NULL AND movement_date=?", (day,)
         ).fetchall()
+        # Folga de 1 h: o dia do Polo MS começa e termina uma hora depois do de Brasília.
         arrival_rows = conn.execute(
             "SELECT * FROM field_weighings WHERE COALESCE(guarita_at, patio_at) BETWEEN ? AND ?",
-            (day_start - STOCK_WINDOW_SECONDS, day_end - 1),
+            (day_start - STOCK_WINDOW_SECONDS - 3600, day_end + 3600 - 1),
         ).fetchall()
         last_import = conn.execute(
             """SELECT w.import_file, w.imported_at, u.name AS imported_by_name
@@ -213,34 +225,54 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None) -> dict
 
     # Referência = momento em que o arquivo está completo: a última saída da balança,
     # limitada à última chegada do dia. Saídas depois dela ficam para a próxima importação.
-    last_exit = max((row["scale_out_at"] for row in weighed), default=None)
-    last_arrival = max((_arrival(row) for row in arrival_rows if _arrival(row) >= day_start), default=None)
-    reference = min(value for value in (last_exit, last_arrival) if value) if last_exit else None
-    # Fechamento pelo relógio: hora atual − 1 h. Às 23:35 fecham as horas até 22:59:59
-    # (00h a 22h); o dia conta desde 00:00:00 e o turno desde o início dele (ex.: 16h).
-    # Data passada: as 24 horas; sem nenhuma carga no dia, nenhuma hora.
+    # Uma por polo (fuso): a balança de cada polo tem a sua extração.
+    def polo_of(code: str) -> str:
+        return getattr(unit_timezone(code), "key", str(unit_timezone(code)))
+
+    references: dict[str, int | None] = {}
+    for polo in {polo_of(code) for code in ALLOWED_UNIT_CODES}:
+        codes = {code for code in ALLOWED_UNIT_CODES if polo_of(code) == polo}
+        last_exit = max((row["scale_out_at"] for row in weighed if row["unit_code"] in codes), default=None)
+        last_arrival = max((_arrival(row) for row in arrival_rows
+                            if row["unit_code"] in codes and _arrival(row) >= day_start), default=None)
+        references[polo] = min(value for value in (last_exit, last_arrival) if value) if last_exit else None
+    reference = references.get(polo_of("PPT")) or next((value for value in references.values() if value), None)
     now_at = int(time.time() if now is None else now)
-    cutoff = min(day_end, day_start + max(0, (now_at - day_start) // 3600) * 3600) if reference else day_start
-    closed_hours = [hour for hour in range(24) if day_start + (hour + 1) * 3600 <= cutoff]
+
+    def closing(unit_start: int) -> tuple[list[int], int | None]:
+        """Fechamento pelo relógio local da unidade: hora atual − 1 h. Às 23:35 de Brasília
+        fecham 00h a 22h no Polo SP e 00h a 21h no Polo MS (lá são 22:35). Data passada:
+        as 24 horas; sem nenhuma carga no dia, nenhuma hora."""
+        cutoff = (min(unit_start + 86400, unit_start + max(0, (now_at - unit_start) // 3600) * 3600)
+                  if reference else unit_start)
+        hours = [hour for hour in range(24) if unit_start + (hour + 1) * 3600 <= cutoff]
+        return hours, unit_start + len(hours) * 3600 if hours else None
+
+    # Resumo geral no horário de Brasília (Polo SP); cada unidade traz o seu.
+    closed_hours, closed_until = closing(day_start)
     shift_code = _shift_of_hour(closed_hours[-1]) if closed_hours else None
-    # Moagem, cargas e frentes param no último segundo da última hora fechada.
-    closed_until = day_start + len(closed_hours) * 3600 if closed_hours else None
-    weighed = [row for row in weighed if closed_until and row["scale_out_at"] < closed_until]
 
     units = []
     support = []
     for code in ALLOWED_UNIT_CODES:
-        rows = [row for row in weighed if row["unit_code"] == code]
+        tz = unit_timezone(code)
+        unit_start = int(datetime.combine(selected, dtime.min, tz).timestamp())
+        unit_hours, unit_closed_until = closing(unit_start)
+        unit_shift = _shift_of_hour(unit_hours[-1]) if unit_hours else None
+        # Moagem, cargas e frentes param no último segundo da última hora fechada.
+        rows = [row for row in weighed if row["unit_code"] == code
+                and unit_closed_until and row["scale_out_at"] < unit_closed_until]
         arrivals = [row for row in arrival_rows if row["unit_code"] == code]
-        # Estoque: chegou nas 24 h até a referência e ainda não tinha saído da balança nela.
+        # Estoque: chegou nas 24 h até a referência do polo e ainda não tinha saído da balança nela.
+        unit_reference = references.get(polo_of(code))
         stock = [row for row in arrivals
-                 if reference and reference - STOCK_WINDOW_SECONDS <= _arrival(row) <= reference
-                 and (row["scale_out_at"] is None or row["scale_out_at"] > reference)]
+                 if unit_reference and unit_reference - STOCK_WINDOW_SECONDS <= _arrival(row) <= unit_reference
+                 and (row["scale_out_at"] is None or row["scale_out_at"] > unit_reference)]
         day_density = _tons(rows) / len(rows) if rows else None
         truck_arrivals = _truck_arrivals(arrivals)
         hours = []
-        for hour in closed_hours:
-            start, end = day_start + hour * 3600, day_start + (hour + 1) * 3600
+        for hour in unit_hours:
+            start, end = unit_start + hour * 3600, unit_start + (hour + 1) * 3600
             milled = [row for row in rows if start <= row["scale_out_at"] < end]
             trucks = [arrival for arrival in truck_arrivals if start <= arrival < end]
             density = _tons(milled) / len(milled) if milled else day_density
@@ -249,7 +281,7 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None) -> dict
                 "loads": len(milled), "density_t": _round(density, 3), "trucks": len(trucks),
                 "delivery_t": _round(len(trucks) * JULIETAS_PER_TRUCK * density) if density else None,
             })
-        shift_hours = [item for item in hours if item["shift"] == shift_code]
+        shift_hours = [item for item in hours if item["shift"] == unit_shift]
         recent_hours = hours[-LAST_HOURS:]
         fronts: dict[str, list] = {}
         for row in rows:
@@ -270,6 +302,12 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None) -> dict
                                 "loads": entry["loads"], "tons": entry["tons"], "atr": entry["atr"]})
         units.append({
             "code": code,
+            # Horário local da unidade: horas, turno e fechamento (Polo MS: uma hora a menos).
+            "timezone": getattr(tz, "key", str(tz)),
+            "reference_at": unit_reference,
+            "closed_hours": len(unit_hours),
+            "closed_until": unit_closed_until,
+            "shift": unit_shift,
             "milling_day_t": _round(_tons(rows)),
             "delivery_day_t": _round(sum(item["delivery_t"] or 0 for item in hours)),
             "loads_day": len(rows),
