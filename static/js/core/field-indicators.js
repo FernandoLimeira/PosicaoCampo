@@ -1,7 +1,7 @@
 // Indicadores da unidade e totais das quatro unidades, num só cálculo para o relatório
 // gerencial da Posição de Campo e a emissão da imagem "Troca de Turno CTT".
 // Moagem, entrega, estoque, ATR, processado e projeção vêm da pesagem da balança (resumo de
-// /api/weighings/summary, horas fechadas = hora atual − 1 h); sem pesagem da unidade, valem
+// /api/weighings/summary: dia e horas do último SELECT importado); sem pesagem da unidade, valem
 // os indicadores digitados no Preencher. "Indústria" é sempre a digitada.
 // Depende de core/format.js, core/common.js e core/field-fronts.js.
 

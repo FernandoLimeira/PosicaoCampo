@@ -57,11 +57,11 @@ const WEIGHING_METRIC_FIELDS = {
   4: 'milling_last3h_tph', 5: 'delivery_last3h_tph'
 };
 
-// Dia pela regra "hora atual − 1 h" (weighingWorkDate, core/format.js): às 00:31 ainda vale
-// o dia anterior; sem isso, a tela voltava aos valores digitados no Preencher.
+// Sem data, o servidor devolve o dia da última pesagem importada, até a última hora do
+// SELECT: a importação vale até a próxima, a qualquer hora (inclusive depois da meia-noite).
 async function loadWeighingSummary() {
   try {
-    weighingSummary = await apiRequest(`/api/weighings/summary?date=${encodeURIComponent(weighingWorkDate())}`);
+    weighingSummary = await apiRequest('/api/weighings/summary');
   } catch (error) {
     console.warn('Não foi possível consultar a pesagem.', error);
     weighingSummary = null;
@@ -75,14 +75,14 @@ function unitWeighing(code) {
   return unit && unit.loads_day > 0 ? unit : null;
 }
 
-// Fechamento: último segundo da última hora fechada (ex.: 20:59), no horário local da
-// unidade (Polo MS: uma hora a menos que Brasília); sem ele, a referência.
+// Último dado do SELECT importado (dia e hora), no horário local da unidade (Polo MS: uma
+// hora a menos que Brasília). Ex.: "14/11 22:29".
 function weighingReferenceTime(code) {
   const unit = code ? (weighingSummary?.units || []).find(item => item.code === code) : null;
-  const closedUntil = unit ? unit.closed_until : weighingSummary?.closed_until;
-  const closed = closedUntil ? closedUntil - 1 : weighingSummary?.reference_at;
+  const moment = unit?.data_until || weighingSummary?.reference_at;
   const timeZone = unit?.timezone || 'America/Sao_Paulo';
-  const text = closed ? new Date(closed * 1000).toLocaleTimeString('pt-BR', { timeZone, hour: '2-digit', minute: '2-digit' }) : '';
+  const text = moment ? new Date(moment * 1000).toLocaleString('pt-BR', {
+    timeZone, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '') : '';
   return text && timeZone !== 'America/Sao_Paulo' ? `${text} (horário do MS)` : text;
 }
 

@@ -3,7 +3,8 @@
 Mesma lógica da aba "Chegada" da planilha "Controle de entrega x Moagem", hora a hora.
 Conferida com a NRD em 14/11/2026: moagem, CVs e entrega batem nas horas 00h-21h quando
 o arquivo traz DT_REG_GUARITA (sem ela, os CVs pela entrada no pátio variam ±2 por hora):
-- Horas fechadas: pelo relógio, hora atual − 1 h (às 23:35 entram 00:00:00 a 22:59:59).
+- Horas: de 00:00 até a última hora do SELECT importado (vale até a próxima importação,
+  independente do relógio); o dia é o mais recente do arquivo.
 - Moagem da hora: soma do peso líquido (QT_LIQUIDO) das cargas com saída da balança
   na hora. Moagem do dia: soma das horas fechadas, desde 00:00:00.
 - Densidade da hora: peso médio das julietas pesadas na hora (moagem ÷ cargas).
@@ -190,10 +191,18 @@ def _truck_arrivals(rows) -> list[int]:
 
 
 def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time: Any = None) -> dict[str, Any]:
-    """Resumo do dia. ``at_time`` ("HH:MM") mostra o dia como estava naquele horário, para
-    conferir com a planilha de fechamento tirada nele; ``now`` (epoch) substitui o relógio."""
+    """Resumo do dia da pesagem importada (sem data: o dia mais recente do arquivo).
+
+    As horas vão de 00:00 até a última hora que veio no SELECT importado, independente do
+    relógio: a importação vale até a próxima. ``at_time`` ("HH:MM") ou ``now`` (epoch)
+    limitam às horas encerradas até aquele momento (hora − 1 h), para conferir com uma
+    planilha de fechamento tirada nele."""
     if work_date in (None, ""):
-        selected = datetime.now(FIELD_TIMEZONE).date()
+        with connection() as conn:
+            latest = conn.execute(
+                "SELECT MAX(movement_date) FROM field_weighings WHERE scale_out_at IS NOT NULL AND movement_date <> ''"
+            ).fetchone()[0]
+        selected = date.fromisoformat(latest) if latest else datetime.now(FIELD_TIMEZONE).date()
     else:
         try:
             selected = date.fromisoformat(str(work_date))
@@ -240,19 +249,29 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
                             if row["unit_code"] in codes and _arrival(row) >= day_start), default=None)
         references[polo] = min(value for value in (last_exit, last_arrival) if value) if last_exit else None
     reference = references.get(polo_of("PPT")) or next((value for value in references.values() if value), None)
-    now_at = int(time.time() if now is None else now)
+    # Último dado do SELECT por polo (última saída da balança ou última chegada do dia).
+    data_until: dict[str, int | None] = {}
+    for polo in references:
+        codes = {code for code in ALLOWED_UNIT_CODES if polo_of(code) == polo}
+        moments = [row["scale_out_at"] for row in weighed if row["unit_code"] in codes]
+        moments += [_arrival(row) for row in arrival_rows if row["unit_code"] in codes and _arrival(row) >= day_start]
+        data_until[polo] = max(moments, default=None) if references[polo] else None
 
-    def closing(unit_start: int) -> tuple[list[int], int | None]:
-        """Fechamento pelo relógio local da unidade: hora atual − 1 h. Às 23:35 de Brasília
-        fecham 00h a 22h no Polo SP e 00h a 21h no Polo MS (lá são 22:35). Data passada:
-        as 24 horas; sem nenhuma carga no dia, nenhuma hora."""
-        cutoff = (min(unit_start + 86400, unit_start + max(0, (now_at - unit_start) // 3600) * 3600)
-                  if reference else unit_start)
+    def closing(unit_start: int, polo: str) -> tuple[list[int], int | None]:
+        """Horas de 00:00 até a hora do último dado do SELECT (no fuso da unidade): a
+        importação vale até a próxima, a qualquer hora. Com ``now``/``at_time``, só as horas
+        encerradas até aquele momento (às 23:35: 00h a 22h no Polo SP, 00h a 21h no MS)."""
+        last = data_until.get(polo)
+        if not last:
+            return [], None
+        cutoff = min(unit_start + 86400, unit_start + ((last - unit_start) // 3600 + 1) * 3600)
+        if now is not None:
+            cutoff = min(cutoff, unit_start + max(0, (int(now) - unit_start) // 3600) * 3600)
         hours = [hour for hour in range(24) if unit_start + (hour + 1) * 3600 <= cutoff]
         return hours, unit_start + len(hours) * 3600 if hours else None
 
     # Resumo geral no horário de Brasília (Polo SP); cada unidade traz o seu.
-    closed_hours, closed_until = closing(day_start)
+    closed_hours, closed_until = closing(day_start, polo_of("PPT"))
     shift_code = _shift_of_hour(closed_hours[-1]) if closed_hours else None
 
     units = []
@@ -260,7 +279,7 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
     for code in ALLOWED_UNIT_CODES:
         tz = unit_timezone(code)
         unit_start = int(datetime.combine(selected, dtime.min, tz).timestamp())
-        unit_hours, unit_closed_until = closing(unit_start)
+        unit_hours, unit_closed_until = closing(unit_start, polo_of(code))
         unit_shift = _shift_of_hour(unit_hours[-1]) if unit_hours else None
         # Moagem, cargas e frentes param no último segundo da última hora fechada.
         rows = [row for row in weighed if row["unit_code"] == code
@@ -308,6 +327,8 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
             # Horário local da unidade: horas, turno e fechamento (Polo MS: uma hora a menos).
             "timezone": getattr(tz, "key", str(tz)),
             "reference_at": unit_reference,
+            # Último dado do SELECT importado para esta unidade (polo), no seu fuso.
+            "data_until": data_until.get(polo_of(code)),
             "closed_hours": len(unit_hours),
             "closed_until": unit_closed_until,
             "shift": unit_shift,

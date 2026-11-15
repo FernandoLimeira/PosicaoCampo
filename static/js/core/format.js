@@ -31,12 +31,6 @@ function saoPauloIsoDate(date = new Date()) {
   return saoPauloDateParts(date).isoDate;
 }
 
-// Dia da pesagem da balança pela regra "hora atual − 1 h": entre 00:00 e 00:59 ainda vale
-// o dia anterior, fechado até 23:59:59 (Posição de Campo, Entrega CTT e emissão da imagem).
-function weighingWorkDate(now = new Date()) {
-  return saoPauloIsoDate(new Date(now.getTime() - 3600 * 1000));
-}
-
 // "AAAA-MM-DD" → "DD/MM/AAAA". Outros valores voltam como texto ("-" quando vazios).
 function formatIsoDateBr(value) {
   const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);

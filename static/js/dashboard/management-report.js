@@ -10,7 +10,7 @@ let managementReportTime = '';
 let managementReportCustomSummary = null;
 
 function managementReportQuery() {
-  const query = new URLSearchParams({ date: managementReportDate || weighingWorkDate() });
+  const query = new URLSearchParams({ date: managementReportDate || weighingSummary?.work_date || '' });
   if (managementReportTime) query.set('hora', managementReportTime);
   return query;
 }
@@ -21,7 +21,7 @@ function managementReportSummary() {
 }
 
 async function loadManagementReport() {
-  const live = (!managementReportDate || managementReportDate === weighingWorkDate()) && !managementReportTime;
+  const live = (!managementReportDate || managementReportDate === weighingSummary?.work_date) && !managementReportTime;
   managementReportCustomSummary = live ? null : await apiRequest(`/api/weighings/summary?${managementReportQuery()}`);
 }
 
@@ -102,14 +102,15 @@ function managementReportHtml() {
       <tbody>${rows}</tbody></table></div>` : '<p class="mr-empty">Sem pesagem fechada.</p>'}</details>`;
   }).join('');
 
-  const today = weighingWorkDate();
+  const today = saoPauloIsoDate();
+  const shownDay = managementReportDate || summary?.work_date || today;
   return `<section class="dashboard-block management-report" aria-labelledby="management-report-title">
     <header class="mr-header">
       <div><h2 id="management-report-title">Relatório gerencial · 4 unidades</h2>
         <p>Balança (moagem, entrega por CVs × 2 × densidade, estoque e ATR) e posição de campo (frentes e indústria).
-          Horas fechadas pela regra hora atual − 1 h; Polo MS no horário de lá.</p></div>
+          Dia e horas do último SELECT importado (vale até a próxima importação); Polo MS no horário de lá.</p></div>
       <div class="mr-controls">
-        <label class="field"><span>Dia</span><input id="management-report-date" type="date" max="${today}" value="${escapeHtml(managementReportDate || today)}" /></label>
+        <label class="field"><span>Dia</span><input id="management-report-date" type="date" max="${today}" value="${escapeHtml(shownDay)}" /></label>
         <label class="field" title="Mostra o dia como estava neste horário (para conferir com uma planilha de fechamento). Em branco: agora."><span>Fechamento às</span>
           <input id="management-report-time" type="time" value="${escapeHtml(managementReportTime)}" /></label>
         <button id="management-report-export" class="dashboard-fill-button" type="button">Exportar Excel</button>

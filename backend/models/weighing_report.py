@@ -3,7 +3,8 @@
 Abas: Resumo (indicadores das 4 unidades e total), Hora a hora (colunas da aba Chegada),
 Turnos (A, B e C), Troca de cana (frentes entregando em outra unidade; o ATR entra na média
 da unidade que recebeu) e Frentes (pesagem por frente). Os números são os mesmos da tela e
-da imagem: resumo de ``weighing_summary`` (hora atual − 1 h) e frentes/indústria da posição.
+da imagem: resumo de ``weighing_summary`` (dia e horas do último SELECT importado) e
+frentes/indústria da posição.
 """
 from __future__ import annotations
 
@@ -56,7 +57,7 @@ def build_weighing_report(work_date: Any = None, at_time: Any = None) -> tuple[b
               "Estoque (cargas)", "ATR parcial (kg/t)", "Processado dia (t)", "Cana entregue dia (t)",
               "Projeção moagem (t)", "Projeção entrega (t)", "Turno", "Fechamento até"]
     resumo = [["Relatório gerencial · Balança CTT"], ["Dia", day],
-              ["Fechamento", f"às {at_time}" if at_time else "hora atual − 1 h"],
+              ["Fechamento", f"às {at_time}" if at_time else "até a última hora do SELECT importado"],
               ["Gerado em", datetime.now(FIELD_TIMEZONE).strftime("%d/%m/%Y %H:%M")], [], header]
     hours_rows = [["Unidade", "Hora", "Turno", "Moagem (t)", "Cargas", "Densidade (t)", "Qtd. CVs", "Cana entregue (t)", "Diferença (t)"]]
     shift_rows = [["Unidade", "Turno", "Horas", "Moagem total (t)", "Entrega total (t)", "Diferença (t)", "Média moagem (t/h)", "Média entrega (t/h)"]]

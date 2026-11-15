@@ -101,7 +101,7 @@ Excel do SELECT ──► services/weighing_import ──► models/weighings.im
                      (fuso local da unidade)       (substitui a base inteira)
                                                           │
                        models/weighings.weighing_summary ◄┘
-                       (horas fechadas = hora atual − 1 h, no fuso da unidade)
+                       (dia e horas do último SELECT importado, no fuso da unidade)
                           │                │                      │
             painel da unidade e     imagem "Troca de     models/weighing_report
             relatório gerencial      Turno CTT"          (Excel, services/xlsx_writer)

@@ -17,10 +17,10 @@ document.querySelector('#emit-global-position')?.addEventListener('click', async
   button.disabled = true;
   status.textContent = 'Carregando a posição atual de todas as unidades…';
   try {
-    // Pesagem da balança do dia pela regra "hora atual − 1 h" (a mesma da Posição de Campo).
+    // Pesagem importada (o dia e as horas do último SELECT, como na Posição de Campo).
     const [payload, weighing] = await Promise.all([
       apiRequest('/api/units'),
-      apiRequest(`/api/weighings/summary?date=${encodeURIComponent(weighingWorkDate())}`).catch(error => {
+      apiRequest('/api/weighings/summary').catch(error => {
         console.warn('Pesagem indisponível; a imagem usa os indicadores digitados.', error);
         return null;
       })

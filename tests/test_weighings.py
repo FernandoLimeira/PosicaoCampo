@@ -34,7 +34,7 @@ def xlsx(rows):
 
 
 def clock(hhmm, day="14/11/2026"):
-    """Relógio dos testes: o resumo fecha as horas até a hora atual − 1 h."""
+    """Relógio dos testes: com ``now``, o resumo só conta as horas encerradas até ali."""
     return int(datetime.strptime(f"{day} {hhmm}", "%d/%m/%Y %H:%M").replace(tzinfo=FIELD_TIMEZONE).timestamp())
 
 
@@ -200,20 +200,21 @@ class WeighingTests(unittest.TestCase):
         # Pátio: D (pesado só às 10:01), as 2 julietas de C e a de E.
         self.assertEqual(ppt["stock_loads"], 4)
 
-    def test_hours_close_by_the_clock_minus_one_hour(self):
-        # Hora atual − 1 h: às 21:35 fecham 00:00:00 a 20:59:59; a hora 21 está em andamento
-        # e não entra nas médias do turno (turno C = 16h a 20h).
+    def test_hours_go_until_the_last_hour_of_the_imported_select(self):
+        # O SELECT foi até 21:59:07: as horas vão de 00h a 21h, a qualquer hora do relógio
+        # (a importação vale até a próxima, inclusive no dia seguinte).
         weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx([HEADER,
             load("204", "1", "20", "300", "3500", "35000", "14/11/2026 20:30:00", patio="14/11/2026 19:50:00"),
             load("204", "2", "20", "300", "3500", "20000", "14/11/2026 21:59:07", patio="14/11/2026 21:59:07"),
         ]), "a.xlsx")["records"])
-        # Às 23:35 fecham 00h a 22h, mesmo que o arquivo vá só até 21:59 (a hora 22 fica zerada).
-        late = weighings.weighing_summary("2026-11-14", now=clock("23:35"))
-        self.assertEqual((late["closed_hours"], late["closed_until"]), (23, clock("23:00")))
-        self.assertEqual(late["units"][1]["milling_day_t"], 55.0)
-        self.assertEqual([item["milling_t"] for item in late["units"][1]["hours"][-3:]], [35.0, 20.0, 0.0])
-        # Data já encerrada: as 24 horas.
-        self.assertEqual(weighings.weighing_summary("2026-11-14", now=clock("08:00", "15/11/2026"))["closed_hours"], 24)
+        for current in (None, clock("23:35"), clock("08:00", "15/11/2026")):
+            summary = weighings.weighing_summary(now=current)  # sem data: o dia do arquivo
+            self.assertEqual(summary["work_date"], "2026-11-14")
+            self.assertEqual((summary["closed_hours"], summary["closed_until"]), (22, clock("22:00")))
+            nrd = summary["units"][1]
+            self.assertEqual([item["milling_t"] for item in nrd["hours"][-2:]], [35.0, 20.0])
+            self.assertEqual((nrd["milling_day_t"], nrd["data_until"]), (55.0, clock("21:59") + 7))
+        # "Fechamento às 21:35" (planilha tirada nesse horário): só as horas encerradas, 00h a 20h.
         summary = weighings.weighing_summary("2026-11-14", now=clock("21:35"))
         self.assertEqual(summary["closed_hours"], 21)  # 00h a 20h
         nrd = summary["units"][1]
