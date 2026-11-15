@@ -185,6 +185,14 @@ async function main() {
   summary.units[0].data_until = 1794776399;  // outro SELECT importado: a correção deixa de valer
   const stale = standalone.fieldUnitIndicators(corrected, summary);
   assert.deepEqual([stale.millingShift, stale.stock, stale.corrected.length], [846.6, 48, 0]);
+  // Moagem do dia consolidada: soma das 4 unidades (processado e projeção), como o modelo
+  // (11.763 + 16.498 + 12.390 + 6.612 = 47.263 t; projeções 78.354 t). Unidade sem balança fica fora.
+  const consolidated = standalone.fieldIndicatorTotals([[11763, 18822], [16498, 26342], [12390, 21240], [6612, 11950]]
+    .map(([day, projection]) => ({ rows: [], active: 0, day, projection, atr: null })));
+  assert.deepEqual([consolidated.day, consolidated.projection], [47263, 78354]);
+  const partial = standalone.fieldIndicatorTotals([{ rows: [], active: 0, day: 100, projection: 240, atr: null },
+    { rows: [], active: 0, day: null, projection: null, atr: null }]);
+  assert.deepEqual([partial.day, partial.projection], [100, 240]);
   const fallback = standalone.fieldUnitIndicators(ppt, null);
   assert.deepEqual([fallback.millingShift, fallback.stock, fallback.atr, fallback.day], [700, 40, null, null]);
   drawn.length = 0;

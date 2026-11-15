@@ -104,21 +104,6 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 }
 
 /* Preencher, etapa 5 (Imagem CTT): balança e troca de cana que vão para a imagem. */
-.image-step-summary { margin-top: 14px; display: grid; gap: 10px; }
-.image-step-source, .image-step-empty { margin: 0; color: #5b6168; font-size: 12px; }
-.image-step-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.image-step-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.image-step-head .image-step-source { flex: 1 1 260px; }
-.image-step-field { display: grid; gap: 4px; padding: 8px 10px; background: var(--data-surface); border: 1px solid var(--data-border); border-radius: var(--data-radius); }
-.image-step-field > small { color: #717c81; font-size: 10px; font-weight: 800; text-transform: uppercase; }
-.image-step-field input { width: 100%; min-width: 0; color: #2d3f44; font-size: 15px; font-weight: 700; }
-.image-step-field em { color: #717c81; font-size: 11px; font-style: normal; }
-.image-step-field.is-corrected { border-color: #e4c257; background: #fff8df; }
-.image-step-field.is-corrected em { color: #9a7400; font-weight: 700; }
-.image-step-exchange { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 12px; }
-.image-step-exchange dt { color: #9a7400; font-weight: 800; }
-.image-step-exchange dd { margin: 0; color: #2d3f44; }
-@media (max-width: 760px) { .image-step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .image-step-exchange { grid-template-columns: 1fr; } }
 
 /* Importar pesagem: botão (label do arquivo) ao lado do Preencher, em tom secundário. */
 .dashboard-import-button { display: inline-flex; align-items: center; cursor: pointer; background: #ffffff; color: var(--green); }
@@ -1116,7 +1101,12 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 .field-subsection-title { margin-bottom: 12px; color: #3c5157; font-size: 11px; font-weight: 850; letter-spacing: .3px; }
 .field-subsection-title .metrics-source { margin-left: 8px; color: #6c777d; font-size: 10px; font-weight: 600; letter-spacing: 0; }
 .metric.is-weighing { box-shadow: inset 3px 0 0 #76b82a; }
-.metrics-weighing-note { grid-column: 1 / -1; margin: 0 0 4px; padding: 8px 10px; border-radius: 8px; background: #eef7e3; color: #3e6b12; font-size: 12px; }
+.metrics-weighing-note { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 4px; padding: 8px 10px; border-radius: 8px; background: #eef7e3; color: #3e6b12; font-size: 12px; }
+.metrics-weighing-note p { flex: 1 1 260px; margin: 0; }
+/* Indicador da balança: valor original abaixo do campo; corrigido fica destacado em amarelo. */
+.metric-field em { color: #717c81; font-size: 11px; font-style: normal; }
+.operation-editor-modal .metric-field.is-corrected { border-color: #e4c257; background: #fff8df; }
+.metric-field.is-corrected em { color: #9a7400; font-weight: 700; }
 .field-note-empty { color: #839299 !important; font-style: italic; }
 .field-note-preview { margin-bottom: 8px !important; }
 .field-note-details summary { display: inline-flex; align-items: center; cursor: pointer; color: #375e6a; font-size: 11px; font-weight: 800; }

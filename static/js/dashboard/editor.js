@@ -168,25 +168,56 @@ function reorderFrontForm() {
   renderFrontRows(collectFrontRows());
 }
 
+// Indicadores do turno (etapa Produção). Sem pesagem, os valores são digitados. Com pesagem,
+// vêm da balança (mesmo cálculo da imagem e do relatório, core/field-indicators.js) e podem ser
+// corrigidos aqui se houver inconsistência: a correção vale só para o fechamento importado
+// (some quando outro SELECT é importado). ATR, processado do dia e projeção só existem com balança.
+const METRIC_OVERRIDE_KEYS = { 1: 'millingShift', 2: 'deliveryShift', 3: 'stock', 4: 'milling3h', 5: 'delivery3h' };
+const BALANCE_ONLY_FIELDS = [['atr', 'ATR PARCIAL', 'KG/T', 2], ['day', 'PROCESSADO DIA', 'T', 0], ['projection', 'PROJEÇÃO', 'T', 0]];
+
+// Valor do campo como o card mostra (inteiro; ATR com 2 casas), sem separador de milhar.
+function metricInputValue(value, digits = 0) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return '';
+  return String(digits ? Number(Number(value).toFixed(digits)) : Math.round(Number(value)));
+}
+
+function metricFieldHtml({ label, unit, value, key = '', balance = '', corrected = false, index = null, digits = 0 }) {
+  const hint = key ? `<em>Balança: ${escapeHtml(fieldIndicatorNumber(balance === '' ? null : Number(balance), digits))}${corrected ? ' · corrigido' : ''}</em>` : '';
+  return `
+    <div class="metric-field${corrected ? ' is-corrected' : ''}">
+      <label>
+        <span>${escapeHtml(label)}</span>
+        <div class="metric-input-wrap">
+          <input class="metric-input" ${index === null ? '' : `data-metric-index="${index}" `}${key ? `data-override-key="${key}" data-balance="${escapeHtml(balance)}" ` : ''}type="number" step="${digits ? '0.01' : '1'}" min="0" value="${escapeHtml(value)}" />
+          <small>${escapeHtml(unit)}</small>
+        </div>
+        ${hint}
+      </label>
+    </div>`;
+}
+
 function renderMetricsForm(unit) {
   const container = document.querySelector('#metrics-form');
-  // Com pesagem importada, moagem/entrega/estoque já vêm preenchidos pela balança.
-  const metrics = displayMetrics(unit);
-  const weighing = unitWeighing(unit.code);
-  // Com pesagem, moagem/entrega/estoque vêm da balança: corrigir na etapa "Imagem CTT".
-  const note = weighing
-    ? `<p class="metrics-weighing-note">Moagem, entrega e estoque vêm da pesagem da balança (dados até ${escapeHtml(weighingReferenceTime(unit.code))}). Para corrigir uma inconsistência, use a etapa Imagem CTT.</p>` : '';
-  container.innerHTML = note + metricDefinitions.map((definition, index) => `
-    <div class="metric-field">
-      <label>
-        <span>${escapeHtml(definition.label)}</span>
-        <div class="metric-input-wrap">
-          <input class="metric-input" data-metric-index="${index}" type="number" step="0.01" min="0" value="${metricNumber(metrics[index]?.[2])}"${weighing && WEIGHING_METRIC_FIELDS[index] ? ' readonly' : ''} />
-          <small>${escapeHtml(definition.unit)}</small>
-        </div>
-      </label>
-    </div>
-  `).join('');
+  const item = fieldUnitIndicators(unit, weighingSummary);
+  if (!item.closingRef) {
+    container.innerHTML = metricDefinitions.map((definition, index) => metricFieldHtml({
+      label: definition.label, unit: definition.unit, value: metricNumber(unit.metrics[index]?.[2]), index })).join('');
+    return;
+  }
+  const note = `<div class="metrics-weighing-note">
+      <p>Valores da pesagem da balança (dados até ${escapeHtml(weighingReferenceTime(unit.code))}). Se houver inconsistência, corrija o campo: a correção vale só para este fechamento.</p>
+      <button id="metrics-balance-reset" class="modal-button secondary" type="button">Usar valores da balança</button>
+    </div>`;
+  const typed = metricDefinitions.map((definition, index) => {
+    const key = METRIC_OVERRIDE_KEYS[index];
+    if (!key) return metricFieldHtml({ label: definition.label, unit: definition.unit, value: metricNumber(unit.metrics[index]?.[2]), index });
+    return metricFieldHtml({ label: definition.label, unit: definition.unit, value: metricInputValue(item[key]), index, key,
+      balance: metricInputValue(item.balance[key]), corrected: item.corrected.includes(key) });
+  });
+  const balanceOnly = BALANCE_ONLY_FIELDS.map(([key, label, suffix, digits]) => metricFieldHtml({ label, unit: suffix,
+    value: metricInputValue(item[key], digits), key, balance: metricInputValue(item.balance[key], digits),
+    corrected: item.corrected.includes(key), digits }));
+  container.innerHTML = note + typed.join('') + balanceOnly.join('');
 }
 
 function rainRowHtml(eq = '', turn = 0, accum = 0) {
@@ -227,63 +258,13 @@ function reorderRainForm() {
   renderRainForm(collectRainRows());
 }
 
-// Etapa "Imagem CTT": os indicadores que vão para o card da unidade na imagem, pelo mesmo
-// cálculo da imagem e do relatório (core/field-indicators.js), já preenchidos pela balança.
-// Se a balança tiver inconsistência, o valor pode ser corrigido aqui: a correção vale só para
-// este fechamento (some quando outro SELECT é importado). Indústria é editada na etapa Produção.
-const IMAGE_STEP_FIELDS = [
-  ['millingShift', 'Moagem turno', 't/h', 0], ['deliveryShift', 'Entrega turno', 't/h', 0],
-  ['milling3h', 'Moagem últ. 3 h', 't/h', 0], ['delivery3h', 'Entrega últ. 3 h', 't/h', 0],
-  ['stock', 'Estoque', 'cargas', 0], ['atr', 'ATR parcial', 'kg/t', 2],
-  ['day', 'Processado dia', 't', 0], ['projection', 'Projeção', 't', 0]
-];
-
-function imageStepInputValue(value) {
-  return value === null || value === undefined || !Number.isFinite(Number(value)) ? '' : String(Number(value));
-}
-
-function imageStepSummaryHtml(unit) {
-  const summary = weighingSummary;
-  const item = fieldUnitIndicators(unit, summary);
-  if (!item.closingRef) {
-    return '<p class="image-step-empty">Sem pesagem importada para esta unidade: a imagem usa os indicadores da etapa Produção.</p>';
-  }
-  const number = fieldIndicatorNumber;
-  const cells = IMAGE_STEP_FIELDS.map(([key, label, suffix, digits]) => {
-    const corrected = item.corrected.includes(key);
-    return `<label class="image-step-field${corrected ? ' is-corrected' : ''}">
-      <small>${escapeHtml(label)}</small>
-      <span class="metric-input-wrap">
-        <input class="image-override-input" data-override-key="${key}" type="number" min="0" step="${digits ? '0.01' : '0.1'}"
-          value="${imageStepInputValue(item[key])}" data-balance="${imageStepInputValue(item.balance[key])}" />
-        <small>${escapeHtml(suffix)}</small>
-      </span>
-      <em>Balança: ${escapeHtml(number(item.balance[key], digits))}${corrected ? ' · corrigido' : ''}</em>
-    </label>`;
-  }).join('');
-  const received = item.received.map(front => `FT${escapeHtml(fieldFrontNumber(front.front))} (${escapeHtml(front.home_unit)}) `
-    + `${number(front.atr, 2)} · ${number(front.tons)} t`).join(' · ');
-  // Frentes desta unidade pesadas em outra indústria: o ATR entra na média de lá.
-  const sent = (summary?.support || []).filter(entry => entry.from_unit === unit.code).map(entry =>
-    `FT${escapeHtml(fieldFrontNumber(entry.front))} → ${escapeHtml(entry.to_unit)} · ${number(entry.tons)} t · ATR ${number(entry.atr, 2)}`).join(' · ');
-  return `<div class="image-step-head">
-      <p class="image-step-source">Da balança para a imagem · dados até ${escapeHtml(weighingReferenceTime(unit.code))}. Corrija só se houver inconsistência: vale para este fechamento.</p>
-      <button id="image-overrides-reset" class="modal-button secondary" type="button">Usar valores da balança</button>
-    </div>
-    <div class="image-step-grid">${cells}</div>
-    <dl class="image-step-exchange">
-      <dt>ATR recebido</dt><dd>${received || 'Nenhuma frente de outra unidade entregou aqui.'}</dd>
-      <dt>Frentes desta unidade em outra indústria (ATR entra lá)</dt><dd>${sent || 'Nenhuma.'}</dd>
-    </dl>`;
-}
-
-// Correções da etapa "Imagem CTT": só os campos diferentes do valor da balança, presos ao
+// Correções dos "Indicadores do turno": só os campos diferentes do valor da balança, presos ao
 // fechamento atual (``ref``). Sem diferença, nada é gravado e a imagem segue a balança.
 function collectImageOverrides(unit) {
   const ref = fieldUnitIndicators(unit, weighingSummary).closingRef;
   if (!ref) return null;
   const values = {};
-  document.querySelectorAll('.image-override-input').forEach(input => {
+  document.querySelectorAll('#metrics-form [data-override-key]').forEach(input => {
     const text = input.value.trim();
     if (!text) return;
     const value = Number(text);
@@ -331,8 +312,6 @@ function loadUnitEditor(index) {
   renderFrontRows(unit.rows);
   renderMetricsForm(unit);
   renderRainForm(unit.rain);
-  const imageSummary = document.querySelector('#image-step-summary');
-  if (imageSummary) imageSummary.innerHTML = imageStepSummaryHtml(unit);
 }
 
 function collectFrontRows() {
@@ -421,9 +400,9 @@ function setupEditorEvents() {
     setEditorStep(currentEditorStep + 1);
   });
 
-  document.querySelector('#image-step-summary')?.addEventListener('click', event => {
-    if (!event.target.closest('#image-overrides-reset')) return;
-    document.querySelectorAll('.image-override-input').forEach(input => { input.value = input.dataset.balance; });
+  document.querySelector('#metrics-form')?.addEventListener('click', event => {
+    if (!event.target.closest('#metrics-balance-reset')) return;
+    document.querySelectorAll('#metrics-form [data-override-key]').forEach(input => { input.value = input.dataset.balance; });
     refreshEditorSaveStatus();
   });
 

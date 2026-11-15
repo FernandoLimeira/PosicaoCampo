@@ -13,14 +13,6 @@ body[data-page="dashboard"] { --page: #202020; --data-border: #484848; }
 .unit-selector-button.selected { color: #ffffff; }
 .unit-selector-button:focus-visible { outline: 2px solid #4b5558; }
 .dashboard-fill-button { color: #ffffff; }
-.image-step-source, .image-step-empty { color: #a3a3a3; }
-.image-step-field > small { color: #999999; }
-.image-step-field input { color: #cccccc; }
-.image-step-field em { color: #999999; }
-.image-step-field.is-corrected { border-color: #605d52; background: #28251d; }
-.image-step-field.is-corrected em { color: #e2cd8c; }
-.image-step-exchange dt { color: #e2cd8c; }
-.image-step-exchange dd { color: #cccccc; }
 .dashboard-import-button { background: #2a2a2a; }
 .mr-unit-row:hover th, .mr-unit-row:hover td, .mr-unit-row:focus-visible th, .mr-unit-row:focus-visible td { background: #242424; }
 .mr-unit-row.is-selected th, .mr-unit-row.is-selected td { background: #1b2225; }
@@ -106,6 +98,9 @@ body[data-page="dashboard"] { --page: #202020; --data-border: #484848; }
 .field-subsection-title { color: #bbbbbb; }
 .field-subsection-title .metrics-source { color: #999999; }
 .metrics-weighing-note { background: #22261c; color: #c5e8a3; }
+.metric-field em { color: #999999; }
+.operation-editor-modal .metric-field.is-corrected { border-color: #605d52; background: #28251d; }
+.metric-field.is-corrected em { color: #e2cd8c; }
 .field-note-empty { color: #999999 !important; }
 .field-note-details summary { color: #9cc0cb; }
 .field-note-details summary:focus-visible { outline: 2px solid #616161; }
