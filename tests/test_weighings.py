@@ -308,6 +308,22 @@ class WeighingTests(unittest.TestCase):
         self.assertEqual((ppt8["trucks"], ppt8["delivery_t"]), (2, 120.0))   # 2 × 2 × 30 t
         self.assertEqual((pst8["trucks"], pst8["delivery_t"]), (1.5, 90.0))  # 1,5 × 2 × 30 t
 
+    def test_ms_arrival_hour_comes_from_hr_guarita(self):
+        # A planilha de PST conta a hora pelo HR_GUARITA (HR_ENTRADA_PATIO do SELECT); a da NRD,
+        # pelo DT_REG_GUARITA. Mesma carga: HR_GUARITA 07:59 e DT_REG_GUARITA 08:00.
+        def julieta(instance, release):
+            return load(instance, release, "5", "361", "1173", "30000", "14/11/2026 08:30:00",
+                        patio="14/11/2026 07:59:28") + ["14/11/2026 08:00:43"]
+        weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx([HEADER + ["DT_REG_GUARITA"],
+            julieta("201", "1"), julieta("401", "2"),
+            load("201", "3", "5", "361", "1173", "30000", "14/11/2026 10:30:00", patio="14/11/2026 10:00:00"),
+            load("401", "4", "5", "361", "1173", "30000", "14/11/2026 10:30:00", patio="14/11/2026 10:00:00"),
+        ]), "a.xlsx")["records"])
+        units = {unit["code"]: unit for unit in weighings.weighing_summary("2026-11-14")["units"]}
+        trucks = {code: {item["hour"]: item["trucks"] for item in units[code]["hours"]} for code in ("PPT", "PST")}
+        self.assertEqual((trucks["PPT"][7], trucks["PPT"][8]), (0, 1))      # DT_REG_GUARITA
+        self.assertEqual((trucks["PST"][7], trucks["PST"][8]), (0.5, 0))    # HR_GUARITA
+
     def test_closing_at_a_chosen_time(self):
         # "Fechamento às 23:35": o dia como estava às 23:35 de Brasília, mesmo consultado depois.
         weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx([HEADER,

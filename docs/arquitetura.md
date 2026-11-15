@@ -111,8 +111,10 @@ Excel do SELECT ──► services/weighing_import ──► models/weighings.im
 - O mesmo resumo alimenta a tela, a imagem e o Excel; no navegador, os indicadores por
   unidade e os totais saem de um só lugar (`static/js/core/field-indicators.js`).
 - Regras (detalhes no docstring de `models/weighings.py`): moagem pela saída da balança;
-  entrega = CVs (guarita, `DT_REG_GUARITA`) × 2 × densidade da hora; turno e últimas 3 h
-  são médias das horas fechadas; projeção = média por hora do dia × 24; troca de cana:
+  entrega = CVs × 2 × densidade da hora (3 casas); CVs pela chegada na guarita, Polo SP
+  pelo `DT_REG_GUARITA` e Polo MS pelo `HR_GUARITA` (julietas ÷ 2), como a planilha de cada
+  polo; turno, últimas 3 h e projeção (média por hora do dia × 24) saem dos valores sem
+  arredondar das horas fechadas; troca de cana:
   o ATR entra na média da unidade que recebeu a cana.
 
 ## Compatibilidade mantida

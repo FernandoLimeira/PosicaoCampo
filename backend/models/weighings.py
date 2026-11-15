@@ -10,7 +10,8 @@ o arquivo traz DT_REG_GUARITA (sem ela, os CVs pela entrada no pátio variam ±2
 - Densidade da hora: peso médio das julietas pesadas na hora (moagem ÷ cargas).
 - Entrega da hora: CVs que chegaram na hora × 2 julietas × densidade da hora. CVs pelo padrão
   da planilha de cada polo: Polo SP conta caminhões; Polo MS conta cada julieta como 0,5 CV.
-  Chegada = guarita (DATA_HORA_GUARITA), quando o arquivo traz; senão a entrada no pátio.
+  Chegada: Polo SP pela guarita (DT_REG_GUARITA), quando o arquivo traz, senão a entrada no
+  pátio; Polo MS pelo HR_GUARITA (HR_ENTRADA_PATIO do SELECT), como a aba "Base Chegada" de PST.
 - Turno: média das horas do turno. Polo SP: A 00h-06h, B 07h-15h, C 16h-23h; Polo MS: A 00h-06h,
   B 07h-14h, C 15h-23h (como a planilha de cada polo).
 - Últimas 3 h: média das 3 últimas horas fechadas.
@@ -50,7 +51,7 @@ MS_SHIFT_HOURS = {"A": range(0, 7), "B": range(7, 15), "C": range(15, 24)}
 
 _COLUMNS = (
     "unit_code", "release_no", "movement_date", "truck", "trailer", "front", "sector", "section",
-    "net_kg", "atr", "patio_at", "scale_in_at", "scale_out_at", "guarita_at",
+    "net_kg", "atr", "patio_at", "scale_in_at", "scale_out_at", "guarita_at", "extracted_at",
 )
 
 
@@ -92,6 +93,7 @@ def import_weighings(user_id: int, records: Any, *, filename: str = "") -> dict[
                 _optional_float(item.get("net_kg")), _optional_float(item.get("atr")),
                 _optional_int(item.get("patio_at")), _optional_int(item.get("scale_in_at")),
                 _optional_int(item.get("scale_out_at")), _optional_int(item.get("guarita_at")),
+                _optional_int(item.get("extracted_at")),
             ))
         except (KeyError, TypeError, ValueError, AttributeError) as exc:
             raise ValueError(f"Carga {position} com dados inválidos.") from exc
@@ -129,6 +131,7 @@ def import_weighings(user_id: int, records: Any, *, filename: str = "") -> dict[
         "imported": len(keys), "removed": removed,
         "by_unit": by_unit, "dates": dates, "dates_by_unit": dates_by_unit,
         "pending": sum(1 for values in prepared if values[12] is None),
+        "extracted_at": max((values[14] for values in prepared if values[14]), default=None),
     }
 
 
@@ -175,7 +178,11 @@ def _average(values) -> float | None:
 
 
 def _arrival(row) -> int | None:
-    """Chegada da carga: guarita, quando o arquivo traz; senão a entrada no pátio."""
+    """Chegada da carga, pela coluna que a planilha de cada polo usa: no Polo SP a guarita
+    (DT_REG_GUARITA), quando o arquivo traz; no Polo MS o HR_GUARITA, que o SELECT exporta
+    como HR_ENTRADA_PATIO (aba "Base Chegada" da planilha de Passa Tempo)."""
+    if row["unit_code"] in MS_UNIT_CODES:
+        return row["patio_at"] or row["guarita_at"]
     return row["guarita_at"] or row["patio_at"]
 
 
@@ -234,7 +241,7 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
         ).fetchall()
         # Folga de 1 h: o dia do Polo MS começa e termina uma hora depois do de Brasília.
         arrival_rows = conn.execute(
-            "SELECT * FROM field_weighings WHERE COALESCE(guarita_at, patio_at) BETWEEN ? AND ?",
+            "SELECT * FROM field_weighings WHERE guarita_at BETWEEN ?1 AND ?2 OR patio_at BETWEEN ?1 AND ?2",
             (day_start - STOCK_WINDOW_SECONDS - 3600, day_end + 3600 - 1),
         ).fetchall()
         last_import = conn.execute(
@@ -304,18 +311,24 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
         cv_arrivals = ([(_arrival(row), 1 / JULIETAS_PER_TRUCK) for row in arrivals] if code in MS_UNIT_CODES
                        else [(arrival, 1) for arrival in _truck_arrivals(arrivals)])
         hours = []
+        # Valores sem arredondar de cada hora: somas e médias (turno, 3 h, dia, projeção)
+        # saem deles, como as fórmulas da planilha; só a saída é arredondada.
+        exact = []
         for hour in unit_hours:
             start, end = unit_start + hour * 3600, unit_start + (hour + 1) * 3600
             milled = [row for row in rows if start <= row["scale_out_at"] < end]
             trucks = sum(weight for arrival, weight in cv_arrivals if start <= arrival < end)
-            density = _tons(milled) / len(milled) if milled else day_density
+            # A planilha usa a densidade com 3 casas (coluna "Densidade") na entrega da hora.
+            density = _round(_tons(milled) / len(milled) if milled else day_density, 3)
+            delivery = trucks * JULIETAS_PER_TRUCK * density if density else None
+            exact.append({"shift": _shift_of_hour(hour, code), "milling": _tons(milled), "delivery": delivery})
             hours.append({
                 "hour": hour, "shift": _shift_of_hour(hour, code), "milling_t": _round(_tons(milled)),
-                "loads": len(milled), "density_t": _round(density, 3), "trucks": trucks,
-                "delivery_t": _round(trucks * JULIETAS_PER_TRUCK * density) if density else None,
+                "loads": len(milled), "density_t": density, "trucks": trucks,
+                "delivery_t": _round(delivery),
             })
-        shift_hours = [item for item in hours if item["shift"] == unit_shift]
-        recent_hours = hours[-LAST_HOURS:]
+        shift_hours = [item for item in exact if item["shift"] == unit_shift]
+        recent_hours = exact[-LAST_HOURS:]
         fronts: dict[str, list] = {}
         for row in rows:
             fronts.setdefault(row["front"], []).append(row)
@@ -346,16 +359,16 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
             # Faixas dos turnos A, B e C da unidade ([início, fim) em horas), para o gráfico.
             "shift_hours": {shift: [span.start, span.stop] for shift, span in _shift_table(code).items()},
             "milling_day_t": _round(_tons(rows)),
-            "delivery_day_t": _round(sum(item["delivery_t"] or 0 for item in hours)),
+            "delivery_day_t": _round(sum(item["delivery"] or 0 for item in exact)),
             "loads_day": len(rows),
-            "milling_shift_tph": _round(_average(item["milling_t"] for item in shift_hours)),
-            "milling_last3h_tph": _round(_average(item["milling_t"] for item in recent_hours)),
-            "delivery_shift_tph": _round(_average(item["delivery_t"] for item in shift_hours)),
-            "delivery_last3h_tph": _round(_average(item["delivery_t"] for item in recent_hours)),
+            "milling_shift_tph": _round(_average(item["milling"] for item in shift_hours)),
+            "milling_last3h_tph": _round(_average(item["milling"] for item in recent_hours)),
+            "delivery_shift_tph": _round(_average(item["delivery"] for item in shift_hours)),
+            "delivery_last3h_tph": _round(_average(item["delivery"] for item in recent_hours)),
             # Projeção do dia (quadro "Projeções" da planilha): média por hora do dia × 24.
-            "milling_projection_t": _round(_average(item["milling_t"] for item in hours) * 24) if hours else None,
-            "delivery_projection_t": _round(_average(item["delivery_t"] for item in hours) * 24)
-            if any(item["delivery_t"] is not None for item in hours) else None,
+            "milling_projection_t": _round(_average(item["milling"] for item in exact) * 24) if exact else None,
+            "delivery_projection_t": _round(_average(item["delivery"] for item in exact) * 24)
+            if any(item["delivery"] is not None for item in exact) else None,
             "stock_loads": len(stock),
             "atr": _weighted_atr(rows),
             "hours": hours,
