@@ -1,17 +1,17 @@
 """Pesagem de cana do CTT: importação das cargas da balança e resumo por unidade/frente.
 
-Regras do resumo (data ``work_date``):
-- Moagem: peso líquido (QT_LIQUIDO) pelo horário de saída da balança.
-  Moagem do dia = cargas com saída da balança e data de movimento no dia.
-- Entrega: cargas pelo horário de entrada no pátio. Carga já pesada usa o peso
-  líquido; carga ainda no pátio usa o peso médio das cargas pesadas da unidade no dia.
-- Referência ("dados até"): horário da última saída da balança no dia, limitado à
-  última entrada no pátio (até onde o arquivo está completo). As taxas usam essa
-  referência para não diluir quando o arquivo é importado algum tempo depois.
-- Turno (t/h): toneladas desde o início do turno da referência ÷ horas decorridas.
-- Últimas 3 h (t/h): toneladas nas 3 h até a referência ÷ 3.
-- Estoque: cargas que entraram no pátio (nas 24 h até a referência) e ainda não
-  tinham saído da balança na referência.
+Mesma lógica da planilha "Controle de entrega x Moagem" (validada com a NRD), hora a hora:
+- Moagem da hora: soma do peso líquido (QT_LIQUIDO) das cargas com saída da balança
+  na hora. Moagem do dia: soma do dia até a referência.
+- Densidade da hora: peso médio das julietas pesadas na hora (moagem ÷ cargas).
+- Entrega da hora: CVs (caminhões) que chegaram na hora × 2 julietas × densidade da hora.
+  Chegada = guarita (DATA_HORA_GUARITA), quando o arquivo traz; senão a entrada no pátio.
+- Turno: média das horas fechadas do turno (A 00h-06h, B 07h-15h, C 16h-23h).
+- Últimas 3 h: média das 3 últimas horas fechadas.
+- Referência ("dados até"): última saída da balança, limitada à última chegada (até
+  onde o arquivo está completo). Só entram nas médias as horas já fechadas.
+- Estoque: cargas que chegaram (nas 24 h até a referência) e ainda não tinham saído
+  da balança na referência.
 - Todas as unidades (inclusive o Polo MS) usam o mesmo horário e os mesmos turnos.
 - Frente de outra unidade: a frente é procurada nas frentes da Posição de Campo de
   cada unidade; se pertence a outra, conta como ATR recebido nesta e apoio daquela.
@@ -24,17 +24,20 @@ from datetime import date, datetime, time as dtime
 from typing import Any
 
 from ..services.front_identifiers import front_key, natural_key
-from ..services.operational_shifts import FIELD_TIMEZONE, shift_at
+from ..services.operational_shifts import FIELD_TIMEZONE
 from .constants import ALLOWED_UNIT_CODES
 from .storage import connection, validate_actor
 
 MAX_WEIGHING_RECORDS = 150_000
 STOCK_WINDOW_SECONDS = 24 * 3600
 LAST_HOURS = 3
+JULIETAS_PER_TRUCK = 2
+# Turnos da planilha, por hora cheia.
+SHIFT_HOURS = {"A": range(0, 7), "B": range(7, 16), "C": range(16, 24)}
 
 _COLUMNS = (
     "unit_code", "release_no", "movement_date", "truck", "trailer", "front", "sector", "section",
-    "net_kg", "atr", "patio_at", "scale_in_at", "scale_out_at",
+    "net_kg", "atr", "patio_at", "scale_in_at", "scale_out_at", "guarita_at",
 )
 
 
@@ -75,7 +78,7 @@ def import_weighings(user_id: int, records: Any, *, filename: str = "") -> dict[
                 front, str(item.get("sector") or "").strip(), str(item.get("section") or "").strip(),
                 _optional_float(item.get("net_kg")), _optional_float(item.get("atr")),
                 _optional_int(item.get("patio_at")), _optional_int(item.get("scale_in_at")),
-                _optional_int(item.get("scale_out_at")),
+                _optional_int(item.get("scale_out_at")), _optional_int(item.get("guarita_at")),
             ))
         except (KeyError, TypeError, ValueError, AttributeError) as exc:
             raise ValueError(f"Carga {position} com dados inválidos.") from exc
@@ -143,6 +146,20 @@ def _round(value: float | None, digits: int = 1) -> float | None:
     return None if value is None else round(value, digits)
 
 
+def _shift_of_hour(hour: int) -> str:
+    return next(code for code, hours in SHIFT_HOURS.items() if hour in hours)
+
+
+def _average(values) -> float | None:
+    values = [value for value in values if value is not None]
+    return sum(values) / len(values) if values else None
+
+
+def _arrival(row) -> int | None:
+    """Chegada da carga: guarita, quando o arquivo traz; senão a entrada no pátio."""
+    return row["guarita_at"] or row["patio_at"]
+
+
 def weighing_summary(work_date: Any = None) -> dict[str, Any]:
     if work_date in (None, ""):
         selected = datetime.now(FIELD_TIMEZONE).date()
@@ -153,28 +170,15 @@ def weighing_summary(work_date: Any = None) -> dict[str, Any]:
             raise ValueError("Data da pesagem inválida.") from exc
     day = selected.isoformat()
     day_start = int(datetime.combine(selected, dtime.min, FIELD_TIMEZONE).timestamp())
+    day_end = day_start + 86400
     with connection() as conn:
         owners = _front_owners(conn)
         weighed = conn.execute(
             "SELECT * FROM field_weighings WHERE scale_out_at IS NOT NULL AND movement_date=?", (day,)
         ).fetchall()
-        # Referência = momento em que o arquivo está completo: a última saída da balança,
-        # limitada à última entrada no pátio. O SELECT traz as cargas que entraram até um
-        # horário; depois dele faltam cargas novas e as taxas ficariam diluídas. Saídas
-        # após a referência ficam para a próxima importação.
-        last_exit = max((row["scale_out_at"] for row in weighed), default=None)
-        last_entry = conn.execute(
-            "SELECT MAX(patio_at) FROM field_weighings WHERE patio_at BETWEEN ? AND ?",
-            (day_start, day_start + 86399),
-        ).fetchone()[0]
-        reference = min(value for value in (last_exit, last_entry) if value) if last_exit else None
-        weighed = [row for row in weighed if reference and row["scale_out_at"] <= reference]
-        # Cargas que entraram no pátio nas 24 h até a referência (pesadas ou não):
-        # base da entrega e do estoque.
-        reference_end = reference or day_start + 86399
         arrival_rows = conn.execute(
-            "SELECT unit_code, patio_at, scale_out_at, net_kg FROM field_weighings WHERE patio_at BETWEEN ? AND ?",
-            (reference_end - STOCK_WINDOW_SECONDS, reference_end),
+            "SELECT * FROM field_weighings WHERE COALESCE(guarita_at, patio_at) BETWEEN ? AND ?",
+            (day_start - STOCK_WINDOW_SECONDS, day_end - 1),
         ).fetchall()
         last_import = conn.execute(
             """SELECT w.import_file, w.imported_at, u.name AS imported_by_name
@@ -182,25 +186,41 @@ def weighing_summary(work_date: Any = None) -> dict[str, Any]:
                ORDER BY w.imported_at DESC LIMIT 1"""
         ).fetchone()
 
-    shift = shift_at(reference) if reference else None
-    shift_hours = max((reference - shift["start_at"]) / 3600, 0.25) if shift else None
-    last_start = reference - LAST_HOURS * 3600 if reference else None
+    # Referência = momento em que o arquivo está completo: a última saída da balança,
+    # limitada à última chegada do dia. Saídas depois dela ficam para a próxima importação.
+    last_exit = max((row["scale_out_at"] for row in weighed), default=None)
+    last_arrival = max((_arrival(row) for row in arrival_rows if _arrival(row) >= day_start), default=None)
+    reference = min(value for value in (last_exit, last_arrival) if value) if last_exit else None
+    weighed = [row for row in weighed if reference and row["scale_out_at"] <= reference]
+    arrival_rows = [row for row in arrival_rows if reference and _arrival(row) <= reference]
+    # Horas fechadas: a hora entra quando a referência chegou ao fim dela (1 min de folga).
+    closed_hours = [hour for hour in range(24)
+                    if reference and day_start + (hour + 1) * 3600 <= reference + 60]
+    shift_code = _shift_of_hour(closed_hours[-1]) if closed_hours else None
+
     units = []
     support = []
     for code in ALLOWED_UNIT_CODES:
         rows = [row for row in weighed if row["unit_code"] == code]
-        shift_rows = [row for row in rows if shift and row["scale_out_at"] >= shift["start_at"]]
-        recent_rows = [row for row in rows if last_start is not None and row["scale_out_at"] > last_start]
         arrivals = [row for row in arrival_rows if row["unit_code"] == code]
-        # Estoque: entrou no pátio e ainda não tinha saído da balança na referência.
-        stock = [row for row in arrivals if row["scale_out_at"] is None or row["scale_out_at"] > reference_end]
-        # Entrega: carga que entrou no pátio. Já pesada usa o peso real; ainda no pátio
-        # usa o peso médio das cargas pesadas da unidade no dia.
-        average_kg = sum(row["net_kg"] or 0 for row in rows) / len(rows) if rows else 0
-
-        def delivered_tons(start):
-            return sum((row["net_kg"] or 0) if row not in stock else average_kg
-                       for row in arrivals if row["patio_at"] >= start) / 1000
+        # Estoque: chegou nas 24 h até a referência e ainda não tinha saído da balança nela.
+        stock = [row for row in arrivals if _arrival(row) >= reference - STOCK_WINDOW_SECONDS
+                 and (row["scale_out_at"] is None or row["scale_out_at"] > reference)]
+        day_density = _tons(rows) / len(rows) if rows else None
+        hours = []
+        for hour in closed_hours:
+            start, end = day_start + hour * 3600, day_start + (hour + 1) * 3600
+            milled = [row for row in rows if start <= row["scale_out_at"] < end]
+            # CV = caminhão: as julietas do mesmo caminhão chegam juntas.
+            trucks = {(row["truck"], _arrival(row)) for row in arrivals if start <= _arrival(row) < end}
+            density = _tons(milled) / len(milled) if milled else day_density
+            hours.append({
+                "hour": hour, "shift": _shift_of_hour(hour), "milling_t": _round(_tons(milled)),
+                "loads": len(milled), "density_t": _round(density, 3), "trucks": len(trucks),
+                "delivery_t": _round(len(trucks) * JULIETAS_PER_TRUCK * density) if density else None,
+            })
+        shift_hours = [item for item in hours if item["shift"] == shift_code]
+        recent_hours = hours[-LAST_HOURS:]
         fronts: dict[str, list] = {}
         for row in rows:
             fronts.setdefault(row["front"], []).append(row)
@@ -212,7 +232,6 @@ def weighing_summary(work_date: Any = None) -> dict[str, Any]:
                 "front": front, "home_unit": owner or code, "external": bool(owner and owner != code),
                 "sector": latest["sector"], "section": latest["section"],
                 "loads": len(front_rows), "tons": _round(_tons(front_rows)),
-                "shift_tons": _round(_tons([row for row in shift_rows if row["front"] == front])),
                 "atr": _weighted_atr(front_rows), "last_at": latest["scale_out_at"],
             }
             front_list.append(entry)
@@ -222,20 +241,23 @@ def weighing_summary(work_date: Any = None) -> dict[str, Any]:
         units.append({
             "code": code,
             "milling_day_t": _round(_tons(rows)),
+            "delivery_day_t": _round(sum(item["delivery_t"] or 0 for item in hours)),
             "loads_day": len(rows),
-            "milling_shift_tph": _round(_tons(shift_rows) / shift_hours) if shift_hours else None,
-            "milling_last3h_tph": _round(_tons(recent_rows) / LAST_HOURS) if reference else None,
-            "delivery_shift_tph": _round(delivered_tons(shift["start_at"]) / shift_hours) if shift_hours else None,
-            "delivery_last3h_tph": _round(delivered_tons(last_start) / LAST_HOURS) if reference else None,
+            "milling_shift_tph": _round(_average(item["milling_t"] for item in shift_hours)),
+            "milling_last3h_tph": _round(_average(item["milling_t"] for item in recent_hours)),
+            "delivery_shift_tph": _round(_average(item["delivery_t"] for item in shift_hours)),
+            "delivery_last3h_tph": _round(_average(item["delivery_t"] for item in recent_hours)),
             "stock_loads": len(stock),
             "atr": _weighted_atr(rows),
+            "hours": hours,
             "fronts": front_list,
             "received": [front for front in front_list if front["external"]],
         })
     return {
         "work_date": day,
         "reference_at": reference,
-        "shift": {"code": shift["shift"], "start_at": shift["start_at"]} if shift else None,
+        "shift": {"code": shift_code} if shift_code else None,
+        "closed_hours": len(closed_hours),
         "units": units,
         "support": support,
         "last_import": dict(last_import) if last_import else None,

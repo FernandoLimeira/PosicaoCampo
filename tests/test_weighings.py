@@ -112,19 +112,9 @@ class WeighingTests(unittest.TestCase):
         summary = weighings.weighing_summary("2026-11-14")
         units = {unit["code"]: unit for unit in summary["units"]}
         ppt, pst = units["PPT"], units["PST"]
-        # Referência: última carga pesada (15:35) -> turno B desde 07:20.
-        self.assertEqual(summary["shift"]["code"], "B")
         self.assertEqual(ppt["milling_day_t"], 100.0)
         self.assertEqual(ppt["loads_day"], 3)
         self.assertEqual(ppt["stock_loads"], 1)
-        # Moagem pela saída da balança. Últimas 3 h (12:35-15:35): 36 + 34 + 30 t / 3 h.
-        self.assertEqual(ppt["milling_last3h_tph"], 33.3)
-        # Turno B: 100 t em 8h15 (07:20-15:35).
-        self.assertEqual(ppt["milling_shift_tph"], round(100 / 8.25, 1))
-        # Entrega pela entrada no pátio (08:00): entrou no turno B, mas não nas últimas 3 h.
-        # A carga ainda no pátio entra com o peso médio das pesadas (100 t / 3 = 33,3 t).
-        self.assertEqual(ppt["delivery_shift_tph"], round((100 + 100 / 3) / 8.25, 1))
-        self.assertEqual(ppt["delivery_last3h_tph"], 0)
         # ATR ponderado pelo peso.
         self.assertEqual(ppt["atr"], round((120 * 36 + 130 * 34 + 127.91 * 30) / 100, 2))
         fronts = {front["front"]: front for front in ppt["fronts"]}
@@ -139,20 +129,66 @@ class WeighingTests(unittest.TestCase):
         self.assertEqual(support, {("19", "NRD", "PPT"), ("402", "RBR", "PST")})
         self.assertEqual(summary["last_import"]["imported_by_name"], "Admin")
 
-    def test_reference_stops_at_last_patio_entry(self):
-        # Arquivo com entradas no pátio só até 10:00, mas uma saída às 12:00: a referência
-        # fica em 10:00 e a saída das 12:00 não entra na moagem (fica para a próxima importação).
+    def test_hourly_logic_of_the_spreadsheet(self):
+        # Mesma lógica da planilha "Controle de entrega x Moagem" (validada com a NRD):
+        # moagem da hora = soma das saídas; densidade = peso médio das julietas da hora;
+        # entrega da hora = CVs que chegaram × 2 × densidade; turno e 3 h = média das horas.
+        def truck(release, plate, arrival, out="", kg=""):
+            row = load("201", release, "5", "361", "1173", kg, out, patio=f"14/11/2026 {arrival}")
+            row[3] = plate
+            return row
         weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx([HEADER,
-            load("201", "1", "5", "361", "1173", "30000", "14/11/2026 09:00:00", patio="14/11/2026 08:00:00"),
-            load("201", "2", "5", "361", "1173", "30000", "14/11/2026 12:00:00", patio="14/11/2026 10:00:00"),
+            truck("1", "A", "07:10:00", "14/11/2026 08:05:00", "30000"),  # CV A: 2 julietas
+            truck("2", "A", "07:10:00", "14/11/2026 08:05:00", "30000"),
+            truck("3", "B", "08:20:00", "14/11/2026 09:10:00", "36000"),  # CV B
+            truck("4", "B", "08:20:00", "14/11/2026 09:10:00", "34000"),
+            truck("5", "D", "09:45:00", "14/11/2026 10:01:00", "32000"),  # pesado depois da referência
+            truck("6", "C", "09:59:30"),                                   # CV C: no pátio
+            truck("7", "C", "09:59:30"),
         ]), "a.xlsx")["records"])
         summary = weighings.weighing_summary("2026-11-14")
         ppt = summary["units"][0]
-        self.assertEqual(summary["reference_at"], 1794661200)  # 14/11/2026 10:00 (Brasília)
-        self.assertEqual(ppt["milling_day_t"], 30.0)
-        # A segunda carga estava no pátio às 10:00: estoque, e entrega com o peso médio.
-        self.assertEqual(ppt["stock_loads"], 1)
-        self.assertEqual(ppt["delivery_last3h_tph"], round(60 / 3, 1))
+        # Referência = última chegada (09:59:30); a saída das 10:01 fica para a próxima importação.
+        self.assertEqual(summary["reference_at"], 1794661170)
+        self.assertEqual(summary["closed_hours"], 10)  # 00h a 09h
+        self.assertEqual(summary["shift"]["code"], "B")
+        hours = {item["hour"]: item for item in ppt["hours"]}
+        self.assertEqual((hours[8]["milling_t"], hours[8]["density_t"], hours[8]["trucks"], hours[8]["delivery_t"]),
+                         (60.0, 30.0, 1, 60.0))
+        # 09h: B pesado (70 t / 2 = 35 t); chegaram D e C (2 CVs × 2 × 35 t).
+        self.assertEqual((hours[9]["milling_t"], hours[9]["density_t"], hours[9]["trucks"], hours[9]["delivery_t"]),
+                         (70.0, 35.0, 2, 140.0))
+        # 07h: sem saídas; a densidade usa a média do dia (130 t / 4 = 32,5 t).
+        self.assertEqual((hours[7]["milling_t"], hours[7]["trucks"], hours[7]["delivery_t"]), (0.0, 1, 65.0))
+        self.assertEqual(ppt["milling_day_t"], 130.0)
+        self.assertEqual(ppt["milling_shift_tph"], round((0 + 60 + 70) / 3, 1))     # turno B: 07h, 08h e 09h
+        self.assertEqual(ppt["milling_last3h_tph"], round((0 + 60 + 70) / 3, 1))
+        self.assertEqual(ppt["delivery_shift_tph"], round((65 + 60 + 140) / 3, 1))
+        self.assertEqual(ppt["delivery_day_t"], 265.0)
+        # Pátio: D (pesado só às 10:01) e as 2 julietas de C.
+        self.assertEqual(ppt["stock_loads"], 3)
+
+    def test_guarita_time_is_used_for_delivery_when_present(self):
+        rows = [HEADER + ["DATA_HORA_GUARITA"],
+                load("201", "1", "5", "361", "1173", "30000", "14/11/2026 08:30:00", patio="14/11/2026 08:10:00")
+                + ["14/11/2026 07:55:00"],
+                load("201", "2", "5", "361", "1173", "", "", patio="14/11/2026 08:59:30") + ["14/11/2026 08:40:00"],
+                # Chegou às 09:10 e saiu às 09:20: a referência fica em 09:10 e fecha a hora 08.
+                load("201", "3", "5", "361", "1173", "30000", "14/11/2026 09:20:00", patio="14/11/2026 09:12:00")
+                + ["14/11/2026 09:10:00"],
+                # Chegou há mais de 24 h e nunca foi pesada: fora do estoque.
+                load("201", "4", "5", "361", "1173", "", "", patio="13/11/2026 06:10:00") + ["13/11/2026 06:00:00"]]
+        records = parse_weighing_file(xlsx(rows), "a.xlsx")["records"]
+        weighings.import_weighings(self.admin["id"], records)
+        summary = weighings.weighing_summary("2026-11-14")
+        self.assertEqual(summary["reference_at"], 1794658200)  # 14/11/2026 09:10 (Brasília)
+        ppt = summary["units"][0]
+        hours = {item["hour"]: item for item in ppt["hours"]}
+        # Chegou na guarita às 07:55 (no pátio às 08:10): conta como CV da hora 07.
+        self.assertEqual(hours[7]["trucks"], 1)
+        self.assertEqual(hours[8]["trucks"], 1)
+        # Pátio: a liberação 2 (sem pesagem) e a 3 (pesada depois da referência).
+        self.assertEqual(ppt["stock_loads"], 2)
 
     def test_summary_without_data(self):
         summary = weighings.weighing_summary("2026-11-13")

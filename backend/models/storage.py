@@ -304,6 +304,7 @@ def _create_field_weighing_table(conn):
             patio_at INTEGER,
             scale_in_at INTEGER,
             scale_out_at INTEGER,
+            guarita_at INTEGER,
             import_file TEXT NOT NULL DEFAULT '',
             imported_by INTEGER,
             imported_at INTEGER NOT NULL,
@@ -313,6 +314,9 @@ def _create_field_weighing_table(conn):
     )
     conn.execute("CREATE INDEX IF NOT EXISTS main.idx_field_weighings_out ON field_weighings(scale_out_at)")
     conn.execute("CREATE INDEX IF NOT EXISTS main.idx_field_weighings_patio ON field_weighings(patio_at)")
+    # Horário da guarita (chegada), incluído depois da primeira versão da tabela.
+    if "guarita_at" not in {row[1] for row in conn.execute("PRAGMA main.table_info(field_weighings)")}:
+        conn.execute("ALTER TABLE main.field_weighings ADD COLUMN guarita_at INTEGER")
     # Consultas SQL da Entrega CTT (o SELECT da pesagem): só guardadas, nunca executadas.
     conn.execute("""
         CREATE TABLE IF NOT EXISTS main.field_sql_queries (
@@ -817,6 +821,7 @@ CREATE TABLE IF NOT EXISTS field_weighings (
     patio_at INTEGER,
     scale_in_at INTEGER,
     scale_out_at INTEGER,
+    guarita_at INTEGER,
     import_file TEXT NOT NULL DEFAULT '',
     imported_by INTEGER,
     imported_at INTEGER NOT NULL,

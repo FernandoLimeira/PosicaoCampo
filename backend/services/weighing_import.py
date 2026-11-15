@@ -50,6 +50,8 @@ HEADER_ALIASES = {
     "patio_at": {"hr entrada patio"},
     "scale_in_at": {"hr entrada balanca"},
     "scale_out_at": {"hr saida balanca"},
+    # Chegada na guarita (opcional): usada na entrega no lugar da entrada no pátio.
+    "guarita_at": {"data hora guarita", "dt reg guarita", "hr guarita", "guarita"},
 }
 REQUIRED_FIELDS = ("instance", "release", "front", "net_kg", "scale_out_at")
 FIELD_LABELS = {
@@ -176,7 +178,7 @@ def _parse_rows(rows):
             "net_kg": net_kg if out_at is not None else None,
             "atr": atr if atr is not None and 0 < atr < 1000 else None,
             "patio_at": _timestamp(values["patio_at"]), "scale_in_at": _timestamp(values["scale_in_at"]),
-            "scale_out_at": out_at,
+            "scale_out_at": out_at, "guarita_at": _timestamp(values["guarita_at"]),
         })
     return {"records": records, "ignored_units": ignored_units, "invalid_rows": invalid_rows,
             "ignored_instances": dict(sorted(ignored_instances.items(), key=lambda item: -item[1])[:20])}
