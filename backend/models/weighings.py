@@ -18,8 +18,9 @@ o arquivo traz DT_REG_GUARITA (sem ela, os CVs pela entrada no pátio variam ±2
 - Fuso: o Polo MS (RBR e PST) registra no horário local, uma hora a menos que Brasília.
   Os horários do arquivo, as horas, os turnos e o relógio do fechamento de cada unidade
   seguem o horário local dela; os turnos (A 00h-06h, B 07h-15h, C 16h-23h) são os mesmos.
-- Frente de outra unidade: a frente é procurada nas frentes da Posição de Campo de
-  cada unidade; se pertence a outra, conta como ATR recebido nesta e apoio daquela.
+- Frente de outra unidade (troca de cana): a frente é procurada nas frentes da Posição de
+  Campo de cada unidade; se pertence a outra, conta como ATR recebido nesta e apoio daquela.
+  O ATR dessa cana entra na média da unidade que recebeu (onde foi pesada), nunca na da dona.
 """
 from __future__ import annotations
 
@@ -96,9 +97,11 @@ def import_weighings(user_id: int, records: Any, *, filename: str = "") -> dict[
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         validate_actor(conn, user_id)
-        existing = {
-            (row[0], row[1]) for row in conn.execute("SELECT unit_code, release_no FROM field_weighings")
-        }
+        # Cada importação substitui a base inteira: o banco guarda só o último SELECT
+        # importado (sem histórico de pesagens antigas). Na mesma transação, então uma
+        # importação inválida não apaga a base anterior.
+        removed = conn.execute("DELETE FROM field_weighings").rowcount
+        # Liberação repetida no mesmo arquivo: vale a última linha.
         conn.executemany(
             f"""INSERT INTO field_weighings ({", ".join(_COLUMNS)}, import_file, imported_by, imported_at)
                 VALUES ({placeholders})
@@ -118,7 +121,7 @@ def import_weighings(user_id: int, records: Any, *, filename: str = "") -> dict[
             dates_by_unit[values[0]][values[2]] = dates_by_unit[values[0]].get(values[2], 0) + 1
     dates = sorted({values[2] for values in prepared if values[2]})
     return {
-        "imported": len(keys), "created": len(keys - existing), "updated": len(keys & existing),
+        "imported": len(keys), "removed": removed,
         "by_unit": by_unit, "dates": dates, "dates_by_unit": dates_by_unit,
         "pending": sum(1 for values in prepared if values[12] is None),
     }
@@ -325,6 +328,7 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
             "fronts": front_list,
             "received": [front for front in front_list if front["external"]],
         })
+
     return {
         "work_date": day,
         "reference_at": reference,

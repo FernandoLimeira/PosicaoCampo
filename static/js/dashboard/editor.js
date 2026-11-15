@@ -3,7 +3,7 @@ let currentEditorStep = 0;
 let editorInitialSnapshot = null;
 let editorObservationContext = null;
 let editorObservationRequest = 0;
-const editorSteps = ['Campo', 'Produção', 'Apontamentos e Mudanças', 'Precipitação'];
+const editorSteps = ['Campo', 'Produção', 'Apontamentos e Mudanças', 'Precipitação', 'Imagem CTT'];
 
 function buildUnitSelect() {
   const input = document.querySelector('#unit-select');
@@ -225,6 +225,33 @@ function reorderRainForm() {
   renderRainForm(collectRainRows());
 }
 
+// Etapa "Imagem CTT": o que a balança leva para o card da unidade na imagem (somente
+// leitura) e a troca de cana. Indústria é editada na etapa Produção.
+function imageStepSummaryHtml(unit) {
+  const weighing = weighingSummary?.reference_at ? (weighingSummary.units || []).find(item => item.code === unit.code) : null;
+  if (!weighing || !weighing.loads_day) {
+    return '<p class="image-step-empty">Sem pesagem importada para esta unidade: a imagem usa os indicadores da etapa Produção.</p>';
+  }
+  const number = (value, digits = 0) => (value === null || value === undefined ? '—'
+    : Number(value).toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits }));
+  const cells = [['Moagem turno', `${number(weighing.milling_shift_tph)} t/h`], ['Entrega turno', `${number(weighing.delivery_shift_tph)} t/h`],
+    ['Moagem últ. 3 h', `${number(weighing.milling_last3h_tph)} t/h`], ['Entrega últ. 3 h', `${number(weighing.delivery_last3h_tph)} t/h`],
+    ['Estoque', `${number(weighing.stock_loads)} cargas`], ['ATR parcial', `${number(weighing.atr, 2)} kg/t`],
+    ['Processado dia', `${number(weighing.milling_day_t)} t`], ['Projeção', `${number(weighing.milling_projection_t)} t`]]
+    .map(([label, value]) => `<div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong></div>`).join('');
+  const received = (weighing.received || []).map(front => `FT${escapeHtml(fieldFrontNumber(front.front))} (${escapeHtml(front.home_unit)}) `
+    + `${number(front.atr, 2)} · ${number(front.tons)} t`).join(' · ');
+  // Frentes desta unidade pesadas em outra indústria: o ATR entra na média de lá.
+  const sent = (weighingSummary.support || []).filter(item => item.from_unit === unit.code).map(item =>
+    `FT${escapeHtml(fieldFrontNumber(item.front))} → ${escapeHtml(item.to_unit)} · ${number(item.tons)} t · ATR ${number(item.atr, 2)}`).join(' · ');
+  return `<p class="image-step-source">Da balança para a imagem · dados até ${escapeHtml(weighingReferenceTime(unit.code))}</p>
+    <div class="image-step-grid">${cells}</div>
+    <dl class="image-step-exchange">
+      <dt>ATR recebido</dt><dd>${received || 'Nenhuma frente de outra unidade entregou aqui.'}</dd>
+      <dt>Frentes desta unidade em outra indústria (ATR entra lá)</dt><dd>${sent || 'Nenhuma.'}</dd>
+    </dl>`;
+}
+
 function autoResizeTextarea(textarea) {
   if (!textarea) return;
   // O CSS usa field-sizing: content. Ajustar rows mantém um fallback sem
@@ -237,6 +264,7 @@ function autoResizeTextarea(textarea) {
 function resizeEditorTextareas() {
   autoResizeTextarea(document.querySelector('#observation-input'));
   autoResizeTextarea(document.querySelector('#changes-input'));
+  autoResizeTextarea(document.querySelector('#support-input'));
 }
 
 function loadUnitEditor(index) {
@@ -247,17 +275,21 @@ function loadUnitEditor(index) {
   const formUnitName = document.querySelector('#form-unit-name');
   const observationInput = document.querySelector('#observation-input');
   const changesInput = document.querySelector('#changes-input');
+  const supportInput = document.querySelector('#support-input');
 
   if (unitSelect) unitSelect.value = String(index);
   unit.border = calculateUnitBorder(unit.rows);
   if (formUnitName) formUnitName.textContent = `${unit.code} — ${unit.name}`;
   if (observationInput) observationInput.value = unit.observation === '-' ? '' : unit.observation || '';
   if (changesInput) changesInput.value = unit.changes === '-' ? '' : unit.changes || '';
+  if (supportInput) supportInput.value = unit.support === '-' ? '' : unit.support || '';
   resizeEditorTextareas();
 
   renderFrontRows(unit.rows);
   renderMetricsForm(unit);
   renderRainForm(unit.rain);
+  const imageSummary = document.querySelector('#image-step-summary');
+  if (imageSummary) imageSummary.innerHTML = imageStepSummaryHtml(unit);
 }
 
 function collectFrontRows() {
@@ -386,7 +418,7 @@ function setupEditorEvents() {
     refreshEditorSaveStatus();
   });
 
-  ['#observation-input', '#changes-input'].forEach(selector => {
+  ['#observation-input', '#changes-input', '#support-input'].forEach(selector => {
     const textarea = document.querySelector(selector);
     textarea?.addEventListener('input', () => {
       if (selector === '#observation-input' && editorObservationContext) editorObservationContext.edited = true;
@@ -427,6 +459,7 @@ function setupEditorEvents() {
     updatedUnit.observation_period = editorObservationContext?.appliedPeriod || currentUnit.observation_period || null;
     updatedUnit.changes = document.querySelector('#changes-input').value.trim() || '-';
     updatedUnit.rain = collectRainRows();
+    updatedUnit.support = document.querySelector('#support-input')?.value.trim() || '-';
     selectedUnitIndex = index;
 
     try {

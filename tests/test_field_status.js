@@ -65,7 +65,7 @@ async function main() {
     assert(image.width > 0 && image.height > 0);
     assert(drawn.some(item => item.text.toUpperCase() === 'EM ATIVIDADE'));
     assert(drawn.some(item => item.text.toUpperCase() === 'SOLO ÚMIDO'));
-    assert(drawn.some(item => item.text.toUpperCase() === 'PARADA' && item.color === '#ee7f2d'));
+    assert(drawn.some(item => item.text.toUpperCase() === 'PARADA' && item.color === '#d78225'));
     for (const item of catalog.filter(item => item.image_status !== item.label)) {
       assert(!drawn.some(drawing => drawing.text.toUpperCase() === item.label));
     }
@@ -78,7 +78,7 @@ async function main() {
   assert.deepEqual(legend.map(item => item.text), ['Em atividade', 'Solo úmido / mudança / teste', 'Parado / oficina / crítico']);
   assert(legend.every((item, index) => index === legend.length - 1
     || item.x + item.maxWidth < legend[index + 1].x), 'A legenda deve ficar alinhada sem sobreposição');
-  assert(drawn.some(item => item.text === 'CTT' && item.color === '#7cc23f'));
+  assert(drawn.some(item => item.text === 'CTT' && item.color === '#77b82a'));
 
   // A legenda mostra só os status usados em alguma frente (sem solo úmido, ele não aparece).
   const onlyActive = { ...source, rows: source.rows.filter(row => ctx.getFieldStatus(row[3]).image_status === 'EM ATIVIDADE') };

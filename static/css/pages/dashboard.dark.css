@@ -13,6 +13,12 @@ body[data-page="dashboard"] { --page: #202020; --data-border: #484848; }
 .unit-selector-button.selected { color: #ffffff; }
 .unit-selector-button:focus-visible { outline: 2px solid #4b5558; }
 .dashboard-fill-button { color: #ffffff; }
+.image-step-source, .image-step-empty { color: #a3a3a3; }
+.image-step-grid small { color: #999999; }
+.image-step-grid strong { color: #cccccc; }
+.image-step-exchange dt { color: #e2cd8c; }
+.image-step-exchange dd { color: #cccccc; }
+.dashboard-import-button { background: #2a2a2a; }
 .unit-card { --unit-accent: #3d3d3d; }
 .unit-card.attention { --unit-accent: #cba74d; }
 .unit-card.critical { --unit-accent: #cb4d4d; }
@@ -154,7 +160,28 @@ body[data-page="dashboard"] { --page: #202020; --data-border: #484848; }
 .wp-dot { fill: #d67f5c; }
 .wp-direct { fill: #cccccc; }
 .wp-hit:hover, .wp-hit:focus-visible { fill: #e6e6e6; }
+.wp-table th, .wp-table td { border-bottom: 1px solid #424242; }
+.wp-table thead th { color: #a3a3a3; background: #242424; }
+.wp-table tbody th { color: #cccccc; }
+.wp-table td { color: #c2c2c2; }
 .wp-table th small { color: #999999; }
 .wp-table tr.is-current th, .wp-table tr.is-current td { background: #1f242b; }
 .wp-table tr.is-total th, .wp-table tr.is-total td { background: #242424; }
 .wp-support ul { color: #acacac; }
+.mr-header p { color: #a3a3a3; }
+.mr-controls .field { color: #a3a3a3; }
+.mr-kpi small { color: #999999; }
+.mr-kpi strong { color: #cccccc; }
+.mr-kpi strong em { color: #a3a3a3; }
+.mr-kpi span { color: #a3a3a3; }
+.mr-kpi.is-green { background: #76af33; border-color: #76af33; }
+.mr-kpi.is-atr { border: 2px solid #605d52; }
+.mr-kpi.is-atr small { color: #d4be78; }
+.mr-kpi.is-projection strong { color: #abdf80; }
+.mr-table th small { color: #999999; }
+.mr-share.is-good { background: #313a29; color: #c3e7a1; }
+.mr-share.is-warning { background: #3b3729; color: #e9d8a5; }
+.mr-share.is-low { background: #3a3028; color: #e1b288; }
+.mr-bottom caption { color: #d4be78; }
+.mr-tag { background: #3b3729; color: #e9d8a5; }
+.mr-empty { color: #a3a3a3; }

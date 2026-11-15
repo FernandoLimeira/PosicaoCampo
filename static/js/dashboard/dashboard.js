@@ -25,6 +25,7 @@ const defaultUnits = [
   metrics: makeMetrics(),
   observation: '-',
   changes: '-',
+  support: '-',
   rain: []
 }));
 
@@ -98,7 +99,8 @@ function displayMetrics(unit) {
   });
 }
 
-// ATR da frente pela balança (média ponderada pelo peso), usado quando não foi digitado.
+// ATR da frente pela balança desta unidade (média ponderada pelo peso), usado quando não foi
+// digitado. Cana da frente pesada em outra unidade entra no ATR daquela (troca de cana).
 function weighingFrontAtr(unitCode, front) {
   const weighing = unitWeighing(unitCode);
   const key = canonicalFieldFrontKey(front);
@@ -421,7 +423,7 @@ function weighingPanel(unit) {
         <div class="wp-chart-wrap">${weighingHourChart(hours)}</div>
       </figure>
       <div class="wp-bottom">
-        <div class="table-wrap"><table class="data-table wp-table">
+        <div class="table-wrap"><table class="wp-table">
           <thead><tr><th>Turno</th><th>Moagem (t)</th><th>Entrega (t)</th><th>Diferença</th><th>Média moagem</th><th>Média entrega</th></tr></thead>
           <tbody>${shifts}
             <tr class="is-total"><th scope="row">Dia</th><td>${panelNumber(total('milling_t'))}</td><td>${panelNumber(total('delivery_t'))}</td>
@@ -430,7 +432,7 @@ function weighingPanel(unit) {
         ${support ? `<div class="wp-support"><h4>Frentes de apoio entregando aqui</h4><ul>${support}</ul></div>` : ''}
       </div>
       <details class="wp-hours"><summary>Ver tabela hora a hora</summary>
-        <div class="table-wrap"><table class="data-table wp-table">
+        <div class="table-wrap"><table class="wp-table">
           <thead><tr><th>Hora</th><th>Moagem (t)</th><th>Cargas</th><th>Densidade (t)</th><th>Qtd. CVs</th><th>Cana entregue (t)</th></tr></thead>
           <tbody>${hourRows}</tbody></table></div></details>
     </section>`;
@@ -581,8 +583,12 @@ function renderDashboard() {
     fieldViewFilter = 'all';
     fieldSearchQuery = '';
   }
-  document.querySelector('#units-grid').innerHTML = unitCard(selectedUnit);
-  applyFieldViewFilters();
+  // Relatório gerencial (dashboard/management-report.js): as 4 unidades no lugar do card.
+  if (managementReportOpen) renderManagementReport();
+  else {
+    document.querySelector('#units-grid').innerHTML = unitCard(selectedUnit);
+    applyFieldViewFilters();
+  }
   renderUnitSelection();
   document.querySelectorAll('[data-unit-context]').forEach(link => {
     link.href = `${link.pathname}?unit=${encodeURIComponent(selectedUnit.code)}`;

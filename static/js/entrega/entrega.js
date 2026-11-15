@@ -153,7 +153,7 @@ function renderDeliveryImportReport(result, selectedDay) {
   box.hidden = false;
 }
 
-// A mesma liberação importada de novo é atualizada, então o arquivo pode ser reenviado no dia.
+// Cada importação substitui a base inteira (vale só o último SELECT importado).
 async function importDeliveryFile(event) {
   const input = event.currentTarget;
   const file = input.files?.[0];
@@ -161,12 +161,8 @@ async function importDeliveryFile(event) {
   const label = document.querySelector('#delivery-import-label');
   label?.classList.add('is-busy');
   try {
-    const formData = new FormData();
-    formData.append('file', file, file.name);
-    const result = await apiRequest('/api/weighings/import', { method: 'POST', body: formData });
-    const weighed = result.imported - result.pending;
-    showToast(`Pesagem importada: ${deliveryNumber(weighed)} ${weighed === 1 ? 'carga pesada' : 'cargas pesadas'}`
-      + `${result.pending ? ` e ${deliveryNumber(result.pending)} no pátio` : ''}.`);
+    const result = await importWeighingFile(file);
+    showToast(weighingImportMessage(result));
     const dateInput = document.querySelector('#delivery-date');
     if (dateInput && result.dates?.length) dateInput.value = result.dates.at(-1);
     renderDeliveryImportReport(result, dateInput?.value || saoPauloIsoDate());

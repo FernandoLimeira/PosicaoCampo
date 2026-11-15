@@ -23,6 +23,7 @@ function normalizeReportUnit(unit, index) {
     metrics: Array.isArray(cloned.metrics) && cloned.metrics.length === REPORT_METRICS.length ? cloned.metrics : REPORT_METRICS.map(([icon, label, suffix, extra = '']) => [icon, label, `0 ${suffix}`, extra]),
     observation: String(cloned.observation || '-'),
     changes: String(cloned.changes || '-'),
+    support: String(cloned.support || '-'),
     rain: standardizeFieldRainLabels(cloned.code || fallbackCodes[index], cloned.rows, cloned.rain)
   };
 

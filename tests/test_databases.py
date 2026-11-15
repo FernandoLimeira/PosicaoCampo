@@ -493,8 +493,11 @@ class DatabaseTests(unittest.TestCase):
         current = db.list_units_payload()
         unit = current["units"][0]
         unit["observation"] = "Teste de gravação"
+        self.assertEqual(unit["support"], "-")  # apoio entre unidades vazio por padrão
+        unit["support"] = "  FT 402 virada 100% para RBR.  "
         saved = db.save_unit(unit, 0, uid, current["meta"]["PPT"]["version"])
         self.assertEqual(saved["meta"]["updated_by"], "Operador")
+        self.assertEqual(saved["unit"]["support"], "FT 402 virada 100% para RBR.")
         with self.assertRaises(db.UnitConflictError):
             db.save_unit(unit, 0, admin["id"], 0)
         db.save_return_analysis_layouts("PPT", [{"code": "02", "name": "Equipe", "equipment": [123]}], uid)

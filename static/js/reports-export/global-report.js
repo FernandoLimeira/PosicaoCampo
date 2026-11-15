@@ -1,10 +1,9 @@
 // Emissão global "Troca de Turno CTT" (quatro unidades), fiel ao modelo aprovado:
 // cabeçalho, resumo geral (frentes, indústrias, moagem do turno, ATR), moagem do dia
 // consolidada e um card por unidade com balança, frentes, ATR recebido e anotações.
-// Moagem, entrega, estoque, ATR, processado e projeção vêm da pesagem da balança
-// (resumo de /api/weighings/summary, horas fechadas = hora atual − 1 h); sem pesagem
-// da unidade, valem os indicadores digitados no Preencher. "Indústria" é sempre digitada.
-// Depende de core/format.js, core/common.js, core/field-fronts.js,
+// Os números de cada unidade e os totais vêm de core/field-indicators.js (os mesmos do
+// relatório gerencial da Posição de Campo).
+// Depende de core/format.js, core/common.js, core/field-fronts.js, core/field-indicators.js,
 // reports-export/shared-drawing.js e reports-export/field-report-data.js.
 const GLOBAL_REPORT_SCALE = 2.5;
 const GLOBAL_REFERENCE_WIDTH = 720;
@@ -13,23 +12,31 @@ const GLOBAL_LEGEND_Y = 224;
 const GLOBAL_CARD_TOP = 470;
 const GLOBAL_FONT = '"Arial Narrow", Arial, sans-serif';
 
+// Cores extraídas do modelo aprovado (print da "Troca de Turno CTT").
 const GLOBAL_COLORS = Object.freeze({
-  header: '#33474f',
+  header: '#305160',
   headerRule: 'rgba(255,255,255,0.16)',
-  page: '#eceff1',
+  page: '#edf1f2',
   card: '#ffffff',
   cardBorder: '#dde3e6',
-  ink: '#22323a',
-  muted: '#6b787e',
+  ink: '#1d2b2c',
+  muted: '#606a6b',
+  footer: '#7a7f82',
   soft: '#f2f4f5',
   rule: '#e3e7ea',
-  green: '#7cc23f',
-  greenText: '#4c9a17',
-  yellow: '#f2c230',
-  yellowText: '#9a7400',
-  yellowSoft: '#fbf3d5',
-  orange: '#ee7f2d',
-  gray: '#b3bbbf',
+  green: '#77b82a',
+  greenText: '#6b9a34',
+  greenBright: '#7ab036',
+  yellow: '#fdcc05',
+  yellowHeader: '#f7cd21',
+  yellowText: '#b48c06',
+  yellowSoft: '#fff7d6',
+  pill: '#ffd302',
+  atrBorder: '#e4c257',
+  atrLabel: '#8f772d',
+  orange: '#ec7f06',
+  orangeText: '#d78225',
+  gray: '#b2b2b0',
   white: '#ffffff',
   rain: '#2f7fa8'
 });
@@ -38,7 +45,7 @@ const GLOBAL_COLORS = Object.freeze({
 const GLOBAL_STATUS_STYLE = Object.freeze({
   green: { dot: GLOBAL_COLORS.green, text: GLOBAL_COLORS.greenText, legend: 'Em atividade' },
   yellow: { dot: GLOBAL_COLORS.yellow, text: GLOBAL_COLORS.yellowText, legend: 'Solo úmido / mudança / teste', pill: true },
-  red: { dot: GLOBAL_COLORS.orange, text: GLOBAL_COLORS.orange, legend: 'Parado / oficina / crítico' },
+  red: { dot: GLOBAL_COLORS.orange, text: GLOBAL_COLORS.orangeText, legend: 'Parado / oficina / crítico' },
   gray: { dot: GLOBAL_COLORS.gray, text: GLOBAL_COLORS.muted, legend: 'Aguardando atividade' }
 });
 
@@ -75,62 +82,11 @@ function globalWrap(ctx, text, width, font) {
   return lines;
 }
 
-// Número no padrão brasileiro; ausente ou inválido vira "—" (sem dado enviado).
-function globalNumber(value, digits = 0) {
-  if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) return '—';
-  return Number(value).toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-}
-
-// Primeiro número de um indicador digitado ("850 TN/H", "1.243", "48 cargas").
-function globalLeadingNumber(text) {
-  const found = String(text ?? '').match(/-?\d[\d.,]*/);
-  if (!found) return null;
-  const number = parseBrNumber(found[0].replace(/[.,]$/, ''));
-  return Number.isFinite(number) ? number : null;
-}
-
 // Turno operacional do horário de Brasília: A até 07:20, B até 15:40, C depois.
 function globalShiftAt(date = new Date()) {
   const { hour, minute } = saoPauloDateParts(date);
   const minutes = hour * 60 + minute;
   return minutes < 440 ? 'A' : minutes < 940 ? 'B' : 'C';
-}
-
-function globalFilledRows(unit) {
-  return (unit.rows || []).filter(row => String(row?.[0] || '').trim() || String(row?.[1] || '').trim());
-}
-
-// Dados de uma unidade para a imagem: balança quando há pesagem do dia, senão o digitado.
-function globalUnitData(unit, summary) {
-  const weighing = (summary?.units || []).find(item => item.code === unit.code);
-  const hasWeighing = Boolean(summary?.reference_at && weighing && weighing.loads_day > 0);
-  const typed = index => globalLeadingNumber(unit.metrics?.[index]?.[2]);
-  const pick = (key, index) => (hasWeighing && weighing[key] !== null && weighing[key] !== undefined ? weighing[key] : typed(index));
-  const rows = globalFilledRows(unit);
-  const frontAtr = new Map((hasWeighing ? weighing.fronts || [] : [])
-    .map(front => [canonicalFieldFrontKey(front.front), front.atr]));
-  const support = (summary?.support || []).filter(item => hasWeighing
-    && (item.to_unit === unit.code || item.from_unit === unit.code));
-  return {
-    rows,
-    active: rows.filter(row => getFieldStatus(row[3]).group === 'active').length,
-    industry: typed(0),
-    millingShift: pick('milling_shift_tph', 1),
-    deliveryShift: pick('delivery_shift_tph', 2),
-    stock: pick('stock_loads', 3),
-    milling3h: pick('milling_last3h_tph', 4),
-    delivery3h: pick('delivery_last3h_tph', 5),
-    atr: hasWeighing ? weighing.atr : null,
-    day: hasWeighing ? weighing.milling_day_t : null,
-    projection: hasWeighing ? weighing.milling_projection_t : null,
-    // ATR digitado na frente; sem ele, o ATR da balança da frente.
-    frontAtr: row => String(row[4] ?? '').trim() || (frontAtr.get(canonicalFieldFrontKey(row[0])) != null
-      ? globalNumber(frontAtr.get(canonicalFieldFrontKey(row[0])), 2) : ''),
-    received: hasWeighing ? (weighing.received || []) : [],
-    support: support.map(item => (item.to_unit === unit.code
-      ? `FT ${fieldFrontNumber(item.front)} (${item.from_unit}) entregando aqui: ${globalNumber(item.loads)} cargas · ${globalNumber(item.tons)} t.`
-      : `FT ${fieldFrontNumber(item.front)} apoiando a ${item.to_unit}: ${globalNumber(item.loads)} cargas · ${globalNumber(item.tons)} t.`))
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +106,7 @@ function globalDrawReportHeader(ctx, units, generatedAt) {
   x += 16;
   // Ícone de calendário.
   ctx.save();
-  ctx.strokeStyle = GLOBAL_COLORS.yellow; ctx.fillStyle = GLOBAL_COLORS.yellow; ctx.lineWidth = 1.8;
+  ctx.strokeStyle = GLOBAL_COLORS.yellowHeader; ctx.fillStyle = GLOBAL_COLORS.yellowHeader; ctx.lineWidth = 1.8;
   roundedRectPath(ctx, x, 25, 17, 16, 2); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(x, 30); ctx.lineTo(x + 17, 30); ctx.stroke();
   ctx.fillRect(x + 4, 21, 1.8, 6); ctx.fillRect(x + 11, 21, 1.8, 6);
@@ -160,7 +116,7 @@ function globalDrawReportHeader(ctx, units, generatedAt) {
   x += Math.min(130, globalTextWidth(ctx, date, topFont)) + 16;
   ctx.fillStyle = GLOBAL_COLORS.headerRule; ctx.fillRect(x, 20, 1.5, 28);
   x += 16;
-  globalDrawText(ctx, `TURNO ${globalShiftAt(generatedAt)}`, x, 34, 110, topFont, GLOBAL_COLORS.yellow);
+  globalDrawText(ctx, `TURNO ${globalShiftAt(generatedAt)}`, x, 34, 110, topFont, GLOBAL_COLORS.yellowHeader);
   ctx.fillStyle = GLOBAL_COLORS.headerRule; ctx.fillRect(0, 66, W, 1);
 
   globalDrawText(ctx, 'TROCA DE TURNO', 26, 106, W - 52, globalFont(46, '900'), GLOBAL_COLORS.white);
@@ -170,7 +126,7 @@ function globalDrawReportHeader(ctx, units, generatedAt) {
 
   // Legenda só com os status usados em alguma frente das quatro unidades
   // (ex.: "Solo úmido" só aparece se alguma frente estiver em solo úmido).
-  const used = new Set(units.flatMap(unit => globalFilledRows(unit).map(row => getFieldStatus(row[3]).color)));
+  const used = new Set(units.flatMap(unit => fieldFilledRows(unit).map(row => getFieldStatus(row[3]).color)));
   const legendFont = globalFont(13.5, 'bold');
   let lx = 32;
   ['green', 'yellow', 'gray', 'red'].filter(color => used.has(color)).forEach(color => {
@@ -192,11 +148,6 @@ function globalDrawReportHeader(ctx, units, generatedAt) {
 // ---------------------------------------------------------------------------
 // Resumo geral e moagem do dia consolidada
 // ---------------------------------------------------------------------------
-function globalSum(values) {
-  const numbers = values.filter(value => value !== null && value !== undefined && Number.isFinite(Number(value)));
-  return numbers.length ? numbers.reduce((sum, value) => sum + Number(value), 0) : null;
-}
-
 function globalDrawSummary(ctx, units, data) {
   const top = GLOBAL_HEADER_HEIGHT + 12;
   const gap = 10;
@@ -213,8 +164,9 @@ function globalDrawSummary(ctx, units, data) {
     globalDrawText(ctx, text, x, y, width - 28, globalFont(11.5, 'bold'), color);
 
   // 1. Frentes em atividade (verde).
-  const totalFronts = data.reduce((sum, item) => sum + item.rows.length, 0);
-  const activeFronts = data.reduce((sum, item) => sum + item.active, 0);
+  const totals = fieldIndicatorTotals(data);
+  const totalFronts = totals.fronts;
+  const activeFronts = totals.active;
   let x = card(0, GLOBAL_COLORS.green);
   label('FRENTES EM', x, top + 20, GLOBAL_COLORS.white);
   label('ATIVIDADE', x, top + 35, GLOBAL_COLORS.white);
@@ -225,36 +177,33 @@ function globalDrawSummary(ctx, units, data) {
   globalDrawText(ctx, `${units.length} unidades`, x, top + 89, width - 28, globalFont(13, 'normal'), GLOBAL_COLORS.white);
 
   // 2. Indústrias em operação (Indústria digitada maior que zero).
-  const running = data.filter(item => item.industry > 0).length;
+  const running = totals.running;
   x = card(1, GLOBAL_COLORS.card);
   label('INDÚSTRIAS', x, top + 20);
   globalDrawText(ctx, String(running), x, top + 52, 50, bigFont);
   globalDrawText(ctx, `de ${units.length}`, x + Math.min(50, globalTextWidth(ctx, running, bigFont)) + 6, top + 55, 60, globalFont(17, 'bold'));
   const stopped = units.length - running;
   globalDrawText(ctx, stopped ? `${stopped} ${stopped === 1 ? 'parada' : 'paradas'}` : 'todas em operação', x, top + 84,
-    width - 28, globalFont(13, 'normal'), stopped ? GLOBAL_COLORS.orange : GLOBAL_COLORS.muted);
+    width - 28, globalFont(13, 'normal'), stopped ? GLOBAL_COLORS.orangeText : GLOBAL_COLORS.muted);
 
   // 3. Moagem do turno somada (com entrega e estoque).
-  const milling = globalSum(data.map(item => item.millingShift));
-  const delivery = globalSum(data.map(item => item.deliveryShift));
-  const stock = globalSum(data.map(item => item.stock));
+  const { milling, delivery, stock } = totals;
   x = card(2, GLOBAL_COLORS.card);
   label('MOAGEM TURNO', x, top + 20);
-  const millingText = globalNumber(milling);
+  const millingText = fieldIndicatorNumber(milling);
   globalDrawText(ctx, millingText, x, top + 50, width - 60, bigFont);
   globalDrawText(ctx, 't/h', x + Math.min(width - 60, globalTextWidth(ctx, millingText, bigFont)) + 5, top + 54, 30, globalFont(15, 'bold'));
-  globalDrawText(ctx, `entrega ${globalNumber(delivery)} t/h`, x, top + 77, width - 28, globalFont(12.5, 'normal'), GLOBAL_COLORS.muted);
-  globalDrawText(ctx, `estoque ${globalNumber(stock)} cargas`, x, top + 93, width - 28, globalFont(12.5, 'normal'), GLOBAL_COLORS.muted);
+  globalDrawText(ctx, `entrega ${fieldIndicatorNumber(delivery)} t/h`, x, top + 77, width - 28, globalFont(12.5, 'normal'), GLOBAL_COLORS.muted);
+  globalDrawText(ctx, `estoque ${fieldIndicatorNumber(stock)} cargas`, x, top + 93, width - 28, globalFont(12.5, 'normal'), GLOBAL_COLORS.muted);
 
   // 4. ATR médio geral: média do ATR das unidades com pesagem.
-  const atrValues = data.map(item => item.atr).filter(value => value !== null && value !== undefined);
-  const atr = atrValues.length ? atrValues.reduce((sum, value) => sum + value, 0) / atrValues.length : null;
-  x = card(3, GLOBAL_COLORS.card, GLOBAL_COLORS.yellow);
-  label('ATR MÉDIO GERAL', x, top + 20, GLOBAL_COLORS.yellowText);
-  const atrText = globalNumber(atr, 2);
+  const atr = totals.atr;
+  x = card(3, GLOBAL_COLORS.card, GLOBAL_COLORS.atrBorder);
+  label('ATR MÉDIO GERAL', x, top + 20, GLOBAL_COLORS.atrLabel);
+  const atrText = fieldIndicatorNumber(atr, 2);
   globalDrawText(ctx, atrText, x, top + 50, width - 64, bigFont);
   globalDrawText(ctx, 'kg/t', x + Math.min(width - 64, globalTextWidth(ctx, atrText, bigFont)) + 5, top + 54, 34, globalFont(15, 'bold'));
-  globalDrawText(ctx, atrValues.length ? `média das ${atrValues.length} unidades` : 'sem pesagem', x, top + 82,
+  globalDrawText(ctx, totals.atrUnits ? `média das ${totals.atrUnits} unidades` : 'sem pesagem', x, top + 82,
     width - 28, globalFont(13, 'normal'), GLOBAL_COLORS.muted);
 
   // Moagem do dia consolidada: total processado e projeção (média do dia × 24) por unidade.
@@ -264,28 +213,27 @@ function globalDrawSummary(ctx, units, data) {
   strokeRoundedRect(ctx, 14.5, rowTop + .5, GLOBAL_REFERENCE_WIDTH - 29, rowHeight - 1, 10, GLOBAL_COLORS.cardBorder, 1);
   fillRoundedRect(ctx, 14, rowTop, 5, rowHeight, 2.5, GLOBAL_COLORS.green);
   globalDrawText(ctx, 'MOAGEM DO DIA · CONSOLIDADO', 32, rowTop + 18, 300, globalFont(11.5, 'bold'), GLOBAL_COLORS.muted);
-  const day = globalSum(data.map(item => item.day));
-  const projection = globalSum(data.map(item => item.projection));
+  const { day, projection } = totals;
   const valueFont = globalFont(30, '900');
   globalDrawText(ctx, 'Total processado dia', 32, rowTop + 38, 140, globalFont(13, 'normal'), GLOBAL_COLORS.muted);
-  const dayText = globalNumber(day);
+  const dayText = fieldIndicatorNumber(day);
   globalDrawText(ctx, dayText, 32, rowTop + 64, 120, valueFont);
   globalDrawText(ctx, 't', 32 + Math.min(120, globalTextWidth(ctx, dayText, valueFont)) + 4, rowTop + 69, 14, globalFont(15, 'bold'));
   ctx.fillStyle = GLOBAL_COLORS.rule; ctx.fillRect(176, rowTop + 32, 1, 44);
   globalDrawText(ctx, 'Projeção de moagem dia', 190, rowTop + 38, 160, globalFont(13, 'normal'), GLOBAL_COLORS.muted);
-  const projectionText = globalNumber(projection);
-  globalDrawText(ctx, projectionText, 190, rowTop + 64, 120, valueFont, GLOBAL_COLORS.greenText);
+  const projectionText = fieldIndicatorNumber(projection);
+  globalDrawText(ctx, projectionText, 190, rowTop + 64, 120, valueFont, GLOBAL_COLORS.greenBright);
   globalDrawText(ctx, 't', 190 + Math.min(120, globalTextWidth(ctx, projectionText, valueFont)) + 4, rowTop + 69, 14,
-    globalFont(15, 'bold'), GLOBAL_COLORS.greenText);
+    globalFont(15, 'bold'), GLOBAL_COLORS.greenBright);
   const unitsLeft = 352;
   const unitWidth = (GLOBAL_REFERENCE_WIDTH - 14 - 8 - unitsLeft) / 4;
   units.forEach((unit, index) => {
     const ux = unitsLeft + index * unitWidth;
     fillRoundedRect(ctx, ux, rowTop + 8, unitWidth - 6, rowHeight - 16, 7, GLOBAL_COLORS.soft);
     globalDrawText(ctx, unit.code, ux + 9, rowTop + 22, unitWidth - 24, globalFont(13, 'bold'));
-    globalDrawText(ctx, globalNumber(data[index].day), ux + 9, rowTop + 44, unitWidth - 24, globalFont(20, '900'));
-    globalDrawText(ctx, `proj. ${globalNumber(data[index].projection)}`, ux + 9, rowTop + 64, unitWidth - 24,
-      globalFont(12, 'bold'), GLOBAL_COLORS.greenText);
+    globalDrawText(ctx, fieldIndicatorNumber(data[index].day), ux + 9, rowTop + 44, unitWidth - 24, globalFont(20, '900'));
+    globalDrawText(ctx, `proj. ${fieldIndicatorNumber(data[index].projection)}`, ux + 9, rowTop + 64, unitWidth - 24,
+      globalFont(12, 'bold'), GLOBAL_COLORS.greenBright);
   });
 }
 
@@ -334,9 +282,13 @@ function globalNoteBlocks(ctx, unit, item, width) {
     const content = !text || text === '-' ? empty : text.split(/\r?\n/).map(line => line.trim().replace(/^[•*-]\s*/, '')).filter(Boolean).join('\n');
     return globalWrap(ctx, content, textWidth, font);
   };
-  const blocks = [{ label: ['OBSERVAÇÃO'], color: GLOBAL_COLORS.orange, lines: lines(unit.observation, 'Sem observação.') }];
-  if (item.support.length) {
-    blocks.push({ label: ['APOIO ENTRE', 'UNIDADES'], color: GLOBAL_COLORS.greenText, lines: lines(item.support.join('\n'), '') });
+  const blocks = [{ label: ['OBSERVAÇÃO'], color: GLOBAL_COLORS.orangeText, lines: lines(unit.observation, 'Sem observação.') }];
+  // Apoio entre unidades: o texto digitado no Preencher (etapa Imagem CTT); sem ele,
+  // o apoio que a balança identificou (troca de cana).
+  const typedSupport = String(unit.support ?? '').trim();
+  const support = typedSupport && typedSupport !== '-' ? typedSupport : item.support.join('\n');
+  if (support) {
+    blocks.push({ label: ['APOIO ENTRE', 'UNIDADES'], color: GLOBAL_COLORS.greenText, lines: lines(support, '') });
   }
   blocks.push({ label: ['MUDANÇAS'], color: GLOBAL_COLORS.ink, lines: lines(unit.changes, 'Sem mudança prevista.') });
   return blocks.map(block => ({ ...block, height: Math.max(block.lines.length, block.label.length) * GLOBAL_CARD.noteLine + 14 }));
@@ -344,7 +296,7 @@ function globalNoteBlocks(ctx, unit, item, width) {
 
 function globalReceivedLines(ctx, item, width) {
   if (!item.received.length) return [];
-  const text = item.received.map(front => `FT${fieldFrontNumber(front.front)} (${front.home_unit}) ${front.atr != null ? globalNumber(front.atr, 2) : '—'}`).join(' · ');
+  const text = item.received.map(front => `FT${fieldFrontNumber(front.front)} (${front.home_unit}) ${front.atr != null ? fieldIndicatorNumber(front.atr, 2) : '—'}`).join(' · ');
   return globalWrap(ctx, text, width - 128, globalFont(13, 'bold'));
 }
 
@@ -378,13 +330,13 @@ function globalDrawCardBase(ctx, layout, unit, item) {
   ctx.fillStyle = GLOBAL_COLORS.rule; ctx.fillRect(x + 14, y + 68, w - 28, 1);
 }
 
-// Barra da moagem: moagem do turno ÷ indústria. Verde ≥ 100%, amarelo 90–99%, laranja < 90%.
+// Barra da moagem (fieldIndustryShare): verde ≥ 100%, amarelo 90–99%, laranja < 90%.
 function globalIndustryShare(item) {
-  if (!(item.industry > 0) || item.millingShift === null || item.millingShift === undefined) return null;
-  const share = item.millingShift / item.industry;
-  const color = share >= 1 ? GLOBAL_COLORS.green : share >= .9 ? GLOBAL_COLORS.yellow : GLOBAL_COLORS.orange;
-  const text = share >= 1 ? GLOBAL_COLORS.greenText : share >= .9 ? GLOBAL_COLORS.yellowText : GLOBAL_COLORS.orange;
-  return { share, color, text };
+  const share = fieldIndustryShare(item);
+  if (!share) return null;
+  const colors = { good: [GLOBAL_COLORS.green, GLOBAL_COLORS.greenText], warning: [GLOBAL_COLORS.yellow, GLOBAL_COLORS.yellowText],
+    low: [GLOBAL_COLORS.orange, GLOBAL_COLORS.orangeText] }[share.level];
+  return { ...share, color: colors[0], text: colors[1] };
 }
 
 function globalDrawCardMetrics(ctx, layout, item) {
@@ -397,7 +349,7 @@ function globalDrawCardMetrics(ctx, layout, item) {
   const unitFont = globalFont(11, 'bold');
   // Valor e unidade dentro da própria coluna (a unidade nunca invade a coluna seguinte).
   const value = (index, number, unitLabel, digits = 0) => {
-    const text = globalNumber(number, digits);
+    const text = fieldIndicatorNumber(number, digits);
     const unitWidth = text === '—' ? 0 : globalTextWidth(ctx, unitLabel, unitFont) + 3;
     const valueWidth = Math.min(widths[index] - 8 - unitWidth, globalTextWidth(ctx, text, valueFont));
     globalDrawText(ctx, text, columns[index], top + 22, valueWidth, valueFont);
@@ -414,15 +366,14 @@ function globalDrawCardMetrics(ctx, layout, item) {
   fillRoundedRect(ctx, columns[0], top + 38, barWidth, 4, 2, GLOBAL_COLORS.rule);
   if (share) {
     fillRoundedRect(ctx, columns[0], top + 38, barWidth * Math.min(1, share.share), 4, 2, share.color);
-    // Trunca (99,6% → 99%) para o número nunca contradizer a cor da faixa (verde só ≥ 100%).
-    small(0, `${Math.floor(share.share * 100)}% da ind. ${globalNumber(item.industry)}`, 50, share.text);
+    small(0, `${share.percent}% da ind. ${fieldIndicatorNumber(item.industry)}`, 50, share.text);
   } else {
-    small(0, item.industry > 0 ? `ind. ${globalNumber(item.industry)}` : 'indústria —', 50);
+    small(0, item.industry > 0 ? `ind. ${fieldIndicatorNumber(item.industry)}` : 'indústria —', 50);
   }
-  small(0, `últ. 3 h · ${globalNumber(item.milling3h)}`, 63);
+  small(0, `últ. 3 h · ${fieldIndicatorNumber(item.milling3h)}`, 63);
 
   value(1, item.deliveryShift, 't/h');
-  small(1, `últ. 3 h · ${globalNumber(item.delivery3h)}`, 50);
+  small(1, `últ. 3 h · ${fieldIndicatorNumber(item.delivery3h)}`, 50);
 
   value(2, item.stock, 'cargas');
   value(3, item.atr, 'kg/t', 2);
@@ -441,8 +392,8 @@ function globalDrawProcessed(ctx, layout, item) {
     globalDrawText(ctx, label, left, top + 16, labelWidth, labelFont, GLOBAL_COLORS.muted);
     globalDrawText(ctx, text, right, top + 16, right - (left + labelWidth + 6), valueFont, color, 'right');
   };
-  pair('PROCESSADO DIA', `${globalNumber(item.day)} t`, x + 22, middle - 8, GLOBAL_COLORS.ink);
-  pair('PROJEÇÃO', `${globalNumber(item.projection)} t`, middle + 8, x + w - 22, GLOBAL_COLORS.greenText);
+  pair('PROCESSADO DIA', `${fieldIndicatorNumber(item.day)} t`, x + 22, middle - 8, GLOBAL_COLORS.ink);
+  pair('PROJEÇÃO', `${fieldIndicatorNumber(item.projection)} t`, middle + 8, x + w - 22, GLOBAL_COLORS.greenBright);
 }
 
 function globalDrawCardTable(ctx, layout, unit, item, placing) {
@@ -486,7 +437,7 @@ function globalDrawCardTable(ctx, layout, unit, item, placing) {
     if (style.pill) {
       const pillFont = globalFont(10.5, 'bold');
       const pillWidth = Math.min(statusWidth, globalTextWidth(ctx, label, pillFont) + 14);
-      fillRoundedRect(ctx, col.status - 2, cy - 8, pillWidth, 16, 8, GLOBAL_COLORS.yellow);
+      fillRoundedRect(ctx, col.status - 2, cy - 8, pillWidth, 16, 8, GLOBAL_COLORS.pill);
       globalDrawText(ctx, label, col.status + 5, cy + .5, pillWidth - 10, pillFont, GLOBAL_COLORS.ink);
     } else {
       const display = label.charAt(0) + label.slice(1).toLocaleLowerCase('pt-BR');
@@ -550,9 +501,9 @@ function globalDrawFooter(ctx, top, generatedAt) {
   const W = GLOBAL_REFERENCE_WIDTH;
   const font = globalFont(11, 'normal');
   globalDrawText(ctx, 'Barra da moagem: verde ≥ 100% · amarelo 90–99% · laranja < 90% da indústria · “—” = sem dado enviado · Total processado dia:',
-    18, top + 12, W - 36, font, GLOBAL_COLORS.muted);
-  globalDrawText(ctx, 'toneladas moídas no dia até o momento · Projeção de moagem dia: toneladas previstas para o fim do dia (média do dia × 24).',
-    18, top + 27, W - 36, font, GLOBAL_COLORS.muted);
+    18, top + 12, W - 36, font, GLOBAL_COLORS.footer);
+  globalDrawText(ctx, 'toneladas moídas no dia até o momento · Projeção de moagem dia: toneladas previstas para o fim do dia.',
+    18, top + 27, W - 36, font, GLOBAL_COLORS.footer);
   ctx.fillStyle = GLOBAL_COLORS.rule; ctx.fillRect(18, top + 40, W - 36, 1);
   globalDrawText(ctx, 'Segurança sempre · Operação com qualidade · Pessoas que fazem a diferença · Resultados sustentáveis',
     W / 2, top + 58, W - 36, globalFont(13, 'bold'), GLOBAL_COLORS.ink, 'center');
@@ -562,7 +513,7 @@ function globalDrawFooter(ctx, top, generatedAt) {
   const total = globalTextWidth(ctx, prefix, sloganFont) + globalTextWidth(ctx, slogan, sloganFont);
   const start = (W - total) / 2;
   globalDrawText(ctx, prefix, start, top + 78, W, sloganFont, GLOBAL_COLORS.ink);
-  globalDrawText(ctx, slogan, start + globalTextWidth(ctx, prefix, sloganFont), top + 78, W, sloganFont, GLOBAL_COLORS.greenText);
+  globalDrawText(ctx, slogan, start + globalTextWidth(ctx, prefix, sloganFont), top + 78, W, sloganFont, GLOBAL_COLORS.greenBright);
 }
 
 // sourceUnits: as quatro unidades de /api/units. weighingSummary: resumo da balança do dia
@@ -574,7 +525,7 @@ async function globalGenerateApprovedImage(sourceUnits, weighingSummary = null, 
   const normalized = sourceUnits.map((unit, index) => normalizeReportUnit(unit, index));
   const unitByCode = new Map(normalized.map(unit => [unit.code, unit]));
   const ordered = ['PPT', 'NRD', 'RBR', 'PST'].map((code, index) => unitByCode.get(code) || normalized[index]);
-  const data = ordered.map(unit => globalUnitData(unit, weighingSummary));
+  const data = ordered.map(unit => fieldUnitIndicators(unit, weighingSummary));
 
   const measure = document.createElement('canvas').getContext('2d');
   const cardWidth = (GLOBAL_REFERENCE_WIDTH - 28 - 12) / 2;

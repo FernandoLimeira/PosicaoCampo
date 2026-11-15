@@ -33,6 +33,21 @@ async function apiRequest(path, options = {}) {
   return data;
 }
 
+// Importação do Excel de pesagem da balança (Posição de Campo e Entrega CTT).
+// Cada importação substitui a base inteira: vale sempre o último SELECT importado.
+async function importWeighingFile(file) {
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+  return apiRequest('/api/weighings/import', { method: 'POST', body: formData });
+}
+
+function weighingImportMessage(result) {
+  const count = value => Number(value || 0).toLocaleString('pt-BR');
+  const weighed = result.imported - result.pending;
+  return `Pesagem importada: ${count(weighed)} ${weighed === 1 ? 'carga pesada' : 'cargas pesadas'}`
+    + `${result.pending ? ` e ${count(result.pending)} no pátio` : ''} (base anterior substituída).`;
+}
+
 function downloadBlobFile(blob, filename) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');

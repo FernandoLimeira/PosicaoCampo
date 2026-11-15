@@ -1,5 +1,6 @@
 // Painel: ligação dos eventos e inicialização da página. Carregado por último.
-// Depende de dashboard/dashboard.js, dashboard/field-notes.js e dashboard/editor.js.
+// Depende de dashboard/dashboard.js, dashboard/field-notes.js, dashboard/editor.js e
+// dashboard/management-report.js.
 function setupEvents() {
   setupFieldViewEvents();
   document.addEventListener('click', event => {
@@ -8,7 +9,28 @@ function setupEvents() {
     openUnitEditor(selectedUnitIndex);
   });
 
+  // Importar pesagem (ao lado do Preencher): atualiza moagem, entrega, estoque e o painel.
+  document.querySelector('#dashboard-import-file')?.addEventListener('change', async event => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+    const label = document.querySelector('#dashboard-import-label');
+    label?.classList.add('is-busy');
+    try {
+      showToast(weighingImportMessage(await importWeighingFile(file)));
+      if (await loadWeighingSummary()) renderDashboard();
+    } catch (error) {
+      console.error(error);
+      showToast(error.message || 'Não foi possível importar a pesagem.', true);
+    } finally {
+      input.value = '';
+      label?.classList.remove('is-busy');
+    }
+  });
+
   document.addEventListener('report-unit-change', () => {
+    // Escolher uma unidade no menu volta do relatório gerencial para o card dela.
+    managementReportOpen = false;
     editorObservationContext = null;
     editorObservationRequest += 1;
     closeAllModals();
@@ -19,6 +41,7 @@ function setupEvents() {
   });
   setupFieldNotesEvents();
   setupEditorEvents();
+  setupManagementReportEvents();
 }
 
 async function initializeApp() {

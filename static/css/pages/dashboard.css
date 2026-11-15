@@ -103,6 +103,23 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
   transform: translateY(-1px);
 }
 
+/* Preencher, etapa 5 (Imagem CTT): balança e troca de cana que vão para a imagem. */
+.image-step-summary { margin-top: 14px; display: grid; gap: 10px; }
+.image-step-source, .image-step-empty { margin: 0; color: #5b6168; font-size: 12px; }
+.image-step-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.image-step-grid > div { padding: 8px 10px; background: var(--data-surface); border: 1px solid var(--data-border); border-radius: var(--data-radius); }
+.image-step-grid small { display: block; color: #717c81; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.image-step-grid strong { color: #2d3f44; font-size: 15px; }
+.image-step-exchange { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 12px; }
+.image-step-exchange dt { color: #9a7400; font-weight: 800; }
+.image-step-exchange dd { margin: 0; color: #2d3f44; }
+@media (max-width: 760px) { .image-step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .image-step-exchange { grid-template-columns: 1fr; } }
+
+/* Importar pesagem: botão (label do arquivo) ao lado do Preencher, em tom secundário. */
+.dashboard-import-button { display: inline-flex; align-items: center; cursor: pointer; background: #ffffff; color: var(--green); }
+.dashboard-import-button:hover { color: #ffffff; }
+.dashboard-import-button.is-busy { opacity: .6; pointer-events: none; }
+
 .units-grid {
   width: var(--content-max);
   margin: 0 auto;
@@ -1341,6 +1358,14 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 .wp-hit { fill: transparent; cursor: default; outline: none; }
 .wp-hit:hover, .wp-hit:focus-visible { fill: #000000; fill-opacity: .05; }
 .wp-bottom { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+/* Tabelas do painel e do relatório gerencial: largura pelo conteúdo, cabeçalho claro. */
+.wp-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; background: var(--data-surface); }
+.wp-table caption { text-align: left; }
+.wp-table th, .wp-table td { padding: 7px 10px; border-bottom: 1px solid #e8ecee; text-align: right; white-space: nowrap; font-size: 12.5px; }
+.wp-table thead th { color: #5b6168; background: #f2f4f5; font-size: 10.5px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; }
+.wp-table th:first-child, .wp-table td:first-child { text-align: left; }
+.wp-table tbody th { color: #2d3f44; font-weight: 800; }
+.wp-table td { color: #38464d; }
 .wp-table th small { display: block; color: #717c81; font-size: 10px; font-weight: 600; }
 .wp-table tr.is-current th, .wp-table tr.is-current td { background: #eef4fb; }
 .wp-table tr.is-total th, .wp-table tr.is-total td { font-weight: 700; background: #f2f4f5; }
@@ -1354,3 +1379,39 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
   .wp-kpis, .wp-bottom { grid-template-columns: 1fr; }
   .wp-side-stats > div { flex: 1 1 140px; }
 }
+
+/* Relatório gerencial (4 unidades) na Posição de Campo. Reaproveita .wp-* do painel da unidade. */
+.management-report { display: grid; gap: 14px; }
+.mr-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.mr-header h2 { margin: 0; color: var(--green-strong); font-size: 17px; }
+.mr-header p { margin: 4px 0 0; max-width: 640px; color: #5b6168; font-size: 12px; }
+.mr-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.mr-controls .field { display: grid; gap: 4px; font-size: 11px; font-weight: 700; color: #5b6168; }
+.mr-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+.mr-kpi { min-width: 0; padding: 12px 14px; display: grid; gap: 4px; background: var(--data-surface); border: 1px solid var(--data-border); border-radius: var(--data-radius); }
+.mr-kpi small { color: #717c81; font-size: 10px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; }
+.mr-kpi strong { color: #2d3f44; font-size: 24px; line-height: 1.1; }
+.mr-kpi strong em { color: #5b6168; font-size: 13px; font-style: normal; font-weight: 700; }
+.mr-kpi span { color: #5b6168; font-size: 11.5px; }
+.mr-kpi.is-green { background: #77b82a; border-color: #77b82a; }
+.mr-kpi.is-green small, .mr-kpi.is-green strong, .mr-kpi.is-green strong em, .mr-kpi.is-green span { color: #ffffff; }
+.mr-kpi.is-atr { border: 2px solid #e4c257; }
+.mr-kpi.is-atr small { color: #8f772d; }
+.mr-kpi.is-projection strong { color: #4f8a1f; }
+.mr-table th small { display: block; color: #717c81; font-size: 10px; font-weight: 600; }
+.mr-share { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 800; }
+.mr-share.is-good { background: #e1f2d2; color: #3e6e12; }
+.mr-share.is-warning { background: #fff3c4; color: #7a5c00; }
+.mr-share.is-low { background: #fde2cc; color: #9a4b05; }
+.mr-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.mr-chart .wp-chart-svg { min-width: 480px; }
+.mr-bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.mr-bottom caption { padding: 0 0 6px; text-align: left; color: #8f772d; font-size: 11px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; }
+.mr-tag { margin-left: 4px; padding: 0 6px; border-radius: 999px; background: #fff3c4; color: #7a5c00; font-size: 10px; font-weight: 800; }
+.mr-front-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.mr-fronts summary { cursor: pointer; color: var(--green); font-size: 12px; font-weight: 700; }
+.mr-fronts .table-wrap { margin-top: 8px; }
+.mr-empty { margin: 0; color: #5b6168; font-size: 12px; }
+@media (max-width: 1180px) { .mr-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .mr-charts, .mr-bottom, .mr-front-list { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .mr-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mr-controls { width: 100%; } }

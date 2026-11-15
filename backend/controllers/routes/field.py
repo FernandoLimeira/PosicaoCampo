@@ -19,6 +19,7 @@ from ...models.units import (
     save_unit,
 )
 from ...models.module_access import user_can
+from ...models.weighing_report import XLSX_MIME, build_weighing_report
 from ...models.weighings import (
     delete_delivery_query,
     import_weighings,
@@ -28,7 +29,7 @@ from ...models.weighings import (
 )
 from ...services.operational_shifts import shift_at
 from ...services.weighing_import import MAX_WEIGHING_UPLOAD_BYTES, parse_weighing_file
-from ..http import _multipart_file
+from ..http import _multipart_file, _respond
 from ..auth import _is_admin
 
 
@@ -93,6 +94,20 @@ def handle(req):
             })
 
         return req.guarded(import_file, bad_request=ValueError)
+
+    # Relatório gerencial em Excel (mesmos números da tela e da imagem).
+    if path == "/api/weighings/report.xlsx" and method == "GET":
+        if not user:
+            return req.unauthorized()
+
+        def report():
+            content, filename = build_weighing_report(req.param("date"), at_time=req.param("hora"))
+            return _respond(req.start_response, HTTPStatus.OK, content, [
+                ("Content-Type", XLSX_MIME), ("Cache-Control", "no-store"),
+                ("Content-Disposition", f'attachment; filename="{filename}"'),
+            ])
+
+        return req.guarded(report, bad_request=ValueError)
 
     if path == "/api/weighings/summary" and method == "GET":
         if not user:

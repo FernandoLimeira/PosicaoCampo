@@ -130,7 +130,9 @@ def _normalize_unit_payload(unit: dict[str, Any], position: int) -> dict[str, An
 
     observation = str(unit.get("observation", "-")).strip() or "-"
     changes = str(unit.get("changes", "-")).strip() or "-"
-    if len(observation) > 10_000 or len(changes) > 10_000:
+    # Apoio entre unidades (troca de cana), mostrado no card da unidade na imagem CTT.
+    support = str(unit.get("support", "-") or "-").strip() or "-"
+    if len(observation) > 10_000 or len(changes) > 10_000 or len(support) > 10_000:
         raise ValueError("Apontamentos excedem o tamanho permitido.")
     observation_period = unit.get("observation_period")
     if observation_period is not None:
@@ -170,6 +172,7 @@ def _normalize_unit_payload(unit: dict[str, Any], position: int) -> dict[str, An
         "metrics": metrics,
         "observation": observation,
         "changes": changes,
+        "support": support,
         "rain": standardize_rain_labels(code, rows, rain),
         **({"observation_period": observation_period} if observation_period is not None else {}),
     }

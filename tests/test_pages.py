@@ -464,8 +464,8 @@ class PageTests(unittest.TestCase):
         # Mesma ordem de tests/page_scripts.js (conferida também por tests/test_page_scripts.js).
         core = ["core/format.js", "core/api.js", "core/common.js", "core/dialog.js"]
         expected = {
-            "/": core + ["core/field-fronts.js", "core/sector-base.js", "dashboard/dashboard.js",
-                         "dashboard/field-notes.js", "dashboard/editor.js", "dashboard/app.js"],
+            "/": core + ["core/field-fronts.js", "core/field-indicators.js", "core/sector-base.js", "dashboard/dashboard.js",
+                         "dashboard/field-notes.js", "dashboard/editor.js", "dashboard/management-report.js", "dashboard/app.js"],
             "/sacarose": core + ["reports-export/shared-drawing.js", "reports-export/sacarose-export.js",
                                  "sacarose/sacarose.js"],
             "/producao": core + ["producao/production-status-groups.js", "producao/production-consolidation.js",
@@ -475,7 +475,7 @@ class PageTests(unittest.TestCase):
                                  "producao/production-catalog.js",
                                  "producao/production-queries.js"],
             "/emitir-posicao-global": core + [
-                "core/field-fronts.js", "reports-export/shared-drawing.js", "reports-export/field-report-data.js",
+                "core/field-fronts.js", "core/field-indicators.js", "reports-export/shared-drawing.js", "reports-export/field-report-data.js",
                 "reports-export/global-report.js", "reports-export/sacarose-export.js",
                 "producao/production-status-groups.js", "producao/production-consolidation.js",
                 "producao/production-export.js", "emissao/emissao.js"],

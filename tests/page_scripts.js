@@ -11,15 +11,15 @@ const JS_DIR = path.join(__dirname, '../static/js');
 const BASE_SCRIPTS = ['core/format.js', 'core/api.js', 'core/common.js', 'core/dialog.js'];
 
 const PAGE_SCRIPTS = {
-  '/': [...BASE_SCRIPTS, 'core/field-fronts.js', 'core/sector-base.js',
-    'dashboard/dashboard.js', 'dashboard/field-notes.js', 'dashboard/editor.js', 'dashboard/app.js'],
+  '/': [...BASE_SCRIPTS, 'core/field-fronts.js', 'core/field-indicators.js', 'core/sector-base.js',
+    'dashboard/dashboard.js', 'dashboard/field-notes.js', 'dashboard/editor.js', 'dashboard/management-report.js', 'dashboard/app.js'],
   '/sacarose': [...BASE_SCRIPTS, 'reports-export/shared-drawing.js', 'reports-export/sacarose-export.js',
     'sacarose/sacarose.js'],
   '/producao': [...BASE_SCRIPTS, 'producao/production-status-groups.js', 'producao/production-consolidation.js', 'producao/production-config.js',
     'producao/producao.js', 'producao/service-orders.js', 'producao/production-sheet.js', 'producao/production-dashboard.js',
     'producao/production-catalog.js', 'producao/production-queries.js'],
   // Os dois scripts da Produção Agrícola só entram para quem tem acesso a ela.
-  '/emitir-posicao-global': [...BASE_SCRIPTS, 'core/field-fronts.js', 'reports-export/shared-drawing.js',
+  '/emitir-posicao-global': [...BASE_SCRIPTS, 'core/field-fronts.js', 'core/field-indicators.js', 'reports-export/shared-drawing.js',
     'reports-export/field-report-data.js', 'reports-export/global-report.js', 'reports-export/sacarose-export.js',
     'producao/production-status-groups.js', 'producao/production-consolidation.js', 'producao/production-export.js', 'emissao/emissao.js'],
   '/setores': [...BASE_SCRIPTS, 'core/sector-base.js', 'setores/setores.js'],
@@ -39,7 +39,7 @@ const PAGE_TEMPLATES = {
 
 // Emissão individual: nenhuma página a carrega (somente os testes).
 // Scripts da emissão global da Posição de Campo, carregados sem o painel.
-const EXPORT_SCRIPTS = ['core/field-fronts.js', 'reports-export/shared-drawing.js',
+const EXPORT_SCRIPTS = ['core/field-fronts.js', 'core/field-indicators.js', 'reports-export/shared-drawing.js',
   'reports-export/field-report-data.js', 'reports-export/global-report.js'];
 
 function readScript(name) {

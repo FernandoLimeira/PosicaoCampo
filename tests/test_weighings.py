@@ -10,7 +10,7 @@ from zipfile import ZipFile
 from backend import config
 from backend.models import database as db
 from backend.models import module_access
-from backend.models import weighings
+from backend.models import storage, weighings
 from backend.models.units import initialize_units
 from backend.services.operational_shifts import FIELD_TIMEZONE
 from backend.services.weighing_import import parse_weighing_file
@@ -42,6 +42,10 @@ def load(instance, release, front, level1, level2, kg, out, atr="", patio="14/11
     return [instance, "14/11/2026" if out else "", release, "4100586", "4401225", level1, level2, front,
             kg, atr, patio, patio, out, "****"]
 
+
+
+# Carga da NRD que passa das 16:00 (fecha a hora 15 nos testes do resumo).
+LATE_NRD_LOAD = load("204", "10", "20", "300", "3500", "30000", "14/11/2026 16:05:00", patio="14/11/2026 16:01:00")
 
 class WeighingTests(unittest.TestCase):
     def setUp(self):
@@ -104,22 +108,28 @@ class WeighingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Excel"):
             parse_weighing_file(b"abc", "a.csv")
 
-    def test_import_upserts_by_release(self):
+    def test_import_replaces_the_whole_base(self):
         records = parse_weighing_file(self.file(), "a.xlsx")["records"]
         first = weighings.import_weighings(self.admin["id"], records, filename="a.xlsx")
-        self.assertEqual((first["created"], first["updated"], first["pending"]), (8, 0, 2))
-        # A carga que estava no pátio foi pesada no arquivo seguinte: atualiza, não duplica.
+        self.assertEqual((first["imported"], first["removed"], first["pending"]), (8, 0, 2))
+        # O arquivo seguinte substitui a base inteira: nada do anterior fica guardado.
         pending = next(record for record in records if record["release_no"] == "4")
         pending.update(scale_out_at=pending["patio_at"] + 7 * 3600, net_kg=35000.0, movement_date="2026-11-14")
         second = weighings.import_weighings(self.admin["id"], [pending], filename="b.xlsx")
-        self.assertEqual((second["created"], second["updated"], second["pending"]), (0, 1, 0))
+        self.assertEqual((second["imported"], second["removed"], second["pending"]), (1, 8, 0))
+        with storage.connection() as conn:
+            rows = conn.execute("SELECT unit_code, release_no, import_file FROM field_weighings").fetchall()
+        self.assertEqual([tuple(row) for row in rows], [("PPT", "4", "b.xlsx")])
+        # Importação inválida não apaga a base atual.
+        with self.assertRaises(ValueError):
+            weighings.import_weighings(self.admin["id"], [{"unit_code": "PPT"}])
+        with storage.connection() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM field_weighings").fetchone()[0], 1)
 
     def test_summary_rates_stock_and_external_fronts(self):
-        weighings.import_weighings(self.admin["id"], parse_weighing_file(self.file(), "a.xlsx")["records"])
-        # Arquivo seguinte com dados das 16:01: fecha a hora 15 (cargas até 15:59:59).
-        weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx([HEADER,
-            load("204", "10", "20", "300", "3500", "30000", "14/11/2026 16:05:00", patio="14/11/2026 16:01:00"),
-        ]), "b.xlsx")["records"])
+        # Com a carga da NRD das 16:01, o arquivo fecha a hora 15 (cargas até 15:59:59).
+        weighings.import_weighings(self.admin["id"], parse_weighing_file(self.file(), "a.xlsx")["records"]
+                                   + parse_weighing_file(xlsx([HEADER, LATE_NRD_LOAD]), "a.xlsx")["records"])
         # 17:00 em Brasília (16:00 no MS): fecham as cargas da PST das 15:20 e 15:35 (horário do MS).
         summary = weighings.weighing_summary("2026-11-14", now=clock("17:00"))
         units = {unit["code"]: unit for unit in summary["units"]}
@@ -140,6 +150,10 @@ class WeighingTests(unittest.TestCase):
         support = {(item["front"], item["from_unit"], item["to_unit"]) for item in summary["support"]}
         self.assertEqual(support, {("19", "NRD", "PPT"), ("402", "RBR", "PST")})
         self.assertEqual(summary["last_import"]["imported_by_name"], "Admin")
+        # Troca de cana: a FT19 é da NRD e entrou na PPT; o ATR dela entra na média da PPT
+        # (acima) e não na da NRD, que não teve carga pesada fechada.
+        self.assertIsNone(units["NRD"]["atr"])
+        self.assertNotIn("19", [front["front"] for front in units["NRD"]["fronts"]])
         self.assertEqual(units["NRD"]["loads_day"], 1)  # a saída das 16:05 entra: a hora 16 fechou às 17:00
 
     def test_hourly_logic_of_the_spreadsheet(self):
@@ -282,6 +296,29 @@ class WeighingTests(unittest.TestCase):
         self.assertEqual((at["closed_hours"], at["units"][1]["milling_day_t"]), (23, 30.0))
         with self.assertRaisesRegex(ValueError, "HH:MM"):
             weighings.weighing_summary("2026-11-14", at_time="25:00")
+
+    def test_management_report_xlsx(self):
+        from backend.models.weighing_report import build_weighing_report
+        from backend.services.weighing_import import parse_weighing_file as parse
+        weighings.import_weighings(self.admin["id"], parse(self.file(), "a.xlsx")["records"]
+                                   + parse(xlsx([HEADER, LATE_NRD_LOAD]), "a.xlsx")["records"])
+        content, filename = build_weighing_report("2026-11-14", at_time="17:00")
+        self.assertEqual(filename, "Relatorio-gerencial-2026-11-14-17h00.xlsx")
+        # O arquivo gerado é lido de volta pelo mesmo leitor das importações.
+        from backend.services.xlsx_reader import open_archive, plain_cell_value, read_sheet_rows, workbook_sheets
+        archive = open_archive(content, "inválido")
+        self.assertEqual([name for name, _ in workbook_sheets(archive)],
+                         ["Resumo", "Hora a hora", "Turnos", "Troca de cana", "Frentes"])
+        sheets = {name: [values for values, _ in read_sheet_rows(
+            archive, path, lambda cell: plain_cell_value(cell, []), max_rows=1000, max_columns=40, keep_empty_rows=False)]
+            for name, path in workbook_sheets(archive)}
+        resumo = {row[0]: row for row in sheets["Resumo"] if row}
+        self.assertEqual(resumo["PPT"][12], "100")  # processado dia (t)
+        # PPT 100 + NRD 30 (16:05) + RBR 30 (15:10 MS) + PST 63 (15:20 e 15:35 MS).
+        self.assertEqual(resumo["Total"][12], "223")
+        troca = sheets["Troca de cana"]
+        self.assertEqual(troca[0][:3], ["Frente", "Unidade dona", "Entregou em"])
+        self.assertIn(["19", "NRD", "PPT", "1", "30", "127.91", "PPT"], troca)
 
     def test_summary_without_data(self):
         summary = weighings.weighing_summary("2026-11-13")

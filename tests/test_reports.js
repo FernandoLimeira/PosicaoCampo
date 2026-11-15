@@ -166,7 +166,7 @@ async function main() {
     units: [{ code: 'PPT', loads_day: 300, milling_shift_tph: 846.6, delivery_shift_tph: 818, stock_loads: 48,
       milling_last3h_tph: 832, delivery_last3h_tph: 878, atr: 118.64, milling_day_t: 11763, milling_projection_t: 18822,
       fronts: [{ front: '02', atr: 121.06 }], received: [{ front: '19', home_unit: 'NRD', atr: 127.91 }] }] };
-  const data = standalone.globalUnitData(ppt, summary);
+  const data = standalone.fieldUnitIndicators(ppt, summary);
   assert.deepEqual([data.industry, data.millingShift, data.deliveryShift, data.stock, data.milling3h, data.delivery3h,
     data.atr, data.day, data.projection], [850, 846.6, 818, 48, 832, 878, 118.64, 11763, 18822]);
   assert.equal(data.active, 1, 'Solo úmido não conta como frente em atividade');
@@ -175,8 +175,8 @@ async function main() {
   assert.deepEqual(Array.from(data.support), ['FT 19 (NRD) entregando aqui: 12 cargas · 411 t.',
     'FT 05 apoiando a RBR: 3 cargas · 98 t.']);
   // 846,6 ÷ 850 = 99,6%: amarelo e "99%" (verde só a partir de 100%).
-  assert.equal(standalone.globalIndustryShare(data).color, '#f2c230');
-  const fallback = standalone.globalUnitData(ppt, null);
+  assert.equal(standalone.globalIndustryShare(data).color, '#fdcc05');
+  const fallback = standalone.fieldUnitIndicators(ppt, null);
   assert.deepEqual([fallback.millingShift, fallback.stock, fallback.atr, fallback.day], [700, 40, null, null]);
   assert.deepEqual(Array.from(fallback.support), []);
   drawn.length = 0;
