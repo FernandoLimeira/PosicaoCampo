@@ -109,6 +109,10 @@ class WeighingTests(unittest.TestCase):
 
     def test_summary_rates_stock_and_external_fronts(self):
         weighings.import_weighings(self.admin["id"], parse_weighing_file(self.file(), "a.xlsx")["records"])
+        # Arquivo seguinte com dados das 16:01: fecha a hora 15 (cargas até 15:59:59).
+        weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx([HEADER,
+            load("204", "10", "20", "300", "3500", "30000", "14/11/2026 16:05:00", patio="14/11/2026 16:01:00"),
+        ]), "b.xlsx")["records"])
         summary = weighings.weighing_summary("2026-11-14")
         units = {unit["code"]: unit for unit in summary["units"]}
         ppt, pst = units["PPT"], units["PST"]
@@ -128,6 +132,7 @@ class WeighingTests(unittest.TestCase):
         support = {(item["front"], item["from_unit"], item["to_unit"]) for item in summary["support"]}
         self.assertEqual(support, {("19", "NRD", "PPT"), ("402", "RBR", "PST")})
         self.assertEqual(summary["last_import"]["imported_by_name"], "Admin")
+        self.assertEqual(units["NRD"]["loads_day"], 0)  # a saída das 16:05 é da hora 16, ainda aberta
 
     def test_hourly_logic_of_the_spreadsheet(self):
         # Mesma lógica da planilha "Controle de entrega x Moagem" (validada com a NRD):
@@ -145,11 +150,13 @@ class WeighingTests(unittest.TestCase):
             truck("5", "D", "09:45:00", "14/11/2026 10:01:00", "32000"),  # pesado depois da referência
             truck("6", "C", "09:59:30"),                                   # CV C: no pátio
             truck("7", "C", "09:59:30"),
+            truck("8", "E", "10:00:10"),                                   # CV E: passou das 10:00
         ]), "a.xlsx")["records"])
         summary = weighings.weighing_summary("2026-11-14")
         ppt = summary["units"][0]
-        # Referência = última chegada (09:59:30); a saída das 10:01 fica para a próxima importação.
-        self.assertEqual(summary["reference_at"], 1794661170)
+        # Referência = última chegada (10:00:10): a hora 09 fechou (passou de 09:59:59);
+        # a saída das 10:01 fica para a próxima importação.
+        self.assertEqual(summary["reference_at"], 1794661210)
         self.assertEqual(summary["closed_hours"], 10)  # 00h a 09h
         self.assertEqual(summary["shift"]["code"], "B")
         hours = {item["hour"]: item for item in ppt["hours"]}
@@ -165,8 +172,25 @@ class WeighingTests(unittest.TestCase):
         self.assertEqual(ppt["milling_last3h_tph"], round((0 + 60 + 70) / 3, 1))
         self.assertEqual(ppt["delivery_shift_tph"], round((65 + 60 + 140) / 3, 1))
         self.assertEqual(ppt["delivery_day_t"], 265.0)
-        # Pátio: D (pesado só às 10:01) e as 2 julietas de C.
-        self.assertEqual(ppt["stock_loads"], 3)
+        # Pátio: D (pesado só às 10:01), as 2 julietas de C e a de E.
+        self.assertEqual(ppt["stock_loads"], 4)
+
+    def test_hour_closes_only_after_its_last_second(self):
+        # Dados até 21:59:07: a hora 21 (21:00:00-21:59:59) ainda está aberta e não entra
+        # nas médias do turno (fechamento da NRD de 14/11: turno C = 16h a 20h).
+        weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx([HEADER,
+            load("204", "1", "20", "300", "3500", "35000", "14/11/2026 20:30:00", patio="14/11/2026 19:50:00"),
+            load("204", "2", "20", "300", "3500", "20000", "14/11/2026 21:59:07", patio="14/11/2026 21:59:07"),
+        ]), "a.xlsx")["records"])
+        summary = weighings.weighing_summary("2026-11-14")
+        self.assertEqual(summary["closed_hours"], 21)  # 00h a 20h
+        nrd = summary["units"][1]
+        self.assertEqual(nrd["hours"][-1]["hour"], 20)
+        self.assertEqual(nrd["milling_shift_tph"], round(35 / 5, 1))  # turno C: 16h a 20h
+        # Fechamento até 20:59:59: a carga que saiu às 21:59 fica para a hora 21.
+        self.assertEqual(summary["closed_until"], 1794700800)  # 14/11/2026 21:00
+        self.assertEqual((nrd["milling_day_t"], nrd["loads_day"]), (35.0, 1))
+        self.assertEqual(nrd["stock_loads"], 0)
 
     def test_guarita_time_is_used_for_delivery_when_present(self):
         rows = [HEADER + ["DATA_HORA_GUARITA"],

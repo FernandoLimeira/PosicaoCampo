@@ -26,6 +26,10 @@ function renderDeliverySummary(summary) {
     const parts = [];
     if (summary.reference_at) {
       parts.push(`Dados até ${escapeHtml(deliveryTime(summary.reference_at))}`);
+      // Moagem, entrega e médias param no último segundo da última hora fechada (ex.: 20:59:59).
+      parts.push(summary.closed_until
+        ? `fechamento até ${escapeHtml(deliveryTime(summary.closed_until - 1))}`
+        : 'nenhuma hora fechada ainda');
       if (summary.shift) parts.push(`turno ${escapeHtml(summary.shift.code)}`);
     } else {
       parts.push(`Nenhuma carga pesada em ${escapeHtml(formatIsoDateBr(summary.work_date))}`);

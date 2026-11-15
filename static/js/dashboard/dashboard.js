@@ -72,8 +72,10 @@ function unitWeighing(code) {
   return unit && unit.loads_day > 0 ? unit : null;
 }
 
+// Fechamento: último segundo da última hora fechada (ex.: 20:59); sem ele, a referência.
 function weighingReferenceTime() {
-  return weighingSummary?.reference_at ? new Date(weighingSummary.reference_at * 1000).toLocaleTimeString('pt-BR', {
+  const closed = weighingSummary?.closed_until ? weighingSummary.closed_until - 1 : weighingSummary?.reference_at;
+  return closed ? new Date(closed * 1000).toLocaleTimeString('pt-BR', {
     timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit'
   }) : '';
 }

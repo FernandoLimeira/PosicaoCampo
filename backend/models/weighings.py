@@ -216,10 +216,15 @@ def weighing_summary(work_date: Any = None) -> dict[str, Any]:
     reference = min(value for value in (last_exit, last_arrival) if value) if last_exit else None
     weighed = [row for row in weighed if reference and row["scale_out_at"] <= reference]
     arrival_rows = [row for row in arrival_rows if reference and _arrival(row) <= reference]
-    # Horas fechadas: a hora entra quando a referência chegou ao fim dela (1 min de folga).
+    # Horas fechadas: a hora (ex.: 20:00:00 a 20:59:59) só entra quando os dados passaram
+    # do último segundo dela; com dados até 21:59:07 a hora 21 ainda está aberta.
     closed_hours = [hour for hour in range(24)
-                    if reference and day_start + (hour + 1) * 3600 <= reference + 60]
+                    if reference and day_start + (hour + 1) * 3600 <= reference]
     shift_code = _shift_of_hour(closed_hours[-1]) if closed_hours else None
+    # Fechamento: moagem, cargas e frentes param no último segundo da última hora fechada
+    # (ex.: 20:59:59), como a planilha. O estoque continua na referência (o que está no pátio).
+    closed_until = day_start + (closed_hours[-1] + 1) * 3600 if closed_hours else None
+    weighed = [row for row in weighed if closed_until and row["scale_out_at"] < closed_until]
 
     units = []
     support = []
@@ -281,6 +286,7 @@ def weighing_summary(work_date: Any = None) -> dict[str, Any]:
         "reference_at": reference,
         "shift": {"code": shift_code} if shift_code else None,
         "closed_hours": len(closed_hours),
+        "closed_until": closed_until,
         "units": units,
         "support": support,
         "last_import": dict(last_import) if last_import else None,
