@@ -69,16 +69,6 @@ async function initializeApp() {
   }
 }
 
-// Compartilha o acompanhamento entre analistas sem recarregar o formulário aberto.
-// startVisiblePolling (core/api.js) pausa a consulta enquanto a aba está oculta.
-function refreshVisibleFieldNotes() {
-  return Promise.all([
-    refreshFieldFrontNotes().catch(error => console.warn('Não foi possível atualizar o acompanhamento.', error)),
-    // Nova importação de pesagem aparece sem recarregar a página.
-    loadWeighingSummary().then(summary => { if (summary && serverStateReady) renderDashboard(); })
-  ]);
-}
-
-startVisiblePolling(refreshVisibleFieldNotes, 30000);
-
+// Sem atualização automática (processamento do servidor limitado): os dados são carregados ao
+// abrir/recarregar a página e depois de importar a pesagem ou salvar no Preencher.
 initializeApp();

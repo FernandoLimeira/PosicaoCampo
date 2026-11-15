@@ -162,10 +162,10 @@ body[data-page="dashboard"] { --page: #202020; --data-border: #484848; }
 .mr-kpi.is-atr { border: 2px solid #605d52; }
 .mr-kpi.is-atr small { color: #d4be78; }
 .mr-kpi.is-projection strong { color: #abdf80; }
-.ov-unit { border-top: 4px solid #616161; }
-.ov-unit.is-active { border-top-color: #76af33; }
-.ov-unit.is-attention { border-top-color: #615d53; }
-.ov-unit.is-critical { border-top-color: #5d4f4f; }
+.ov-unit { --tile-accent: #3d3d3d; }
+.ov-unit.is-active { --tile-accent: #76af33; }
+.ov-unit.is-attention { --tile-accent: #cba74d; }
+.ov-unit.is-critical { --tile-accent: #cb4d4d; }
 .ov-unit.is-selected { border-color: #76af33; }
 .ov-unit-head strong { color: #d6d6d6; }
 .ov-unit-head small { color: #999999; }

@@ -234,7 +234,7 @@ function rainRowHtml(eq = '', turn = 0, accum = 0) {
         <span>Acumulado (mm)</span>
         <input class="rain-accum" type="number" min="0" step="0.1" value="${normalizeNumber(accum)}" />
       </label>
-      <button class="row-remove remove-rain-row" type="button" aria-label="Remover equipamento">×</button>
+      <button class="row-remove remove-rain-row" type="button" aria-label="Remover frente">×</button>
     </div>
   `;
 }

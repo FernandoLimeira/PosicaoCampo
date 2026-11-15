@@ -7,6 +7,11 @@ const vm = require('node:vm');
 const { BASE_SCRIPTS, PAGE_SCRIPTS, PAGE_TEMPLATES, EXPORT_SCRIPTS, readScript } = require('./page_scripts.js');
 
 const TEMPLATES = path.join(__dirname, '../templates');
+
+// Sem DOM, scripts que iniciam a página (ex.: initializeApp(), assíncrona) falham depois da
+// execução, como promessa rejeitada: a falha é esperada (como os erros síncronos abaixo) e não
+// pode derrubar o teste, que só confere declarações e ordem dos scripts.
+process.on('unhandledRejection', () => {});
 const scriptSources = file => [...fs.readFileSync(path.join(TEMPLATES, file), 'utf8')
   .matchAll(/<script\s+src="\/js\/([^"?]+)/g)].map(match => match[1]);
 

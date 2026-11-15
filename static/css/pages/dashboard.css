@@ -151,7 +151,7 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 
 .unit-main-block {
   padding: 18px 20px;
-  border-top: 4px solid var(--unit-accent);
+  box-shadow: inset 0 4px 0 var(--unit-accent), var(--data-shadow);
 }
 
 .unit-state {
@@ -1182,7 +1182,7 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 }
 
 /* Painel gerencial da balança (Posição de Campo). Séries: moagem = azul, entrega = laranja. */
-.weighing-panel { margin-top: 14px; display: grid; gap: 14px; }
+.weighing-panel { margin-top: 14px; padding: 18px 20px; display: grid; gap: 14px; }
 .wp-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .wp-header h3 { margin: 0; color: var(--green-strong); font-size: 15px; }
 .wp-header p { margin: 4px 0 0; color: #5b6168; font-size: 12px; }
@@ -1242,7 +1242,7 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 }
 
 /* Visão geral das 4 unidades na Posição de Campo. Reaproveita .wp-* do painel da unidade. */
-.management-report { display: grid; gap: 14px; }
+.management-report { padding: 18px 20px; display: grid; gap: 14px; }
 .mr-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
 .mr-header h2 { margin: 0; color: var(--green-strong); font-size: 17px; }
 .mr-header p { margin: 4px 0 0; max-width: 640px; color: #5b6168; font-size: 12px; }
@@ -1278,21 +1278,21 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
   cursor: pointer;
   background: var(--data-surface);
   border: 1px solid var(--data-border);
-  border-top: 4px solid #66909c;
   border-radius: var(--data-radius);
-  box-shadow: var(--data-shadow);
+  --tile-accent: #66909c;
+  box-shadow: inset 0 4px 0 var(--tile-accent), var(--data-shadow);
   transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
   animation: dash-rise .45s ease both;
 }
 .ov-unit:nth-child(2) { animation-delay: .06s; }
 .ov-unit:nth-child(3) { animation-delay: .12s; }
 .ov-unit:nth-child(4) { animation-delay: .18s; }
-.ov-unit.is-active { border-top-color: #77b82a; }
-.ov-unit.is-attention { border-top-color: #dfb856; }
-.ov-unit.is-critical { border-top-color: #d87878; }
-.ov-unit:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(35, 60, 67, .12); }
+.ov-unit.is-active { --tile-accent: #77b82a; }
+.ov-unit.is-attention { --tile-accent: #dfb856; }
+.ov-unit.is-critical { --tile-accent: #d87878; }
+.ov-unit:hover { transform: translateY(-2px); box-shadow: inset 0 4px 0 var(--tile-accent), 0 10px 22px rgba(35, 60, 67, .12); }
 .ov-unit:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
-.ov-unit.is-selected { border-color: #77b82a; box-shadow: 0 0 0 2px rgba(119, 184, 42, .35), var(--data-shadow); }
+.ov-unit.is-selected { border-color: #77b82a; box-shadow: inset 0 4px 0 var(--tile-accent), 0 0 0 2px rgba(119, 184, 42, .35), var(--data-shadow); }
 .ov-unit-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .ov-unit-head strong { color: #22343a; font-size: 18px; font-weight: 850; }
 .ov-unit-head strong { display: block; }
@@ -1337,7 +1337,7 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 .uc-count.is-attention b { color: #96702b; }
 
 /* Indicadores do turno (coluna direita do card). */
-.uc-indicators { padding: 14px 16px; display: grid; gap: 10px; border-top: 4px solid var(--unit-accent); animation: dash-rise .45s ease both; }
+.uc-indicators { padding: 18px 20px; display: grid; gap: 10px; box-shadow: inset 0 4px 0 var(--unit-accent), var(--data-shadow); animation: dash-rise .45s ease both; }
 .uc-indicators-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 8px; }
 .uc-indicators-head h3 { margin: 0; color: #2c4147; font-size: 15px; }
 .uc-indicators-head small { letter-spacing: 0; text-transform: none; font-size: 11px; font-weight: 600; }
@@ -1402,3 +1402,8 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 .wp-kpi-stat small { color: #717c81; font-size: 9px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; }
 .wp-kpi-stat strong { color: #2d3f44; font-size: 20px; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .wp-kpi-stat strong span { margin-left: 3px; color: #5b6168; font-size: 11px; font-weight: 700; }
+
+/* Mesma margem interna nos blocos do painel em telas pequenas. */
+@media (max-width: 760px) {
+  .management-report, .weighing-panel, .uc-indicators { padding: 14px; }
+}
