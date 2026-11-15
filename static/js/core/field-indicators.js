@@ -42,19 +42,27 @@ function fieldUnitIndicators(unit, summary) {
   const typed = index => fieldLeadingNumber(unit.metrics?.[index]?.[2]);
   const pick = (key, index) => (hasWeighing && weighing[key] !== null && weighing[key] !== undefined ? weighing[key] : typed(index));
   const overrides = hasWeighing ? fieldImageOverrides(unit, weighing) : {};
+  const rows = fieldFilledRows(unit);
+  // ATR da frente na balança desta unidade. Cana desta frente pesada em outra unidade (troca
+  // de cana) entra no ATR daquela unidade, como "ATR recebido" lá.
+  const weighedFrontAtr = new Map((hasWeighing ? weighing.fronts || [] : [])
+    .map(front => [canonicalFieldFrontKey(front.front), front.atr]));
+  // ATR digitado na frente; sem ele, o ATR da balança da frente.
+  const frontAtr = row => String(row[4] ?? '').trim() || (weighedFrontAtr.get(canonicalFieldFrontKey(row[0])) != null
+    ? fieldIndicatorNumber(weighedFrontAtr.get(canonicalFieldFrontKey(row[0])), 2) : '');
+  // ATR da unidade: o da balança (média ponderada pelo peso) quando o SELECT traz o ATR das
+  // cargas; sem ele, a média do ATR das frentes da Posição de Campo.
+  const frontAtrValues = rows.map(row => fieldLeadingNumber(frontAtr(row))).filter(value => value > 0);
+  const frontsAtr = frontAtrValues.length ? frontAtrValues.reduce((sum, value) => sum + value, 0) / frontAtrValues.length : null;
+  const weighedAtr = hasWeighing && weighing.atr !== null && weighing.atr !== undefined ? weighing.atr : null;
   // Valores da balança (sem as correções), mostrados ao lado das correções no Preencher.
   const balance = {
     millingShift: pick('milling_shift_tph', 1), deliveryShift: pick('delivery_shift_tph', 2),
     milling3h: pick('milling_last3h_tph', 4), delivery3h: pick('delivery_last3h_tph', 5),
-    stock: pick('stock_loads', 3), atr: hasWeighing ? weighing.atr : null,
+    stock: pick('stock_loads', 3), atr: weighedAtr ?? frontsAtr,
     day: hasWeighing ? weighing.milling_day_t : null, projection: hasWeighing ? weighing.milling_projection_t : null
   };
   const value = key => (key in overrides ? overrides[key] : balance[key]);
-  const rows = fieldFilledRows(unit);
-  // ATR da frente na balança desta unidade. Cana desta frente pesada em outra unidade (troca
-  // de cana) entra no ATR daquela unidade, como "ATR recebido" lá.
-  const frontAtr = new Map((hasWeighing ? weighing.fronts || [] : [])
-    .map(front => [canonicalFieldFrontKey(front.front), front.atr]));
   return {
     rows,
     active: rows.filter(row => getFieldStatus(row[3]).group === 'active').length,
@@ -65,6 +73,7 @@ function fieldUnitIndicators(unit, summary) {
     milling3h: value('milling3h'),
     delivery3h: value('delivery3h'),
     atr: value('atr'),
+    atrSource: weighedAtr !== null ? 'balança' : frontsAtr !== null ? 'frentes' : null,
     day: value('day'),
     deliveryDay: hasWeighing ? weighing.delivery_day_t : null,
     projection: value('projection'),
@@ -73,9 +82,7 @@ function fieldUnitIndicators(unit, summary) {
     closingRef: hasWeighing ? weighing.data_until || null : null,
     hours: hasWeighing ? weighing.hours || [] : [],
     fronts: hasWeighing ? weighing.fronts || [] : [],
-    // ATR digitado na frente; sem ele, o ATR da balança da frente.
-    frontAtr: row => String(row[4] ?? '').trim() || (frontAtr.get(canonicalFieldFrontKey(row[0])) != null
-      ? fieldIndicatorNumber(frontAtr.get(canonicalFieldFrontKey(row[0])), 2) : ''),
+    frontAtr,
     received: hasWeighing ? (weighing.received || []) : []
   };
 }
@@ -94,7 +101,7 @@ function fieldIndicatorSum(values) {
 }
 
 // Totais das unidades: frentes, indústrias em operação, moagem/entrega/estoque do turno,
-// ATR médio geral (média das unidades com pesagem), processado e projeção do dia.
+// ATR médio geral (média do ATR das unidades que têm ATR), processado e projeção do dia.
 function fieldIndicatorTotals(items) {
   const atrValues = items.map(item => item.atr).filter(value => value !== null && value !== undefined);
   return {

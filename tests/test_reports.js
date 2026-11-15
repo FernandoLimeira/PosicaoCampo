@@ -194,7 +194,20 @@ async function main() {
     { rows: [], active: 0, day: null, projection: null, atr: null }]);
   assert.deepEqual([partial.day, partial.projection], [100, 240]);
   const fallback = standalone.fieldUnitIndicators(ppt, null);
-  assert.deepEqual([fallback.millingShift, fallback.stock, fallback.atr, fallback.day], [700, 40, null, null]);
+  // Sem pesagem, o ATR da unidade é a média do ATR digitado nas frentes (FT 19: 125).
+  assert.deepEqual([fallback.millingShift, fallback.stock, fallback.atr, fallback.atrSource, fallback.day], [700, 40, 125, 'frentes', null]);
+  // Pesagem sem ATR das cargas (QT_ATR vazio no SELECT): média das frentes, digitado primeiro e,
+  // sem ele, o da balança da frente (FT 02: 121,06 da balança; FT 19: 125 digitado).
+  const noAtr = { ...summary, units: [{ ...summary.units[0], atr: null }] };
+  const frontsAtr = standalone.fieldUnitIndicators(ppt, noAtr);
+  assert.equal(frontsAtr.atrSource, 'frentes');
+  assert(Math.abs(frontsAtr.atr - (121.06 + 125) / 2) < 1e-9);
+  assert.equal(standalone.fieldUnitIndicators(ppt, summary).atrSource, 'balança');
+  // ATR médio geral: média das unidades que têm ATR (unidade sem ATR fica fora).
+  const atrTotals = standalone.fieldIndicatorTotals([118.64, 128.41, 119.8, 113.78, null]
+    .map(atr => ({ rows: [], active: 0, day: null, projection: null, atr })));
+  assert.equal(atrTotals.atrUnits, 4);
+  assert(Math.abs(atrTotals.atr - 120.1575) < 1e-9);  // 120,16 no modelo
   drawn.length = 0;
   await standalone.generateSacaroseReportImageBlob(['PPT'], { PPT: [{ front: '1', sector: '10' }], NRD: [{ front: '9', sector: '90' }] }, []);
   assert.deepEqual(drawn.map(item => item.code), ['PPT']);

@@ -181,8 +181,8 @@ function metricInputValue(value, digits = 0) {
   return String(digits ? Number(Number(value).toFixed(digits)) : Math.round(Number(value)));
 }
 
-function metricFieldHtml({ label, unit, value, key = '', balance = '', corrected = false, index = null, digits = 0 }) {
-  const hint = key ? `<em>Balança: ${escapeHtml(fieldIndicatorNumber(balance === '' ? null : Number(balance), digits))}${corrected ? ' · corrigido' : ''}</em>` : '';
+function metricFieldHtml({ label, unit, value, key = '', balance = '', corrected = false, index = null, digits = 0, source = 'Balança' }) {
+  const hint = key ? `<em>${escapeHtml(source)}: ${escapeHtml(fieldIndicatorNumber(balance === '' ? null : Number(balance), digits))}${corrected ? ' · corrigido' : ''}</em>` : '';
   return `
     <div class="metric-field${corrected ? ' is-corrected' : ''}">
       <label>
@@ -215,7 +215,8 @@ function renderMetricsForm(unit) {
   });
   const balanceOnly = BALANCE_ONLY_FIELDS.map(([key, label, suffix, digits]) => metricFieldHtml({ label, unit: suffix,
     value: metricInputValue(item[key], digits), key, balance: metricInputValue(item.balance[key], digits),
-    corrected: item.corrected.includes(key), digits }));
+    corrected: item.corrected.includes(key), digits,
+    source: key === 'atr' && item.atrSource === 'frentes' ? 'Média das frentes' : 'Balança' }));
   container.innerHTML = note + typed.join('') + balanceOnly.join('');
 }
 

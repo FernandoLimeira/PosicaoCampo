@@ -224,7 +224,7 @@ function globalDrawSummary(ctx, units, data) {
   const atrText = fieldIndicatorNumber(atr, 2);
   globalDrawText(ctx, atrText, x, top + 50, width - 64, bigFont);
   globalDrawText(ctx, 'kg/t', x + Math.min(width - 64, globalTextWidth(ctx, atrText, bigFont)) + 5, top + 54, 34, globalFont(15, 'bold'));
-  globalDrawText(ctx, totals.atrUnits ? `média das ${totals.atrUnits} unidades` : 'sem pesagem', x, top + 82,
+  globalDrawText(ctx, totals.atrUnits > 1 ? `média das ${totals.atrUnits} unidades` : totals.atrUnits ? 'ATR de 1 unidade' : 'sem ATR informado', x, top + 82,
     width - 28, globalFont(12, '500'), GLOBAL_COLORS.muted);
 
   // Moagem do dia consolidada: total processado e projeção (média do dia × 24) por unidade.
