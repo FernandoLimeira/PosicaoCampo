@@ -48,6 +48,21 @@ function weighingImportMessage(result) {
     + `${result.pending ? ` e ${count(result.pending)} no pátio` : ''} (base anterior substituída).`;
 }
 
+// Avisos da importação: instâncias que não são de PPT/NRD/RBR/PST, linhas sem liberação,
+// frente ou peso válido e unidades sem nenhuma carga no arquivo.
+function weighingImportWarnings(result) {
+  const warnings = [];
+  const ignored = Object.entries(result.ignored_instances || {});
+  if (ignored.length) {
+    warnings.push(`Ignoradas: ${ignored.map(([code, count]) => `INSTANCIA_ORIGEM ${code} (${count})`).join(', ')}`
+      + ' — só valem 201 (PPT), 204 (NRD), 402 (RBR) e 401 (PST).');
+  }
+  if (result.invalid_rows) warnings.push(`${result.invalid_rows} linha(s) sem liberação, frente ou peso válido.`);
+  const empty = Object.entries(result.by_unit || {}).filter(([, loads]) => !loads).map(([code]) => code);
+  if (empty.length) warnings.push(`Sem cargas no arquivo: ${empty.join(', ')}.`);
+  return warnings;
+}
+
 function downloadBlobFile(blob, filename) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');

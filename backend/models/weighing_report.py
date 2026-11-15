@@ -13,7 +13,7 @@ from typing import Any
 from ..services.field_status import field_status
 from ..services.operational_shifts import FIELD_TIMEZONE, unit_timezone
 from ..services.xlsx_writer import build_xlsx
-from .units import _parse_br_number, list_units
+from .units import parse_br_number, list_units
 from .weighings import weighing_summary
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -38,7 +38,7 @@ def _position_indicators(unit: dict[str, Any]) -> dict[str, Any]:
     rows = [row for row in unit.get("rows") or []
             if isinstance(row, list) and (str(row[0] or "").strip() or str(row[1] or "").strip())]
     metrics = unit.get("metrics") or []
-    industry = _parse_br_number(str(metrics[0][2])) if metrics and len(metrics[0]) > 2 else None
+    industry = parse_br_number(str(metrics[0][2])) if metrics and len(metrics[0]) > 2 else None
     return {
         "fronts": len(rows),
         "active": sum(1 for row in rows if len(row) > 3 and field_status(row[3])["group"] == "active"),

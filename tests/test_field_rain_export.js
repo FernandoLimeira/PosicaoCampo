@@ -25,7 +25,6 @@ async function main() {
   }, { get: (target, key) => key in target ? target[key] : () => {} });
   ctx.document.createElement = () => ({ width: 0, height: 0, getContext: () => canvasContext,
     toBlob(callback) { callback({ width: this.width, height: this.height }); } });
-  ctx.drawFittedText = (_canvas, text, x, y) => drawn.push({ text: String(text), x, y });
 
   async function checkImages(source, expected) {
     const original = JSON.stringify(source);

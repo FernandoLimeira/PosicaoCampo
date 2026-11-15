@@ -99,7 +99,8 @@ async function main() {
   assert.equal(flyout.hidden, true);
   toggle.listeners.click();
   ctx.window.innerWidth = 380;
-  ctx.positionReportsFlyout();
+  // O primeiro menu lateral registrado é o de Relatórios.
+  vm.runInContext('sidebarFlyouts[0].position()', ctx);
   assert.equal(flyout.style.left, '20px');
   assert.equal(flyout.style.top, '170px');
   ctx.document.dispatchEvent({ type: 'focusin', target: {} });

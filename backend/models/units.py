@@ -26,7 +26,7 @@ class UnitConflictError(Exception):
 _NUMBER_RE = re.compile(r"\s*(-?[\d.,]+)")
 
 
-def _parse_br_number(text: str) -> float | None:
+def parse_br_number(text: str) -> float | None:
     """Converte o número no início do texto aceitando formato pt-BR e decimal com ponto.
 
     "1.234,5" -> 1234.5; "12,5" -> 12.5; "1.5" -> 1.5; "1.234.567" -> 1234567.
@@ -66,7 +66,7 @@ def _nonnegative_number(value: Any, field: str) -> int | float:
         if text in {"", "-"}:
             number = 0.0
         else:
-            parsed = _parse_br_number(text)
+            parsed = parse_br_number(text)
             if parsed is None:
                 raise ValueError(f"{field} deve ser um número maior ou igual a zero.")
             number = parsed

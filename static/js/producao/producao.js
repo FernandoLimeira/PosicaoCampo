@@ -798,15 +798,6 @@ function showEntryPane() {
   if (modalTitle) modalTitle.textContent = editingItemId ? 'Editar frente' : 'Adicionar frente';
 }
 
-// Grupos, frentes, status e operações ficam na página Cadastros (menu lateral).
-function showConfigPane() {
-  if (canConfigureProduction()) window.location.href = '/producao/cadastros';
-}
-
-function showStatusConfigPane() {
-  showConfigPane();
-}
-
 function setProductionEntryEditMode(isEditing) {
   const serviceSection = document.querySelector('#production-service-section');
   if (serviceSection) serviceSection.hidden = Boolean(isEditing);
@@ -855,21 +846,6 @@ function clearEntryForm(defaultUnit = selectedNavbarProductionUnit()) {
   setSelectedStatus(defaultStatusCode());
   resetSectorFields();
   setProductionEntryEditMode(false);
-}
-
-async function openNewProductionItem() {
-  if (!canFillProduction()) return;
-  const navbarUnit = selectedNavbarProductionUnit();
-  showEntryPane();
-  try {
-    if (productionCatalog?.unit !== navbarUnit) await loadProductionCatalog(navbarUnit);
-    clearEntryForm(navbarUnit);
-    openModal('production-entry-modal');
-    document.querySelector('#production-group-input')?.focus();
-  } catch (error) {
-    console.error(error);
-    showToast(error.message || 'Não foi possível carregar as frentes desta unidade.', true);
-  }
 }
 
 function findProductionItem(itemId) {

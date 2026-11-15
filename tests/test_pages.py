@@ -104,30 +104,35 @@ class PageTests(unittest.TestCase):
 
     def test_delivery_pages_menu_and_permissions(self):
         from backend.models.module_access import MODULES
-        page = self.request('/entrega-ctt', role='admin')
+        # A antiga página de resumo virou o painel/relatório da Posição de Campo.
+        old = self.request('/entrega-ctt', role='admin')
+        self.assertEqual((old['status'], old['headers']['Location']), (302, '/'))
+        page = self.request('/entrega-ctt/consultas', role='admin')
         self.assertEqual(page['status'], 200)
-        # Fica dentro do menu CTT, depois de Sacarose.
+        # Fica dentro do menu CTT, depois de Sacarose; só as Consultas SQL.
         menu = page['body'].split('id="ctt-flyout"', 1)[1].split('</nav>', 1)[0]
-        self.assertLess(menu.index('href="/sacarose"'), menu.index('href="/entrega-ctt"'))
-        self.assertNotIn('id="delivery-toggle"', page['body'])
-        self.assertIn('href="/entrega-ctt/consultas"', page['body'])
-        self.assertIn('id="delivery-import-file"', page['body'])
-        self.assertIn('id="delivery-query-modal"', self.request('/entrega-ctt/consultas', role='admin')['body'])
+        self.assertLess(menu.index('href="/sacarose"'), menu.index('href="/entrega-ctt/consultas"'))
+        self.assertNotIn('href="/entrega-ctt"', menu)
+        self.assertIn('id="delivery-query-modal"', page['body'])
+        self.assertIn('id="delivery-query-new"', page['body'])
+        # A importação da pesagem fica na Posição de Campo, ao lado do Preencher.
+        self.assertIn('id="dashboard-import-file"', self.request('/', role='admin')['body'])
         modules = {item['key']: {'view': True, 'edit': False} for item in MODULES}
         viewer = self.db.create_user('DeliveryViewer', 'Test-password-42', module_access=modules)
         viewer_cookie = f"{config.SESSION_COOKIE}={self.db.create_session(viewer['id'])}"
-        viewed = self.request('/entrega-ctt', cookie=viewer_cookie)
+        viewed = self.request('/entrega-ctt/consultas', cookie=viewer_cookie)
         self.assertEqual(viewed['status'], 200)
-        self.assertNotIn('id="delivery-import-file"', viewed['body'])
+        self.assertNotIn('id="delivery-query-new"', viewed['body'])
+        self.assertNotIn('id="dashboard-import-file"', self.request('/', cookie=viewer_cookie)['body'])
         self.assertEqual(self.request('/api/delivery/queries', cookie=viewer_cookie, method='POST',
                                       body={'name': 'A', 'sql': 'SELECT 1'})['status'], 403)
         modules['dashboard'] = {'view': False, 'edit': False}
         denied = self.db.create_user('DeliveryDenied', 'Test-password-42', module_access=modules)
         denied_cookie = f"{config.SESSION_COOKIE}={self.db.create_session(denied['id'])}"
-        self.assertEqual(self.request('/entrega-ctt', cookie=denied_cookie)['status'], 403)
+        self.assertEqual(self.request('/entrega-ctt/consultas', cookie=denied_cookie)['status'], 403)
         self.assertEqual(self.request('/api/weighings/summary', cookie=denied_cookie)['status'], 200
                          if modules.get('emission', {}).get('view') else 403)
-        self.assertNotIn('href="/entrega-ctt"', self.request('/historico', cookie=denied_cookie)['body'])
+        self.assertNotIn('href="/entrega-ctt/consultas"', self.request('/historico', cookie=denied_cookie)['body'])
 
     def test_field_front_notes_http_flow_and_module_permissions(self):
         from backend.models.module_access import MODULES
@@ -465,7 +470,7 @@ class PageTests(unittest.TestCase):
         core = ["core/format.js", "core/api.js", "core/common.js", "core/dialog.js"]
         expected = {
             "/": core + ["core/field-fronts.js", "core/field-indicators.js", "core/sector-base.js", "dashboard/dashboard.js",
-                         "dashboard/field-notes.js", "dashboard/editor.js", "dashboard/management-report.js", "dashboard/app.js"],
+                         "dashboard/weighing-panel.js", "dashboard/field-notes.js", "dashboard/editor.js", "dashboard/management-report.js", "dashboard/app.js"],
             "/sacarose": core + ["reports-export/shared-drawing.js", "reports-export/sacarose-export.js",
                                  "sacarose/sacarose.js"],
             "/producao": core + ["producao/production-status-groups.js", "producao/production-consolidation.js",
@@ -484,7 +489,6 @@ class PageTests(unittest.TestCase):
             "/retornos": core + ["retornos/return-analysis.js"],
             "/historico": core + ["historico/historico.js"],
             "/usuarios": core + ["usuarios/usuarios.js"],
-            "/entrega-ctt": core + ["entrega/entrega.js"],
             "/entrega-ctt/consultas": core + ["entrega/entrega.js"],
         }
         for path, scripts in expected.items():

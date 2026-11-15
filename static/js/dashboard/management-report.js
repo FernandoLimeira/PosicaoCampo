@@ -2,7 +2,8 @@
 // Mesmos números da imagem "Troca de Turno CTT" (core/field-indicators.js): resumo geral,
 // comparativo das unidades, hora a hora, turnos, troca de cana e frentes, com dia e
 // horário de fechamento escolhidos e exportação em Excel (/api/weighings/report.xlsx).
-// Depende de core/field-indicators.js e dashboard/dashboard.js (painel e gráfico por hora).
+// Depende de core/field-indicators.js, dashboard/dashboard.js e dashboard/weighing-panel.js
+// (gráfico por hora e diferença).
 let managementReportOpen = false;
 let managementReportDate = '';
 let managementReportTime = '';

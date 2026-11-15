@@ -1,24 +1,8 @@
 /* Gerado por tools/build_dark_css.py a partir de pages/entrega.css. Não edite: rode o script. */
-.delivery-reference { color: #9b9b9b; }
-.delivery-import-report { background: #2a2a2a; color: #cbcbcb; }
-.delivery-import-report small { color: #999999; }
-.delivery-import-report em { color: #da9d6d; }
-.delivery-import-report .is-warning strong, .delivery-import-report p.is-warning { color: #da9d6d; }
 .delivery-card { background: #2a2a2a; }
-.delivery-card > header { border-bottom: 1px solid #434343; }
-.delivery-card h2 { color: #e0e0e0; }
-.delivery-card h2 small { color: #999999; }
-.delivery-card > header span { color: #999999; }
-.delivery-table th, .delivery-table td { border-bottom: 1px solid #414141; }
-.delivery-table thead th { color: #9b9b9b; }
-.delivery-table th small { color: #999999; }
-.delivery-table tbody th strong { color: #e0e0e0; }
-.delivery-tag { background: #27221c; color: #da9d6d; }
-.delivery-front-table tr.is-external td { background: #282828; }
 .delivery-empty { color: #999999; }
 .delivery-query { border-bottom: 1px solid #414141; }
 .delivery-query-head strong { color: #e0e0e0; }
 .delivery-query-head small { color: #999999; }
 .delivery-query-copy { border: 1px solid #42474e; background: #1f242b; color: #5c8fd6; }
 .delivery-query-sql { color: #cbcbcb; }
-.delivery-table tr.is-total th, .delivery-table tr.is-total td { background: #242424; }

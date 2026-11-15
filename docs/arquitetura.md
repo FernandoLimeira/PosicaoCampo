@@ -35,7 +35,7 @@ storage / security / constants
 | `routes/auth.py` | `/login`, `/register`, `/api/auth/*` |
 | `routes/users.py` | `/api/users`, acessos por módulo e da Produção |
 | `routes/production.py` | `/api/production/*` |
-| `routes/field.py` | `/api/front-notes*`, `/api/units*`, `/api/history` |
+| `routes/field.py` | `/api/front-notes*`, `/api/units*`, `/api/history`, pesagem (`/api/weighings/import`, `/api/weighings/summary`, `/api/weighings/report.xlsx`) e consultas SQL da entrega (`/api/delivery/queries*`) |
 | `routes/sacarose.py` | `/api/sacarose` |
 | `routes/sectors.py` | `/api/sector-base*` |
 | `routes/returns.py` | `/api/return-analysis/*` (layouts, solo úmido, análise, PPTX) |
@@ -71,6 +71,8 @@ exatamente quais exceções trata, mantendo os códigos de status anteriores.
 | `sacarose.py` | posições da Sacarose |
 | `returns.py` | layouts de mudanças de área e apontamentos de solo úmido |
 | `front_notes.py` | acompanhamentos por frente |
+| `weighings.py` | pesagem da balança: importação (substitui a base inteira), resumo por unidade/hora e consultas SQL salvas |
+| `weighing_report.py` | relatório gerencial da balança em Excel (Resumo, Hora a hora, Turnos, Troca de cana, Frentes) |
 | `database.py` | fachada: `init_db()` e reexportação dos nomes acima |
 
 Código novo deve importar do módulo de domínio. `backend.models.database`
@@ -87,8 +89,31 @@ compatibilidade com scripts e testes.
 | `return_analysis.py` | análise de retornos (XLSX/XLS) |
 | `soil_wet_import.py` | leitura dos apontamentos de solo úmido |
 | `return_presentation.py` | geração do PPTX |
+| `weighing_import.py` | leitura do Excel de pesagem (colunas, instâncias → unidades, horários no fuso local) |
+| `xlsx_writer.py` | geração XLSX mínima e genérica (abas, cabeçalho em negrito, números) |
 | `front_identifiers.py` | todas as normalizações de identificação de frente (tabela no docstring) |
-| `field_status.py`, `operational_shifts.py` | status de campo e turnos |
+| `field_status.py`, `operational_shifts.py` | status de campo, turnos e fuso por unidade (`unit_timezone`: Polo MS uma hora a menos) |
+
+## Pesagem da balança (Posição de Campo)
+
+```
+Excel do SELECT ──► services/weighing_import ──► models/weighings.import_weighings
+                     (fuso local da unidade)       (substitui a base inteira)
+                                                          │
+                       models/weighings.weighing_summary ◄┘
+                       (horas fechadas = hora atual − 1 h, no fuso da unidade)
+                          │                │                      │
+            painel da unidade e     imagem "Troca de     models/weighing_report
+            relatório gerencial      Turno CTT"          (Excel, services/xlsx_writer)
+            (static/js/dashboard)  (static/js/reports-export)
+```
+
+- O mesmo resumo alimenta a tela, a imagem e o Excel; no navegador, os indicadores por
+  unidade e os totais saem de um só lugar (`static/js/core/field-indicators.js`).
+- Regras (detalhes no docstring de `models/weighings.py`): moagem pela saída da balança;
+  entrega = CVs (guarita, `DT_REG_GUARITA`) × 2 × densidade da hora; turno e últimas 3 h
+  são médias das horas fechadas; projeção = média por hora do dia × 24; troca de cana:
+  o ATR entra na média da unidade que recebeu a cana.
 
 ## Compatibilidade mantida
 

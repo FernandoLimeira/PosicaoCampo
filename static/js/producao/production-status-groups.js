@@ -9,7 +9,3 @@ const PRODUCTION_STATUS_GROUPS = [
   { key: 'stopped', name: 'Parado / oficina / crítico', summary: 'parado / oficina', color: '#ef7d1a' }
 ];
 
-function productionStatusGroup(key) {
-  return PRODUCTION_STATUS_GROUPS.find(group => group.key === key)
-    || PRODUCTION_STATUS_GROUPS.find(group => group.key === 'waiting');
-}

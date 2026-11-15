@@ -51,6 +51,7 @@ A organização das pastas está descrita em "Organização de `static/js` e
 | `/` | `index.html` | `dashboard.css` | `dashboard/` |
 | `/sacarose` | `sacarose.html` | `sacarose.css` | `sacarose/` + `reports-export/` |
 | `/emitir-posicao-global` | `emissao.html` | `emissao.css` | `emissao/` + `reports-export/` + `producao/` |
+| `/entrega-ctt/consultas` | `entrega.html` | `entrega.css` | `entrega/` (só as consultas SQL; `/entrega-ctt` redireciona para `/`) |
 | `/producao` | `producao.html` | `producao.css` | `producao/` |
 | `/setores` | `setores.html` | `setores.css` | `setores/` |
 | `/relatorios` | `relatorios.html` | `reports-common.css`, `relatorios.css` | `relatorios/` |
@@ -163,16 +164,18 @@ static/
     ├── login.js                  tela de login (público, fica na raiz)
     ├── core/                     núcleo compartilhado
     │   ├── format.js             escapeHtml, datas de São Paulo, números, saudação
-    │   ├── api.js                apiRequest, downloadBlobFile, startVisiblePolling
+    │   ├── api.js                apiRequest, importação da pesagem, downloadBlobFile, startVisiblePolling
     │   ├── common.js             sessão, unidade, menu, modais, toast, status de campo
     │   ├── field-fronts.js       chave/número das frentes e rótulos de chuva
     │   ├── field-indicators.js   indicadores da unidade e totais (relatório gerencial e imagem CTT)
     │   └── sector-base.js        estado e índice da base de setores
     ├── dashboard/                Posição de Campo (/)
     │   ├── dashboard.js          estado das unidades, tabela de frentes e filtros
+    │   ├── weighing-panel.js     painel da balança no card da unidade e gráfico por hora
     │   ├── field-notes.js        observações e modal de detalhes da frente
-    │   ├── editor.js             assistente "Preencher" (etapas, linhas, gravação)
-    │   └── app.js                setupEvents, initializeApp e atualização periódica
+    │   ├── editor.js             assistente "Preencher" (5 etapas, linhas, gravação)
+    │   ├── management-report.js  relatório gerencial das 4 unidades e exportação Excel
+    │   └── app.js                setupEvents, importação da pesagem, initializeApp e atualização periódica
     ├── reports-export/           geração das imagens PNG
     │   ├── shared-drawing.js     primitivas de canvas, loadImageAsset, cabeçalho
     │   ├── field-report-data.js  normalização das unidades e chuva por frente
@@ -196,13 +199,14 @@ Subpastas funcionam em `/css/`, `/js/` e `/assets/`, e a versão dos assets
 
 | Página | Scripts próprios, nesta ordem |
 | --- | --- |
-| `/` | `core/field-fronts.js`, `core/field-indicators.js`, `core/sector-base.js`, `dashboard/dashboard.js`, `dashboard/field-notes.js`, `dashboard/editor.js`, `dashboard/management-report.js`, `dashboard/app.js` |
+| `/` | `core/field-fronts.js`, `core/field-indicators.js`, `core/sector-base.js`, `dashboard/dashboard.js`, `dashboard/weighing-panel.js`, `dashboard/field-notes.js`, `dashboard/editor.js`, `dashboard/management-report.js`, `dashboard/app.js` |
 | `/sacarose` | `reports-export/shared-drawing.js`, `reports-export/sacarose-export.js`, `sacarose/sacarose.js` |
 | `/producao` | `producao/production-consolidation.js`, `producao/production-config.js`, `producao/producao.js`, `producao/service-orders.js`, `producao/production-sheet.js`, `producao/production-dashboard.js`, `producao/production-catalog.js`, `producao/production-queries.js` |
 | `/emitir-posicao-global` | `core/field-fronts.js`, `core/field-indicators.js`, `reports-export/shared-drawing.js`, `reports-export/field-report-data.js`, `reports-export/global-report.js`, `reports-export/sacarose-export.js`, `producao/production-consolidation.js`¹, `producao/production-export.js`¹, `emissao/emissao.js` |
 | `/setores` | `core/sector-base.js`, `setores/setores.js` |
 | `/relatorios` | `relatorios/relatorios.js` |
 | `/retornos` | `retornos/return-analysis.js` |
+| `/entrega-ctt/consultas` | `entrega/entrega.js` |
 | `/historico` | `historico/historico.js` |
 | `/usuarios` | `usuarios/usuarios.js` |
 

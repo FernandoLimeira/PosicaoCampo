@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if page == 'delivery_queries' %}Consultas SQL · Entrega CTT{% else %}Entrega CTT{% endif %} · Posição de Campo{% endblock %}
+{% block title %}Consultas SQL · Entrega CTT · Posição de Campo{% endblock %}
 {% block styles %}
   <link rel="stylesheet" href="/css/pages/entrega.css?v={{ asset_version }}-import-report" />
   <link rel="stylesheet" href="/css/pages/entrega.dark.css?v={{ asset_version }}-import-report" media="(prefers-color-scheme: dark)" />
@@ -10,59 +10,18 @@
   <header class="module-standard-header delivery-header">
     <div>
       <span class="modal-kicker">Entrega CTT</span>
-      <h1 id="delivery-title">{% if page == 'delivery_queries' %}Consultas SQL{% else %}Pesagem e moagem{% endif %}</h1>
-      <p>{% if page == 'delivery_queries' %}SELECT usado no sistema da balança para gerar o Excel de pesagem. Ele é só guardado aqui para copiar; não é executado.{% else %}Moagem pela saída da balança e entrega pela entrada no pátio, com o peso líquido de cada carga.{% endif %}</p>
+      <h1 id="delivery-title">Consultas SQL</h1>
+      <p>SELECT usado no sistema da balança para gerar o Excel de pesagem. Ele é só guardado aqui para copiar; não é executado. A pesagem é importada pela Posição de Campo.</p>
     </div>
-    {% if page == 'delivery' %}
-    <div class="delivery-header-actions">
-      <label class="field delivery-date"><span>Dia</span><input id="delivery-date" type="date" /></label>
-      <label class="field delivery-date" title="Mostra o dia como estava neste horário (hora atual − 1 h), para conferir com a planilha de fechamento tirada nele. Em branco: agora."><span>Fechamento às</span><input id="delivery-time" type="time" /></label>
-      {% if user.module_access.dashboard.edit %}<label class="modal-button save delivery-import" id="delivery-import-label">Importar pesagem<input id="delivery-import-file" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" hidden /></label>{% endif %}
-    </div>
-    {% else %}
     {% if user.module_access.dashboard.edit %}<button id="delivery-query-new" class="modal-button save" type="button">+ Nova consulta</button>{% endif %}
-    {% endif %}
   </header>
-
-  {% if page == 'delivery' %}
-  <p id="delivery-reference" class="delivery-reference">Carregando…</p>
-  <div id="delivery-import-report" class="delivery-import-report" hidden></div>
-  <section class="delivery-card" aria-labelledby="delivery-units-title">
-    <header><h2 id="delivery-units-title">Unidades</h2></header>
-    <div class="delivery-table-wrap">
-      <table class="delivery-table">
-        <thead>
-          <tr><th scope="col" rowspan="2">Unidade</th><th scope="colgroup" colspan="3">Moagem</th><th scope="colgroup" colspan="2">Entrega</th>
-            <th scope="col" rowspan="2">Pátio<small>cargas</small></th><th scope="col" rowspan="2">ATR<small>kg/t</small></th></tr>
-          <tr><th scope="col">Dia<small>t</small></th><th scope="col">Turno<small>t/h</small></th><th scope="col">Últ. 3 h<small>t/h</small></th>
-            <th scope="col">Turno<small>t/h</small></th><th scope="col">Últ. 3 h<small>t/h</small></th></tr>
-        </thead>
-        <tbody id="delivery-units"></tbody>
-      </table>
-    </div>
-  </section>
-  <section class="delivery-card" aria-labelledby="delivery-hours-title">
-    <header><h2 id="delivery-hours-title">Hora a hora <small>(mesmas colunas da aba Chegada)</small></h2>
-      <label class="field delivery-date"><span>Unidade</span><select id="delivery-hours-unit"></select></label></header>
-    <div class="delivery-table-wrap">
-      <table class="delivery-table">
-        <thead><tr><th scope="col">Hora</th><th scope="col">Moagem<small>t</small></th><th scope="col">Cargas</th>
-          <th scope="col">Densidade<small>t</small></th><th scope="col">Qtd. CVs</th><th scope="col">Cana entregue<small>t</small></th></tr></thead>
-        <tbody id="delivery-hours"></tbody>
-      </table>
-    </div>
-  </section>
-  <div id="delivery-fronts" class="delivery-fronts"></div>
-  {% else %}
   <section class="delivery-card">
     <div id="delivery-queries" class="delivery-queries"></div>
   </section>
-  {% endif %}
 </section>
 {% endblock %}
 
 {% block modals %}
-{% if page == 'delivery_queries' %}
 <div id="delivery-query-modal" class="modal-backdrop" hidden>
   <section class="editor-modal delivery-query-modal" role="dialog" aria-modal="true" aria-labelledby="delivery-query-modal-title">
     <header class="modal-header">
@@ -86,7 +45,6 @@
     </footer>
   </section>
 </div>
-{% endif %}
 {% endblock %}
 
 {% block scripts %}

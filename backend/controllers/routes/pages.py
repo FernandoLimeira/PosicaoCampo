@@ -12,7 +12,6 @@ PAGE_ROUTES = {
     "/emitir-posicao-global": ("emissao.html", "emission"),
     "/": ("index.html", "dashboard"),
     "/sacarose": ("sacarose.html", "sacarose"),
-    "/entrega-ctt": ("entrega.html", "delivery"),
     "/entrega-ctt/consultas": ("entrega.html", "delivery_queries"),
     "/producao": ("producao.html", "production"),
     "/producao/ordens-servico": ("producao.html", "service_orders"),
@@ -47,6 +46,11 @@ def handle(req):
                         b"Nenhum modulo liberado para esta conta. Solicite acesso ao administrador.",
                         [("Content-Type", "text/plain; charset=utf-8")])
 
+    # A antiga página de resumo da Entrega CTT virou o painel e o relatório gerencial da
+    # Posição de Campo; o endereço antigo leva para lá.
+    if path == "/entrega-ctt" and method == "GET":
+        return _redirect(start_response, "/" if user else "/login")
+
     if path in PAGE_ROUTES and method == "GET":
         if not user:
             return _redirect(start_response, "/login")
@@ -55,10 +59,10 @@ def handle(req):
         if path in {"/producao", "/producao/ordens-servico", "/producao/consultas", "/producao/cadastros"} and not user.get("production_access", {}).get("enabled"):
             return req.error(HTTPStatus.FORBIDDEN, "Você não possui acesso à Produção Agrícola.")
         page_key = PAGE_ROUTES[path][1]
-        # Entrega CTT faz parte do módulo Posição de Campo (CTT).
-        if page_key in {"delivery", "delivery_queries"} and not user_can(user, "dashboard"):
+        # Consultas SQL da Entrega CTT fazem parte do módulo Posição de Campo (CTT).
+        if page_key == "delivery_queries" and not user_can(user, "dashboard"):
             return req.error(HTTPStatus.FORBIDDEN, "Você não possui acesso à Entrega CTT.")
-        if page_key not in {"delivery", "delivery_queries"} and page_key not in {"production", "service_orders", "production_queries", "production_catalog", "users"} and not user_can(user, page_key):
+        if page_key != "delivery_queries" and page_key not in {"production", "service_orders", "production_queries", "production_catalog", "users"} and not user_can(user, page_key):
             return req.error(HTTPStatus.FORBIDDEN, "Você não possui acesso a este módulo.")
         if path == "/usuarios/cadastro":
             return _redirect(start_response, "/usuarios?novo=1")

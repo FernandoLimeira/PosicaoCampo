@@ -17,7 +17,9 @@ function setupEvents() {
     const label = document.querySelector('#dashboard-import-label');
     label?.classList.add('is-busy');
     try {
-      showToast(weighingImportMessage(await importWeighingFile(file)));
+      const result = await importWeighingFile(file);
+      const warnings = weighingImportWarnings(result);
+      showToast(`${weighingImportMessage(result)}${warnings.length ? ` Atenção: ${warnings.join(' ')}` : ''}`, warnings.length > 0);
       if (await loadWeighingSummary()) renderDashboard();
     } catch (error) {
       console.error(error);

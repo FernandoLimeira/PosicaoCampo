@@ -1,179 +1,14 @@
-// Entrega CTT: importação do Excel de pesagem da balança, resumo de moagem/entrega
-// por unidade e frente, e consultas SQL salvas (o SELECT da pesagem, só guardado).
-const DELIVERY_UNIT_NAMES = { PPT: 'Paraguaçu Paulista', NRD: 'Narandiba', RBR: 'Rio Brilhante', PST: 'Passa Tempo' };
+// Entrega CTT: consultas SQL salvas (o SELECT da pesagem, só guardado para copiar).
+// A pesagem é importada e acompanhada pela Posição de Campo (painel da unidade e
+// relatório gerencial); aqui ficam apenas as consultas.
 const DELIVERY_COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
 let deliveryQueries = [];
 let deliveryQueriesEditable = false;
 
-function deliveryNumber(value, digits = 0) {
-  if (value === null || value === undefined) return '—';
-  return Number(value).toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-}
-
-function deliveryTime(timestamp, timeZone = 'America/Sao_Paulo') {
+function deliveryTime(timestamp) {
   return new Date(timestamp * 1000).toLocaleString('pt-BR', {
-    timeZone, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+    timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
   });
-}
-
-function deliverySection(front) {
-  return front.section ? ` / ${escapeHtml(front.section)}` : '';
-}
-
-function renderDeliverySummary(summary) {
-  const reference = document.querySelector('#delivery-reference');
-  if (reference) {
-    const parts = [];
-    if (summary.reference_at) {
-      parts.push(`Dados até ${escapeHtml(deliveryTime(summary.reference_at))}`);
-      // Moagem, entrega e médias param no último segundo da última hora fechada (ex.: 20:59:59).
-      parts.push(summary.closed_until
-        ? `fechamento até ${escapeHtml(deliveryTime(summary.closed_until - 1))}`
-        : 'nenhuma hora fechada ainda');
-      // Polo MS: horário local, uma hora a menos que Brasília.
-      const ms = (summary.units || []).find(unit => unit.timezone && unit.timezone !== 'America/Sao_Paulo');
-      if (ms?.closed_until) {
-        parts.push(`Polo MS até ${escapeHtml(deliveryTime(ms.closed_until - 1, ms.timezone))} (horário do MS)`);
-      }
-      if (summary.shift) parts.push(`turno ${escapeHtml(summary.shift.code)}`);
-    } else {
-      parts.push(`Nenhuma carga pesada em ${escapeHtml(formatIsoDateBr(summary.work_date))}`);
-    }
-    if (summary.last_import) {
-      parts.push(`última importação ${escapeHtml(deliveryTime(summary.last_import.imported_at))} por ${escapeHtml(summary.last_import.imported_by_name || '-')}`);
-    }
-    reference.innerHTML = parts.join(' · ');
-  }
-  const body = document.querySelector('#delivery-units');
-  if (body) body.innerHTML = summary.units.map(unit => `<tr>
-      <th scope="row"><strong>${escapeHtml(unit.code)}</strong><small>${escapeHtml(DELIVERY_UNIT_NAMES[unit.code] || '')}</small></th>
-      <td>${deliveryNumber(unit.milling_day_t)}</td>
-      <td>${deliveryNumber(unit.milling_shift_tph)}</td>
-      <td>${deliveryNumber(unit.milling_last3h_tph)}</td>
-      <td>${deliveryNumber(unit.delivery_shift_tph)}</td>
-      <td>${deliveryNumber(unit.delivery_last3h_tph)}</td>
-      <td>${deliveryNumber(unit.stock_loads)}</td>
-      <td>${deliveryNumber(unit.atr, 2)}</td>
-    </tr>`).join('');
-  const fronts = document.querySelector('#delivery-fronts');
-  if (!fronts) return;
-  fronts.innerHTML = summary.units.map(unit => {
-    const rows = unit.fronts.map(front => `<tr class="${front.external ? 'is-external' : ''}">
-        <td><strong>${escapeHtml(front.front)}</strong>${front.external
-          ? `<span class="delivery-tag" title="Frente de ${escapeHtml(front.home_unit)} entregando nesta unidade">${escapeHtml(front.home_unit)}</span>` : ''}</td>
-        <td>${escapeHtml(front.sector || '-')}${deliverySection(front)}</td>
-        <td>${deliveryNumber(front.tons)}</td>
-        <td>${deliveryNumber(front.loads)}</td>
-        <td>${deliveryNumber(front.atr, 2)}</td>
-      </tr>`).join('');
-    return `<section class="delivery-card delivery-unit">
-        <header><h2>${escapeHtml(unit.code)} <small>${escapeHtml(DELIVERY_UNIT_NAMES[unit.code] || '')}</small></h2>
-          <span>${deliveryNumber(unit.fronts.length)} ${unit.fronts.length === 1 ? 'frente' : 'frentes'}</span></header>
-        ${rows ? `<table class="delivery-table delivery-front-table">
-          <thead><tr><th scope="col">Frente</th><th scope="col">Setor</th><th scope="col">Moagem<small>t</small></th>
-            <th scope="col">Cargas</th><th scope="col">ATR</th></tr></thead>
-          <tbody>${rows}</tbody></table>` : '<p class="delivery-empty">Nenhuma carga pesada no dia.</p>'}
-      </section>`;
-  }).join('');
-}
-
-// Hora a hora da unidade escolhida, nas colunas da aba Chegada, com turnos e últimas 3 h.
-let deliveryLastSummary = null;
-function renderDeliveryHours(summary = deliveryLastSummary) {
-  const select = document.querySelector('#delivery-hours-unit');
-  const body = document.querySelector('#delivery-hours');
-  if (!select || !body || !summary) return;
-  if (!select.options.length) {
-    select.innerHTML = summary.units.map(unit => `<option value="${escapeHtml(unit.code)}">${escapeHtml(unit.code)}</option>`).join('');
-  }
-  const unit = summary.units.find(item => item.code === select.value) || summary.units[0];
-  const title = document.querySelector('#delivery-hours-title small');
-  if (title) {
-    title.textContent = unit?.timezone && unit.timezone !== 'America/Sao_Paulo'
-      ? '(mesmas colunas da aba Chegada · horário do MS, uma hora a menos)' : '(mesmas colunas da aba Chegada)';
-  }
-  if (!unit?.hours?.length) {
-    body.innerHTML = '<tr><td colspan="6">Nenhuma hora fechada.</td></tr>';
-    return;
-  }
-  const label = hour => `${String(hour).padStart(2, '0')}:00`;
-  const rows = unit.hours.map(item => `<tr><th scope="row">${label(item.hour)}</th>
-      <td>${deliveryNumber(item.milling_t, 3)}</td><td>${deliveryNumber(item.loads)}</td>
-      <td>${deliveryNumber(item.density_t, 2)}</td><td>${deliveryNumber(item.trucks)}</td>
-      <td>${deliveryNumber(item.delivery_t, 3)}</td></tr>`).join('');
-  const total = (key) => unit.hours.reduce((sum, item) => sum + (item[key] || 0), 0);
-  const shiftRows = ['A', 'B', 'C'].map(code => {
-    const hours = unit.hours.filter(item => item.shift === code);
-    if (!hours.length) return '';
-    const average = key => hours.reduce((sum, item) => sum + (item[key] || 0), 0) / hours.length;
-    return `<tr class="is-total"><th scope="row">Turno ${code}<small>média</small></th><td>${deliveryNumber(average('milling_t'), 3)}</td>
-      <td></td><td></td><td></td><td>${deliveryNumber(average('delivery_t'), 3)}</td></tr>`;
-  }).join('');
-  body.innerHTML = rows + `<tr class="is-total"><th scope="row">Totais</th><td>${deliveryNumber(total('milling_t'), 3)}</td>
-      <td>${deliveryNumber(total('loads'))}</td><td></td><td>${deliveryNumber(total('trucks'))}</td><td>${deliveryNumber(total('delivery_t'), 3)}</td></tr>`
-    + shiftRows
-    + `<tr class="is-total"><th scope="row">Últimas 3 h<small>média</small></th><td>${deliveryNumber(unit.milling_last3h_tph, 1)}</td>
-      <td></td><td></td><td></td><td>${deliveryNumber(unit.delivery_last3h_tph, 1)}</td></tr>`;
-}
-
-async function loadDeliverySummary() {
-  const input = document.querySelector('#delivery-date');
-  const day = input?.value || weighingWorkDate();
-  // "Fechamento às": o dia como estava naquele horário (para conferir com a planilha).
-  const time = document.querySelector('#delivery-time')?.value || '';
-  const summary = await apiRequest(`/api/weighings/summary?date=${encodeURIComponent(day)}${
-    time ? `&hora=${encodeURIComponent(time)}` : ''}`);
-  deliveryLastSummary = summary;
-  renderDeliverySummary(summary);
-  renderDeliveryHours(summary);
-}
-
-// Quadro da última importação: cargas por unidade e data, unidades sem cargas e
-// instâncias do arquivo que não são de PPT/NRD/RBR/PST (ignoradas).
-function renderDeliveryImportReport(result, selectedDay) {
-  const box = document.querySelector('#delivery-import-report');
-  if (!box) return;
-  const units = Object.entries(result.by_unit || {}).map(([code, loads]) => {
-    const dates = Object.entries(result.dates_by_unit?.[code] || {})
-      .map(([day, count]) => `${escapeHtml(formatIsoDateBr(day))}: ${deliveryNumber(count)}`).join(', ');
-    const otherDay = dates && !(result.dates_by_unit?.[code] || {})[selectedDay];
-    const tone = !loads || otherDay ? ' is-warning' : '';
-    const note = !loads ? 'nenhuma carga no arquivo' : otherDay ? `sem cargas em ${escapeHtml(formatIsoDateBr(selectedDay))}` : '';
-    return `<li class="${tone}"><strong>${escapeHtml(code)}</strong> ${deliveryNumber(loads)} ${loads === 1 ? 'carga' : 'cargas'}${
-      dates ? ` <small>(${dates})</small>` : ''}${note ? ` <em>${note}</em>` : ''}</li>`;
-  }).join('');
-  const ignored = Object.entries(result.ignored_instances || {});
-  const ignoredText = ignored.length
-    ? `<p class="is-warning"><strong>Ignoradas:</strong> ${ignored.map(([code, count]) =>
-      `INSTANCIA_ORIGEM ${escapeHtml(code)} (${deliveryNumber(count)} ${count === 1 ? 'linha' : 'linhas'})`).join(', ')}. `
-      + 'Só são reconhecidas 201 (PPT), 204 (NRD), 402 (RBR) e 401 (PST).</p>' : '';
-  const invalid = result.invalid_rows
-    ? `<p class="is-warning">${deliveryNumber(result.invalid_rows)} ${result.invalid_rows === 1 ? 'linha sem' : 'linhas sem'} liberação, frente ou peso válido.</p>` : '';
-  box.innerHTML = `<strong>Última importação</strong><ul>${units}</ul>${ignoredText}${invalid}`;
-  box.hidden = false;
-}
-
-// Cada importação substitui a base inteira (vale só o último SELECT importado).
-async function importDeliveryFile(event) {
-  const input = event.currentTarget;
-  const file = input.files?.[0];
-  if (!file) return;
-  const label = document.querySelector('#delivery-import-label');
-  label?.classList.add('is-busy');
-  try {
-    const result = await importWeighingFile(file);
-    showToast(weighingImportMessage(result));
-    const dateInput = document.querySelector('#delivery-date');
-    if (dateInput && result.dates?.length) dateInput.value = result.dates.at(-1);
-    renderDeliveryImportReport(result, dateInput?.value || saoPauloIsoDate());
-    await loadDeliverySummary();
-  } catch (error) {
-    console.error(error);
-    showToast(error.message || 'Não foi possível importar a pesagem.', true);
-  } finally {
-    input.value = '';
-    label?.classList.remove('is-busy');
-  }
 }
 
 function renderDeliveryQueries() {
@@ -273,14 +108,6 @@ async function deleteDeliveryQuery(query) {
   }
 }
 
-document.querySelector('#delivery-import-file')?.addEventListener('change', importDeliveryFile);
-document.querySelector('#delivery-date')?.addEventListener('change', () => {
-  loadDeliverySummary().catch(error => showToast(error.message || 'Não foi possível carregar a pesagem.', true));
-});
-document.querySelector('#delivery-time')?.addEventListener('change', () => {
-  loadDeliverySummary().catch(error => showToast(error.message || 'Não foi possível carregar a pesagem.', true));
-});
-document.querySelector('#delivery-hours-unit')?.addEventListener('change', () => renderDeliveryHours());
 document.querySelector('#delivery-query-new')?.addEventListener('click', () => openDeliveryQueryModal());
 document.querySelector('#delivery-query-form')?.addEventListener('submit', saveDeliveryQuery);
 document.querySelector('#delivery-queries')?.addEventListener('click', event => {
@@ -305,15 +132,6 @@ document.querySelector('#delivery-query-sql')?.addEventListener('keydown', event
   event.target.setRangeText('    ', event.target.selectionStart, event.target.selectionEnd, 'end');
 });
 
-if (document.querySelector('#delivery-units')) {
-  const dateInput = document.querySelector('#delivery-date');
-  // Hora atual − 1 h: entre 00:00 e 00:59 abre no dia anterior, ainda em fechamento.
-  if (dateInput && !dateInput.value) dateInput.value = weighingWorkDate();
-  loadDeliverySummary().catch(error => {
-    console.error(error);
-    showToast(error.message || 'Não foi possível carregar a pesagem.', true);
-  });
-}
 if (document.querySelector('#delivery-queries')) {
   loadDeliveryQueries().catch(error => {
     console.error(error);

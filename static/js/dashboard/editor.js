@@ -225,25 +225,26 @@ function reorderRainForm() {
   renderRainForm(collectRainRows());
 }
 
-// Etapa "Imagem CTT": o que a balança leva para o card da unidade na imagem (somente
-// leitura) e a troca de cana. Indústria é editada na etapa Produção.
+// Etapa "Imagem CTT": o que vai para o card da unidade na imagem (somente leitura), pelo
+// mesmo cálculo da imagem e do relatório (core/field-indicators.js), e a troca de cana.
+// Indústria é editada na etapa Produção.
 function imageStepSummaryHtml(unit) {
-  const weighing = weighingSummary?.reference_at ? (weighingSummary.units || []).find(item => item.code === unit.code) : null;
-  if (!weighing || !weighing.loads_day) {
+  const summary = weighingSummary;
+  const item = fieldUnitIndicators(unit, summary);
+  if (item.day === null) {
     return '<p class="image-step-empty">Sem pesagem importada para esta unidade: a imagem usa os indicadores da etapa Produção.</p>';
   }
-  const number = (value, digits = 0) => (value === null || value === undefined ? '—'
-    : Number(value).toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits }));
-  const cells = [['Moagem turno', `${number(weighing.milling_shift_tph)} t/h`], ['Entrega turno', `${number(weighing.delivery_shift_tph)} t/h`],
-    ['Moagem últ. 3 h', `${number(weighing.milling_last3h_tph)} t/h`], ['Entrega últ. 3 h', `${number(weighing.delivery_last3h_tph)} t/h`],
-    ['Estoque', `${number(weighing.stock_loads)} cargas`], ['ATR parcial', `${number(weighing.atr, 2)} kg/t`],
-    ['Processado dia', `${number(weighing.milling_day_t)} t`], ['Projeção', `${number(weighing.milling_projection_t)} t`]]
+  const number = fieldIndicatorNumber;
+  const cells = [['Moagem turno', `${number(item.millingShift)} t/h`], ['Entrega turno', `${number(item.deliveryShift)} t/h`],
+    ['Moagem últ. 3 h', `${number(item.milling3h)} t/h`], ['Entrega últ. 3 h', `${number(item.delivery3h)} t/h`],
+    ['Estoque', `${number(item.stock)} cargas`], ['ATR parcial', `${number(item.atr, 2)} kg/t`],
+    ['Processado dia', `${number(item.day)} t`], ['Projeção', `${number(item.projection)} t`]]
     .map(([label, value]) => `<div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong></div>`).join('');
-  const received = (weighing.received || []).map(front => `FT${escapeHtml(fieldFrontNumber(front.front))} (${escapeHtml(front.home_unit)}) `
+  const received = item.received.map(front => `FT${escapeHtml(fieldFrontNumber(front.front))} (${escapeHtml(front.home_unit)}) `
     + `${number(front.atr, 2)} · ${number(front.tons)} t`).join(' · ');
   // Frentes desta unidade pesadas em outra indústria: o ATR entra na média de lá.
-  const sent = (weighingSummary.support || []).filter(item => item.from_unit === unit.code).map(item =>
-    `FT${escapeHtml(fieldFrontNumber(item.front))} → ${escapeHtml(item.to_unit)} · ${number(item.tons)} t · ATR ${number(item.atr, 2)}`).join(' · ');
+  const sent = (summary?.support || []).filter(entry => entry.from_unit === unit.code).map(entry =>
+    `FT${escapeHtml(fieldFrontNumber(entry.front))} → ${escapeHtml(entry.to_unit)} · ${number(entry.tons)} t · ATR ${number(entry.atr, 2)}`).join(' · ');
   return `<p class="image-step-source">Da balança para a imagem · dados até ${escapeHtml(weighingReferenceTime(unit.code))}</p>
     <div class="image-step-grid">${cells}</div>
     <dl class="image-step-exchange">

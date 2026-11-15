@@ -73,7 +73,7 @@ from .units import (  # noqa: F401
     _nonnegative_number,
     _normalize_status,
     _normalize_unit_payload,
-    _parse_br_number,
+    parse_br_number,
     _repair_unit_identities,
     _seed_missing_units,
     _standardize_unit_rain,

@@ -61,20 +61,6 @@ function strokeRoundedRect(ctx, x, y, width, height, radius, color, lineWidth = 
   ctx.restore();
 }
 
-function drawFittedText(ctx, text, x, y, maxWidth, font, color = '#ffffff', baseline = 'alphabetic') {
-  const value = String(text ?? '');
-  ctx.save();
-  ctx.font = font;
-  ctx.fillStyle = color;
-  ctx.textBaseline = baseline;
-  const measured = Math.max(1, ctx.measureText(value).width);
-  const scaleX = Math.min(1, maxWidth / measured);
-  ctx.translate(x, y);
-  ctx.scale(scaleX, 1);
-  ctx.fillText(value, 0, 0);
-  ctx.restore();
-}
-
 function wrapTextLines(ctx, text, maxWidth) {
   const content = String(text || '-').replace(/\r/g, '');
   const paragraphs = content.split('\n');

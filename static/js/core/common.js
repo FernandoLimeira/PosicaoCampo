@@ -187,13 +187,11 @@ function setupSidebarFlyout(toggleSelector, panelSelector) {
   return flyout;
 }
 
-const reportsMenu = setupSidebarFlyout('#reports-toggle', '#reports-flyout');
+setupSidebarFlyout('#reports-toggle', '#reports-flyout');
 
 setupSidebarFlyout('#ctt-toggle', '#ctt-flyout');
 
 setupSidebarFlyout('#production-toggle', '#production-flyout');
-
-function positionReportsFlyout() { reportsMenu?.position(); }
 
 document.querySelector('.nav-actions')?.addEventListener('scroll', () => sidebarFlyouts.forEach(menu => menu.close()));
 

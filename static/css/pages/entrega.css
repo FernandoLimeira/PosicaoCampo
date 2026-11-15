@@ -1,40 +1,7 @@
-/* Entrega CTT: pesagem, moagem e consultas SQL salvas. */
+/* Entrega CTT: consultas SQL salvas (o SELECT da pesagem, só guardado para copiar). */
 .delivery-header { align-items: flex-end; }
-.delivery-header-actions { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
-.delivery-date { min-width: 160px; margin: 0; }
-.delivery-import { display: inline-flex; align-items: center; cursor: pointer; white-space: nowrap; }
-.delivery-import.is-busy { opacity: .6; pointer-events: none; }
-.delivery-reference { margin: 0 0 14px; color: #5f6d74; font-size: 12px; }
-
-.delivery-import-report { margin: 0 0 14px; padding: 12px 16px; border: 1px solid var(--data-border); border-radius: 10px; background: #fff; color: #303c42; font-size: 12px; }
-.delivery-import-report ul { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 6px 0 0; padding: 0; list-style: none; }
-.delivery-import-report small { color: #6c777d; }
-.delivery-import-report em { color: #b5560c; font-style: normal; font-weight: 700; }
-.delivery-import-report .is-warning strong, .delivery-import-report p.is-warning { color: #b5560c; }
-.delivery-import-report p { margin: 6px 0 0; }
-
 .delivery-card { margin-bottom: 16px; border: 1px solid var(--data-border); border-radius: 10px; background: #fff; box-shadow: var(--data-shadow); overflow: hidden; }
-.delivery-card > header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #e5eaec; }
-.delivery-card h2 { margin: 0; color: #1f262a; font-size: 16px; }
-.delivery-card h2 small { margin-left: 6px; color: #6c777d; font-size: 12px; font-weight: 600; }
-.delivery-card > header span { color: #6c777d; font-size: 12px; }
-
-.delivery-table-wrap { overflow-x: auto; }
-.delivery-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
-.delivery-table th, .delivery-table td { padding: 8px 14px; border-bottom: 1px solid #edf1f2; text-align: right; white-space: nowrap; }
-.delivery-table thead th { color: #5f6d74; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .3px; background: var(--data-alternate); }
-.delivery-table th small { display: block; color: #8a9397; font-size: 10px; font-weight: 600; text-transform: none; letter-spacing: 0; }
-.delivery-table th:first-child, .delivery-table td:first-child { text-align: left; }
-.delivery-table tbody th strong { display: block; color: #1f262a; font-size: 14px; }
-.delivery-table tbody tr:last-child > * { border-bottom: 0; }
-
-.delivery-fronts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.delivery-fronts .delivery-card { margin-bottom: 0; }
-.delivery-front-table td:first-child strong { margin-right: 6px; }
-.delivery-tag { display: inline-block; padding: 1px 7px; border-radius: 999px; background: #fdeedf; color: #b5560c; font-size: 10px; font-weight: 800; }
-.delivery-front-table tr.is-external td { background: #fffaf5; }
 .delivery-empty { margin: 0; padding: 18px; color: #6c777d; font-size: 13px; }
-
 .delivery-query { padding: 16px 20px; border-bottom: 1px solid #edf2ef; }
 .delivery-query:last-child { border-bottom: 0; }
 .delivery-query-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
@@ -50,12 +17,3 @@
 .delivery-query-form { display: grid; gap: 12px; padding: 18px 24px; overflow-y: auto; }
 .delivery-query-form textarea { min-height: 300px; font: 12px/1.5 Consolas, "Courier New", monospace; white-space: pre; tab-size: 4; resize: vertical; }
 .delivery-clipboard { position: fixed; opacity: 0; }
-
-@media (max-width: 900px) {
-  .delivery-fronts { grid-template-columns: minmax(0, 1fr); }
-  .delivery-header-actions { width: 100%; }
-}
-
-/* Hora a hora: totais, médias dos turnos e últimas 3 h. */
-.delivery-table tr.is-total th, .delivery-table tr.is-total td { background: #f1f4f5; font-weight: 600; }
-.delivery-card > header h2 small { font-weight: 400; }
