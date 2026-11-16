@@ -187,16 +187,18 @@ class WeighingTests(unittest.TestCase):
         # 09h: B pesado (70 t / 2 = 35 t); chegaram D e C (2 CVs × 2 × 35 t).
         self.assertEqual((hours[9]["milling_t"], hours[9]["density_t"], hours[9]["trucks"], hours[9]["delivery_t"]),
                          (70.0, 35.0, 2, 140.0))
-        # 07h: sem saídas; a densidade usa a média do dia (130 t / 4 = 32,5 t).
-        self.assertEqual((hours[7]["milling_t"], hours[7]["trucks"], hours[7]["delivery_t"]), (0.0, 1, 65.0))
+        # 07h: sem saídas (indústria sem moagem na hora): sem densidade, a entrega é 0 mesmo com
+        # 1 CV chegando, como a planilha (RBR parada no turno C de 15/11).
+        self.assertEqual((hours[7]["milling_t"], hours[7]["density_t"], hours[7]["trucks"], hours[7]["delivery_t"]),
+                         (0.0, None, 1, 0.0))
         self.assertEqual(ppt["milling_day_t"], 130.0)
         self.assertEqual(ppt["milling_shift_tph"], round((0 + 60 + 70) / 3, 1))     # turno B: 07h, 08h e 09h
         self.assertEqual(ppt["milling_last3h_tph"], round((0 + 60 + 70) / 3, 1))
-        self.assertEqual(ppt["delivery_shift_tph"], round((65 + 60 + 140) / 3, 1))
-        self.assertEqual(ppt["delivery_day_t"], 265.0)
+        self.assertEqual(ppt["delivery_shift_tph"], round((0 + 60 + 140) / 3, 1))
+        self.assertEqual(ppt["delivery_day_t"], 200.0)
         # Projeção do dia: média por hora (10 horas fechadas: 00h a 09h) × 24.
         self.assertEqual(ppt["milling_projection_t"], round(130 / 10 * 24, 1))
-        self.assertEqual(ppt["delivery_projection_t"], round(265 / 10 * 24, 1))
+        self.assertEqual(ppt["delivery_projection_t"], round(200 / 10 * 24, 1))
         # Pátio: D (pesado só às 10:01), as 2 julietas de C e a de E.
         self.assertEqual(ppt["stock_loads"], 4)
 

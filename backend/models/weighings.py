@@ -10,7 +10,8 @@ o arquivo traz DT_REG_GUARITA (sem ela, os CVs pela entrada no pátio variam ±2
 - Moagem da hora: soma do peso líquido (QT_LIQUIDO) das cargas com saída da balança
   na hora. Moagem do dia: soma das horas fechadas, desde 00:00:00.
 - Densidade da hora: peso médio das julietas pesadas na hora (moagem ÷ cargas).
-- Entrega da hora: CVs que chegaram na hora × 2 julietas × densidade da hora. CVs pelo padrão
+- Entrega da hora: CVs que chegaram na hora × 2 julietas × densidade da hora (hora sem moagem:
+  entrega 0, como a planilha). CVs pelo padrão
   da planilha de cada polo: Polo SP conta caminhões; Polo MS conta cada julieta como 0,5 CV.
   Chegada: Polo SP pela guarita (DT_REG_GUARITA), quando o arquivo traz, senão a entrada no
   pátio; Polo MS pelo HR_GUARITA (HR_ENTRADA_PATIO do SELECT), como a aba "Base Chegada" de PST.
@@ -322,7 +323,6 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
         stock = [row for row in arrivals
                  if unit_reference and unit_reference - STOCK_WINDOW_SECONDS <= _arrival(row) <= unit_reference
                  and (row["scale_out_at"] is None or row["scale_out_at"] > unit_reference)]
-        day_density = _tons(rows) / len(rows) if rows else None
         # CVs da hora pelo padrão da planilha de cada polo: no Polo SP, caminhões (a julieta de
         # sequência 1); no Polo MS, cada julieta que chegou vale meio CV (6,5 · 5,5 ...).
         cv_arrivals = ([(_arrival(row), 1 / JULIETAS_PER_TRUCK) for row in arrivals] if code in MS_UNIT_CODES
@@ -336,8 +336,10 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
             milled = [row for row in rows if start <= row["scale_out_at"] < end]
             trucks = sum(weight for arrival, weight in cv_arrivals if start <= arrival < end)
             # A planilha usa a densidade com 3 casas (coluna "Densidade") na entrega da hora.
-            density = _round(_tons(milled) / len(milled) if milled else day_density, 3)
-            delivery = trucks * JULIETAS_PER_TRUCK * density if density else None
+            # Hora sem moagem (indústria parada) não tem densidade: a entrega da hora é 0, como a
+            # planilha (CVs × densidade × 2 com a densidade vazia), mesmo com cana chegando.
+            density = _round(_tons(milled) / len(milled), 3) if milled else None
+            delivery = trucks * JULIETAS_PER_TRUCK * density if density else 0.0
             exact.append({"shift": _shift_of_hour(hour, code), "milling": _tons(milled), "delivery": delivery})
             hours.append({
                 "hour": hour, "shift": _shift_of_hour(hour, code), "milling_t": _round(_tons(milled)),

@@ -105,6 +105,18 @@ function setEditorStep(step) {
   requestAnimationFrame(() => focusTarget?.focus());
 }
 
+// Fechamento da balança sobre o qual os "Indicadores do turno" do formulário foram montados.
+let editorWeighingRef = null;
+
+// A tela não se atualiza sozinha (botão "Atualizar dados"): ao salvar, confere se outra pessoa
+// importou um SELECT novo enquanto o Preencher estava aberto.
+async function refreshEditorWeighing() {
+  const before = weighingSummary?.last_import?.imported_at ?? null;
+  const summary = await loadWeighingSummary();
+  if (summary && (summary.last_import?.imported_at ?? null) !== before && serverStateReady) renderDashboard();
+  return summary;
+}
+
 function openUnitEditor(index) {
   const safeIndex = Number(index);
   if (!Number.isInteger(safeIndex) || !units[safeIndex]) return;
@@ -199,6 +211,7 @@ function metricFieldHtml({ label, unit, value, key = '', balance = '', corrected
 function renderMetricsForm(unit) {
   const container = document.querySelector('#metrics-form');
   const item = fieldUnitIndicators(unit, weighingSummary);
+  editorWeighingRef = item.closingRef;
   if (!item.closingRef) {
     container.innerHTML = metricDefinitions.map((definition, index) => metricFieldHtml({
       label: definition.label, unit: definition.unit, value: metricNumber(unit.metrics[index]?.[2]), index })).join('');
@@ -260,8 +273,7 @@ function reorderRainForm() {
 
 // Correções dos "Indicadores do turno": só os campos diferentes do valor da balança, presos ao
 // fechamento atual (``ref``). Sem diferença, nada é gravado e a imagem segue a balança.
-function collectImageOverrides(unit) {
-  const ref = fieldUnitIndicators(unit, weighingSummary).closingRef;
+function collectImageOverrides(unit, ref = fieldUnitIndicators(unit, weighingSummary).closingRef) {
   if (!ref) return null;
   const values = {};
   document.querySelectorAll('#metrics-form [data-override-key]').forEach(input => {
@@ -478,6 +490,35 @@ function setupEditorEvents() {
       if (saveButton) saveButton.disabled = false;
       return;
     }
+    // Pesagem importada por outra pessoa com o formulário aberto: os indicadores do formulário
+    // são de outro fechamento. As correções feitas (campos diferentes da balança) não se perdem:
+    // com a confirmação, passam para o fechamento novo; os demais campos seguem a balança nova.
+    let overridesRef;
+    if (editorWeighingRef) {
+      await refreshEditorWeighing();
+      const currentRef = fieldUnitIndicators(currentUnit, weighingSummary).closingRef;
+      if (currentRef !== editorWeighingRef) {
+        const corrections = collectImageOverrides(currentUnit, editorWeighingRef);
+        const keep = corrections && currentRef ? await askConfirmation({
+          kicker: 'Nova pesagem importada',
+          title: 'Manter as correções no novo fechamento?',
+          message: `Outra pessoa importou um SELECT novo (dados até ${weighingReferenceTime(currentUnit.code)}) com o Preencher aberto. `
+            + 'As correções dos indicadores do turno passam para o novo fechamento; os demais valores seguem a balança nova.',
+          confirmLabel: 'Manter correções',
+          cancelLabel: 'Revisar valores',
+          tone: 'warning'
+        }) : false;
+        if (!keep) {
+          renderMetricsForm(currentUnit);
+          setEditorStep(1);
+          refreshEditorSaveStatus();
+          showToast(`Nova pesagem importada (dados até ${weighingReferenceTime(currentUnit.code)}). Confira os indicadores do turno e salve.`, true);
+          if (saveButton) saveButton.disabled = false;
+          return;
+        }
+        overridesRef = currentRef;
+      }
+    }
 
     const updatedUnit = clone(currentUnit);
     updatedUnit.rows = collectFrontRows();
@@ -488,7 +529,8 @@ function setupEditorEvents() {
     updatedUnit.changes = document.querySelector('#changes-input').value.trim() || '-';
     updatedUnit.rain = collectRainRows();
     updatedUnit.support = document.querySelector('#support-input')?.value.trim() || '-';
-    const imageOverrides = collectImageOverrides(updatedUnit);
+    // Correções = campos alterados em relação ao valor mostrado; presas ao fechamento atual.
+    const imageOverrides = collectImageOverrides(updatedUnit, overridesRef || editorWeighingRef);
     if (imageOverrides) updatedUnit.image_overrides = imageOverrides;
     else delete updatedUnit.image_overrides;
     selectedUnitIndex = index;

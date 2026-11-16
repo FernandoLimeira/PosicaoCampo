@@ -30,6 +30,24 @@ function setupEvents() {
     }
   });
 
+  // Atualizar dados: a tela não se atualiza sozinha (processamento limitado); busca a última
+  // pesagem importada e as unidades salvas pelos outros analistas, com as correções deles.
+  document.querySelector('#dashboard-refresh')?.addEventListener('click', async event => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      await Promise.all([loadServerState(), loadWeighingSummary()]);
+      renderDashboard();
+      await refreshFieldFrontNotes().catch(error => console.warn('Não foi possível atualizar o acompanhamento.', error));
+      showToast('Dados atualizados.');
+    } catch (error) {
+      console.error(error);
+      showToast(error.message || 'Não foi possível atualizar os dados.', true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   document.addEventListener('report-unit-change', () => {
     editorObservationContext = null;
     editorObservationRequest += 1;
