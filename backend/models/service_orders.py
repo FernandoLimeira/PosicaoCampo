@@ -83,6 +83,9 @@ def import_service_orders(user_id: int, unit_code: Any, records: list[dict[str, 
     if not isinstance(records, list) or not records:
         raise ValueError("Nenhuma ordem de serviço válida foi encontrada no arquivo.")
     rows: dict[tuple[str, str, str, str], tuple] = {}
+    # Descrição do centro de custo de cada operação (CCUSTO_TRATOS): nomes do cadastro iguais a
+    # ela foram preenchidos por importações antigas e são trocados pela descrição da operação.
+    cost_center_names: dict[str, set[str]] = {}
     for record in records:
         number = _text(record.get("number"), 60)
         sector = _text(record.get("sector"), 32)
@@ -97,6 +100,8 @@ def import_service_orders(user_id: int, unit_code: Any, records: list[dict[str, 
             for item in (record.get("rows") or [])[:2000] if isinstance(item, dict)
         ]
         key = (number.casefold(), sector_key(sector), sector_key(section), operation_key(operation))
+        if _text(record.get("cost_center_name"), 160):
+            cost_center_names.setdefault(operation_key(operation), set()).add(_text(record.get("cost_center_name"), 160))
         rows[key] = (
             unit, number, sector, sector_key(sector), section, operation, operation_key(operation),
             _text(record.get("operation_name"), 160), _text(record.get("cost_center"), 60),
@@ -110,14 +115,21 @@ def import_service_orders(user_id: int, unit_code: Any, records: list[dict[str, 
         conn.execute("BEGIN IMMEDIATE")
         _require_access(conn, user_id, unit=unit)
         _require_configure(conn, user_id)
-        # Operações novas do arquivo entram no cadastro com a descrição (CCUSTO_TRATOS).
+        # Operações novas do arquivo entram no cadastro com a descrição da operação
+        # (DESCRICAO_OPERACAO), nunca com a do centro de custo.
+        for key, names in cost_center_names.items():
+            conn.execute(
+                f"""UPDATE production_operations SET name='', updated_at=?
+                    WHERE code_key=? AND name IN ({','.join('?' * len(names))})""",
+                (now, key, *sorted(names)),
+            )
         for row in rows.values():
             code, key, name = row[5], row[6], row[7]
             conn.execute(
                 """INSERT INTO production_operations(code,code_key,name,position,is_active,created_by,updated_by,created_at,updated_at)
                    VALUES (?,?,?,0,1,?,?,?,?)
                    ON CONFLICT(code_key) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at
-                   WHERE production_operations.name=''""",
+                   WHERE production_operations.name='' AND excluded.name<>''""",
                 (code, key, name, user_id, user_id, now, now),
             )
         removed = conn.execute("DELETE FROM production_service_orders").rowcount

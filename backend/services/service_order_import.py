@@ -44,7 +44,8 @@ HEADER_ALIASES = {
     "plot": {"talhao", "cod talhao"},
     "cost_center": {"ccusto", "centro custo", "centro de custo"},
     "operation_name": {"descricao operacao", "descricao da operacao", "nome operacao", "nome da operacao"},
-    # Descrição do centro de custo: nome da operação só quando falta DESCRICAO_OPERACAO.
+    # Descrição do centro de custo (CCUSTO_TRATOS): nunca é o nome da operação. Serve só para
+    # limpar do cadastro os nomes que versões antigas preencheram com ela.
     "cost_center_name": {"ccusto tratos"},
     "opened_on": {"dt abertura os", "data abertura os", "data abertura", "dt abertura"},
 }
@@ -104,8 +105,6 @@ def _parse_rows(rows):
     rows_read = 0
     for row in rows[header_index + 1:]:
         values = {field: _cell(row, mapping.get(field)) for field in HEADER_ALIASES}
-        if "operation_name" not in mapping:
-            values["operation_name"] = values["cost_center_name"]
         if not values["number"] or not values["sector"] or not values["operation"]:
             continue
         rows_read += 1
@@ -115,7 +114,7 @@ def _parse_rows(rows):
         order = orders.setdefault(key, {
             "key": values["key"], "number": values["number"], "sector": values["sector"], "section": values["section"],
             "operation": values["operation"], "operation_name": values["operation_name"],
-            "cost_center": values["cost_center"], "opened_on": _iso_date(values["opened_on"]), "plots": [],
+            "cost_center": values["cost_center"], "cost_center_name": values["cost_center_name"], "opened_on": _iso_date(values["opened_on"]), "plots": [],
             "columns": columns, "rows": [],
         })
         # Linha completa do arquivo (todas as colunas), com a data já convertida.
@@ -125,7 +124,7 @@ def _parse_rows(rows):
         })
         if values["plot"] and values["plot"] not in order["plots"]:
             order["plots"].append(values["plot"])
-        for field in ("operation_name", "cost_center"):
+        for field in ("operation_name", "cost_center", "cost_center_name"):
             if not order[field] and values[field]:
                 order[field] = values[field]
         if not order["opened_on"] and values["opened_on"]:

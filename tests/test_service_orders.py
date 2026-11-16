@@ -177,6 +177,13 @@ class ServiceOrderTests(unittest.TestCase):
         self.assertEqual((first["number"], first["operation"], first["operation_name"]), ("329655", "342", "FERT ASPERSAO 1 LAMINA"))
         self.assertEqual((first["section"], first["cost_center"], first["plots"]), ("67626", "305121", ["5", "8"]))
         self.assertEqual(second["operation_name"], "ARACAO S/ INSUMO")
+        # Cadastro preenchido por versões antigas com o centro de custo: a importação troca
+        # pela descrição da operação; nome digitado no cadastro continua.
+        service_orders.save_operation(self.admin["id"], {"code": "342", "name": "TRATOS SOQUEIRA"})
+        service_orders.save_operation(self.admin["id"], {"code": "348", "name": "ARAÇÃO (CADASTRO)"})
+        service_orders.import_service_orders(self.admin["id"], "PST", parsed["records"])
+        names = {item["code"]: item["name"] for item in service_orders.list_operations(self.admin["id"])["operations"]}
+        self.assertEqual((names["342"], names["348"]), ("FERT ASPERSAO 1 LAMINA", "ARAÇÃO (CADASTRO)"))
         self.assertEqual(first["key"], "")  # CHAVE é opcional
 
     def test_parser_groups_plots_of_the_same_order(self):
@@ -192,7 +199,9 @@ class ServiceOrderTests(unittest.TestCase):
         first, second = parsed["records"]
         self.assertEqual((first["number"], first["sector"], first["section"], first["operation"]), ("331158", "4", "1", "338"))
         self.assertEqual(first["plots"], ["3", "4", "10"])
-        self.assertEqual((first["operation_name"], first["cost_center"], first["opened_on"]), ("PLANTIO MEIOSI", "305116", "2026-11-09"))
+        # Sem DESCRICAO_OPERACAO, a operação fica sem nome: CCUSTO_TRATOS é o centro de custo.
+        self.assertEqual((first["operation_name"], first["cost_center_name"]), ("", "PLANTIO MEIOSI"))
+        self.assertEqual((first["cost_center"], first["opened_on"]), ("305116", "2026-11-09"))
         self.assertEqual(second["opened_on"], "2026-09-28")
         # Todas as colunas do arquivo ficam guardadas, uma linha por talhão.
         self.assertEqual(first["columns"], self.HEADER)
