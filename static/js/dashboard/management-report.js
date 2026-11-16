@@ -75,7 +75,7 @@ function managementReportHtml() {
     managementKpi('Moagem turno', `${fieldIndicatorNumber(totals.milling)} <em>t/h</em>`,
       `entrega ${fieldIndicatorNumber(totals.delivery)} t/h · estoque ${fieldIndicatorNumber(totals.stock)} cargas`),
     managementKpi('ATR médio geral', `${fieldIndicatorNumber(totals.atr, 2)} <em>kg/t</em>`,
-      totals.atrUnits > 1 ? `média das ${totals.atrUnits} unidades` : totals.atrUnits ? 'ATR de 1 unidade' : 'sem ATR informado', 'is-atr'),
+      totals.atrUnits > 1 ? `média ${totals.atrWeighted ? 'ponderada pela moagem ' : ''}das ${totals.atrUnits} unidades` : totals.atrUnits ? 'ATR de 1 unidade' : 'sem ATR informado', 'is-atr'),
     managementKpi('Processado dia', `${fieldIndicatorNumber(totals.day)} <em>t</em>`, 'soma das 4 unidades'),
     managementKpi('Projeção de moagem dia', `${fieldIndicatorNumber(totals.projection)} <em>t</em>`, 'média do dia × 24 h', 'is-projection')
   ].join('');

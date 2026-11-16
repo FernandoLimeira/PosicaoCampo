@@ -36,6 +36,19 @@ function fieldImageOverrides(unit, weighing) {
     .map(([key, value]) => [key, Number(value)]));
 }
 
+// ATR médio ponderado pela tonelada de cana: soma(ATR × t) ÷ soma(t), só com os pares que
+// têm ATR e tonelada. Sem tonelada em nenhum, média simples dos ATR (preenchimento manual).
+function fieldWeightedAtr(pairs) {
+  const valid = pairs.filter(([atr]) => atr !== null && atr !== undefined && Number(atr) > 0);
+  if (!valid.length) return { atr: null, count: 0, weighted: false };
+  const weighed = valid.filter(([, tons]) => Number(tons) > 0);
+  if (weighed.length) {
+    const tons = weighed.reduce((sum, [, value]) => sum + Number(value), 0);
+    return { atr: weighed.reduce((sum, [atr, value]) => sum + Number(atr) * Number(value), 0) / tons, count: weighed.length, weighted: true };
+  }
+  return { atr: valid.reduce((sum, [atr]) => sum + Number(atr), 0) / valid.length, count: valid.length, weighted: false };
+}
+
 function fieldUnitIndicators(unit, summary) {
   const weighing = (summary?.units || []).find(item => item.code === unit.code);
   const hasWeighing = Boolean(summary?.reference_at && weighing && weighing.loads_day > 0);
@@ -45,15 +58,16 @@ function fieldUnitIndicators(unit, summary) {
   const rows = fieldFilledRows(unit);
   // ATR da frente na balança desta unidade. Cana desta frente pesada em outra unidade (troca
   // de cana) entra no ATR daquela unidade, como "ATR recebido" lá.
-  const weighedFrontAtr = new Map((hasWeighing ? weighing.fronts || [] : [])
-    .map(front => [canonicalFieldFrontKey(front.front), front.atr]));
+  const weighedFronts = new Map((hasWeighing ? weighing.fronts || [] : [])
+    .map(front => [canonicalFieldFrontKey(front.front), front]));
+  const weighedFrontAtr = new Map([...weighedFronts].map(([key, front]) => [key, front.atr]));
   // ATR digitado na frente; sem ele, o ATR da balança da frente.
   const frontAtr = row => String(row[4] ?? '').trim() || (weighedFrontAtr.get(canonicalFieldFrontKey(row[0])) != null
     ? fieldIndicatorNumber(weighedFrontAtr.get(canonicalFieldFrontKey(row[0])), 2) : '');
   // ATR da unidade: o da balança (média ponderada pelo peso) quando o SELECT traz o ATR das
-  // cargas; sem ele, a média do ATR das frentes da Posição de Campo.
-  const frontAtrValues = rows.map(row => fieldLeadingNumber(frontAtr(row))).filter(value => value > 0);
-  const frontsAtr = frontAtrValues.length ? frontAtrValues.reduce((sum, value) => sum + value, 0) / frontAtrValues.length : null;
+  // cargas; sem ele, a média do ATR das frentes ponderada pela tonelada de cada frente na balança.
+  const frontsAtr = fieldWeightedAtr(rows.map(row => [fieldLeadingNumber(frontAtr(row)),
+    weighedFronts.get(canonicalFieldFrontKey(row[0]))?.tons])).atr;
   const weighedAtr = hasWeighing && weighing.atr !== null && weighing.atr !== undefined ? weighing.atr : null;
   // Valores da balança (sem as correções), mostrados ao lado das correções no Preencher.
   const balance = {
@@ -101,9 +115,10 @@ function fieldIndicatorSum(values) {
 }
 
 // Totais das unidades: frentes, indústrias em operação, moagem/entrega/estoque do turno,
-// ATR médio geral (média do ATR das unidades que têm ATR), processado e projeção do dia.
+// ATR médio geral (média do ATR das unidades ponderada pelo processado do dia de cada uma),
+// processado e projeção do dia.
 function fieldIndicatorTotals(items) {
-  const atrValues = items.map(item => item.atr).filter(value => value !== null && value !== undefined);
+  const atr = fieldWeightedAtr(items.map(item => [item.atr, item.day]));
   return {
     units: items.length,
     fronts: items.reduce((sum, item) => sum + item.rows.length, 0),
@@ -112,8 +127,9 @@ function fieldIndicatorTotals(items) {
     milling: fieldIndicatorSum(items.map(item => item.millingShift)),
     delivery: fieldIndicatorSum(items.map(item => item.deliveryShift)),
     stock: fieldIndicatorSum(items.map(item => item.stock)),
-    atr: atrValues.length ? atrValues.reduce((sum, value) => sum + value, 0) / atrValues.length : null,
-    atrUnits: atrValues.length,
+    atr: atr.atr,
+    atrUnits: atr.count,
+    atrWeighted: atr.weighted,
     day: fieldIndicatorSum(items.map(item => item.day)),
     deliveryDay: fieldIndicatorSum(items.map(item => item.deliveryDay)),
     projection: fieldIndicatorSum(items.map(item => item.projection))

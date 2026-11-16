@@ -203,7 +203,19 @@ async function main() {
   assert.equal(frontsAtr.atrSource, 'frentes');
   assert(Math.abs(frontsAtr.atr - (121.06 + 125) / 2) < 1e-9);
   assert.equal(standalone.fieldUnitIndicators(ppt, summary).atrSource, 'balança');
-  // ATR médio geral: média das unidades que têm ATR (unidade sem ATR fica fora).
+  // Com a tonelada das frentes na balança, a média das frentes é ponderada pela cana:
+  // (121,06 × 300 + 125 × 100) ÷ 400 = 122,045.
+  const weighedFronts = { ...summary, units: [{ ...summary.units[0], atr: null,
+    fronts: [{ front: '02', atr: 121.06, tons: 300 }, { front: '19', atr: 130, tons: 100 }] }] };
+  assert(Math.abs(standalone.fieldUnitIndicators(ppt, weighedFronts).atr - (121.06 * 300 + 125 * 100) / 400) < 1e-9);
+  // ATR médio geral ponderado pelo processado do dia de cada unidade:
+  // (118,64 × 11.763 + 128,41 × 16.498) ÷ 28.261.
+  const weighted = standalone.fieldIndicatorTotals([[118.64, 11763], [128.41, 16498], [null, 12390]]
+    .map(([atr, day]) => ({ rows: [], active: 0, day, projection: null, atr })));
+  assert.equal(weighted.atrUnits, 2);
+  assert.equal(weighted.atrWeighted, true);
+  assert(Math.abs(weighted.atr - (118.64 * 11763 + 128.41 * 16498) / 28261) < 1e-9);
+  // Sem processado do dia (só ATR digitado): média simples das unidades que têm ATR.
   const atrTotals = standalone.fieldIndicatorTotals([118.64, 128.41, 119.8, 113.78, null]
     .map(atr => ({ rows: [], active: 0, day: null, projection: null, atr })));
   assert.equal(atrTotals.atrUnits, 4);
