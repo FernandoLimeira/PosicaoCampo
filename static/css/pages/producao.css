@@ -1131,3 +1131,19 @@ button.pdash-kpi.is-amber.is-active { box-shadow: 0 0 0 3px rgba(213, 163, 38, .
 :is(.production-operation-codes span, .pdash-op).is-order-missing { border-color: #efc3c8; background: var(--status-stop-soft); color: var(--status-stop-text); }
 .pdash-tile-foot { min-height: 0; margin-top: 1px; padding-top: 7px; border-top: 1px dashed #e3e8eb; }
 .pdash-tile-who { overflow: hidden; color: var(--slate); font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Busca de setor (antes de "Informar chuva"): resultado no lugar do cartão da chuva. */
+.pdash-sector-search { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; padding: 0 10px; border: 1px solid var(--data-border); border-radius: 8px; background: #fff; color: #7a8489; }
+.pdash-sector-search:focus-within { border-color: #2f8f5b; box-shadow: 0 0 0 3px rgba(47, 143, 91, .15); }
+.pdash-sector-search svg { flex: 0 0 auto; width: 16px; height: 16px; }
+.pdash-sector-search input { width: 112px; min-width: 0; border: 0; outline: 0; background: transparent; color: #1f262a; font: inherit; font-size: 14px; font-weight: 700; }
+.pdash-sector-result { display: grid; gap: 10px; max-height: 340px; padding: 14px 16px 16px; overflow-y: auto; }
+.pdash-rain-card > .production-empty { padding: 14px 16px; }
+/* Abas do detalhe da frente. */
+.pfd-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--data-border); }
+.pfd-tab { display: inline-flex; align-items: center; gap: 6px; margin-bottom: -1px; padding: 8px 14px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #66737a; font: inherit; font-size: 13px; font-weight: 800; white-space: nowrap; cursor: pointer; }
+.pfd-tab:hover { color: #1f262a; }
+.pfd-tab.is-active { border-bottom-color: #2f8f5b; color: #1f262a; }
+.pfd-tab small { padding: 1px 7px; border-radius: 999px; background: #eef3f1; color: #4d5a61; font-size: 11px; }
+.pfd-section[hidden] { display: none; }
+@media (max-width: 760px) { .pdash-sector-search { flex: 1 1 100%; } .pdash-sector-search input { width: 100%; } }

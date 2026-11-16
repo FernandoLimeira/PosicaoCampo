@@ -98,7 +98,11 @@ const detail = element('#production-front-detail-body').innerHTML;
 assert.match(detail, /Outras O\.S\. no setor <small>1<\/small>/);
 assert.match(detail, /205<\/span>\s*<span class="pfd-op-name">Calagem/);
 assert.match(detail, /O\.S\. 5002/);
-assert.doesNotMatch(detail.split('Outras O.S.')[1], /5001/);
+// Outras O.S. ficam numa aba própria (escondida até clicar), separadas das operações.
+const othersPanel = detail.split('data-pfd-panel="others" hidden')[1];
+assert.ok(othersPanel);
+assert.doesNotMatch(othersPanel, /5001/);
+assert.match(detail, /data-pfd-tab="others"/);
 context.openDashboardFrontDetail(2);
 assert.match(element('#production-front-detail-body').innerHTML, /Nenhuma outra O\.S\. aberta no setor 42/);
 // Filtros do grupo: só aparecem quando alguma frente está na condição (Plantio: 1 sem O.S.,
@@ -227,4 +231,20 @@ function sectorRow(sector, status = 'ATIVO') {
   await Promise.all([lookupBeforeSave, saveWhileLoading]);
   assert.equal(savedPayload.sectors[0].farm, 'Fazenda 400');
   assert.equal(savedPayload.sectors[0].section, '40');
+
+  // Busca de setor: as O.S. do setor (só o setor igual ao digitado) aparecem no lugar da
+  // chuva; com a busca vazia, a chuva volta.
+  context.URLSearchParams = URLSearchParams;
+  context.apiRequest = async url => {
+    assert.match(url, /service-orders\?unit=NRD&search=42/);
+    return { orders: [{ number: '7001', sector: '42', section: '1', operation: '101', operation_name: 'Gradagem', plots: ['1'] },
+      { number: '7002', sector: '420', section: '1', operation: '205', operation_name: 'Calagem', plots: [] }] };
+  };
+  await context.searchDashboardSector('042');
+  const rainCard = element('#production-rain-card').innerHTML;
+  assert.match(rainCard, /O\.S\. do setor 042/);
+  assert.match(rainCard, /7001/);
+  assert.doesNotMatch(rainCard, /7002/);
+  await context.searchDashboardSector('');
+  assert.match(element('#production-rain-card').innerHTML, /Chuva nas 4 unidades/);
 })().catch(error => { console.error(error); process.exitCode = 1; });

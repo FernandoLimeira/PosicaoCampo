@@ -151,12 +151,15 @@ function openDashboardFrontDetail(itemId) {
       ${item.is_current_day ? '' : `<span class="pdash-stale">${dashboardIcon('clock')}Não atualizada hoje</span>`}
     </div>
     <dl class="pfd-info">${info.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}</dl>
-    <section class="pfd-section">
-      <h3>Operações ${codes.length ? `<small>${codes.length}</small>` : ''}</h3>
+    ${entry.sector ? `<div class="pfd-tabs" role="tablist" aria-label="O.S. da frente">
+      <button type="button" role="tab" class="pfd-tab is-active" aria-selected="true" data-pfd-tab="operations">Operações${codes.length ? ` <small>${codes.length}</small>` : ''}</button>
+      <button type="button" role="tab" class="pfd-tab" aria-selected="false" data-pfd-tab="others">Outras O.S. no setor${others.length ? ` <small>${others.length}</small>` : ''}</button>
+    </div>` : ''}
+    <section class="pfd-section" data-pfd-panel="operations">
+      ${entry.sector ? '' : `<h3>Operações ${codes.length ? `<small>${codes.length}</small>` : ''}</h3>`}
       ${operations || '<p class="production-empty">Nenhuma operação informada neste lançamento.</p>'}
     </section>
-    ${entry.sector ? `<section class="pfd-section">
-      <h3>Outras O.S. no setor ${others.length ? `<small>${others.length}</small>` : ''}</h3>
+    ${entry.sector ? `<section class="pfd-section" data-pfd-panel="others" hidden>
       ${otherOrders || `<p class="production-empty">Nenhuma outra O.S. aberta no setor ${escapeHtml(entry.sector)}.</p>`}
     </section>` : ''}
     ${entry.observation ? `<section class="pfd-section"><h3>Observação</h3><p class="pfd-note">${escapeHtml(entry.observation)}</p></section>` : ''}
@@ -339,9 +342,49 @@ function dashboardRainCardHtml() {
     <p class="pdash-rain-legend"><i class="is-turn"></i>Turno <i class="is-accumulated"></i>Acumulada · ${rain.informed} de ${rain.units.length} unidades informaram (botão Informar chuva)</p>`;
 }
 
+// Busca de setor (ao lado de "Informar chuva"): as O.S. abertas do setor aparecem no lugar
+// do cartão da chuva; com a busca vazia, a chuva volta.
+const dashboardSectorSearch = { term: '', orders: [], loading: false, error: '' };
+let dashboardSectorSearchTimer = null;
+let dashboardSectorSearchSeq = 0;
+const dashboardSectorKey = value => String(value ?? '').trim().replace(/^0+(?=\d)/, '').toLocaleUpperCase('pt-BR');
+
+function dashboardSectorSearchHtml() {
+  const { term, orders, loading, error } = dashboardSectorSearch;
+  const head = `<header><h3>O.S. do setor ${escapeHtml(term)}</h3><span>Apague a busca para voltar à chuva</span></header>`;
+  if (loading) return `${head}<p class="production-empty">Buscando O.S. do setor…</p>`;
+  if (error) return `${head}<p class="production-empty">${escapeHtml(error)}</p>`;
+  return `${head}<div class="pdash-sector-result">${orders.length ? serviceOrdersPanelHtml(orders)
+    : `<p class="production-empty">Nenhuma O.S. aberta para o setor ${escapeHtml(term)}.</p>`}</div>`;
+}
+
+async function searchDashboardSector(value) {
+  const term = String(value || '').trim();
+  const seq = ++dashboardSectorSearchSeq;
+  Object.assign(dashboardSectorSearch, { term, orders: [], loading: Boolean(term), error: '' });
+  renderDashboardRainCard();
+  if (!term) return;
+  try {
+    const params = new URLSearchParams({ unit: currentProductionUnit(), search: dashboardSectorKey(term) });
+    const data = await apiRequest(`/api/production/service-orders?${params}`);
+    if (seq !== dashboardSectorSearchSeq) return;
+    // A busca do servidor procura em vários campos; aqui fica só o setor igual ao digitado.
+    dashboardSectorSearch.orders = (data.orders || []).filter(order => dashboardSectorKey(order.sector) === dashboardSectorKey(term));
+  } catch (error) {
+    if (seq !== dashboardSectorSearchSeq) return;
+    dashboardSectorSearch.error = error.message || 'Não foi possível buscar as O.S. do setor.';
+  }
+  dashboardSectorSearch.loading = false;
+  renderDashboardRainCard();
+}
+
 function renderDashboardRainCard() {
   const card = document.querySelector('#production-rain-card');
   if (!card) return;
+  if (dashboardSectorSearch.term) {
+    card.innerHTML = dashboardSectorSearchHtml();
+    return;
+  }
   card.innerHTML = `<header><h3>Chuva nas 4 unidades</h3><span>${productionRainOverview ? escapeHtml(formatIsoDateBr(productionRainOverview.work_date)) : ''}</span></header>
     <div class="pdash-rain-body">${dashboardRainCardHtml()}</div>`;
   // A CSP bloqueia "style" no HTML; a largura das barras é aplicada pelo script.
@@ -527,6 +570,25 @@ document.querySelector('#production-group-cards')?.addEventListener('keydown', e
   if (!['Enter', ' '].includes(event.key) || !event.target.matches?.('[data-panel-detail]')) return;
   event.preventDefault();
   openDashboardFrontDetail(Number(event.target.dataset.panelDetail));
+});
+document.querySelector('#production-sector-search')?.addEventListener('input', event => {
+  clearTimeout(dashboardSectorSearchTimer);
+  const value = event.target.value;
+  // Busca vazia volta à chuva na hora; com setor, espera parar de digitar.
+  if (!value.trim()) searchDashboardSector('');
+  else dashboardSectorSearchTimer = setTimeout(() => searchDashboardSector(value), 300);
+});
+// Abas do detalhe da frente: Operações do lançamento e Outras O.S. no setor.
+document.querySelector('#production-front-detail-body')?.addEventListener('click', event => {
+  const tab = event.target.closest?.('[data-pfd-tab]');
+  if (!tab) return;
+  const body = event.currentTarget;
+  body.querySelectorAll('[data-pfd-tab]').forEach(button => {
+    const active = button === tab;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+  body.querySelectorAll('[data-pfd-panel]').forEach(panel => { panel.hidden = panel.dataset.pfdPanel !== tab.dataset.pfdTab; });
 });
 document.querySelector('#production-group-cards')?.addEventListener('change', event => {
   if (!event.target.matches?.('[data-panel-front]')) return;

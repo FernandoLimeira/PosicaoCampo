@@ -340,6 +340,13 @@ button.pdash-kpi.is-active { color: #e0e0e0; }
 :is(.production-operation-codes span, .pdash-op).is-order-ok { border-color: #46534c; }
 :is(.production-operation-codes span, .pdash-op).is-order-missing { border-color: #4d4243; }
 .pdash-tile-foot { border-top: 1px dashed #434343; }
+.pdash-sector-search { background: #2a2a2a; color: #999999; }
+.pdash-sector-search:focus-within { border-color: #35a167; }
+.pdash-sector-search input { color: #e0e0e0; }
+.pfd-tab { color: #999999; }
+.pfd-tab:hover { color: #e0e0e0; }
+.pfd-tab.is-active { border-bottom-color: #35a167; color: #e0e0e0; }
+.pfd-tab small { background: #232323; color: #adadad; }
 .production-primary-button.pdash-action { background: linear-gradient(135deg, #3f6f7a 0%, #1b3a41 100%); }
 .production-primary-button.pdash-action:hover:not(:disabled) { background: linear-gradient(135deg, #4a7c87 0%, #22474e 100%); }
 .pdash-group-tab.is-active { background: linear-gradient(135deg, #3f6f7a 0%, #1b3a41 100%); color: #ffffff; }
