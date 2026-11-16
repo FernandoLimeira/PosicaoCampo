@@ -129,6 +129,19 @@ function openDashboardFrontDetail(itemId) {
         ${opened.length ? `<p class="pfd-op-line"><b>Abertura</b>${escapeHtml(opened.join(', '))}</p>` : ''}
       </article>`;
   }).join('');
+  // Outras O.S. abertas no setor (as que não conferem com as operações do lançamento): mostram
+  // se o setor tem O.S. de outra operação ou de outra seção.
+  const others = (item.service_order?.orders || []).filter(order => !order.matches)
+    .sort((a, b) => compareFrontLabels(a.operation || '', b.operation || '') || compareFrontLabels(a.number || '', b.number || ''));
+  const otherOrders = others.map(order => `<article class="pfd-op is-other">
+        <header>
+          <span class="pfd-op-code">${escapeHtml(order.operation || '-')}</span>
+          <span class="pfd-op-name">${escapeHtml(order.operation_name || 'Operação sem nome no cadastro')}</span>
+          <span class="pfd-op-badge">O.S. ${escapeHtml(order.number)}</span>
+        </header>
+        ${(order.plots || []).length ? `<p class="pfd-op-line"><b>${order.plots.length === 1 ? 'Talhão' : `Talhões (${order.plots.length})`}</b>${escapeHtml(order.plots.join(', '))}</p>` : ''}
+        <p class="pfd-op-line"><b>Seção</b>${escapeHtml(order.section || '-')}${order.opened_on ? ` · aberta em ${escapeHtml(serviceOrderDate(order.opened_on))}` : ''}</p>
+      </article>`).join('');
   const check = codes.length
     ? `<span class="pfd-hero-check ${okCount === codes.length ? 'is-order-ok' : 'is-order-missing'}">${okCount}/${codes.length} ${codes.length === 1 ? 'operação' : 'operações'} com O.S.</span>`
     : '<span class="pfd-hero-check">Sem operação informada</span>';
@@ -142,6 +155,10 @@ function openDashboardFrontDetail(itemId) {
       <h3>Operações ${codes.length ? `<small>${codes.length}</small>` : ''}</h3>
       ${operations || '<p class="production-empty">Nenhuma operação informada neste lançamento.</p>'}
     </section>
+    ${entry.sector ? `<section class="pfd-section">
+      <h3>Outras O.S. no setor ${others.length ? `<small>${others.length}</small>` : ''}</h3>
+      ${otherOrders || `<p class="production-empty">Nenhuma outra O.S. aberta no setor ${escapeHtml(entry.sector)}.</p>`}
+    </section>` : ''}
     ${entry.observation ? `<section class="pfd-section"><h3>Observação</h3><p class="pfd-note">${escapeHtml(entry.observation)}</p></section>` : ''}
     ${canFillProduction() ? `<div class="pdash-detail-actions">
       <button class="modal-button danger" type="button" data-panel-remove="${item.id}">Remover</button>
@@ -397,7 +414,11 @@ function renderProductionDashboard() {
     const today = group.items.filter(item => item.is_current_day).length;
     const stopped = group.items.filter(item => dashboardFlags(item).stopped).length;
     // Indicadores do grupo são filtros: clicar mostra só essas frentes; clicar de novo desfaz.
+    // Cada filtro só aparece quando alguma frente do grupo está naquela condição.
+    const counts = { stopped, ok, noOrder, noOperation, today };
+    if (dashboardPanelFilter.flag && !counts[dashboardPanelFilter.flag]) dashboardPanelFilter.flag = '';
     const kpi = (key, label, value, tone = '') => {
+      if (!counts[key]) return '';
       const active = dashboardPanelFilter.flag === key;
       return `<button type="button" class="pdash-kpi ${tone}${active ? ' is-active' : ''}" data-panel-filter="${key}" aria-pressed="${active}"
         title="${active ? 'Mostrar todas as frentes' : `Filtrar: ${label}`}"><b>${value}</b>${label}</button>`;

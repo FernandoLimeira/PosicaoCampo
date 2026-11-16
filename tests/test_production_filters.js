@@ -87,6 +87,34 @@ assert.equal(element('#production-modal-title').textContent, vm.runInContext('fi
 assert.equal(element('#production-observation-input').value, 'Observação anterior');
 assert.equal(element('#production-changes-input').value, 'Mudança anterior');
 
+// Painel: o detalhe da frente mostra as outras O.S. abertas no setor (as que não conferem
+// com as operações do lançamento), com a operação de cada uma.
+vm.runInContext(`productionItems[0].entry.operation = '101';
+  productionItems[0].service_order = { status: 'ok', orders: [
+    { number: '5001', operation: '101', operation_name: 'Gradagem', section: '1', plots: ['1'], matches: true },
+    { number: '5002', operation: '205', operation_name: 'Calagem', section: '1', plots: ['2', '3'], matches: false }] };`, context);
+context.openDashboardFrontDetail(1);
+const detail = element('#production-front-detail-body').innerHTML;
+assert.match(detail, /Outras O\.S\. no setor <small>1<\/small>/);
+assert.match(detail, /205<\/span>\s*<span class="pfd-op-name">Calagem/);
+assert.match(detail, /O\.S\. 5002/);
+assert.doesNotMatch(detail.split('Outras O.S.')[1], /5001/);
+context.openDashboardFrontDetail(2);
+assert.match(element('#production-front-detail-body').innerHTML, /Nenhuma outra O\.S\. aberta no setor 42/);
+// Filtros do grupo: só aparecem quando alguma frente está na condição (Plantio: 1 sem O.S.,
+// 1 sem operação, nenhuma parada).
+vm.runInContext("productionPanelGroup = '1'", context);
+context.renderProductionDashboard();
+const groupCards = element('#production-group-cards').innerHTML;
+assert.match(groupCards, /data-panel-filter="noOperation"/);
+assert.match(groupCards, /data-panel-filter="ok"/);
+assert.doesNotMatch(groupCards, /data-panel-filter="stopped"/);
+assert.doesNotMatch(groupCards, /data-panel-filter="noOrder"/);
+// Filtro ligado cuja condição deixou de existir volta para "todas as frentes".
+vm.runInContext("dashboardPanelFilter.flag = 'stopped'", context);
+context.renderProductionDashboard();
+assert.equal(vm.runInContext('dashboardPanelFilter.flag', context), '');
+
 vm.runInContext("productionFilterGroup = '1'", context);
 context.renderProductionFilters();
 context.renderProductionItems();
