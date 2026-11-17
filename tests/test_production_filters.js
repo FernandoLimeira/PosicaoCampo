@@ -141,17 +141,8 @@ function sectorRow(sector, status = 'ATIVO') {
 }
 
 (async () => {
-  vm.runInContext('productionAccess.permissions.summary = true', context);
-  await context.openProductionRainModal();
-  assert.equal(element('#production-rain-unit').textContent, 'NRD — Narandiba');
-  assert.equal(element('#production-rain-turn').value, 2);
-  assert.ok(modalEvents.includes('open:production-rain-modal'));
-  element('#production-rain-turn').value = '3';
-  await context.submitProductionDailySummary({ preventDefault() {} });
-  const save = requests.find(request => request.options?.method === 'PUT');
-  assert.equal(JSON.parse(save.options.body).unit_code, 'NRD');
-  assert.equal(JSON.parse(save.options.body).rain_turn_mm, '3');
-  assert.ok(modalEvents.includes('close:production-rain-modal'));
+  assert.equal(typeof context.openProductionRainModal, 'undefined', 'A Produção não tem mais o preenchimento de chuva');
+  assert.equal(typeof context.submitProductionDailySummary, 'undefined');
 
   context.refreshProductionPage = async () => {};
   element('#production-front-input').value = '7';

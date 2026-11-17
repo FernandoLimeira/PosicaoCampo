@@ -134,7 +134,8 @@ class ServiceOrderTests(unittest.TestCase):
             "position": 2, "units": ["PST", "PPT"], "is_active": True,
         })
         service_orders.import_service_orders(self.admin["id"], "PST", [
-            {"number": "329655", "sector": "1", "section": "67626", "operation": "342", "plots": ["5", "8"]},
+            {"number": "329655", "sector": "1", "section": "67626", "operation": "342", "plots": ["5", "8"],
+             "operation_name": "FERT ASPERSAO 1 LAMINA"},
             {"number": "331116", "sector": "1", "section": "90284", "operation": "348", "plots": ["1"]},
         ])
 
@@ -158,11 +159,15 @@ class ServiceOrderTests(unittest.TestCase):
         order = launch("PPT", "", "348")
         self.assertEqual((order["status"], order["needs_section"]), ("ok", False))
 
-        # Nome de cada operação: o do cadastro; sem cadastro, o do arquivo de O.S.
+        # Nome de cada operação: o da Ordem de serviço; sem O.S. com nome, o do cadastro.
         service_orders.save_operation(self.admin["id"], {"code": "999", "name": "OPERAÇÃO DO CADASTRO"})
+        # 342 no cadastro com o nome do centro de custo (importação antiga): vale o da O.S.
+        op_342 = next(op for op in service_orders.list_operations(self.admin["id"])["operations"] if op["code"] == "342")
+        service_orders.save_operation(self.admin["id"], {"code": "342", "name": "TRATOS SOQUEIRA"}, operation_id=op_342["id"])
         order = launch("PST", "67626", "342, 999")
         self.assertEqual(order["missing_operations"], ["999"])
         self.assertEqual(order["operation_names"]["999"], "OPERAÇÃO DO CADASTRO")
+        self.assertEqual(order["operation_names"]["342"], "FERT ASPERSAO 1 LAMINA")
 
     def test_parser_reads_operation_name_column(self):
         # Layout novo: DESCRICAO_OPERACAO é o nome da operação, mesmo depois de CCUSTO_TRATOS.

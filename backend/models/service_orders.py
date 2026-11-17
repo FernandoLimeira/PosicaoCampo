@@ -194,14 +194,17 @@ def attach_service_order_status(conn: sqlite3.Connection, unit: str, items: list
     obrigatória na conferência (Polo MS)."""
     require_section = str(unit or "").upper() in SECTION_UNIT_CODES
     by_sector: dict[str, list[sqlite3.Row]] = {}
-    # Nome de cada operação: o do cadastro; sem cadastro, o que veio no arquivo de O.S.
+    # Nome de cada operação: o da Ordem de serviço (DESCRICAO_OPERACAO, ex.: "509 — FERTIRRIGACAO
+    # LOCALIZADA"); sem ele, o do cadastro de operações.
     names: dict[str, str] = {}
+    for row in conn.execute("SELECT code_key, name FROM production_operations WHERE name<>''"):
+        names[row["code_key"]] = row["name"]
+    file_names: dict[str, str] = {}
     for row in conn.execute("SELECT * FROM production_service_orders"):
         by_sector.setdefault(row["sector_key"], []).append(row)
         if row["operation_name"]:
-            names.setdefault(row["operation_key"], row["operation_name"])
-    for row in conn.execute("SELECT code_key, name FROM production_operations WHERE name<>''"):
-        names[row["code_key"]] = row["name"]
+            file_names.setdefault(row["operation_key"], row["operation_name"])
+    names.update(file_names)
     # Cada O.S. é lida uma vez; o lançamento leva só o resumo (o detalhe vem no "Ver").
     summaries: dict[int, dict[str, Any]] = {}
 

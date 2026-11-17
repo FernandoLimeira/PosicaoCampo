@@ -521,10 +521,11 @@ class PageTests(unittest.TestCase):
             'id="production-status-config-pane"', 'id="production-config-pane"',
             'id="production-front-form"', 'id="production-dashboard"', 'id="production-group-tabs"',
             'id="production-overview"', 'id="production-front-detail-modal"',
-            'id="production-rain-button"', 'id="production-rain-modal"',
-            'id="production-daily-form"',
         ):
             self.assertIn(marker, page["body"])
+        # O preenchimento de chuva saiu da Produção (botão, modal e formulário).
+        for marker in ('id="production-rain-button"', 'id="production-rain-modal"', 'id="production-daily-form"'):
+            self.assertNotIn(marker, page["body"])
         self.assertNotIn('class="production-daily-card"', page["body"])
         # A Produção concentra tudo no painel gerencial: sem a visão Tabela.
         self.assertNotIn('id="production-items-body"', page["body"])

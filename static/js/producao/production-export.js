@@ -165,18 +165,6 @@ function productionExportCalendar(ctx, x, y) {
   });
 }
 
-function productionExportCloud(ctx, x, y) {
-  ctx.fillStyle = '#9aa6ab';
-  [[x + 7, y + 9, 6], [x + 14, y + 5, 7], [x + 21, y + 9, 6]].forEach(([cx, cy, r]) => {
-    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
-  });
-  ctx.fillRect(x + 7, y + 9, 14, 6);
-  ctx.strokeStyle = '#9aa6ab';
-  ctx.lineWidth = 1.5;
-  [x + 9, x + 15, x + 21].forEach(dropX => {
-    ctx.beginPath(); ctx.moveTo(dropX, y + 18); ctx.lineTo(dropX - 2, y + 22); ctx.stroke();
-  });
-}
 
 // Turnos de campo (horário de Brasília): A até 07:20, B até 15:40, C no restante.
 function productionExportShift(parts = saoPauloDateParts()) {
@@ -196,19 +184,6 @@ function productionExportBorderState(counts) {
     if (counts[state]) return state;
   }
   return 'waiting';
-}
-
-function productionExportRainText(summary) {
-  const turn = summary?.rain_turn_mm;
-  const accumulated = summary?.rain_accumulated_mm;
-  // Regra de negócio: o quadro de chuva só aparece quando há volume lançado.
-  const hasRain = [turn, accumulated].some(value => {
-    const number = parseBrNumber(value);
-    return Number.isFinite(number) && number > 0;
-  });
-  if (!hasRain) return '';
-  const format = value => value == null ? '—' : String(value).replace('.', ',');
-  return `Chuva: turno ${format(turn)} mm | acumulado ${format(accumulated)} mm`;
 }
 
 function productionExportWrap(ctx, text, width, font) {
@@ -382,19 +357,15 @@ function productionExportCardPlan(ctx, report, statusByCode, minHeight) {
   if (!changeLines.length && !report.continuation && report.changeLinesOverride == null) {
     changeLines.push('• Sem mudanças previstas.');
   }
-  const rainText = productionExportRainText(report.summary);
-  const rainLines = rainText ? productionExportWrap(ctx, rainText, 418,
-    `bold 18px ${PRODUCTION_EXPORT_FONT}`) : [];
-  const rainHeight = rainLines.length ? Math.max(36, rainLines.length * 22 + 12) : 0;
   const statusLines = productionExportStatusLines(ctx, counts);
   // Topo do cartão: identificação da unidade, resumo de status e linha divisória.
   const headerHeight = 99 + statusLines.length * 25;
   // Todas as seções são medidas com os mesmos espaçamentos usados no desenho.
   // A altura cresce com dados reais, sem cortar observações ou deixar lacunas fixas.
   const contentHeight = headerHeight + rows.reduce((sum, row) => sum + row.height, 0)
-    + (rainLines.length ? 16 + rainHeight + 14 : 8) + 26 + noteLines.length * 21 + 13
+    + 8 + 26 + noteLines.length * 21 + 13
     + 26 + changeLines.length * 21 + 26;
-  return { rows, noteLines, changeLines, rainLines, rainHeight, statusLines, headerHeight,
+  return { rows, noteLines, changeLines, statusLines, headerHeight,
     counts, contentHeight, height: Math.max(minHeight, contentHeight) };
 }
 
@@ -562,7 +533,7 @@ function drawProductionExportCard(ctx, report, plan, x, y) {
     cursor += row.height;
   }
 
-  cursor = plan.rainLines.length ? drawProductionExportRain(ctx, plan, x, cursor) : cursor + 8;
+  cursor += 8;
 
   productionExportText(ctx, 'OBSERVAÇÃO', x + 17, cursor + 20, 460,
     `bold 21px ${PRODUCTION_EXPORT_TITLE_FONT}`, PRODUCTION_EXPORT_ACCENT);
@@ -579,27 +550,6 @@ function drawProductionExportCard(ctx, report, plan, x, y) {
     productionExportText(ctx, line, x + 17, cursor + 19, 466, `16px ${PRODUCTION_EXPORT_FONT}`);
     cursor += 21;
   }
-}
-
-function drawProductionExportRain(ctx, plan, x, cursor) {
-  cursor += 16;
-  productionExportRoundRect(ctx, x + 17, cursor, 472, plan.rainHeight, 9, '#e5eaec');
-  productionExportCloud(ctx, x + 29, cursor + plan.rainHeight / 2 - 12);
-  const rainFont = `bold 18px ${PRODUCTION_EXPORT_FONT}`;
-  plan.rainLines.forEach((line, index) => {
-    const lineY = cursor + 25 + index * 22;
-    if (index === 0 && line.startsWith('Chuva:')) {
-      // "Chuva:" em peso normal e o valor em destaque, como no modelo.
-      const labelFont = `18px ${PRODUCTION_EXPORT_FONT}`;
-      const labelWidth = productionExportMeasure(ctx, 'Chuva:', labelFont);
-      productionExportText(ctx, 'Chuva:', x + 64, lineY, labelWidth + 2, labelFont);
-      productionExportText(ctx, line.slice(6), x + 64 + labelWidth + 5, lineY,
-        Math.max(1, 413 - labelWidth), rainFont);
-    } else {
-      productionExportText(ctx, line, x + 64, lineY, 413, rainFont);
-    }
-  });
-  return cursor + plan.rainHeight + 14;
 }
 
 function productionExportFooterIcon(ctx, index, x, y) {

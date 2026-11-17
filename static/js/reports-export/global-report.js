@@ -42,8 +42,7 @@ const GLOBAL_COLORS = Object.freeze({
   orange: '#ec7f06',
   orangeText: '#d78225',
   gray: '#b2b2b0',
-  white: '#ffffff',
-  rain: '#2f7fa8'
+  white: '#ffffff'
 });
 
 // Status da imagem (image_status do catálogo) → cor do ponto, do texto e legenda do modelo.
@@ -270,30 +269,6 @@ const GLOBAL_CARD = Object.freeze({
   noteLine: 16
 });
 
-function globalFrontRainMap(unit) {
-  return buildRainLookup(unit, { rawValues: true });
-}
-
-function globalRainCell(value) {
-  if (value === '' || value == null) return '—';
-  const normalized = String(value).trim();
-  return !normalized || normalized === '-' ? '—' : normalized;
-}
-
-// Média apenas das frentes exibidas no informativo (mesmo critério de reportHasRainData).
-// Turno e acumulado seguem a mesma regra: vazios e textos não numéricos ficam fora; zeros contam.
-function globalRainMean(unit) {
-  const lookup = buildRainLookup(unit, { rawValues: true });
-  const shownKeys = new Set((Array.isArray(unit?.rows) ? unit.rows : [])
-    .filter(Array.isArray).map(row => canonicalFieldFrontKey(row[0])).filter(Boolean));
-  const entries = [...shownKeys].map(key => lookup.get(key)).filter(Boolean);
-  const average = field => {
-    const values = entries.map(entry => parseBrNumber(entry[field])).filter(Number.isFinite);
-    return values.length ? String(Math.round(values.reduce((sum, n) => sum + n, 0) / values.length)) : '—';
-  };
-  return { turn: average('turn'), accum: average('accum') };
-}
-
 // Observação, mudanças e apoio: rótulo à esquerda, texto quebrado à direita.
 function globalNoteBlocks(ctx, unit, item, width) {
   const textWidth = width - 120;
@@ -347,19 +322,16 @@ function globalReceivedLines(ctx, item, width) {
 }
 
 function globalUnitPlacement(ctx, unit, item, width) {
-  const hasRain = reportHasRainData(unit);
   const rows = Math.max(1, item.rows.length);
   const rowsEnd = GLOBAL_CARD.firstRow + (rows - 1) * GLOBAL_CARD.rowStep;
   let cursor = rowsEnd + 18;
-  const rainBar = hasRain ? cursor : null;
-  if (hasRain) cursor += 38;
   const receivedLines = globalReceivedLines(ctx, item, width);
   const received = receivedLines.length ? { y: cursor, height: 16 + receivedLines.length * 18, lines: receivedLines } : null;
   if (received) cursor += received.height + 12;
   const notes = globalNoteBlocks(ctx, unit, item, width);
   const notesY = cursor;
   cursor += notes.reduce((sum, block) => sum + block.height, 0);
-  return { hasRain, rowsEnd, rainBar, received, notes, notesY, height: Math.ceil(cursor + 10) };
+  return { rowsEnd, received, notes, notesY, height: Math.ceil(cursor + 10) };
 }
 
 function globalDrawCardBase(ctx, layout, unit, item) {
@@ -449,19 +421,10 @@ function globalDrawProcessed(ctx, layout, item) {
   pair(boxes[1], 'PROJEÇÃO', fieldIndicatorNumber(item.projection), GLOBAL_COLORS.greenBright);
 }
 
-function globalDrawCardTable(ctx, layout, unit, item, placing) {
+function globalDrawCardTable(ctx, layout, unit, item) {
   const { x, y, w } = layout;
-  const hasRain = placing.hasRain;
-  // Com chuva, as colunas TURNO e ACUM. ficam presas à margem direita do card (como o ATR sem
-  // chuva), nunca além dela; as demais colunas e fontes ficam compactas para caber no card.
-  const accum = x + w - 32;
-  const col = hasRain
-    ? { front: x + 26, sector: x + 70, status: x + 114, atr: accum - 60, turn: accum - 31, accum }
-    : { front: x + 30, sector: x + 96, status: x + 160, atr: x + w - 18 };
-  const size = hasRain
-    ? { title: 9.5, spacing: 0, front: 13, sector: 12.5, status: 12, atr: 12.5, gap: 46 }
-    : { title: 10, spacing: GLOBAL_LABEL_SPACING, front: 14, sector: 13.5, status: 13.5, atr: 13.5, gap: 46 };
-  const rain = hasRain ? globalFrontRainMap(unit) : null;
+  const col = { front: x + 30, sector: x + 96, status: x + 160, atr: x + w - 18 };
+  const size = { title: 10, spacing: GLOBAL_LABEL_SPACING, front: 14, sector: 13.5, status: 13.5, atr: 13.5, gap: 46 };
   const headerY = y + GLOBAL_CARD.tableHeaderY;
   const titleFont = globalFont(size.title, '700');
   globalDrawText(ctx, 'FRENTE', col.front, headerY, col.sector - col.front - 4, titleFont, GLOBAL_COLORS.muted, 'left', size.spacing);
@@ -469,13 +432,6 @@ function globalDrawCardTable(ctx, layout, unit, item, placing) {
   globalDrawText(ctx, 'STATUS', col.status, headerY, 80, titleFont, GLOBAL_COLORS.muted, 'left', size.spacing);
   globalDrawText(ctx, 'ATR', col.atr, headerY - 6, 40, titleFont, GLOBAL_COLORS.muted, 'right');
   globalDrawText(ctx, 'kg/t', col.atr, headerY + 7, 40, globalFont(9.5, '500'), GLOBAL_COLORS.muted, 'right');
-  if (hasRain) {
-    // Chuva (mm) em duas linhas, na altura do cabeçalho do ATR (sem invadir o quadro de cima):
-    // "CHUVA" sobre as duas colunas e, abaixo, TURNO e ACUM.
-    globalDrawText(ctx, 'CHUVA', (col.turn + col.accum) / 2, headerY - 6, 58, globalFont(10, 'bold'), GLOBAL_COLORS.rain, 'center');
-    [[col.turn, 'TURNO'], [col.accum, 'ACUM.']].forEach(([center, label]) =>
-      globalDrawText(ctx, label, center, headerY + 7, 28, globalFont(8.5, 'bold'), GLOBAL_COLORS.muted, 'center'));
-  }
   ctx.fillStyle = GLOBAL_COLORS.rule; ctx.fillRect(x + 14, headerY + 15, w - 28, 1);
 
   const rowFont = globalFont(size.front, '700');
@@ -503,23 +459,9 @@ function globalDrawCardTable(ctx, layout, unit, item, placing) {
       globalDrawText(ctx, display, col.status, cy, statusWidth, globalFont(size.status, '700'), style.text);
     }
     globalDrawText(ctx, item.frontAtr(row) || '—', col.atr, cy, size.gap - 4, globalFont(size.atr, '500'), GLOBAL_COLORS.ink, 'right');
-    if (hasRain) {
-      const rainfall = rain.get(canonicalFieldFrontKey(front));
-      globalDrawText(ctx, rainfall ? globalRainCell(rainfall.turn) : '—', col.turn, cy, 26, globalFont(13.5, 'bold'), GLOBAL_COLORS.rain, 'center');
-      globalDrawText(ctx, rainfall ? globalRainCell(rainfall.accum) : '—', col.accum, cy, 26, globalFont(13.5, 'bold'), GLOBAL_COLORS.rain, 'center');
-    }
   });
   if (!item.rows.length) {
     globalDrawText(ctx, 'Aguardando preenchimento do turno', col.front, y + GLOBAL_CARD.firstRow, w - 44, globalFont(13, '500'), GLOBAL_COLORS.muted);
-  }
-
-  if (hasRain) {
-    const barY = y + placing.rainBar;
-    fillRoundedRect(ctx, x + 14, barY, w - 28, 28, 8, '#e6f1f7');
-    const mean = globalRainMean(unit);
-    globalDrawText(ctx, `Média: Turno ${mean.turn} mm | Acum ${mean.accum} mm`, x + 26, barY + 14, w - 150, globalFont(13, 'bold'), GLOBAL_COLORS.rain);
-    const startDate = unit.rainStartDate || unit.rain_start_date || unit.rainStart || '';
-    if (startDate) globalDrawText(ctx, `acum.: desde ${startDate}`, x + w - 24, barY + 14, 110, globalFont(10, '500'), GLOBAL_COLORS.muted, 'right');
   }
 }
 
@@ -551,7 +493,7 @@ function globalDrawCard(ctx, layout, unit, placing, item) {
   globalDrawCardBase(ctx, layout, unit, item);
   globalDrawCardMetrics(ctx, layout, item);
   globalDrawProcessed(ctx, layout, item);
-  globalDrawCardTable(ctx, layout, unit, item, placing);
+  globalDrawCardTable(ctx, layout, unit, item);
   globalDrawReceived(ctx, layout, placing);
   globalDrawCardNotes(ctx, layout, placing);
 }

@@ -3,7 +3,7 @@ let currentEditorStep = 0;
 let editorInitialSnapshot = null;
 let editorObservationContext = null;
 let editorObservationRequest = 0;
-const editorSteps = ['Campo', 'Produção', 'Apontamentos e Mudanças', 'Precipitação'];
+const editorSteps = ['Campo', 'Produção', 'Apontamentos e Mudanças'];
 
 function buildUnitSelect() {
   const input = document.querySelector('#unit-select');
@@ -233,44 +233,6 @@ function renderMetricsForm(unit) {
   container.innerHTML = note + typed.join('') + balanceOnly.join('');
 }
 
-function rainRowHtml(eq = '', turn = 0, accum = 0) {
-  return `
-    <div class="rain-edit-row">
-      <label>
-        <span>Frente</span>
-        <input class="rain-eq" type="text" maxlength="20" value="${escapeHtml(eq)}" placeholder="Ex.: FT 06" />
-      </label>
-      <label>
-        <span>Chuva turno (mm)</span>
-        <input class="rain-turn" type="number" min="0" step="0.1" value="${normalizeNumber(turn)}" />
-      </label>
-      <label>
-        <span>Acumulado (mm)</span>
-        <input class="rain-accum" type="number" min="0" step="0.1" value="${normalizeNumber(accum)}" />
-      </label>
-      <button class="row-remove remove-rain-row" type="button" aria-label="Remover frente">×</button>
-    </div>
-  `;
-}
-
-function sortRainRows(rain = []) {
-  return [...rain].sort((a, b) => compareFrontLabels(canonicalFieldFrontKey(a?.[0]), canonicalFieldFrontKey(b?.[0])));
-}
-
-function renderRainForm(rain) {
-  const container = document.querySelector('#rain-form');
-  const index = Number(document.querySelector('#unit-select')?.value ?? selectedUnitIndex);
-  const unit = units[index] || units[selectedUnitIndex];
-  const sortedRain = sortRainRows(standardizeFieldRainLabels(unit?.code, unit?.rows, rain));
-  container.innerHTML = sortedRain.length
-    ? sortedRain.map(([eq, turn, accum]) => rainRowHtml(eq, turn, accum)).join('')
-    : rainRowHtml();
-}
-
-function reorderRainForm() {
-  renderRainForm(collectRainRows());
-}
-
 // Correções dos "Indicadores do turno": só os campos diferentes do valor da balança, presos ao
 // fechamento atual (``ref``). Sem diferença, nada é gravado e a imagem segue a balança.
 function collectImageOverrides(unit, ref = fieldUnitIndicators(unit, weighingSummary).closingRef) {
@@ -323,7 +285,6 @@ function loadUnitEditor(index) {
 
   renderFrontRows(unit.rows);
   renderMetricsForm(unit);
-  renderRainForm(unit.rain);
 }
 
 function collectFrontRows() {
@@ -354,19 +315,6 @@ function collectMetrics() {
     const value = normalizeNumber(input?.value);
     return [definition.icon, definition.label, `${value} ${definition.unit}`, definition.extra || ''];
   });
-}
-
-function collectRainRows() {
-  const rows = [...document.querySelectorAll('.rain-edit-row')]
-    .map(row => {
-      const eq = row.querySelector('.rain-eq').value.trim();
-      const turn = normalizeNumber(row.querySelector('.rain-turn').value);
-      const accum = normalizeNumber(row.querySelector('.rain-accum').value);
-      return [eq, turn, accum];
-    })
-    .filter(([eq, turn, accum]) => eq || turn || accum);
-
-  return sortRainRows(rows);
 }
 
 // Assistente de preenchimento: etapas, linhas dinâmicas, proteção contra descarte e gravação.
@@ -424,12 +372,6 @@ function setupEditorEvents() {
     refreshEditorSaveStatus();
   });
 
-  document.querySelector('#add-rain-row').addEventListener('click', () => {
-    document.querySelector('#rain-form').insertAdjacentHTML('beforeend', rainRowHtml());
-    document.querySelector('#rain-form .rain-edit-row:last-child .rain-eq')?.focus();
-    refreshEditorSaveStatus();
-  });
-
   document.querySelector('#front-rows').addEventListener('click', event => {
     const button = event.target.closest('.remove-front-row');
     if (!button) return;
@@ -441,20 +383,6 @@ function setupEditorEvents() {
   document.querySelector('#front-rows').addEventListener('change', event => {
     if (!event.target.closest('.front-input')) return;
     reorderFrontForm();
-    refreshEditorSaveStatus();
-  });
-
-  document.querySelector('#rain-form').addEventListener('click', event => {
-    const button = event.target.closest('.remove-rain-row');
-    if (!button) return;
-    button.closest('.rain-edit-row')?.remove();
-    reorderRainForm();
-    refreshEditorSaveStatus();
-  });
-
-  document.querySelector('#rain-form').addEventListener('change', event => {
-    if (!event.target.closest('.rain-eq')) return;
-    reorderRainForm();
     refreshEditorSaveStatus();
   });
 
@@ -527,7 +455,6 @@ function setupEditorEvents() {
     updatedUnit.observation = document.querySelector('#observation-input').value.trim() || '-';
     updatedUnit.observation_period = editorObservationContext?.appliedPeriod || currentUnit.observation_period || null;
     updatedUnit.changes = document.querySelector('#changes-input').value.trim() || '-';
-    updatedUnit.rain = collectRainRows();
     updatedUnit.support = document.querySelector('#support-input')?.value.trim() || '-';
     // Correções = campos alterados em relação ao valor mostrado; presas ao fechamento atual.
     const imageOverrides = collectImageOverrides(updatedUnit, overridesRef || editorWeighingRef);

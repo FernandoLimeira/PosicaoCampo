@@ -1,4 +1,4 @@
-// Produção Agrícola: lançamentos do dia, filtros, chuva e inicialização da página.
+// Produção Agrícola: lançamentos do dia, filtros e inicialização da página.
 // Classe visual e rótulo de cada grupo de status (production-status-groups.js).
 const PRODUCTION_STATUS_STYLES = Object.fromEntries(PRODUCTION_STATUS_GROUPS.map(group => [
   group.key, { className: `is-${group.key}`, label: group.name }
@@ -41,11 +41,6 @@ function canFillProduction() {
   return Boolean(productionAccess?.unit_permissions?.[currentProductionUnit()]?.fill ?? productionAccess?.permissions?.fill);
 }
 
-function canEditProductionDailySummary() {
-  return Boolean(productionAccess?.enabled && allowedProductionUnits().includes(currentProductionUnit()) &&
-    (productionAccess?.unit_permissions?.[currentProductionUnit()]?.summary ?? productionAccess?.permissions?.summary));
-}
-
 function canConfigureProduction() {
   return Boolean(productionAccess?.permissions?.configure);
 }
@@ -54,9 +49,7 @@ function updateProductionAccessMessage() {
   const message = document.querySelector('#production-access-message');
   if (!message) return;
   message.hidden = canFillProduction();
-  if (!message.hidden) message.textContent = canEditProductionDailySummary()
-    ? 'As frentes estão em modo de consulta. Você pode preencher a chuva da unidade.'
-    : 'Esta unidade está liberada somente para consulta.';
+  if (!message.hidden) message.textContent = 'Esta unidade está liberada somente para consulta.';
 }
 
 function selectedNavbarProductionUnit() {
@@ -103,8 +96,6 @@ async function loadProductionAccess() {
   productionAccess = data.access || { enabled: false, permissions: {}, units: [] };
   const addButton = document.querySelector('#production-add-button');
   if (addButton) addButton.hidden = !canFillProduction();
-  const rainButton = document.querySelector('#production-rain-button');
-  if (rainButton) rainButton.hidden = !canEditProductionDailySummary();
   const configButton = document.querySelector('#production-config-toggle');
   if (configButton) configButton.hidden = !canConfigureProduction();
 
@@ -140,84 +131,6 @@ async function loadProductionItems(unit, epoch = productionPageEpoch) {
   saveProductionFilters(unit);
   renderProductionItems(data);
   return data;
-}
-
-async function loadProductionDailySummary(unit, epoch = productionPageEpoch, fixedWorkDate = null) {
-  const workDate = fixedWorkDate || saoPauloIsoDate();
-  const save = document.querySelector('#production-daily-save');
-  if (save) save.disabled = true;
-  const { summary } = await apiRequest(`/api/production/daily-summary?unit=${encodeURIComponent(unit)}&date=${workDate}`);
-  if (!isCurrentProductionRequest(unit, epoch) || (!fixedWorkDate && workDate !== saoPauloIsoDate())) return;
-  const fields = [
-    ['#production-rain-turn', summary?.rain_turn_mm],
-    ['#production-rain-accumulated', summary?.rain_accumulated_mm]
-  ];
-  fields.forEach(([selector, value]) => {
-    const input = document.querySelector(selector);
-    if (!input) return;
-    input.value = value ?? '';
-    input.disabled = !canEditProductionDailySummary();
-  });
-  if (save) {
-    save.hidden = !canEditProductionDailySummary();
-    save.disabled = false;
-  }
-  const status = document.querySelector('#production-daily-status');
-  if (status) status.textContent = summary?.updated_at
-    ? `Dados salvos para ${formatIsoDateBr(workDate)}.`
-    : `Sem dados salvos para ${formatIsoDateBr(workDate)}.`;
-}
-
-// Unidade e dia exibidos no modal de chuva; o envio usa esses valores mesmo após a virada do dia.
-let productionRainModalContext = null;
-
-async function openProductionRainModal() {
-  if (!canEditProductionDailySummary()) return;
-  const unit = currentProductionUnit();
-  const workDate = saoPauloIsoDate();
-  const label = document.querySelector('#production-rain-unit');
-  if (label) label.textContent = productionUnitLabel(unit);
-  await loadProductionDailySummary(unit, productionPageEpoch, workDate);
-  if (unit !== currentProductionUnit()) return;
-  productionRainModalContext = { unit, workDate };
-  openModal('production-rain-modal');
-  document.querySelector('#production-rain-turn')?.focus();
-}
-
-async function submitProductionDailySummary(event) {
-  event.preventDefault();
-  if (!canEditProductionDailySummary()) return;
-  const { unit, workDate } = productionRainModalContext || { unit: currentProductionUnit(), workDate: saoPauloIsoDate() };
-  const save = document.querySelector('#production-daily-save');
-  const status = document.querySelector('#production-daily-status');
-  const payload = {
-    unit_code: unit, work_date: workDate,
-    rain_turn_mm: document.querySelector('#production-rain-turn')?.value || null,
-    rain_accumulated_mm: document.querySelector('#production-rain-accumulated')?.value || null
-  };
-  if (save) save.disabled = true;
-  if (status) status.textContent = 'Salvando dados do dia…';
-  try {
-    await apiRequest('/api/production/daily-summary', { method: 'PUT', body: JSON.stringify(payload) });
-  } catch (error) {
-    console.error(error);
-    if (status) status.textContent = error.message || 'Não foi possível salvar os dados do dia.';
-    showToast(status?.textContent || 'Não foi possível salvar os dados do dia.', true);
-    if (save) save.disabled = false;
-    return;
-  }
-  closeModal('production-rain-modal');
-  productionRainModalContext = null;
-  if (typeof loadDashboardRainOverview === 'function') loadDashboardRainOverview();
-  showToast('Dados da imagem salvos.');
-  try {
-    await loadProductionDailySummary(unit, productionPageEpoch, workDate);
-  } catch (error) {
-    console.error(error);
-    showToast(PRODUCTION_REFRESH_WARNING, true);
-  } finally {
-    if (save) save.disabled = false;
-  }
 }
 
 function statusMeta(code) {
@@ -388,11 +301,12 @@ function productionOperationTone(item, code) {
   return missing.includes(productionOperationKey(code)) ? 'is-order-missing' : 'is-order-ok';
 }
 
-// Nome da operação: o servidor manda o do cadastro (ou o do arquivo de O.S.).
+// Nome da operação: o da Ordem de serviço do setor; sem ela, o que o servidor manda
+// (o da base de O.S. ou, sem ele, o do cadastro de operações).
 function productionOperationName(item, code) {
   const key = productionOperationKey(code);
-  return item?.service_order?.operation_names?.[key]
-    || (item?.service_order?.orders || []).find(order => productionOperationKey(order.operation) === key)?.operation_name || '';
+  return (item?.service_order?.orders || []).find(order => productionOperationKey(order.operation) === key && order.operation_name)?.operation_name
+    || item?.service_order?.operation_names?.[key] || '';
 }
 
 // O.S. que conferem com uma operação do lançamento (mesmo setor, seção e operação).
@@ -467,8 +381,6 @@ function renderProductionItems(data) {
     productionAccess.permissions = { ...productionAccess.permissions, ...data.permissions };
     const addButton = document.querySelector('#production-add-button');
     if (addButton) addButton.hidden = !canFillProduction();
-    const rainButton = document.querySelector('#production-rain-button');
-    if (rainButton) rainButton.hidden = !canEditProductionDailySummary();
     updateProductionAccessMessage();
   }
 
@@ -1016,7 +928,7 @@ async function refreshProductionPage(unit = currentProductionUnit(), { keepFilte
   try {
     // Chuva das 4 unidades (quadro fixo do painel): carrega junto, sem travar a página se falhar.
     if (typeof loadDashboardRainOverview === 'function') loadDashboardRainOverview();
-    await Promise.all([loadProductionCatalog(unit, epoch), loadProductionStatuses(), loadProductionDailySummary(unit, epoch)]);
+    await Promise.all([loadProductionCatalog(unit, epoch), loadProductionStatuses()]);
     if (!isCurrentProductionRequest(unit, epoch)) return;
     renderStatusOptions(defaultStatusCode());
     await loadProductionItems(unit, epoch);
@@ -1042,20 +954,9 @@ async function initializeProductionPage() {
     }
     const addButton = document.querySelector('#production-add-button');
     if (addButton) addButton.hidden = true;
-    const rainButton = document.querySelector('#production-rain-button');
-    if (rainButton) rainButton.hidden = true;
   }
 }
 
-
-document.querySelector('#production-rain-button')?.addEventListener('click', async () => {
-  try {
-    await openProductionRainModal();
-  } catch (error) {
-    console.error(error);
-    showToast(error.message || 'Não foi possível carregar a chuva da unidade.', true);
-  }
-});
 
 document.querySelector('#production-filter-group')?.addEventListener('change', event => {
   productionFilterGroup = event.target.value;
@@ -1072,8 +973,6 @@ document.querySelector('#production-filter-front')?.addEventListener('change', e
 });
 
 document.querySelector('#production-entry-form')?.addEventListener('submit', submitProductionEntry);
-
-document.querySelector('#production-daily-form')?.addEventListener('submit', submitProductionDailySummary);
 
 document.querySelector('#production-group-input')?.addEventListener('change', () => renderEntryFronts());
 
