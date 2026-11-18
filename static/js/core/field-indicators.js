@@ -31,6 +31,8 @@ const FIELD_IMAGE_OVERRIDE_KEYS = ['millingShift', 'deliveryShift', 'milling3h',
 function fieldImageOverrides(unit, weighing) {
   const saved = unit?.image_overrides;
   if (!weighing?.data_until || !saved || saved.ref !== weighing.data_until) return {};
+  // O relatório pode consultar um corte anterior dentro da mesma importação.
+  if (weighing.closed_until && weighing.closed_until <= saved.ref) return {};
   return Object.fromEntries(Object.entries(saved.values || {})
     .filter(([key, value]) => FIELD_IMAGE_OVERRIDE_KEYS.includes(key) && value !== null && value !== '' && Number.isFinite(Number(value)))
     .map(([key, value]) => [key, Number(value)]));

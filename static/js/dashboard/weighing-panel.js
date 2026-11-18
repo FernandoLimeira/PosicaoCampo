@@ -83,10 +83,10 @@ function weighingPanel(unit) {
   const hours = weighing.hours;
   const shiftCode = weighing.shift || hours.at(-1).shift;
   const total = key => hours.reduce((sum, item) => sum + (item[key] || 0), 0);
+  const projectionHint = unit.code === 'NRD' ? 'média dos turnos × 24 h' : 'média do dia × 24 h';
   const groups = [
     ['Dia', `00h às ${String(hours.at(-1).hour).padStart(2, '0')}h`, weighing.milling_day_t, weighing.delivery_day_t, 't'],
-    // Projeção (quadro "Projeções" da planilha): média por hora do dia × 24.
-    ['Projeção do dia', 'média do dia × 24 h', weighing.milling_projection_t, weighing.delivery_projection_t, 't'],
+    ['Projeção do dia', projectionHint, weighing.milling_projection_t, weighing.delivery_projection_t, 't'],
   ].map(([title, hint, milling, delivery, unitLabel]) => `
     <div class="wp-kpi-group">
       <div class="wp-kpi-title"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(hint)}</small></div>

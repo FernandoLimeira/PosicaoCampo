@@ -177,12 +177,18 @@ async function main() {
   assert.equal(standalone.globalIndustryShare(data).color, '#fdcc05');
   // Correção dos "Indicadores do turno": vale só no fechamento em que foi feita (ref = data_until).
   summary.units[0].data_until = 1794772799;
-  const corrected = standalone.normalizeReportUnit({ ...ppt, image_overrides: { ref: 1794772799, values: { millingShift: 850.5, stock: 50 } } }, 0);
+  summary.units[0].closed_until = 1794772800;
+  const corrected = standalone.normalizeReportUnit({ ...ppt, image_overrides: { ref: 1794772799,
+    values: { millingShift: 850.5, stock: 50, day: 11945 } } }, 0);
   const fixed = standalone.fieldUnitIndicators(corrected, summary);
-  assert.deepEqual([fixed.millingShift, fixed.stock, fixed.deliveryShift, fixed.balance.millingShift, fixed.balance.stock],
-    [850.5, 50, 818, 846.6, 48]);
-  assert.deepEqual(Array.from(fixed.corrected), ['millingShift', 'stock']);
+  assert.deepEqual([fixed.millingShift, fixed.stock, fixed.day, fixed.deliveryShift, fixed.balance.millingShift, fixed.balance.stock],
+    [850.5, 50, 11945, 818, 846.6, 48]);
+  assert.deepEqual(Array.from(fixed.corrected), ['millingShift', 'stock', 'day']);
+  const earlier = { ...summary, units: [{ ...summary.units[0], closed_until: 1794751200, stock_loads: 31, milling_day_t: 5367.7 }] };
+  const historical = standalone.fieldUnitIndicators(corrected, earlier);
+  assert.deepEqual([historical.day, historical.stock, historical.corrected.length], [5367.7, 31, 0]);
   summary.units[0].data_until = 1794776399;  // outro SELECT importado: a correção deixa de valer
+  summary.units[0].closed_until = 1794776400;
   const stale = standalone.fieldUnitIndicators(corrected, summary);
   assert.deepEqual([stale.millingShift, stale.stock, stale.corrected.length], [846.6, 48, 0]);
   // Moagem do dia consolidada: soma das 4 unidades (processado e projeção), como o modelo

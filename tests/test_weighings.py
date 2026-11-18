@@ -199,8 +199,8 @@ class WeighingTests(unittest.TestCase):
         # Projeção do dia: média por hora (10 horas fechadas: 00h a 09h) × 24.
         self.assertEqual(ppt["milling_projection_t"], round(130 / 10 * 24, 1))
         self.assertEqual(ppt["delivery_projection_t"], round(200 / 10 * 24, 1))
-        # Pátio: D (pesado só às 10:01), as 2 julietas de C e a de E.
-        self.assertEqual(ppt["stock_loads"], 4)
+        # No corte de 09:59:59, D e as duas julietas de C estavam no pátio.
+        self.assertEqual(ppt["stock_loads"], 3)
 
     def test_hours_go_until_the_last_hour_of_the_imported_select(self):
         # O SELECT foi até 21:59:07: as horas vão de 00h a 21h, a qualquer hora do relógio
@@ -227,9 +227,9 @@ class WeighingTests(unittest.TestCase):
         self.assertEqual((nrd["milling_day_t"], nrd["loads_day"]), (35.0, 1))
         self.assertEqual(nrd["stock_loads"], 0)
 
-    def test_guarita_time_is_used_for_delivery_when_present(self):
+    def test_ppt_counts_cvs_by_scale_entry_and_uses_gate_for_stock(self):
         rows = [HEADER + ["DATA_HORA_GUARITA"],
-                load("201", "1", "5", "361", "1173", "30000", "14/11/2026 08:30:00", patio="14/11/2026 08:10:00")
+                load("201", "1", "5", "361", "1173", "30000", "14/11/2026 08:30:00", patio="14/11/2026 07:58:00")
                 + ["14/11/2026 07:55:00"],
                 load("201", "2", "5", "361", "1173", "", "", patio="14/11/2026 08:59:30") + ["14/11/2026 08:40:00"],
                 # Chegou às 09:10 e saiu às 09:20: a referência fica em 09:10 e fecha a hora 08.
@@ -237,17 +237,17 @@ class WeighingTests(unittest.TestCase):
                 + ["14/11/2026 09:10:00"],
                 # Chegou há mais de 24 h e nunca foi pesada: fora do estoque.
                 load("201", "4", "5", "361", "1173", "", "", patio="13/11/2026 06:10:00") + ["13/11/2026 06:00:00"]]
+        rows[1][11] = "14/11/2026 08:10:00"
         records = parse_weighing_file(xlsx(rows), "a.xlsx")["records"]
         weighings.import_weighings(self.admin["id"], records)
         summary = weighings.weighing_summary("2026-11-14", now=clock("09:30"))
         self.assertEqual(summary["reference_at"], 1794658200)  # 14/11/2026 09:10 (Brasília)
         ppt = summary["units"][0]
         hours = {item["hour"]: item for item in ppt["hours"]}
-        # Chegou na guarita às 07:55 (no pátio às 08:10): conta como CV da hora 07.
-        self.assertEqual(hours[7]["trucks"], 1)
-        self.assertEqual(hours[8]["trucks"], 1)
-        # Pátio: a liberação 2 (sem pesagem) e a 3 (pesada depois da referência).
-        self.assertEqual(ppt["stock_loads"], 2)
+        # Guarita e pátio às 07h, entrada na balança às 08h: o CV entra na hora 08.
+        self.assertEqual((hours[7]["trucks"], hours[8]["trucks"]), (0, 2))
+        # No corte de 08:59:59, só a liberação 2 estava no pátio.
+        self.assertEqual(ppt["stock_loads"], 1)
 
     def test_julietas_of_the_same_truck_are_one_cv(self):
         # Caminhão X: julieta 1 na guarita às 07:59 e julieta 2 às 08:01 -> 1 CV na hora 07
@@ -345,6 +345,61 @@ class WeighingTests(unittest.TestCase):
         summary = weighings.weighing_summary()
         self.assertEqual((summary["work_date"], summary["units"][0]["closed_hours"]), ("2026-11-14", 24))
 
+    def test_ms_stock_uses_the_selected_hour_with_or_without_extraction_time(self):
+        rows = [
+            load("402", "1", "411", "90441", "2", "30000", "14/11/2026 10:36:30", patio="14/11/2026 10:10:00"),
+            load("402", "2", "411", "90441", "2", "", "", patio="14/11/2026 12:59:59"),
+            load("402", "3", "411", "90441", "2", "", "", patio="14/11/2026 13:00:00"),
+        ]
+        for with_extraction in (False, True):
+            with self.subTest(with_extraction=with_extraction):
+                source = ([HEADER + ["DT_EXTRACAO"]] + [row + ["14/11/2026 15:20:00"] for row in rows]
+                          if with_extraction else [HEADER, *rows])
+                weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx(source), "a.xlsx")["records"])
+                # Brasília 14h = 13h em MS. A chegada às 13h locais entra no próximo corte.
+                early, late = (next(unit for unit in weighings.weighing_summary("2026-11-14", at_time=hour)["units"]
+                                    if unit["code"] == "RBR") for hour in ("14:00", "15:00"))
+                self.assertEqual((early["closed_hours"], early["stock_loads"]), (13, 1))
+                self.assertEqual((late["closed_hours"], late["stock_loads"]), (14, 2))
+
+    def test_ms_stock_for_an_earlier_day_ends_at_local_midnight(self):
+        rows = [HEADER + ["DT_EXTRACAO"],
+                load("402", "1", "411", "90441", "2", "30000", "14/11/2026 23:15:00",
+                     patio="14/11/2026 23:10:00") + ["15/11/2026 08:30:00"],
+                load("402", "2", "411", "90441", "2", "30000", "15/11/2026 00:05:00",
+                     patio="14/11/2026 23:30:00") + ["15/11/2026 08:30:00"]]
+        rows[2][1] = "15/11/2026"
+        weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx(rows), "a.xlsx")["records"])
+        rbr = next(unit for unit in weighings.weighing_summary("2026-11-14")["units"] if unit["code"] == "RBR")
+        self.assertEqual((rbr["closed_hours"], rbr["loads_day"], rbr["stock_loads"]), (24, 1, 1))
+
+    def test_nrd_projection_uses_shift_averages_and_excel_density_rounding(self):
+        rows = [HEADER + ["DT_EXTRACAO"], *[
+            row + ["14/11/2026 08:05:00"] for row in (
+                load("204", "1", "20", "300", "3500", "70000", "14/11/2026 06:30:00",
+                     patio="14/11/2026 06:10:00"),
+                load("204", "2", "20", "300", "3500", "35557", "14/11/2026 07:30:00",
+                     patio="14/11/2026 07:10:00"),
+                load("204", "3", "20", "300", "3500", "35558", "14/11/2026 07:31:00",
+                     patio="14/11/2026 07:11:00"),
+            )
+        ]]
+        weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx(rows), "a.xlsx")["records"])
+        nrd = next(unit for unit in weighings.weighing_summary()["units"] if unit["code"] == "NRD")
+        self.assertEqual(nrd["hours"][7]["density_t"], 35.558)
+        self.assertEqual((nrd["milling_projection_t"], nrd["delivery_projection_t"]), (973.4, 1093.4))
+
+    def test_nrd_stock_includes_pending_loads_from_earlier_days(self):
+        rows = [HEADER + ["DT_EXTRACAO"], *[
+            row + ["14/11/2026 09:05:00"] for row in (
+                load("204", "1", "20", "300", "3500", "30000", "14/11/2026 08:30:00"),
+                load("204", "2", "20", "300", "3500", "", "", patio="12/11/2026 06:10:00"),
+            )
+        ]]
+        weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx(rows), "a.xlsx")["records"])
+        nrd = next(unit for unit in weighings.weighing_summary()["units"] if unit["code"] == "NRD")
+        self.assertEqual(nrd["stock_loads"], 1)
+
     def test_ms_arrival_hour_comes_from_hr_guarita(self):
         # A planilha de PST conta a hora pelo HR_GUARITA (HR_ENTRADA_PATIO do SELECT); a da NRD,
         # pelo DT_REG_GUARITA. Mesma carga: HR_GUARITA 07:59 e DT_REG_GUARITA 08:00.
@@ -352,13 +407,13 @@ class WeighingTests(unittest.TestCase):
             return load(instance, release, "5", "361", "1173", "30000", "14/11/2026 08:30:00",
                         patio="14/11/2026 07:59:28") + ["14/11/2026 08:00:43"]
         weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx([HEADER + ["DT_REG_GUARITA"],
-            julieta("201", "1"), julieta("401", "2"),
-            load("201", "3", "5", "361", "1173", "30000", "14/11/2026 10:30:00", patio="14/11/2026 10:00:00"),
+            julieta("204", "1"), julieta("401", "2"),
+            load("204", "3", "5", "361", "1173", "30000", "14/11/2026 10:30:00", patio="14/11/2026 10:00:00"),
             load("401", "4", "5", "361", "1173", "30000", "14/11/2026 10:30:00", patio="14/11/2026 10:00:00"),
         ]), "a.xlsx")["records"])
         units = {unit["code"]: unit for unit in weighings.weighing_summary("2026-11-14")["units"]}
-        trucks = {code: {item["hour"]: item["trucks"] for item in units[code]["hours"]} for code in ("PPT", "PST")}
-        self.assertEqual((trucks["PPT"][7], trucks["PPT"][8]), (0, 1))      # DT_REG_GUARITA
+        trucks = {code: {item["hour"]: item["trucks"] for item in units[code]["hours"]} for code in ("NRD", "PST")}
+        self.assertEqual((trucks["NRD"][7], trucks["NRD"][8]), (0, 1))      # DT_REG_GUARITA
         self.assertEqual((trucks["PST"][7], trucks["PST"][8]), (0.5, 0))    # HR_GUARITA
 
     def test_closing_at_a_chosen_time(self):

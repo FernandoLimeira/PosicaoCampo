@@ -110,13 +110,13 @@ Excel do SELECT ──► services/weighing_import ──► models/weighings.im
 
 - O mesmo resumo alimenta a tela, a imagem e o Excel; no navegador, os indicadores por
   unidade e os totais saem de um só lugar (`static/js/core/field-indicators.js`).
-- Regras (detalhes no docstring de `models/weighings.py`): moagem pela saída da balança;
-  entrega = CVs × 2 × densidade da hora (3 casas); CVs pela chegada na guarita, Polo SP
-  pelo `DT_REG_GUARITA` e Polo MS pelo `HR_GUARITA` (julietas ÷ 2), como a planilha de cada
-  polo; turno, últimas 3 h e projeção (média por hora do dia × 24) saem dos valores sem
-  arredondar das horas fechadas; com `DT_EXTRACAO` no SELECT, fecha até a última hora cheia
-  da extração e ignora o que chegou ou saiu depois (inclusive no estoque); troca de cana:
-  o ATR entra na média da unidade que recebeu a cana.
+- A moagem usa a saída da balança. A entrega multiplica os CVs por 2 e pela densidade da
+  hora (3 casas). NRD conta CVs pela guarita (`DT_REG_GUARITA`), PPT pela entrada na
+  balança (`HR_ENTRADA_BALANCA`) e o Polo MS conta julietas ÷ 2 pelo `HR_GUARITA`.
+  A projeção usa a média das horas fechadas × 24. NRD usa a média das taxas dos turnos
+  com horas fechadas × 24 e inclui no estoque as cargas em aberto dos dias anteriores
+  presentes no arquivo. Com `DT_EXTRACAO`, o corte é a última hora cheia da extração.
+  Na troca de cana, o ATR entra na média da unidade que recebeu a cana.
 
 ## Compatibilidade mantida
 

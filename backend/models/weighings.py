@@ -1,8 +1,6 @@
 """Pesagem de cana do CTT: importação das cargas da balança e resumo por unidade/frente.
 
-Mesma lógica da aba "Chegada" da planilha "Controle de entrega x Moagem", hora a hora.
-Conferida com a NRD em 14/11/2026: moagem, CVs e entrega batem nas horas 00h-21h quando
-o arquivo traz DT_REG_GUARITA (sem ela, os CVs pela entrada no pátio variam ±2 por hora):
+Cálculo hora a hora da planilha "Controle de entrega x Moagem":
 - Horas: de 00:00 até a última hora do SELECT importado (vale até a próxima importação,
   independente do relógio); o dia é o mais recente do arquivo. Com a coluna DT_EXTRACAO
   (SYSDATE do SELECT), fecha até a última hora cheia encerrada na extração (rodou às 17:20 de
@@ -10,22 +8,22 @@ o arquivo traz DT_REG_GUARITA (sem ela, os CVs pela entrada no pátio variam ±2
 - Moagem da hora: soma do peso líquido (QT_LIQUIDO) das cargas com saída da balança
   na hora. Moagem do dia: soma das horas fechadas, desde 00:00:00.
 - Densidade da hora: peso médio das julietas pesadas na hora (moagem ÷ cargas).
-- Entrega da hora: CVs que chegaram na hora × 2 julietas × densidade da hora (hora sem moagem:
-  entrega 0, como a planilha). CVs pelo padrão
-  da planilha de cada polo: Polo SP conta caminhões; Polo MS conta cada julieta como 0,5 CV.
-  Chegada: Polo SP pela guarita (DT_REG_GUARITA), quando o arquivo traz, senão a entrada no
-  pátio; Polo MS pelo HR_GUARITA (HR_ENTRADA_PATIO do SELECT), como a aba "Base Chegada" de PST.
+- Entrega da hora: CVs × 2 julietas × densidade da hora. O Polo SP conta caminhões:
+  NRD usa DT_REG_GUARITA e PPT usa HR_ENTRADA_BALANCA, com entrada no pátio como alternativa.
+  O Polo MS conta cada julieta como 0,5 CV pelo HR_GUARITA (HR_ENTRADA_PATIO do SELECT).
 - Turno: média das horas do turno. Polo SP: A 00h-06h, B 07h-15h, C 16h-23h; Polo MS: A 00h-06h,
   B 07h-14h, C 15h-23h (como a planilha de cada polo).
 - Últimas 3 h: média das 3 últimas horas fechadas.
+- Projeção: média das horas fechadas × 24. Em NRD, calcula a média das taxas dos turnos com
+  horas fechadas e multiplica por 24.
 - Referência ("dados até"): última saída da balança, limitada à última chegada (até
   onde o arquivo está completo); com DT_EXTRACAO, o fim da última hora fechada. É o
   momento do estoque.
-- Estoque: cargas que chegaram (nas 24 h até a referência) e ainda não tinham saído
-  da balança na referência.
+- Estoque: cargas que ainda estavam no pátio. Em NRD o estoque inclui as cargas em aberto de
+  outros dias presentes no arquivo. Nas demais unidades usa a janela de 24 h.
 - Fuso: o Polo MS (RBR e PST) registra no horário local, uma hora a menos que Brasília.
   Os horários do arquivo, as horas, os turnos e o relógio do fechamento de cada unidade
-  seguem o horário local dela; os turnos (A 00h-06h, B 07h-15h, C 16h-23h) são os mesmos.
+  seguem o horário local dela.
 - Frente de outra unidade (troca de cana): a frente é procurada nas frentes da Posição de
   Campo de cada unidade; se pertence a outra, conta como ATR recebido nesta e apoio daquela.
   O ATR dessa cana entra na média da unidade que recebeu (onde foi pesada), nunca na da dona.
@@ -35,6 +33,8 @@ from __future__ import annotations
 import json
 import time
 from datetime import date, datetime, time as dtime
+from decimal import ROUND_HALF_UP, Decimal
+from functools import partial
 from typing import Any
 
 from ..services.front_identifiers import front_key, natural_key
@@ -181,24 +181,28 @@ def _average(values) -> float | None:
     return sum(values) / len(values) if values else None
 
 
-def _arrival(row) -> int | None:
-    """Chegada da carga, pela coluna que a planilha de cada polo usa: no Polo SP a guarita
-    (DT_REG_GUARITA), quando o arquivo traz; no Polo MS o HR_GUARITA, que o SELECT exporta
-    como HR_ENTRADA_PATIO (aba "Base Chegada" da planilha de Passa Tempo)."""
-    if row["unit_code"] in MS_UNIT_CODES:
+def _arrival(row, *, for_cv: bool = False) -> int | None:
+    """Chegada para estoque ou CV. A planilha de PPT conta CVs pela entrada na balança."""
+    code = row["unit_code"]
+    if code in MS_UNIT_CODES:
         return row["patio_at"] or row["guarita_at"]
+    if code == "PPT":
+        if for_cv:
+            return row["scale_in_at"] or row["patio_at"] or row["guarita_at"]
+        return row["guarita_at"] or row["patio_at"] or row["scale_in_at"]
     return row["guarita_at"] or row["patio_at"]
 
 
 def _truck_arrivals(rows) -> list[int]:
-    """Chegada de cada CV (caminhão). As julietas do mesmo caminhão podem passar na guarita
+    """Chegada de cada CV (caminhão). As julietas do mesmo caminhão podem chegar
     com alguns minutos de diferença (ex.: 19:06 e 19:07): as que chegam até
     ``CV_JULIETA_WINDOW`` depois da primeira formam um só CV, contado na hora da primeira,
     como a planilha, que conta a julieta de sequência 1."""
     starts: list[int] = []
     first_by_truck: dict[Any, int] = {}
-    for row in sorted(rows, key=_arrival):
-        arrival = _arrival(row)
+    cv_arrival = partial(_arrival, for_cv=True)
+    for row in sorted(rows, key=cv_arrival):
+        arrival = cv_arrival(row)
         # Sem placa do caminhão, junta só as julietas com a mesma chegada.
         key = row["truck"] or ("", arrival)
         first = first_by_truck.get(key)
@@ -207,6 +211,16 @@ def _truck_arrivals(rows) -> list[int]:
         first_by_truck[key] = arrival
         starts.append(arrival)
     return starts
+
+
+def _daily_projection(hours, metric, *, by_shift: bool) -> float | None:
+    if by_shift:
+        rates = (_average(item[metric] for item in hours if item["shift"] == shift)
+                 for shift in SHIFT_HOURS)
+    else:
+        rates = (item[metric] for item in hours)
+    average = _average(rates)
+    return _round(average * 24) if average is not None else None
 
 
 def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time: Any = None) -> dict[str, Any]:
@@ -251,10 +265,14 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
         weighed = conn.execute(
             "SELECT * FROM field_weighings WHERE scale_out_at IS NOT NULL AND movement_date=?", (day,)
         ).fetchall()
-        # Folga de 1 h: o dia do Polo MS começa e termina uma hora depois do de Brasília.
+        # Folga de 1 h para o Polo MS e cargas anteriores que ainda podem compor o estoque de NRD.
         arrival_rows = conn.execute(
-            "SELECT * FROM field_weighings WHERE guarita_at BETWEEN ?1 AND ?2 OR patio_at BETWEEN ?1 AND ?2",
-            (day_start - STOCK_WINDOW_SECONDS - 3600, day_end + 3600 - 1),
+            """SELECT * FROM field_weighings
+               WHERE guarita_at BETWEEN ?1 AND ?2 OR patio_at BETWEEN ?1 AND ?2
+                  OR (unit_code = 'PPT' AND scale_in_at BETWEEN ?1 AND ?2)
+                  OR (unit_code = 'NRD' AND COALESCE(guarita_at, patio_at) < ?1
+                      AND (scale_out_at IS NULL OR scale_out_at >= ?3))""",
+            (day_start - STOCK_WINDOW_SECONDS - 3600, day_end + 3600 - 1, day_start),
         ).fetchall()
         last_import = conn.execute(
             """SELECT w.import_file, w.imported_at, u.name AS imported_by_name
@@ -318,11 +336,15 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
         rows = [row for row in weighed if row["unit_code"] == code
                 and unit_closed_until and row["scale_out_at"] < unit_closed_until]
         arrivals = [row for row in arrival_rows if row["unit_code"] == code]
-        # Estoque: chegou nas 24 h até a referência do polo e ainda não tinha saído da balança nela.
         unit_reference = references.get(polo_of(code))
+        stock_at = unit_closed_until - 1 if unit_closed_until is not None else None
+        if now is None and stock_at is not None and unit_reference is not None:
+            stock_at = min(stock_at, unit_reference)
+        # O fechamento de NRD conta as cargas em aberto sem limitar o tempo no pátio.
         stock = [row for row in arrivals
-                 if unit_reference and unit_reference - STOCK_WINDOW_SECONDS <= _arrival(row) <= unit_reference
-                 and (row["scale_out_at"] is None or row["scale_out_at"] > unit_reference)]
+                 if stock_at is not None and _arrival(row) <= stock_at
+                 and (code == "NRD" or _arrival(row) >= stock_at - STOCK_WINDOW_SECONDS)
+                 and (row["scale_out_at"] is None or row["scale_out_at"] > stock_at)]
         # CVs da hora pelo padrão da planilha de cada polo: no Polo SP, caminhões (a julieta de
         # sequência 1); no Polo MS, cada julieta que chegou vale meio CV (6,5 · 5,5 ...).
         cv_arrivals = ([(_arrival(row), 1 / JULIETAS_PER_TRUCK) for row in arrivals] if code in MS_UNIT_CODES
@@ -335,14 +357,19 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
             start, end = unit_start + hour * 3600, unit_start + (hour + 1) * 3600
             milled = [row for row in rows if start <= row["scale_out_at"] < end]
             trucks = sum(weight for arrival, weight in cv_arrivals if start <= arrival < end)
-            # A planilha usa a densidade com 3 casas (coluna "Densidade") na entrega da hora.
-            # Hora sem moagem (indústria parada) não tem densidade: a entrega da hora é 0, como a
-            # planilha (CVs × densidade × 2 com a densidade vazia), mesmo com cana chegando.
-            density = _round(_tons(milled) / len(milled), 3) if milled else None
+            milling = _tons(milled)
+            density = None
+            if milled:
+                if code in MS_UNIT_CODES:
+                    density = _round(milling / len(milled), 3)
+                else:
+                    weight_kg = sum(Decimal(str(row["net_kg"] or 0)) for row in milled)
+                    mean_tons = weight_kg / (1000 * len(milled))
+                    density = float(mean_tons.quantize(Decimal("0.001"), rounding=ROUND_HALF_UP))
             delivery = trucks * JULIETAS_PER_TRUCK * density if density else 0.0
-            exact.append({"shift": _shift_of_hour(hour, code), "milling": _tons(milled), "delivery": delivery})
+            exact.append({"shift": _shift_of_hour(hour, code), "milling": milling, "delivery": delivery})
             hours.append({
-                "hour": hour, "shift": _shift_of_hour(hour, code), "milling_t": _round(_tons(milled)),
+                "hour": hour, "shift": _shift_of_hour(hour, code), "milling_t": _round(milling),
                 "loads": len(milled), "density_t": density, "trucks": trucks,
                 "delivery_t": _round(delivery),
             })
@@ -384,10 +411,8 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
             "milling_last3h_tph": _round(_average(item["milling"] for item in recent_hours)),
             "delivery_shift_tph": _round(_average(item["delivery"] for item in shift_hours)),
             "delivery_last3h_tph": _round(_average(item["delivery"] for item in recent_hours)),
-            # Projeção do dia (quadro "Projeções" da planilha): média por hora do dia × 24.
-            "milling_projection_t": _round(_average(item["milling"] for item in exact) * 24) if exact else None,
-            "delivery_projection_t": _round(_average(item["delivery"] for item in exact) * 24)
-            if any(item["delivery"] is not None for item in exact) else None,
+            "milling_projection_t": _daily_projection(exact, "milling", by_shift=code == "NRD"),
+            "delivery_projection_t": _daily_projection(exact, "delivery", by_shift=code == "NRD"),
             "stock_loads": len(stock),
             "atr": _weighted_atr(rows),
             "hours": hours,
