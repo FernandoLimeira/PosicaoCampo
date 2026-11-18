@@ -350,6 +350,15 @@ function unitIndicatorsHtml(unit) {
 function unitCard(unit) {
   const summary = fieldUnitSummary(unit);
   const rainVisible = fieldHasRain(unit);
+  const filters = [
+    ['all', 'Todas', summary.total],
+    ['active', 'Em atividade', summary.active],
+    ['attention', 'Em atenção', summary.attention]
+  ].map(([filter, label, count]) => {
+    const selected = fieldViewFilter === filter;
+    return `<button type="button" class="field-filter-button${selected ? ' is-selected' : ''}" data-field-filter="${filter}" aria-pressed="${selected}">
+      <span>${label}</span><b class="field-filter-count">${count}</b></button>`;
+  }).join('');
   const rows = unit.rows.length
     ? unit.rows.map(([front, sector, color, status, atr = ''], index) => {
       const statusClass = fieldDashboardStatusClass(status);
@@ -357,10 +366,10 @@ function unitCard(unit) {
       const farm = fieldFarmFromSector(sector);
       return `
       <tr class="field-front-row" data-field-front-index="${index}" data-field-group="${group}">
-        <td data-label="Frente"><span class="front-cell"><i class="status-dot ${escapeHtml(color)}"></i><strong>${escapeHtml(front)}</strong></span></td>
+        <td data-label="Frente" class="field-front-id-cell"><span class="front-cell"><i class="status-dot ${escapeHtml(color)}" aria-hidden="true"></i><strong>${escapeHtml(front)}</strong></span></td>
         <td data-label="Setor" class="field-sector-cell">${escapeHtml(sector)}</td>
         <td data-label="Fazenda" class="field-farm-cell" title="${escapeHtml(farm.note || farm.name)}">${escapeHtml(farm.name)}</td>
-        <td data-label="Status"><span class="field-status-chip ${statusClass}">${escapeHtml(status)}</span></td>
+        <td data-label="Status" class="field-front-status-cell"><span class="field-status-chip ${statusClass}">${escapeHtml(status)}</span></td>
         <td data-label="ATR" class="field-atr-cell"${!atr && weighingFrontAtr(unit.code, front) ? ' title="ATR da balança (Entrega CTT)"' : ''}>${escapeHtml(atr || weighingFrontAtr(unit.code, front) || '—')}</td>
         <td data-label="Observações" class="field-observation-cell" data-field-summary-index="${index}" tabindex="0" aria-label="Ver acontecimentos em aberto da Frente ${escapeHtml(front)}">${fieldNotePreview(front)}</td>
         <td data-label="Detalhes" class="field-front-action-cell"><button type="button" class="field-front-details-button" data-field-front-index="${index}" aria-label="Ver detalhes da Frente ${escapeHtml(front)}" title="Ver detalhes da Frente ${escapeHtml(front)}">Ver</button></td>
@@ -379,32 +388,27 @@ function unitCard(unit) {
   return `
     <article class="unit-card ${escapeHtml(unit.border)}">
       <div class="unit-layout-grid">
-        <section class="dashboard-block unit-main-block" aria-label="Frentes da unidade">
-          <div class="field-list-heading">
-            <div><h3>Frentes de campo</h3><p>Frentes, setores e situação operacional.</p></div>
-            <div class="uc-counts" aria-label="Resumo das frentes desta unidade">
-              <span class="uc-count"><b>${summary.total}</b> frentes</span>
-              <span class="uc-count is-active"><b>${summary.active}</b> em atividade</span>
-              <span class="uc-count is-attention"><b>${summary.attention}</b> em atenção</span>
+        <section class="dashboard-block unit-main-block" aria-labelledby="field-fronts-title">
+          <header class="field-list-heading">
+            <h3 id="field-fronts-title">Frentes de campo</h3>
+            <div class="field-search" role="search" aria-label="Buscar frentes de campo">
+              <label class="field-search-label" for="field-front-search">
+                <span class="field-search-icon" aria-hidden="true"></span>
+                <input id="field-front-search" type="search" aria-label="Buscar por frente, setor, fazenda ou observação" placeholder="Buscar frente, setor ou fazenda" autocomplete="off" value="${escapeHtml(fieldSearchQuery)}" />
+              </label>
             </div>
-          </div>
-          <div class="field-toolbar" role="search" aria-label="Filtrar frentes de campo">
-            <label class="field-search-label" for="field-front-search">
-              <span class="field-search-icon" aria-hidden="true">⌕</span>
-              <input id="field-front-search" type="search" placeholder="Buscar frente, setor, fazenda ou observação" autocomplete="off" value="${escapeHtml(fieldSearchQuery)}" />
-            </label>
-            <div class="field-status-filters" aria-label="Filtrar por condição">
-              <button type="button" class="field-filter-button ${fieldViewFilter === 'all' ? 'is-selected' : ''}" data-field-filter="all" aria-pressed="${fieldViewFilter === 'all'}">Todas</button>
-              <button type="button" class="field-filter-button ${fieldViewFilter === 'active' ? 'is-selected' : ''}" data-field-filter="active" aria-pressed="${fieldViewFilter === 'active'}">Em atividade</button>
-              <button type="button" class="field-filter-button ${fieldViewFilter === 'attention' ? 'is-selected' : ''}" data-field-filter="attention" aria-pressed="${fieldViewFilter === 'attention'}">Em atenção</button>
+          </header>
+          <div class="field-toolbar">
+            <div class="field-status-filters" role="group" aria-label="Filtrar por situação operacional">${filters}</div>
+            <div class="field-toolbar-meta">
+              <small id="field-result-count" class="field-result-count" role="status" aria-live="polite"></small>
+              <button type="button" id="field-filter-clear" class="field-filter-clear" ${fieldViewFilter === 'all' && !fieldSearchQuery ? 'hidden' : ''}>Limpar filtros</button>
             </div>
-            <button type="button" id="field-filter-clear" class="field-filter-clear" ${fieldViewFilter === 'all' && !fieldSearchQuery ? 'hidden' : ''}>Limpar filtros</button>
-            <small id="field-result-count" class="field-result-count" role="status" aria-live="polite"></small>
           </div>
 
           <div class="table-wrap status-table-wrap">
             <table class="data-table field-data-table">
-              <thead><tr><th>Frente</th><th>Setor</th><th>Fazenda</th><th>Status</th><th>ATR</th><th>Observações</th><th>Ação</th></tr></thead>
+              <thead><tr><th scope="col">Frente</th><th scope="col">Setor</th><th scope="col">Fazenda</th><th scope="col">Status</th><th scope="col">ATR</th><th scope="col">Observações</th><th scope="col">Ação</th></tr></thead>
               <tbody>${rows || '<tr class="field-table-empty"><td colspan="7">Aguardando preenchimento do turno</td></tr>'}
                 <tr class="field-filter-empty" hidden><td colspan="7">Nenhuma frente encontrada para este filtro.</td></tr>
               </tbody>
@@ -457,7 +461,7 @@ function applyFieldViewFilters() {
   const noResults = grid.querySelector('.field-filter-empty');
   if (noResults) noResults.hidden = visible !== 0 || rows.length === 0;
   const count = grid.querySelector('#field-result-count');
-  if (count) count.textContent = `Exibindo ${visible} de ${rows.length} frentes`;
+  if (count) count.textContent = fieldViewFilter !== 'all' || search ? `Exibindo ${visible} de ${rows.length} frentes` : '';
   const clear = grid.querySelector('#field-filter-clear');
   if (clear) clear.hidden = fieldViewFilter === 'all' && !fieldSearchQuery.trim();
   grid.querySelectorAll('[data-field-filter]').forEach(button => {

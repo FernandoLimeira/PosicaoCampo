@@ -45,6 +45,8 @@ async function main() {
     assert.equal(ctx.calculateUnitBorder(statuses.map(status => ['01', '101', '', status])), border);
   }
   const html = ctx.unitCard({ ...normalized, rows: ctx.normalizeFrontRows(source.rows) });
+  assert.match(html, /aria-labelledby="field-fronts-title"/);
+  assert.deepEqual([...html.matchAll(/class="field-filter-count">(\d+)</g)].map(match => Number(match[1])), [9, 7, 2]);
   assert.equal((html.match(/data-field-group="active"/g) || []).length, 7);
   assert.equal((html.match(/data-field-group="attention"/g) || []).length, 2);
   assert(html.includes('is-stopped'));
