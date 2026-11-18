@@ -305,6 +305,22 @@ function fieldDashboardStatusClass(status) {
 // "Indicadores do turno" do card: moagem do turno contra a indústria (barra animada), entrega
 // (com a diferença para a moagem), estoque e últimas 3 h. Da balança quando há pesagem (com as
 // correções do Preencher); senão, os digitados.
+function panelDiff(value, unitLabel) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '<span class="wp-diff">—</span>';
+  const tone = Math.round(value) === 0 ? 'is-even' : value > 0 ? 'is-up' : 'is-down';
+  const sign = Math.round(value) > 0 ? '+' : '';
+  const icon = tone === 'is-up' ? '▲' : tone === 'is-down' ? '▼' : '●';
+  const text = tone === 'is-up' ? 'entrega acima' : tone === 'is-down' ? 'entrega abaixo' : 'equilibrado';
+  return `<span class="wp-diff ${tone}" title="Entrega − moagem: ${text}"><i aria-hidden="true">${icon}</i>${sign}${fieldIndicatorNumber(value)} ${unitLabel}</span>`;
+}
+
+function panelGauge(fraction, tone) {
+  const width = Math.max(0, Math.min(100, (Number(fraction) || 0) * 100));
+  return `<svg class="dash-gauge" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
+    <rect class="dash-gauge-track" width="100" height="8" rx="1.6" ry="4"></rect>
+    ${width ? `<rect class="dash-gauge-fill is-${escapeHtml(tone)}" width="${width.toFixed(1)}" height="8" rx="1.6" ry="4"></rect>` : ''}</svg>`;
+}
+
 function unitIndicatorsHtml(unit) {
   const item = fieldUnitIndicators(unit, weighingSummary);
   const number = fieldIndicatorNumber;
@@ -418,7 +434,6 @@ function unitCard(unit) {
           </section>
         </div>
       </div>
-      ${weighingPanel(unit)}
     </article>
   `;
 }
@@ -463,7 +478,7 @@ function renderDashboard() {
     fieldViewFilter = 'all';
     fieldSearchQuery = '';
   }
-  // Dashboard das 4 unidades no topo (dashboard/management-report.js) e o card da unidade.
+  // Resumo e detalhes da unidade selecionada.
   renderManagementReport();
   document.querySelector('#units-grid').innerHTML = unitCard(selectedUnit);
   applyFieldViewFilters();

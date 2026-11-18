@@ -126,32 +126,9 @@ body[data-page="dashboard"] { --page: #202020; --data-border: #484848; }
 .field-front-note-copy .field-observation-text, .field-front-note-copy .field-observation-excerpt { color: #e6e6e6; }
 .field-notes-pagination small { color: #a5a5a5; }
 .field-front-note-empty, .field-note-readonly { color: #a5a5a5; }
-.wp-header p { color: #a3a3a3; }
-.wp-kpi-values small { color: #999999; }
-.wp-kpi-title small { color: #999999; }
-.wp-kpi-values strong { color: #cccccc; }
-.wp-kpi-values span { color: #a3a3a3; }
 .wp-diff { color: #acacac; }
 .wp-diff.is-up { color: #9ce4cd; }
 .wp-diff.is-down { color: #d26871; }
-.wp-chart figcaption { color: #cccccc; }
-.wp-legend { color: #acacac; }
-.wp-band { fill: #e6e6e6; }
-.wp-band-label { fill: #999999; }
-.wp-axis { fill: #999999; }
-.wp-bar { fill: #5c93d6; }
-.wp-line { stroke: #d67f5c; }
-.wp-dot { fill: #d67f5c; }
-.wp-direct { fill: #cccccc; }
-.wp-hit:hover, .wp-hit:focus-visible { fill: #e6e6e6; }
-.wp-table th, .wp-table td { border-bottom: 1px solid #424242; }
-.wp-table thead th { color: #a3a3a3; background: #242424; }
-.wp-table tbody th { color: #cccccc; }
-.wp-table td { color: #c2c2c2; }
-.wp-table th small { color: #999999; }
-.wp-table tr.is-current th, .wp-table tr.is-current td { background: #1f242b; }
-.wp-table tr.is-total th, .wp-table tr.is-total td { background: #242424; }
-.wp-support ul { color: #acacac; }
 .mr-header p { color: #a3a3a3; }
 .mr-controls .field { color: #a3a3a3; }
 .mr-kpi small { color: #999999; }
@@ -162,32 +139,16 @@ body[data-page="dashboard"] { --page: #202020; --data-border: #484848; }
 .mr-kpi.is-atr { border: 2px solid #605d52; }
 .mr-kpi.is-atr small { color: #d4be78; }
 .mr-kpi.is-projection strong { color: #abdf80; }
-.ov-unit { --tile-accent: #3d3d3d; }
-.ov-unit.is-active { --tile-accent: #76af33; }
-.ov-unit.is-attention { --tile-accent: #cba74d; }
-.ov-unit.is-critical { --tile-accent: #cb4d4d; }
-.ov-unit.is-selected { border-color: #76af33; }
-.ov-unit-head strong { color: #d6d6d6; }
-.ov-unit-head small { color: #999999; }
-.ov-chip { background: #232323; color: #9bd3aa; }
-.ov-unit small, .uc-indicators small { color: #999999; }
-.ov-unit em, .uc-indicators em { color: #a3a3a3; }
-.ov-unit-main b { color: #d6d6d6; }
+.uc-indicators small { color: #999999; }
+.uc-indicators em { color: #a3a3a3; }
 .ov-share { background: #232323; color: #acacac; }
 .ov-share.is-good { background: #313a29; color: #c3e7a1; }
 .ov-share.is-warning { background: #3b3729; color: #e9d8a5; }
 .ov-share.is-low { background: #3a3028; color: #e1b288; }
-.ov-unit-grid b { color: #cccccc; }
-.ov-unit-grid i { color: #999999; }
-.ov-unit-day { border-top: 1px solid #424242; }
-.ov-unit-day b { color: #cccccc; }
-.ov-unit-day b.is-projection { color: #abdf80; }
-.ov-unit-foot { color: #999999; }
 .dash-gauge-fill { fill: #999999; }
 .dash-gauge-fill.is-good { fill: #9ed65c; }
 .dash-gauge-fill.is-warning { fill: #d6b85c; }
 .dash-gauge-fill.is-low { fill: #d69c5c; }
-.dash-gauge-fill.is-day { fill: #abdf80; }
 .uc-count { background: #232323; color: #acacac; }
 .uc-count b { color: #cbcbcb; }
 .uc-count.is-active { background: #1c2620; color: #87daba; }
@@ -199,6 +160,3 @@ body[data-page="dashboard"] { --page: #202020; --data-border: #484848; }
 .uc-metric { background: #282828; }
 .uc-metric strong { color: #cccccc; }
 .uc-corrected { background: #3b3729; color: #e9d8a5; }
-.wp-kpi-stat small { color: #999999; }
-.wp-kpi-stat strong { color: #cccccc; }
-.wp-kpi-stat strong span { color: #a3a3a3; }

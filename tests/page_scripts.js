@@ -12,7 +12,7 @@ const BASE_SCRIPTS = ['core/format.js', 'core/api.js', 'core/common.js', 'core/d
 
 const PAGE_SCRIPTS = {
   '/': [...BASE_SCRIPTS, 'core/field-fronts.js', 'core/field-indicators.js', 'core/sector-base.js',
-    'dashboard/dashboard.js', 'dashboard/weighing-panel.js', 'dashboard/field-notes.js', 'dashboard/editor.js', 'dashboard/management-report.js', 'dashboard/app.js'],
+    'dashboard/dashboard.js', 'dashboard/field-notes.js', 'dashboard/editor.js', 'dashboard/management-report.js', 'dashboard/app.js'],
   '/sacarose': [...BASE_SCRIPTS, 'reports-export/shared-drawing.js', 'reports-export/sacarose-export.js',
     'sacarose/sacarose.js'],
   '/producao': [...BASE_SCRIPTS, 'producao/production-status-groups.js', 'producao/production-consolidation.js', 'producao/production-config.js',

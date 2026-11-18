@@ -484,7 +484,7 @@ class PageTests(unittest.TestCase):
         core = ["core/format.js", "core/api.js", "core/common.js", "core/dialog.js"]
         expected = {
             "/": core + ["core/field-fronts.js", "core/field-indicators.js", "core/sector-base.js", "dashboard/dashboard.js",
-                         "dashboard/weighing-panel.js", "dashboard/field-notes.js", "dashboard/editor.js", "dashboard/management-report.js", "dashboard/app.js"],
+                         "dashboard/field-notes.js", "dashboard/editor.js", "dashboard/management-report.js", "dashboard/app.js"],
             "/sacarose": core + ["reports-export/shared-drawing.js", "reports-export/sacarose-export.js",
                                  "sacarose/sacarose.js"],
             "/producao": core + ["producao/production-status-groups.js", "producao/production-consolidation.js",

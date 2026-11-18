@@ -126,21 +126,21 @@ function fieldIndicatorSum(values) {
 // Totais das unidades: frentes, indústrias em operação, moagem/entrega/estoque do turno,
 // ATR médio geral (média do ATR das unidades ponderada pelo processado do dia de cada uma),
 // processado e projeção do dia.
-function fieldIndicatorTotals(items, balanceItems = items) {
-  const atr = fieldWeightedAtr(balanceItems.map(item => [item.atr, item.day]));
+function fieldIndicatorTotals(items) {
+  const atr = fieldWeightedAtr(items.map(item => [item.atr, item.day]));
   return {
     units: items.length,
     fronts: items.reduce((sum, item) => sum + item.rows.length, 0),
     active: items.reduce((sum, item) => sum + item.active, 0),
     running: items.filter(item => item.industry > 0).length,
-    milling: fieldIndicatorSum(balanceItems.map(item => item.millingShift)),
-    delivery: fieldIndicatorSum(balanceItems.map(item => item.deliveryShift)),
-    stock: fieldIndicatorSum(balanceItems.map(item => item.stock)),
+    milling: fieldIndicatorSum(items.map(item => item.millingShift)),
+    delivery: fieldIndicatorSum(items.map(item => item.deliveryShift)),
+    stock: fieldIndicatorSum(items.map(item => item.stock)),
     atr: atr.atr,
     atrUnits: atr.count,
     atrWeighted: atr.weighted,
-    day: fieldIndicatorSum(balanceItems.map(item => item.day)),
-    deliveryDay: fieldIndicatorSum(balanceItems.map(item => item.deliveryDay)),
-    projection: fieldIndicatorSum(balanceItems.map(item => item.projection))
+    day: fieldIndicatorSum(items.map(item => item.day)),
+    deliveryDay: fieldIndicatorSum(items.map(item => item.deliveryDay)),
+    projection: fieldIndicatorSum(items.map(item => item.projection))
   };
 }

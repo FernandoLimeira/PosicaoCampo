@@ -135,7 +135,7 @@ async function main() {
     units[1].observation = 'Dados da NRD';
     weighingSummary = {
       work_date: '2026-11-17', reference_at: 1794960000, last_import: { imported_at: 1 },
-      units: [{ code: 'NRD', work_date: '2026-11-17', reference_at: 1794960000,
+      units: [{ code: 'NRD', work_date: '2026-11-17', reference_at: 1794960000, data_until: 1794960000,
         closed_until: 1794960001, loads_day: 2, milling_day_t: 880, milling_projection_t: 980 }]
     };
   `, refresh.ctx);
@@ -149,7 +149,8 @@ async function main() {
     if (path === '/api/units?unit=PPT') return new Promise(resolve => { resolvePosition = resolve; });
     if (path === '/api/weighings/summary?unit=PPT') return {
       work_date: '2026-11-18', last_import: { imported_at: 2 },
-      units: [{ code: 'PPT', work_date: '2026-11-18', reference_at: 1795046400, loads_day: 3,
+      units: [{ code: 'PPT', work_date: '2026-11-18', reference_at: 1795046400, data_until: 1795046400,
+        closed_until: 1795046401, loads_day: 3,
         milling_day_t: 1500, milling_projection_t: 1800 }]
     };
     return {};
@@ -169,9 +170,33 @@ async function main() {
   assert.equal(vm.runInContext('units[1]', refresh.ctx), untouched[0]);
   assert.equal(vm.runInContext('unitMeta.NRD', refresh.ctx), untouched[1]);
   assert.equal(vm.runInContext('weighingSummary.units.find(unit => unit.code === "NRD")', refresh.ctx), untouched[2]);
-  const refreshedDashboard = refresh.ctx.managementReportHtml();
-  assert.match(refreshedDashboard, /Processado dia<\/small><strong>1\.500 /);
-  assert.match(refreshedDashboard, /Balança até 17\/11/);
+  const nrdOverview = refresh.ctx.managementReportHtml();
+  assert.match(nrdOverview, /Visão geral · NRD/);
+  assert.match(nrdOverview, /Processado no dia<\/small><strong>880 /);
+  assert.match(nrdOverview, /Balança até 17\/11/);
+  assert.doesNotMatch(nrdOverview, /PPT|1\.500|data-overview-unit/);
+  refresh.ctx.setReportUnit('PPT');
+  const pptOverview = refresh.ctx.managementReportHtml();
+  assert.match(pptOverview, /Visão geral · PPT/);
+  assert.match(pptOverview, /Processado no dia<\/small><strong>1\.500 /);
+  assert.match(pptOverview, /Balança até 18\/11/);
+  assert.doesNotMatch(pptOverview, /NRD|880/);
+  assert.doesNotMatch(refresh.elements.get('#units-grid').innerHTML, /Painel gerencial · Balança/);
+  refresh.ctx.apiRequest = async path => {
+    assert.match(path, /^\/api\/weighings\/summary\?date=2026-11-18/);
+    return {
+      work_date: '2026-11-18', reference_at: 1795046400,
+      units: [{ code: 'PPT', work_date: '2026-11-18', data_until: 1795046400,
+        closed_until: 1795032000, loads_day: 2, milling_day_t: 700 }]
+    };
+  };
+  vm.runInContext("managementReportDate = '2026-11-18'; managementReportTime = '17:00';", refresh.ctx);
+  await refresh.ctx.loadManagementReport();
+  assert.match(refresh.ctx.managementReportHtml(), /Processado no dia<\/small><strong>700 /);
+  assert.match(refresh.ctx.managementReportHtml(), /value="17:00"/);
+  vm.runInContext("managementReportTime = '';", refresh.ctx);
+  await refresh.ctx.loadManagementReport();
+  assert.match(refresh.ctx.managementReportHtml(), /Processado no dia<\/small><strong>1\.500 /);
 
   loadScripts(ctx, pageScripts('/relatorios'));
   const report = { performance_rows: [{ unit: 'PPT', front: '1' }, { unit: 'NRD', front: '1' }, { unit: '' }], timeline: [{ unit: 'PPT' }, { unit: 'NRD' }] };
@@ -252,11 +277,14 @@ async function main() {
   const idleAllDay = { ...stoppedSummary, units: [{ ...currentWeighing, loads_day: 0,
     milling_day_t: 0, milling_projection_t: 0 }] };
   assert.equal(standalone.fieldUnitIndicators(resumedUnit, idleAllDay).projection, 0);
-  assert.match(ctx.managementUnitTile(stoppedUnit, stopped, currentWeighing), /Unidade parada/);
+  ctx.testOverviewUnit = stoppedUnit;
   ctx.testProjectionSummary = stoppedSummary;
-  vm.runInContext('weighingSummary = testProjectionSummary', ctx);
-  assert.match(ctx.weighingPanel(stoppedUnit), /Unidade parada/);
-  assert.doesNotMatch(ctx.weighingPanel(resumedUnit), /Unidade parada/);
+  ctx.setReportUnit('PPT');
+  vm.runInContext('units[0] = testOverviewUnit; weighingSummary = testProjectionSummary', ctx);
+  assert.match(ctx.managementReportHtml(), /Unidade parada/);
+  ctx.testOverviewUnit = resumedUnit;
+  vm.runInContext('units[0] = testOverviewUnit', ctx);
+  assert.doesNotMatch(ctx.managementReportHtml(), /Unidade parada/);
   vm.runInContext('weighingSummary = null', ctx);
 
   summary.units[0].data_until = 1794776399;  // outro SELECT importado: a correção deixa de valer

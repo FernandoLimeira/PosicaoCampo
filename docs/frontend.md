@@ -171,10 +171,9 @@ static/
     │   └── sector-base.js        estado e índice da base de setores
     ├── dashboard/                Posição de Campo (/)
     │   ├── dashboard.js          estado das unidades, tabela de frentes e filtros
-    │   ├── weighing-panel.js     painel da balança no card da unidade, gráfico por hora e barras animadas
     │   ├── field-notes.js        observações e modal de detalhes da frente
     │   ├── editor.js             assistente "Preencher" (5 etapas, linhas, gravação)
-    │   ├── management-report.js  visão geral das 4 unidades (cards clicáveis) e exportação Excel
+    │   ├── management-report.js  visão geral da unidade selecionada e exportação Excel gerencial
     │   └── app.js                setupEvents, importação da pesagem, initializeApp e atualização periódica
     ├── reports-export/           geração das imagens PNG
     │   ├── shared-drawing.js     primitivas de canvas, loadImageAsset, cabeçalho
@@ -199,7 +198,7 @@ Subpastas funcionam em `/css/`, `/js/` e `/assets/`, e a versão dos assets
 
 | Página | Scripts próprios, nesta ordem |
 | --- | --- |
-| `/` | `core/field-fronts.js`, `core/field-indicators.js`, `core/sector-base.js`, `dashboard/dashboard.js`, `dashboard/weighing-panel.js`, `dashboard/field-notes.js`, `dashboard/editor.js`, `dashboard/management-report.js`, `dashboard/app.js` |
+| `/` | `core/field-fronts.js`, `core/field-indicators.js`, `core/sector-base.js`, `dashboard/dashboard.js`, `dashboard/field-notes.js`, `dashboard/editor.js`, `dashboard/management-report.js`, `dashboard/app.js` |
 | `/sacarose` | `reports-export/shared-drawing.js`, `reports-export/sacarose-export.js`, `sacarose/sacarose.js` |
 | `/producao` | `producao/production-consolidation.js`, `producao/production-config.js`, `producao/producao.js`, `producao/service-orders.js`, `producao/production-sheet.js`, `producao/production-dashboard.js`, `producao/production-catalog.js`, `producao/production-queries.js` |
 | `/emitir-posicao-global` | `core/field-fronts.js`, `core/field-indicators.js`, `reports-export/shared-drawing.js`, `reports-export/field-report-data.js`, `reports-export/global-report.js`, `reports-export/sacarose-export.js`, `producao/production-consolidation.js`¹, `producao/production-export.js`¹, `emissao/emissao.js` |
