@@ -272,7 +272,11 @@ def _decode_unit(row: sqlite3.Row) -> dict[str, Any] | None:
         return None
 
 
-def list_units_payload() -> dict[str, Any]:
+def list_units_payload(unit_code: str | None = None) -> dict[str, Any]:
+    if unit_code is not None:
+        unit_code = unit_code.strip().upper()
+        if unit_code not in ALLOWED_UNIT_CODES:
+            raise ValueError("Unidade inválida.")
     with connection() as conn:
         rows = conn.execute(
             """
@@ -280,8 +284,9 @@ def list_units_payload() -> dict[str, Any]:
             FROM units u
             LEFT JOIN auth.users AS users ON users.id = u.updated_by
             WHERE u.code IN ('PPT', 'NRD', 'RBR', 'PST')
+              AND (?1 IS NULL OR u.code = ?1)
             ORDER BY CASE u.code WHEN 'PPT' THEN 0 WHEN 'NRD' THEN 1 WHEN 'RBR' THEN 2 WHEN 'PST' THEN 3 ELSE 99 END, u.id ASC
-            """
+            """, (unit_code,)
         ).fetchall()
 
     units: list[dict[str, Any]] = []

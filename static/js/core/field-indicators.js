@@ -25,6 +25,11 @@ function fieldFilledRows(unit) {
   return (unit?.rows || []).filter(row => String(row?.[0] || '').trim() || String(row?.[1] || '').trim());
 }
 
+function fieldProjectionStopped(rows, weighing) {
+  return weighing?.zero_milling_at_latest_close === true && rows.length > 0
+    && rows.every(row => getFieldStatus(row[3]).group === 'stopped');
+}
+
 const FIELD_IMAGE_OVERRIDE_KEYS = ['millingShift', 'deliveryShift', 'milling3h', 'delivery3h', 'stock', 'atr', 'day', 'projection'];
 
 // Correções salvas para o fechamento atual da balança da unidade (vazio se o fechamento mudou).
@@ -53,11 +58,12 @@ function fieldWeightedAtr(pairs) {
 
 function fieldUnitIndicators(unit, summary) {
   const weighing = (summary?.units || []).find(item => item.code === unit.code);
-  const hasWeighing = Boolean(summary?.reference_at && weighing && weighing.loads_day > 0);
+  const rows = fieldFilledRows(unit);
+  const projectionStopped = fieldProjectionStopped(rows, weighing);
+  const hasWeighing = Boolean(summary?.reference_at && weighing && (weighing.loads_day > 0 || weighing.zero_milling_at_latest_close));
   const typed = index => fieldLeadingNumber(unit.metrics?.[index]?.[2]);
   const pick = (key, index) => (hasWeighing && weighing[key] !== null && weighing[key] !== undefined ? weighing[key] : typed(index));
   const overrides = hasWeighing ? fieldImageOverrides(unit, weighing) : {};
-  const rows = fieldFilledRows(unit);
   // ATR da frente na balança desta unidade. Cana desta frente pesada em outra unidade (troca
   // de cana) entra no ATR daquela unidade, como "ATR recebido" lá.
   const weighedFronts = new Map((hasWeighing ? weighing.fronts || [] : [])
@@ -92,7 +98,8 @@ function fieldUnitIndicators(unit, summary) {
     atrSource: weighedAtr !== null ? 'balança' : frontsAtr !== null ? 'frentes' : null,
     day: value('day'),
     deliveryDay: hasWeighing ? weighing.delivery_day_t : null,
-    projection: value('projection'),
+    projection: projectionStopped ? null : value('projection'),
+    projectionStopped,
     balance,
     corrected: Object.keys(overrides),
     closingRef: hasWeighing ? weighing.data_until || null : null,
@@ -119,21 +126,21 @@ function fieldIndicatorSum(values) {
 // Totais das unidades: frentes, indústrias em operação, moagem/entrega/estoque do turno,
 // ATR médio geral (média do ATR das unidades ponderada pelo processado do dia de cada uma),
 // processado e projeção do dia.
-function fieldIndicatorTotals(items) {
-  const atr = fieldWeightedAtr(items.map(item => [item.atr, item.day]));
+function fieldIndicatorTotals(items, balanceItems = items) {
+  const atr = fieldWeightedAtr(balanceItems.map(item => [item.atr, item.day]));
   return {
     units: items.length,
     fronts: items.reduce((sum, item) => sum + item.rows.length, 0),
     active: items.reduce((sum, item) => sum + item.active, 0),
     running: items.filter(item => item.industry > 0).length,
-    milling: fieldIndicatorSum(items.map(item => item.millingShift)),
-    delivery: fieldIndicatorSum(items.map(item => item.deliveryShift)),
-    stock: fieldIndicatorSum(items.map(item => item.stock)),
+    milling: fieldIndicatorSum(balanceItems.map(item => item.millingShift)),
+    delivery: fieldIndicatorSum(balanceItems.map(item => item.deliveryShift)),
+    stock: fieldIndicatorSum(balanceItems.map(item => item.stock)),
     atr: atr.atr,
     atrUnits: atr.count,
     atrWeighted: atr.weighted,
-    day: fieldIndicatorSum(items.map(item => item.day)),
-    deliveryDay: fieldIndicatorSum(items.map(item => item.deliveryDay)),
-    projection: fieldIndicatorSum(items.map(item => item.projection))
+    day: fieldIndicatorSum(balanceItems.map(item => item.day)),
+    deliveryDay: fieldIndicatorSum(balanceItems.map(item => item.deliveryDay)),
+    projection: fieldIndicatorSum(balanceItems.map(item => item.projection))
   };
 }

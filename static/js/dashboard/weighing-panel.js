@@ -81,13 +81,15 @@ function weighingPanel(unit) {
   const weighing = unitWeighing(unit.code);
   if (!weighing?.hours?.length) return '';
   const hours = weighing.hours;
+  const projectionStopped = fieldProjectionStopped(fieldFilledRows(unit), weighing);
   const shiftCode = weighing.shift || hours.at(-1).shift;
   const total = key => hours.reduce((sum, item) => sum + (item[key] || 0), 0);
   const projectionHint = unit.code === 'NRD' ? 'média dos turnos × 24 h' : 'média do dia × 24 h';
-  const groups = [
-    ['Dia', `00h às ${String(hours.at(-1).hour).padStart(2, '0')}h`, weighing.milling_day_t, weighing.delivery_day_t, 't'],
-    ['Projeção do dia', projectionHint, weighing.milling_projection_t, weighing.delivery_projection_t, 't'],
-  ].map(([title, hint, milling, delivery, unitLabel]) => `
+  const measures = [['Dia', `00h às ${String(hours.at(-1).hour).padStart(2, '0')}h`, weighing.milling_day_t, weighing.delivery_day_t, 't']];
+  if (!projectionStopped) {
+    measures.push(['Projeção do dia', projectionHint, weighing.milling_projection_t, weighing.delivery_projection_t, 't']);
+  }
+  const groups = measures.map(([title, hint, milling, delivery, unitLabel]) => `
     <div class="wp-kpi-group">
       <div class="wp-kpi-title"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(hint)}</small></div>
       <div class="wp-kpi-values">
@@ -119,6 +121,7 @@ function weighingPanel(unit) {
           <p>Moagem pela saída da balança e entrega pelos CVs × 2 × densidade · dados até ${escapeHtml(weighingReferenceTime(unit.code))}</p></div>
       </header>
       <div class="wp-kpis">${groups}
+        ${projectionStopped ? '<div class="wp-kpi-group"><div class="wp-kpi-title"><strong>Projeção do dia</strong></div><strong>Unidade parada</strong></div>' : ''}
         <div class="wp-kpi-group wp-kpi-stat"><small>Última hora (${String(lastHour.hour).padStart(2, '0')}h)</small>
           <strong>${fieldIndicatorNumber(lastHour.milling_t)}<span>t</span></strong>${trend === null ? '' : panelDiff(trend, 't').replace(/title="[^"]*"/, 'title="Moagem da última hora em relação à anterior"')}</div>
         <div class="wp-kpi-group wp-kpi-stat"><small>ATR do dia</small><strong>${fieldIndicatorNumber(weighing.atr, 2)}<span>kg/t</span></strong></div>

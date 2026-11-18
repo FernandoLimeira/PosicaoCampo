@@ -67,7 +67,7 @@ async function loadWeighingSummary() {
 function unitWeighing(code) {
   if (!weighingSummary?.reference_at) return null;
   const unit = (weighingSummary.units || []).find(item => item.code === code);
-  return unit && unit.loads_day > 0 ? unit : null;
+  return unit && (unit.loads_day > 0 || unit.zero_milling_at_latest_close) ? unit : null;
 }
 
 // Último dado do SELECT importado (dia e hora), no horário local da unidade (Polo MS: uma
@@ -107,22 +107,22 @@ function metricNumber(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizeDashboardUnit(unit, index) {
+  const merged = {
+    ...clone(defaultUnits[index]),
+    ...unit,
+    rows: normalizeFrontRows(Array.isArray(unit.rows) ? unit.rows : []),
+    metrics: Array.isArray(unit.metrics) && unit.metrics.length === metricDefinitions.length ? unit.metrics : makeMetrics(),
+    rain: standardizeFieldRainLabels(unit.code || defaultUnits[index].code, unit.rows, unit.rain)
+  };
+  if (merged.code === 'PST' && (!merged.name || merged.name === 'PARAÍSA TEMPO')) merged.name = 'PASSA TEMPO';
+  merged.border = calculateUnitBorder(merged.rows);
+  return merged;
+}
+
 function normalizeUnitsCollection(collection) {
   if (!Array.isArray(collection) || collection.length !== defaultUnits.length) return clone(defaultUnits);
-
-  return collection.map((unit, index) => {
-    const merged = {
-      ...clone(defaultUnits[index]),
-      ...unit,
-      rows: normalizeFrontRows(Array.isArray(unit.rows) ? unit.rows : []),
-      metrics: Array.isArray(unit.metrics) && unit.metrics.length === metricDefinitions.length ? unit.metrics : makeMetrics(),
-      rain: standardizeFieldRainLabels(unit.code || defaultUnits[index].code, unit.rows, unit.rain)
-    };
-
-    if (merged.code === 'PST' && (!merged.name || merged.name === 'PARAÍSA TEMPO')) merged.name = 'PASSA TEMPO';
-    merged.border = calculateUnitBorder(merged.rows);
-    return merged;
-  });
+  return collection.map(normalizeDashboardUnit);
 }
 
 function applyServerPayload(data) {
@@ -145,6 +145,31 @@ async function loadServerState() {
 
   const data = await apiRequest('/api/units');
   if (!applyServerPayload(data)) throw new Error('Resposta de unidades inválida.');
+}
+
+async function refreshDashboardUnit(code) {
+  const query = new URLSearchParams({ unit: code });
+  const [position, balance] = await Promise.all([
+    apiRequest(`/api/units?${query}`, { cache: 'no-store' }),
+    apiRequest(`/api/weighings/summary?${query}`, { cache: 'no-store' })
+  ]);
+  const index = units.findIndex(unit => unit.code === code);
+  const updated = position.units?.find(unit => unit.code === code);
+  const meta = position.meta?.[code];
+  const updatedWeighing = balance.units?.find(unit => unit.code === code);
+  if (index < 0 || !updated || !Number.isInteger(meta?.version) || !updatedWeighing) {
+    throw new Error('Não foi possível obter os dados da unidade selecionada.');
+  }
+  if (meta.version > (unitMeta[code]?.version ?? 0)) {
+    units[index] = normalizeDashboardUnit(updated, index);
+    unitMeta[code] = meta;
+  }
+  if ((balance.last_import?.imported_at ?? 0) >= (weighingSummary?.last_import?.imported_at ?? 0)) {
+    const cached = (weighingSummary?.units || []).filter(unit => unit.code !== code);
+    const summaries = [...cached, updatedWeighing];
+    const reference = Math.max(0, ...summaries.map(unit => unit.reference_at || 0));
+    weighingSummary = { ...balance, reference_at: reference || null, units: summaries };
+  }
 }
 
 async function saveUnitToServer(index, unit, expectedVersion = unitMeta[unit?.code]?.version ?? null) {

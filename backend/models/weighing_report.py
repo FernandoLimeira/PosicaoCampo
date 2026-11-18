@@ -38,11 +38,13 @@ def _average(values) -> float | None:
 def _position_indicators(unit: dict[str, Any]) -> dict[str, Any]:
     rows = [row for row in unit.get("rows") or []
             if isinstance(row, list) and (str(row[0] or "").strip() or str(row[1] or "").strip())]
+    groups = [field_status(row[3])["group"] if len(row) > 3 else None for row in rows]
     metrics = unit.get("metrics") or []
     industry = parse_br_number(str(metrics[0][2])) if metrics and len(metrics[0]) > 2 else None
     return {
         "fronts": len(rows),
-        "active": sum(1 for row in rows if len(row) > 3 and field_status(row[3])["group"] == "active"),
+        "active": groups.count("active"),
+        "all_stopped": bool(groups) and all(group == "stopped" for group in groups),
         "industry": industry,
     }
 
@@ -66,22 +68,28 @@ def build_weighing_report(work_date: Any = None, at_time: Any = None) -> tuple[b
     for unit in summary["units"]:
         code = unit["code"]
         position = positions.get(code, {"fronts": 0, "active": 0, "industry": None})
-        has = unit["loads_day"] > 0
+        projection_stopped = unit["zero_milling_at_latest_close"] and position.get("all_stopped", False)
+        has = unit["loads_day"] > 0 or unit["zero_milling_at_latest_close"]
         share = (round(unit["milling_shift_tph"] / position["industry"] * 100, 1)
                  if has and position["industry"] and unit["milling_shift_tph"] is not None else None)
         value = lambda key: unit[key] if has else None  # noqa: E731
+        projection = None if projection_stopped else value("milling_projection_t")
+        delivery_projection = None if projection_stopped else value("delivery_projection_t")
         resumo.append([code, position["active"], position["fronts"], position["industry"], value("milling_shift_tph"), share,
                        value("delivery_shift_tph"), _diff(value("delivery_shift_tph"), value("milling_shift_tph")),
                        value("milling_last3h_tph"), value("delivery_last3h_tph"), unit["stock_loads"], value("atr"),
-                       value("milling_day_t"), value("delivery_day_t"), value("milling_projection_t"), value("delivery_projection_t"),
+                       value("milling_day_t"), value("delivery_day_t"),
+                       "Unidade parada" if projection_stopped else projection, delivery_projection,
                        unit["shift"], _time(unit["closed_until"] - 1 if unit["closed_until"] else None, code)])
         totals["active"] += position["active"]
         totals["fronts"] += position["fronts"]
         for key, source in (("milling", "milling_shift_tph"), ("delivery", "delivery_shift_tph"), ("atr", "atr"),
-                            ("day", "milling_day_t"), ("delivery_day", "delivery_day_t"), ("projection", "milling_projection_t")):
+                            ("day", "milling_day_t"), ("delivery_day", "delivery_day_t")):
             if value(source) is not None:
                 totals[key].append(value(source))
         totals["stock"].append(unit["stock_loads"])
+        if projection is not None:
+            totals["projection"].append(projection)
         for item in unit["hours"]:
             hours_rows.append([code, f"{item['hour']:02d}:00", item["shift"], item["milling_t"], item["loads"], item["density_t"],
                                item["trucks"], item["delivery_t"], _diff(item["delivery_t"], item["milling_t"])])

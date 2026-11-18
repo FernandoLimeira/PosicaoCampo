@@ -30,16 +30,18 @@ function setupEvents() {
     }
   });
 
-  // Atualizar dados: a tela não se atualiza sozinha (processamento limitado); busca a última
-  // pesagem importada e as unidades salvas pelos outros analistas, com as correções deles.
+  // A resposta pertence à unidade selecionada no clique, mesmo que a seleção mude enquanto carrega.
   document.querySelector('#dashboard-refresh')?.addEventListener('click', async event => {
     const button = event.currentTarget;
+    const code = getReportUnit();
     button.disabled = true;
     try {
-      await Promise.all([loadServerState(), loadWeighingSummary()]);
+      await refreshDashboardUnit(code);
       renderDashboard();
-      await refreshFieldFrontNotes().catch(error => console.warn('Não foi possível atualizar o acompanhamento.', error));
-      showToast('Dados atualizados.');
+      if (getReportUnit() === code) {
+        await refreshFieldFrontNotes(code).catch(error => console.warn('Não foi possível atualizar o acompanhamento.', error));
+      }
+      showToast(`Dados de ${code} atualizados.`);
     } catch (error) {
       console.error(error);
       showToast(error.message || 'Não foi possível atualizar os dados.', true);

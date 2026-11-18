@@ -31,18 +31,22 @@ function managementKpi(label, value, detail, tone = '') {
 
 // Card de cada unidade (clicar abre a unidade abaixo): moagem do turno contra a indústria e
 // processado do dia contra a projeção, em barras animadas, com entrega, estoque e ATR.
-function managementUnitTile(unit, item, weighing) {
+function managementUnitTile(unit, item, weighing, workDate) {
   const number = fieldIndicatorNumber;
   const share = fieldIndustryShare(item);
   const selected = unit.code === getReportUnit();
-  const until = weighing?.closed_until ? new Date((weighing.closed_until - 1) * 1000).toLocaleTimeString('pt-BR', {
-    timeZone: weighing.timezone || 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : '';
+  const differentDay = weighing?.work_date && weighing.work_date !== workDate;
+  const until = weighing?.closed_until ? new Date((weighing.closed_until - 1) * 1000).toLocaleString('pt-BR', {
+    timeZone: weighing.timezone || 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit',
+    ...(differentDay ? { day: '2-digit', month: '2-digit' } : {})
+  }).replace(',', '') : '';
   const ms = weighing?.timezone && weighing.timezone !== 'America/Sao_Paulo' ? ' (MS)' : '';
   const shareText = share ? `${share.percent}% da ind. ${number(item.industry)}`
     : item.industry > 0 ? `ind. ${number(item.industry)}` : 'indústria —';
   const delivery = item.deliveryShift !== null && item.deliveryShift !== undefined && item.millingShift !== null && item.millingShift !== undefined
     ? panelDiff(item.deliveryShift - item.millingShift, '') : '';
   const dayShare = item.day > 0 && item.projection > 0 ? item.day / item.projection : 0;
+  const projection = item.projectionStopped ? 'Unidade parada' : `${number(item.projection)} <em>t</em>`;
   return `<button type="button" class="ov-unit is-${escapeHtml(unit.border)}${selected ? ' is-selected' : ''}" data-overview-unit="${escapeHtml(unit.code)}"
       aria-pressed="${selected}" aria-label="Abrir ${escapeHtml(unit.code)} abaixo">
     <span class="ov-unit-head"><span><strong>${escapeHtml(unit.code)}</strong><small>${escapeHtml(unit.name)}</small></span>
@@ -56,8 +60,8 @@ function managementUnitTile(unit, item, weighing) {
       <span><small>ATR</small><b>${number(item.atr, 2)}</b><i>kg/t</i></span>
     </span>
     <span class="ov-unit-day"><span><small>Processado dia</small><b>${number(item.day)} <em>t</em></b></span>
-      <span><small>Projeção</small><b class="is-projection">${number(item.projection)} <em>t</em></b></span></span>
-    ${panelGauge(dayShare, 'day')}
+      <span><small>Projeção</small><b class="is-projection">${projection}</b></span></span>
+    ${item.projectionStopped ? '' : panelGauge(dayShare, 'day')}
     <span class="ov-unit-foot">${until ? `Balança até ${escapeHtml(until)}${ms}` : 'Sem pesagem: indicadores do Preencher'}</span>
   </button>`;
 }
@@ -65,8 +69,13 @@ function managementUnitTile(unit, item, weighing) {
 function managementReportHtml() {
   const summary = managementReportSummary();
   const items = units.map(unit => fieldUnitIndicators(unit, summary));
-  const totals = fieldIndicatorTotals(items);
   const weighingByCode = new Map((summary?.units || []).map(unit => [unit.code, unit]));
+  // Uma atualização individual pode manter os cards das outras unidades no dia anterior.
+  const balanceItems = items.filter((_, index) => {
+    const day = weighingByCode.get(units[index].code)?.work_date;
+    return !day || day === summary.work_date;
+  });
+  const totals = fieldIndicatorTotals(items, balanceItems);
 
   const kpis = [
     managementKpi('Frentes em atividade', `${totals.active} <em>de ${totals.fronts}</em>`, `${totals.units} unidades`, 'is-green'),
@@ -76,10 +85,11 @@ function managementReportHtml() {
       `entrega ${fieldIndicatorNumber(totals.delivery)} t/h · estoque ${fieldIndicatorNumber(totals.stock)} cargas`),
     managementKpi('ATR médio geral', `${fieldIndicatorNumber(totals.atr, 2)} <em>kg/t</em>`,
       totals.atrUnits > 1 ? `média ${totals.atrWeighted ? 'ponderada pela moagem ' : ''}das ${totals.atrUnits} unidades` : totals.atrUnits ? 'ATR de 1 unidade' : 'sem ATR informado', 'is-atr'),
-    managementKpi('Processado dia', `${fieldIndicatorNumber(totals.day)} <em>t</em>`, 'soma das 4 unidades'),
-    managementKpi('Projeção de moagem dia', `${fieldIndicatorNumber(totals.projection)} <em>t</em>`, 'soma das projeções das unidades', 'is-projection')
+    managementKpi('Processado dia', `${fieldIndicatorNumber(totals.day)} <em>t</em>`, 'soma das unidades no dia'),
+    managementKpi('Projeção de moagem dia', totals.projection === null ? '—' : `${fieldIndicatorNumber(totals.projection)} <em>t</em>`,
+      'soma das projeções do dia', 'is-projection')
   ].join('');
-  const tiles = units.map((unit, index) => managementUnitTile(unit, items[index], weighingByCode.get(unit.code))).join('');
+  const tiles = units.map((unit, index) => managementUnitTile(unit, items[index], weighingByCode.get(unit.code), summary?.work_date)).join('');
 
   const today = saoPauloIsoDate();
   const shownDay = managementReportDate || summary?.work_date || today;

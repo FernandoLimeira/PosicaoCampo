@@ -1,6 +1,7 @@
 // Painel: editor da posição da unidade (assistente em etapas do modal "Preencher").
 let currentEditorStep = 0;
 let editorInitialSnapshot = null;
+let editorUnitVersion = null;
 let editorObservationContext = null;
 let editorObservationRequest = 0;
 const editorSteps = ['Campo', 'Produção', 'Apontamentos e Mudanças'];
@@ -268,6 +269,7 @@ function resizeEditorTextareas() {
 function loadUnitEditor(index) {
   const unit = units[index];
   if (!unit) return;
+  editorUnitVersion = unitMeta[unit.code]?.version ?? null;
 
   const unitSelect = document.querySelector('#unit-select');
   const formUnitName = document.querySelector('#form-unit-name');
@@ -414,6 +416,7 @@ function setupEditorEvents() {
 
     const index = Number(document.querySelector('#unit-select').value);
     const currentUnit = units[index];
+    const expectedVersion = editorUnitVersion;
     if (!currentUnit) {
       if (saveButton) saveButton.disabled = false;
       return;
@@ -463,7 +466,7 @@ function setupEditorEvents() {
     selectedUnitIndex = index;
 
     try {
-      const saved = await saveUnitToServer(index, updatedUnit);
+      const saved = await saveUnitToServer(index, updatedUnit, expectedVersion);
       units[index] = normalizeUnitsCollection(units.map((unit, unitIndex) => unitIndex === index ? saved.unit : unit))[index];
       if (saved.meta) unitMeta[updatedUnit.code] = saved.meta;
       renderDashboard();

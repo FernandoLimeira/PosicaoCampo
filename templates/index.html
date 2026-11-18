@@ -18,7 +18,7 @@
           </div>
           <div class="dashboard-heading-actions">
             <span id="preview-unit-state" class="unit-state dashboard-unit-state"></span>
-            <button id="dashboard-refresh" class="dashboard-fill-button dashboard-import-button" type="button" title="Busca a última pesagem importada e o que os outros analistas salvaram (a tela não se atualiza sozinha)">Atualizar dados</button>
+            <button id="dashboard-refresh" class="dashboard-fill-button dashboard-import-button" type="button" title="Atualiza a pesagem, a posição de campo e o acompanhamento da unidade selecionada">Atualizar dados</button>
             <button id="management-report-export" class="dashboard-fill-button dashboard-import-button" type="button" title="Indicadores das 4 unidades, hora a hora, turnos, troca de cana e frentes">Exportar Excel</button>
             {% if user.module_access.dashboard.edit %}<label id="dashboard-import-label" class="dashboard-fill-button dashboard-import-button" title="Excel do SELECT da balança (Entrega CTT → Consultas SQL); substitui a pesagem anterior">Importar pesagem<input id="dashboard-import-file" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" hidden /></label>
             <button id="open-data-modal" class="dashboard-fill-button" type="button">Preencher</button>{% endif %}

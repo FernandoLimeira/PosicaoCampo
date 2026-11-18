@@ -223,13 +223,18 @@ def _daily_projection(hours, metric, *, by_shift: bool) -> float | None:
     return _round(average * 24) if average is not None else None
 
 
-def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time: Any = None) -> dict[str, Any]:
+def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time: Any = None,
+                     unit_code: str | None = None) -> dict[str, Any]:
     """Resumo do dia da pesagem importada (sem data: o dia mais recente do arquivo).
 
     As horas vão de 00:00 até a última hora que veio no SELECT importado, independente do
     relógio: a importação vale até a próxima. ``at_time`` ("HH:MM") ou ``now`` (epoch)
     limitam às horas encerradas até aquele momento (hora − 1 h), para conferir com uma
     planilha de fechamento tirada nele."""
+    if unit_code is not None:
+        unit_code = unit_code.strip().upper()
+        if unit_code not in ALLOWED_UNIT_CODES:
+            raise ValueError("Unidade inválida.")
     with connection() as conn:
         extracted = conn.execute("SELECT MAX(extracted_at) FROM field_weighings").fetchone()[0]
         latest = conn.execute(
@@ -238,12 +243,13 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
     # Com DT_EXTRACAO: fecha até a última hora cheia encerrada quando o SELECT rodou (os fusos
     # dos polos diferem em horas inteiras, então a hora cheia é a mesma nos dois).
     extraction_cut = extracted - extracted % 3600 if extracted else None
+    if extraction_cut:
+        # Dia da última hora fechada (00:20 fecha a hora 23 do dia anterior).
+        latest_day = datetime.fromtimestamp(extraction_cut - 1, FIELD_TIMEZONE).date()
+    else:
+        latest_day = date.fromisoformat(latest) if latest else datetime.now(FIELD_TIMEZONE).date()
     if work_date in (None, ""):
-        if extraction_cut:
-            # Dia da última hora fechada (00:20 fecha a hora 23 do dia anterior).
-            selected = datetime.fromtimestamp(extraction_cut - 1, FIELD_TIMEZONE).date()
-        else:
-            selected = date.fromisoformat(latest) if latest else datetime.now(FIELD_TIMEZONE).date()
+        selected = latest_day
     else:
         try:
             selected = date.fromisoformat(str(work_date))
@@ -327,7 +333,7 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
 
     units = []
     support = []
-    for code in ALLOWED_UNIT_CODES:
+    for code in ((unit_code,) if unit_code else ALLOWED_UNIT_CODES):
         tz = unit_timezone(code)
         unit_start = int(datetime.combine(selected, dtime.min, tz).timestamp())
         unit_hours, unit_closed_until = closing(unit_start, polo_of(code))
@@ -337,6 +343,7 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
                 and unit_closed_until and row["scale_out_at"] < unit_closed_until]
         arrivals = [row for row in arrival_rows if row["unit_code"] == code]
         unit_reference = references.get(polo_of(code))
+        unit_data_until = data_until.get(polo_of(code))
         stock_at = unit_closed_until - 1 if unit_closed_until is not None else None
         if now is None and stock_at is not None and unit_reference is not None:
             stock_at = min(stock_at, unit_reference)
@@ -373,6 +380,13 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
                 "loads": len(milled), "density_t": density, "trucks": trucks,
                 "delivery_t": _round(delivery),
             })
+        # O status atual das frentes só vale no fechamento mais recente. Exige dados
+        # da própria unidade para distinguir moagem zero de uma unidade sem pesagem.
+        zero_milling_at_latest_close = bool(
+            selected == latest_day and exact and exact[-1]["milling"] == 0
+            and unit_data_until < unit_closed_until
+            and (rows or stock or any(unit_start <= _arrival(row) < unit_closed_until for row in arrivals))
+        )
         shift_hours = [item for item in exact if item["shift"] == unit_shift]
         recent_hours = exact[-LAST_HOURS:]
         fronts: dict[str, list] = {}
@@ -394,11 +408,12 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
                                 "loads": entry["loads"], "tons": entry["tons"], "atr": entry["atr"]})
         units.append({
             "code": code,
+            "work_date": day,
             # Horário local da unidade: horas, turno e fechamento (Polo MS: uma hora a menos).
             "timezone": getattr(tz, "key", str(tz)),
             "reference_at": unit_reference,
             # Último dado do SELECT importado para esta unidade (polo), no seu fuso.
-            "data_until": data_until.get(polo_of(code)),
+            "data_until": unit_data_until,
             "closed_hours": len(unit_hours),
             "closed_until": unit_closed_until,
             "shift": unit_shift,
@@ -413,6 +428,7 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
             "delivery_last3h_tph": _round(_average(item["delivery"] for item in recent_hours)),
             "milling_projection_t": _daily_projection(exact, "milling", by_shift=code == "NRD"),
             "delivery_projection_t": _daily_projection(exact, "delivery", by_shift=code == "NRD"),
+            "zero_milling_at_latest_close": zero_milling_at_latest_close,
             "stock_loads": len(stock),
             "atr": _weighted_atr(rows),
             "hours": hours,

@@ -452,6 +452,44 @@ class WeighingTests(unittest.TestCase):
         self.assertEqual(troca[0][:3], ["Frente", "Unidade dona", "Entregou em"])
         self.assertIn(["19", "NRD", "PPT", "1", "30", "127.91", "PPT"], troca)
 
+    def test_stopped_projection_in_the_latest_close_and_excel(self):
+        from backend.models.weighing_report import build_weighing_report
+        from backend.services.xlsx_reader import open_archive, plain_cell_value, read_sheet_rows, workbook_sheets
+
+        source = [HEADER + ["DT_EXTRACAO"], *[
+            row + ["14/11/2026 11:08:00"] for row in (
+                load("201", "1", "5", "361", "1173", "60000", "14/11/2026 08:30:00"),
+                load("201", "2", "5", "361", "1173", "", "", patio="14/11/2026 10:10:00"),
+                load("402", "3", "411", "90441", "2", "30000", "14/11/2026 08:20:00"),
+                load("402", "4", "411", "90441", "2", "20", "14/11/2026 09:15:00"),
+                load("401", "5", "404", "90428", "1", "", "", patio="14/11/2026 09:20:00"),
+            )
+        ]]
+        records = parse_weighing_file(xlsx(source), "a.xlsx")["records"]
+        weighings.import_weighings(self.admin["id"], records)
+        units = {unit["code"]: unit for unit in weighings.weighing_summary()["units"]}
+        self.assertEqual({code: unit["zero_milling_at_latest_close"] for code, unit in units.items()},
+                         {"PPT": True, "NRD": False, "RBR": False, "PST": True})
+        self.assertEqual(weighings.weighing_summary(unit_code="pst")["units"], [units["PST"]])
+        self.assertEqual(units["RBR"]["hours"][-1]["milling_t"], 0.0)  # 20 kg aparecem arredondados.
+        earlier = weighings.weighing_summary("2026-11-14", at_time="10:00")["units"][0]
+        self.assertEqual(earlier["hours"][-1]["milling_t"], 0.0)
+        self.assertFalse(earlier["zero_milling_at_latest_close"])
+
+        positions = [{"code": code, "rows": [["1", "", "", "PARADA", ""]]} for code in units]
+        with patch("backend.models.weighing_report.list_units", return_value=positions):
+            content, _ = build_weighing_report()
+        with open_archive(content, "inválido") as archive:
+            _, path = workbook_sheets(archive)[0]
+            summary = {values[0]: values for values, _ in read_sheet_rows(
+                archive, path, lambda cell: plain_cell_value(cell, []),
+                max_rows=100, max_columns=30, keep_empty_rows=False)}
+        self.assertEqual((summary["PPT"][10], summary["PPT"][12], summary["PPT"][14], summary["PPT"][15]),
+                         ("1", "60", "Unidade parada", ""))
+        self.assertEqual(summary["PST"][14], "Unidade parada")
+        self.assertEqual(summary["NRD"][14], "")
+        self.assertEqual(float(summary["Total"][14]), units["RBR"]["milling_projection_t"])
+
     def test_summary_without_data(self):
         summary = weighings.weighing_summary("2026-11-13")
         self.assertIsNone(summary["reference_at"])

@@ -127,6 +127,52 @@ async function main() {
   assert.equal(link.href, '/sacarose?unit=PST');
   assert.match(elements.get('#preview-unit-label').textContent, /PST/);
 
+  const refresh = context('?unit=PPT');
+  loadScripts(refresh.ctx, pageScripts('/'), withoutInitializeApp);
+  refresh.ctx.setupEvents();
+  vm.runInContext(`
+    unitMeta = { PPT: { version: 1 }, NRD: { version: 9 } };
+    units[1].observation = 'Dados da NRD';
+    weighingSummary = {
+      work_date: '2026-11-17', reference_at: 1794960000, last_import: { imported_at: 1 },
+      units: [{ code: 'NRD', work_date: '2026-11-17', reference_at: 1794960000,
+        closed_until: 1794960001, loads_day: 2, milling_day_t: 880, milling_projection_t: 980 }]
+    };
+  `, refresh.ctx);
+  refresh.ctx.loadUnitEditor(0);
+  const untouched = vm.runInContext('[units[1], unitMeta.NRD, weighingSummary.units[0]]', refresh.ctx);
+  const requests = [];
+  let resolvePosition;
+  refresh.ctx.showToast = () => {};
+  refresh.ctx.apiRequest = async path => {
+    requests.push(path);
+    if (path === '/api/units?unit=PPT') return new Promise(resolve => { resolvePosition = resolve; });
+    if (path === '/api/weighings/summary?unit=PPT') return {
+      work_date: '2026-11-18', last_import: { imported_at: 2 },
+      units: [{ code: 'PPT', work_date: '2026-11-18', reference_at: 1795046400, loads_day: 3,
+        milling_day_t: 1500, milling_projection_t: 1800 }]
+    };
+    return {};
+  };
+  const refreshButton = refresh.elements.get('#dashboard-refresh');
+  const refreshing = refreshButton.listeners.click({ currentTarget: refreshButton });
+  assert(refreshButton.disabled);
+  refresh.ctx.setReportUnit('NRD');
+  resolvePosition({ units: [{ code: 'PPT', observation: 'PPT atualizado' }], meta: { PPT: { version: 2 } } });
+  await refreshing;
+  assert.deepEqual(requests, ['/api/units?unit=PPT', '/api/weighings/summary?unit=PPT', '/api/front-notes?unit=NRD']);
+  assert.equal(refresh.ctx.getReportUnit(), 'NRD');
+  assert(!refreshButton.disabled);
+  assert.equal(vm.runInContext('units[0].observation', refresh.ctx), 'PPT atualizado');
+  assert.equal(vm.runInContext('unitMeta.PPT.version', refresh.ctx), 2);
+  assert.equal(vm.runInContext('editorUnitVersion', refresh.ctx), 1);
+  assert.equal(vm.runInContext('units[1]', refresh.ctx), untouched[0]);
+  assert.equal(vm.runInContext('unitMeta.NRD', refresh.ctx), untouched[1]);
+  assert.equal(vm.runInContext('weighingSummary.units.find(unit => unit.code === "NRD")', refresh.ctx), untouched[2]);
+  const refreshedDashboard = refresh.ctx.managementReportHtml();
+  assert.match(refreshedDashboard, /Processado dia<\/small><strong>1\.500 /);
+  assert.match(refreshedDashboard, /Balança até 17\/11/);
+
   loadScripts(ctx, pageScripts('/relatorios'));
   const report = { performance_rows: [{ unit: 'PPT', front: '1' }, { unit: 'NRD', front: '1' }, { unit: '' }], timeline: [{ unit: 'PPT' }, { unit: 'NRD' }] };
   assert.equal(ctx.filterExcelPerformanceRows(report, { unit: 'PPT' }).length, 1);
@@ -187,6 +233,32 @@ async function main() {
   const earlier = { ...summary, units: [{ ...summary.units[0], closed_until: 1794751200, stock_loads: 31, milling_day_t: 5367.7 }] };
   const historical = standalone.fieldUnitIndicators(corrected, earlier);
   assert.deepEqual([historical.day, historical.stock, historical.corrected.length], [5367.7, 31, 0]);
+
+  const stoppedUnit = { ...corrected, rows: [['FT 02', '', '', 'PARADA'], ['FT 19', '', '', 'PARADO']] };
+  const currentWeighing = { ...summary.units[0], zero_milling_at_latest_close: true,
+    hours: [{ hour: 20, shift: 'C', milling_t: 0, delivery_t: 0, loads: 0, trucks: 0 }] };
+  const stoppedSummary = { ...summary, units: [currentWeighing] };
+  const stopped = standalone.fieldUnitIndicators(stoppedUnit, stoppedSummary);
+  assert.deepEqual([stopped.projectionStopped, stopped.projection, stopped.day, stopped.stock],
+    [true, null, 11945, 50]);
+  const resumedUnit = { ...stoppedUnit, rows: [stoppedUnit.rows[0], ['FT 19', '', '', 'EM ATIVIDADE']] };
+  const resumed = standalone.fieldUnitIndicators(resumedUnit, stoppedSummary);
+  assert.deepEqual([resumed.projectionStopped, resumed.projection], [false, 18822]);
+  assert.equal(standalone.fieldIndicatorTotals([stopped, resumed]).projection, 18822);
+  assert.equal(standalone.fieldIndicatorTotals([stopped]).projection, null);
+  assert.equal(standalone.fieldUnitIndicators(stoppedUnit, summary).projection, 18822);
+  assert.equal(standalone.fieldUnitIndicators({ ...stoppedUnit, rows: [] }, stoppedSummary).projection, 18822);
+  assert.equal(standalone.fieldUnitIndicators({ ...stoppedUnit, rows: [['FT 02', '', '', '']] }, stoppedSummary).projection, 18822);
+  const idleAllDay = { ...stoppedSummary, units: [{ ...currentWeighing, loads_day: 0,
+    milling_day_t: 0, milling_projection_t: 0 }] };
+  assert.equal(standalone.fieldUnitIndicators(resumedUnit, idleAllDay).projection, 0);
+  assert.match(ctx.managementUnitTile(stoppedUnit, stopped, currentWeighing), /Unidade parada/);
+  ctx.testProjectionSummary = stoppedSummary;
+  vm.runInContext('weighingSummary = testProjectionSummary', ctx);
+  assert.match(ctx.weighingPanel(stoppedUnit), /Unidade parada/);
+  assert.doesNotMatch(ctx.weighingPanel(resumedUnit), /Unidade parada/);
+  vm.runInContext('weighingSummary = null', ctx);
+
   summary.units[0].data_until = 1794776399;  // outro SELECT importado: a correção deixa de valer
   summary.units[0].closed_until = 1794776400;
   const stale = standalone.fieldUnitIndicators(corrected, summary);

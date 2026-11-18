@@ -102,6 +102,20 @@ class PageTests(unittest.TestCase):
                 self.assertEqual(response["status"], 302)
                 self.assertEqual(response["headers"]["Location"], "/login")
 
+    def test_dashboard_refresh_endpoints_filter_to_the_requested_unit(self):
+        for path in ("/api/units", "/api/weighings/summary"):
+            with self.subTest(path=path):
+                full = self.request(path, role="member")
+                scoped = self.request(path, role="member", overrides={"QUERY_STRING": "unit=PST"})
+                self.assertEqual((full["status"], scoped["status"]), (200, 200))
+                expected = json.loads(full["body"])
+                actual = json.loads(scoped["body"])
+                self.assertEqual(actual["units"], [unit for unit in expected["units"] if unit["code"] == "PST"])
+                if path == "/api/units":
+                    self.assertEqual(actual["meta"], {"PST": expected["meta"]["PST"]})
+                self.assertEqual(self.request(path, role="member", overrides={"QUERY_STRING": "unit=XYZ"})["status"], 400)
+                self.assertEqual(self.request(path, overrides={"QUERY_STRING": "unit=PST"})["status"], 401)
+
     def test_delivery_pages_menu_and_permissions(self):
         from backend.models.module_access import MODULES
         # A antiga página de resumo virou o painel/relatório da Posição de Campo.

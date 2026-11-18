@@ -243,8 +243,10 @@ function globalDrawSummary(ctx, units, data) {
   globalDrawText(ctx, 'Projeção de moagem dia', 190, rowTop + 38, 160, globalFont(12, '500'), GLOBAL_COLORS.muted);
   const projectionText = fieldIndicatorNumber(projection);
   globalDrawText(ctx, projectionText, 190, rowTop + 64, 120, valueFont, GLOBAL_COLORS.greenBright);
-  globalDrawText(ctx, 't', 190 + Math.min(120, globalTextWidth(ctx, projectionText, valueFont)) + 4, rowTop + 69, 14,
-    globalFont(15, 'bold'), GLOBAL_COLORS.greenBright);
+  if (projection !== null) {
+    globalDrawText(ctx, 't', 190 + Math.min(120, globalTextWidth(ctx, projectionText, valueFont)) + 4, rowTop + 69, 14,
+      globalFont(15, 'bold'), GLOBAL_COLORS.greenBright);
+  }
   const unitsLeft = 352;
   const unitWidth = (GLOBAL_REFERENCE_WIDTH - 14 - 8 - unitsLeft) / 4;
   units.forEach((unit, index) => {
@@ -252,7 +254,8 @@ function globalDrawSummary(ctx, units, data) {
     fillRoundedRect(ctx, ux, rowTop + 8, unitWidth - 6, rowHeight - 16, 7, GLOBAL_COLORS.soft);
     globalDrawText(ctx, unit.code, ux + 9, rowTop + 22, unitWidth - 24, globalFont(13, 'bold'));
     globalDrawText(ctx, fieldIndicatorNumber(data[index].day), ux + 9, rowTop + 44, unitWidth - 24, globalFont(20, '800'));
-    globalDrawText(ctx, `proj. ${fieldIndicatorNumber(data[index].projection)}`, ux + 9, rowTop + 64, unitWidth - 24,
+    const unitProjection = data[index].projectionStopped ? 'Parada' : `proj. ${fieldIndicatorNumber(data[index].projection)}`;
+    globalDrawText(ctx, unitProjection, ux + 9, rowTop + 64, unitWidth - 24,
       globalFont(12, 'bold'), GLOBAL_COLORS.greenBright);
   });
 }
@@ -418,7 +421,12 @@ function globalDrawProcessed(ctx, layout, item) {
     globalDrawText(ctx, number, right - unitWidth - 3, top + 16, room, valueFont, color, 'right');
   };
   pair(boxes[0], 'PROCESSADO DIA', fieldIndicatorNumber(item.day), GLOBAL_COLORS.ink);
-  pair(boxes[1], 'PROJEÇÃO', fieldIndicatorNumber(item.projection), GLOBAL_COLORS.greenBright);
+  if (item.projectionStopped) {
+    const [left, width] = boxes[1];
+    globalDrawText(ctx, 'Unidade parada', left + 10, top + 17, width - 20, labelFont, GLOBAL_COLORS.muted);
+  } else {
+    pair(boxes[1], 'PROJEÇÃO', fieldIndicatorNumber(item.projection), GLOBAL_COLORS.greenBright);
+  }
 }
 
 function globalDrawCardTable(ctx, layout, unit, item) {

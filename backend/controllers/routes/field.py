@@ -112,8 +112,8 @@ def handle(req):
     if path == "/api/weighings/summary" and method == "GET":
         if not user:
             return req.unauthorized()
-        return req.guarded(lambda: req.json(HTTPStatus.OK, weighing_summary(req.param("date"), at_time=req.param("hora"))),
-                           bad_request=ValueError)
+        return req.guarded(lambda: req.json(HTTPStatus.OK, weighing_summary(
+            req.param("date"), at_time=req.param("hora"), unit_code=req.param("unit"))), bad_request=ValueError)
 
     # Consultas SQL salvas da Entrega CTT (só guardadas, não executadas).
     if path == "/api/delivery/queries":
@@ -147,7 +147,7 @@ def handle(req):
     if path == "/api/units" and method == "GET":
         if not user:
             return req.unauthorized()
-        return req.json(HTTPStatus.OK, list_units_payload())
+        return req.guarded(lambda: req.json(HTTPStatus.OK, list_units_payload(req.param("unit"))), bad_request=ValueError)
 
     if path == "/api/units/sync" and method == "POST":
         if not user:
