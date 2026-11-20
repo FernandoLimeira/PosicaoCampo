@@ -31,7 +31,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .editor-unit-summary span { color: #999999; }
 .editor-unit-summary strong { color: #d3d3d3; }
 .section-heading h3 { color: #d1d1d1; }
-.field > span, .metric-field label > span, .rain-edit-row label > span { color: #999999; }
+.field > span, .metric-field label > span { color: #999999; }
 input, select, textarea { background: #2a2a2a; color: #d9d9d9; }
 input:focus, select:focus, textarea:focus { border-color: #616161; }
 .modal-backdrop :is(input, select, textarea):hover:not(:focus) { border-color: #4a5457; }

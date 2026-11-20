@@ -12,7 +12,6 @@
 .production-summary-item.is-wet { border-left-color: #b59335; }
 .production-summary-item.is-waiting { border-left-color: #616161; }
 .production-summary-item.is-stopped { border-left-color: #c6783c; }
-.production-rain-context { color: #9c9c9c; }
 .production-daily-actions p { color: #9c9c9c; }
 .production-table-card { background: #2a2a2a; }
 .production-table-heading { border-bottom: 1px solid #434343; }
@@ -312,19 +311,6 @@
 .production-secondary-button.pdash-action svg { color: #999999; }
 .pdash-overview-card h3 small { color: #999999; }
 .pdash-overview-note { color: #e1c989; background: #2a261e; }
-.pdash-rain-average div { background: linear-gradient(135deg, #383838, #2b2b2b); }
-.pdash-rain-average span { color: #999999; }
-.pdash-rain-average strong small { color: #999999; }
-.pdash-rain-unit b { color: #e0e0e0; }
-.pdash-rain-unit small { color: #999999; }
-.pdash-rain-bars { background: #202020; }
-.pdash-rain-bars i.is-accumulated { background: #404040; }
-.pdash-rain-bars i.is-turn { background: #383838; }
-.pdash-rain-values { color: #adadad; }
-.pdash-rain-values b { color: #b1d6dd; }
-.pdash-rain-legend { color: #999999; }
-.pdash-rain-legend i.is-turn { background: #383838; }
-.pdash-rain-legend i.is-accumulated { background: #404040; }
 button.pdash-kpi.is-active { color: #e0e0e0; }
 .pdash-front-filter { color: #9d9d9d; }
 .pdash-front-filter select { background-color: #2a2a2a; color: #e0e0e0; }

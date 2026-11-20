@@ -22,9 +22,6 @@ body[data-page="dashboard"] { --page: #202020; --data-border: #484848; }
 .unit-card.critical .unit-state { color: #d3626d; }
 .status-table-wrap { border: 1px solid #444444; scrollbar-color: #303c42 transparent; }
 .status-cell.active-text { color: #7edfa3; }
-.rain-turn-block .compact-block-title { border-bottom-color: #616161; }
-.rain-row { color: #bababa; }
-.rain-empty { color: #999999; }
 .text-panel p { color: #acacac; }
 .form-content { background: #262626; }
 .row-remove { background: #2c2021; color: #d2606c; }
@@ -51,7 +48,6 @@ body[data-page="dashboard"] { --page: #202020; --data-border: #484848; }
 .operation-editor-modal .form-wizard-content { background: #252525; }
 .operation-editor-modal .metric-field { background: #292929; }
 .operation-editor-modal .notes-form-grid textarea { background: #2a2a2a; }
-.operation-editor-modal .rain-edit-row { background: #292929; }
 .operation-editor-modal .wizard-save-status { color: #999999; }
 .operation-editor-modal .wizard-save-status.is-dirty { color: #deb47d; }
 .export-image-option { border: 1px solid #454545; background: #2a2a2a; color: #d1d1d1; }
@@ -101,7 +97,6 @@ body[data-page="dashboard"] { --page: #202020; --data-border: #484848; }
 .field-front-detail-unit { color: #a5a5a5; }
 .field-front-detail-grid dt { color: #a5a5a5; }
 .field-front-detail-grid small { color: #dcb77f; }
-.field-front-detail-rain { color: #a5a5a5; }
 .field-front-status-form label { color: #bebebe; }
 .field-front-status-form small { color: #a5a5a5; }
 .field-front-detail-section h3 { color: #bebebe; }

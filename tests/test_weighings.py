@@ -345,6 +345,26 @@ class WeighingTests(unittest.TestCase):
         summary = weighings.weighing_summary()
         self.assertEqual((summary["work_date"], summary["units"][0]["closed_hours"]), ("2026-11-14", 24))
 
+    def test_sp_weighings_at_the_hour_boundary_count_in_the_next_hour(self):
+        rows = [HEADER + ["DT_EXTRACAO"]]
+        for instance, front in (("201", "05"), ("204", "20")):
+            for release, out, weight in (
+                ("1", "15:59:59", "30000"), ("2", "16:00:00", "40000"),
+                ("3", "16:59:59", "50000"), ("4", "17:00:00", "60000"),
+            ):
+                rows.append(load(instance, release, front, "361", "1173", weight,
+                                 f"14/11/2026 {out}", patio="14/11/2026 15:30:00")
+                            + ["14/11/2026 17:05:00"])
+        weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx(rows))["records"])
+
+        for code in ("PPT", "NRD"):
+            cutoff_16 = weighings.weighing_summary("2026-11-14", at_time="16:00", unit_code=code)["units"][0]
+            cutoff_17 = weighings.weighing_summary("2026-11-14", unit_code=code)["units"][0]
+            self.assertEqual((cutoff_16["loads_day"], cutoff_16["milling_day_t"]), (1, 30.0))
+            self.assertEqual((cutoff_17["loads_day"], cutoff_17["milling_day_t"]), (3, 120.0))
+            self.assertEqual([(h["hour"], h["loads"], h["milling_t"]) for h in cutoff_17["hours"][-2:]],
+                             [(15, 1, 30.0), (16, 2, 90.0)])
+
     def test_ms_stock_uses_the_selected_hour_with_or_without_extraction_time(self):
         rows = [
             load("402", "1", "411", "90441", "2", "30000", "14/11/2026 10:36:30", patio="14/11/2026 10:10:00"),
@@ -451,6 +471,29 @@ class WeighingTests(unittest.TestCase):
         troca = sheets["Troca de cana"]
         self.assertEqual(troca[0][:3], ["Frente", "Unidade dona", "Entregou em"])
         self.assertIn(["19", "NRD", "PPT", "1", "30", "127.91", "PPT"], troca)
+
+    def test_report_shift_totals_round_only_after_aggregation_in_sp(self):
+        from backend.models.weighing_report import build_weighing_report
+        from backend.services.xlsx_reader import open_archive, plain_cell_value, read_sheet_rows, workbook_sheets
+
+        rows = [HEADER + ["DT_EXTRACAO"]]
+        for instance, front in [("201", "5"), ("204", "20"), ("402", "411")]:
+            for hour, weight in enumerate((30040, 30040, 30140)):
+                rows.append(load(instance, str(hour + 1), front, "361", "1173", str(weight),
+                                 f"14/11/2026 {hour:02}:40:00", patio=f"14/11/2026 {hour:02}:10:00")
+                            + ["14/11/2026 04:10:00"])
+        records = parse_weighing_file(xlsx(rows))["records"]
+        weighings.import_weighings(self.admin["id"], records)
+        content, _ = build_weighing_report()
+        with open_archive(content, "inválido") as archive:
+            shifts_path = dict(workbook_sheets(archive))["Turnos"]
+            turns = {row[0]: row for row, _ in read_sheet_rows(
+                archive, shifts_path, lambda cell: plain_cell_value(cell, []),
+                max_rows=100, max_columns=20, keep_empty_rows=False)}
+
+        for code in ("PPT", "NRD"):
+            self.assertEqual((turns[code][3], turns[code][6]), ("90.2", "22.6"))
+        self.assertEqual((turns["RBR"][3], turns["RBR"][6]), ("90.1", "30"))
 
     def test_stopped_projection_in_the_latest_close_and_excel(self):
         from backend.models.weighing_report import build_weighing_report

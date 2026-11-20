@@ -44,8 +44,9 @@ async function importWeighingFile(file) {
 function weighingImportMessage(result) {
   const count = value => Number(value || 0).toLocaleString('pt-BR');
   const weighed = result.imported - result.pending;
-  return `Pesagem importada: ${count(weighed)} ${weighed === 1 ? 'carga pesada' : 'cargas pesadas'}`
-    + `${result.pending ? ` e ${count(result.pending)} no pátio` : ''} (base anterior substituída).`;
+  return `Base substituída. O arquivo continha ${count(weighed)} ${weighed === 1 ? 'carga pesada' : 'cargas pesadas'}`
+    + `${result.pending ? ` e ${count(result.pending)} no pátio` : ''}.`
+    + (result.extracted_at ? ' O painel usa as horas fechadas.' : '');
 }
 
 // Avisos da importação: instâncias que não são de PPT/NRD/RBR/PST, linhas sem liberação,

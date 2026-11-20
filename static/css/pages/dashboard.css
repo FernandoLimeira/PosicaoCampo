@@ -132,7 +132,7 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 
 .unit-card.critical { --unit-accent: #d87878; }
 
-/* Card da unidade: frentes à esquerda; indicadores, chuva e notas à direita. */
+/* Card da unidade: frentes à esquerda; indicadores e notas à direita. */
 .unit-layout-grid {
   min-width: 0;
   display: grid;
@@ -204,7 +204,7 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 
 .status-cell.active-text { color: #218a49; }
 
-/* Coluna direita do card: indicadores do turno, chuva e observação/mudanças empilhados. */
+/* Coluna direita do card: indicadores do turno e observação/mudanças empilhados. */
 .unit-side-stack {
   min-width: 0;
   display: grid;
@@ -214,30 +214,6 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 }
 .unit-side-stack .notes-changes-grid { grid-template-columns: minmax(0, 1fr); }
 .unit-side-stack .text-panel + .text-panel { border-left: 0; border-top: 1px solid var(--data-border); }
-
-.rain-turn-block {
-  padding: 0;
-  overflow: hidden;
-}
-.rain-turn-block .compact-block-title { background: var(--data-header); color: #f6f7f8; border-bottom-color: #24373c; }
-
-.rain-box { min-width: 0; background: var(--data-surface); }
-
-.rain-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 54px 10px 54px;
-  gap: 4px;
-  padding: 8px 10px;
-  border-top: 1px solid var(--data-border);
-  color: #3d5258;
-  font-size: 11px;
-}
-
-.rain-row:first-child { border-top: 0; }
-
-.rain-row span:not(:first-child) { text-align: right; }
-
-.rain-empty { padding: 16px 10px; color: #899296; font-size: 11px; text-align: center; }
 
 .notes-changes-block {
   min-height: 0;
@@ -343,12 +319,6 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 
 .metric-input-wrap small { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #828b90; font-size: 9px; font-weight: 800; }
 
-.rain-form { display: flex; flex-direction: column; gap: 8px; }
-
-.rain-edit-row { display: grid; grid-template-columns: 1.5fr 1fr 1fr 36px; gap: 9px; align-items: end; }
-
-.rain-edit-row label { display: flex; flex-direction: column; gap: 5px; }
-
 @media (max-width: 1120px) {
 .dashboard-preview-heading { padding: 0 22px; }
 
@@ -390,10 +360,6 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 
 .front-cell, .status-cell { gap: 6px; }
 
-.rain-box { width: 100%; }
-
-.rain-row { grid-template-columns: minmax(0, 1fr) 38px 8px 38px; }
-
 .form-content { padding: 14px 18px 18px; grid-template-columns: 1fr; }
 
 .form-section-wide { grid-column: auto; }
@@ -404,7 +370,6 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 
 .editable-table-wrap { overscroll-behavior-inline: contain; }
 
-.rain-edit-row { grid-template-columns: minmax(0, 1.3fr) 1fr 1fr 36px; }
 }
 
 @media (max-width: 520px) {
@@ -427,7 +392,7 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 
 .unit-card { gap: 10px; }
 
-.unit-main-block, .rain-turn-block, .notes-changes-block { border-radius: var(--data-radius); }
+.unit-main-block, .notes-changes-block { border-radius: var(--data-radius); }
 
 .unit-state { font-size: 9px; }
 
@@ -440,8 +405,6 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 .data-table th:nth-child(2), .data-table td:nth-child(2) { width: 25%; }
 
 .data-table th:nth-child(3), .data-table td:nth-child(3) { width: 51%; }
-
-.rain-row { padding: 5px 7px; font-size: 9px; }
 
 .form-section { padding: 13px; }
 
@@ -503,11 +466,6 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 
 .editable-table input, .editable-table select { min-width: 0; width: 100%; }
 
-.rain-edit-row { grid-template-columns: 1fr 1fr; }
-
-.rain-edit-row label:first-child { grid-column: 1 / -1; }
-
-.rain-edit-row .row-remove { justify-self: end; }
 }
 
 @media print {
@@ -549,9 +507,6 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 
 .front-cell, .status-cell { gap: 4px; }
 
-.rain-row { grid-template-columns: 1fr 23px 5px 23px; padding: 1px 4px; font-size: 5px; }
-
-.rain-empty { padding: 5px; font-size: 5px; }
 }
 
 .form-stepper {
@@ -803,16 +758,6 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
   background: #fff;
 }
 
-.operation-editor-modal .rain-form { gap: 9px; }
-
-.operation-editor-modal .rain-edit-row {
-  padding: 9px;
-  border: 1px solid var(--data-border);
-  border-radius: 10px;
-  background: #fbfdfc;
-  box-shadow: 0 4px 12px rgba(35, 60, 67, .045);
-}
-
 .operation-editor-modal .wizard-footer-info { gap: 2px; }
 
 .operation-editor-modal .wizard-footer-info strong { font-size: 12px; }
@@ -822,7 +767,6 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 .operation-editor-modal .wizard-actions .modal-button { min-height: 42px; font-size: 12px; white-space: nowrap; }
 .operation-editor-modal .section-heading > div > span { font-size: 10px; letter-spacing: .7px; }
 .operation-editor-modal .metric-field label > span,
-.operation-editor-modal .rain-edit-row label > span,
 .operation-editor-modal .notes-form-grid .field > span { font-size: 11px; letter-spacing: .2px; }
 
 @media (max-width: 760px) {
@@ -1048,7 +992,6 @@ body[data-page="dashboard"] { --page: #e8ecee; --data-border: #d2dade; }
 .field-front-detail-grid dt { color: #52636c; font-size: 12px; }
 .field-front-detail-grid dd { margin: 5px 0 0; color: var(--text); font-size: 14px; font-weight: 650; line-height: 1.5; overflow-wrap: anywhere; }
 .field-front-detail-grid small { display: block; margin-top: 4px; color: #886025; line-height: 1.5; font-size: 12px; font-weight: 400; }
-.field-front-detail-rain { margin: 10px 0 0; color: #52636c; font-size: 13px; line-height: 1.5; }
 .field-front-edit-row { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.45fr); gap: 24px; margin-top: 12px; }
 .field-front-status-form { display: flex; flex-wrap: wrap; align-content: start; align-items: flex-end; gap: 8px 12px; margin: 0; }
 .field-front-status-form label { display: flex; flex: 1 1 250px; min-width: 0; flex-direction: column; gap: 8px; color: #394d53; font-size: 13px; font-weight: 650; }

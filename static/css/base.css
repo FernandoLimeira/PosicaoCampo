@@ -514,7 +514,7 @@ body.modal-open { overflow: hidden; }
 
 .field + .field { margin-top: 12px; }
 
-.field > span, .metric-field label > span, .rain-edit-row label > span {
+.field > span, .metric-field label > span {
   color: #697479;
   font-size: 9px;
   font-weight: 800;

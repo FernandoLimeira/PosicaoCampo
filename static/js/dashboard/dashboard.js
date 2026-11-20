@@ -112,8 +112,7 @@ function normalizeDashboardUnit(unit, index) {
     ...clone(defaultUnits[index]),
     ...unit,
     rows: normalizeFrontRows(Array.isArray(unit.rows) ? unit.rows : []),
-    metrics: Array.isArray(unit.metrics) && unit.metrics.length === metricDefinitions.length ? unit.metrics : makeMetrics(),
-    rain: standardizeFieldRainLabels(unit.code || defaultUnits[index].code, unit.rows, unit.rain)
+    metrics: Array.isArray(unit.metrics) && unit.metrics.length === metricDefinitions.length ? unit.metrics : makeMetrics()
   };
   if (merged.code === 'PST' && (!merged.name || merged.name === 'PARAÍSA TEMPO')) merged.name = 'PASSA TEMPO';
   merged.border = calculateUnitBorder(merged.rows);
@@ -258,11 +257,6 @@ function fieldUnitSummary(unit) {
   return { total: rows.length, active, attention: rows.length - active };
 }
 
-function fieldHasRain(unit) {
-  return (Array.isArray(unit.rain) ? unit.rain : []).some(row => Array.isArray(row) &&
-    (normalizeNumber(row[1]) > 0 || normalizeNumber(row[2]) > 0));
-}
-
 function fieldNoteContent(raw, label) {
   const value = String(raw ?? '').trim();
   if (!value || value === '-') return '<p class="field-note-empty">Nenhum registro informado.</p>';
@@ -349,7 +343,6 @@ function unitIndicatorsHtml(unit) {
 
 function unitCard(unit) {
   const summary = fieldUnitSummary(unit);
-  const rainVisible = fieldHasRain(unit);
   const filters = [
     ['all', 'Todas', summary.total],
     ['active', 'Em atividade', summary.active],
@@ -378,12 +371,6 @@ function unitCard(unit) {
     : '';
 
   const indicators = unitIndicatorsHtml(unit);
-
-  const rain = rainVisible
-    ? unit.rain.filter(([eq, turn, accum]) => String(eq ?? '').trim() || normalizeNumber(turn) > 0 || normalizeNumber(accum) > 0).map(([eq, turn, accum]) => `
-      <div class="rain-row"><span>${escapeHtml(eq)}</span><span>${escapeHtml(turn)}</span><span>/</span><span>${escapeHtml(accum)}</span></div>
-    `).join('')
-    : '';
 
   return `
     <article class="unit-card ${escapeHtml(unit.border)}">
@@ -419,11 +406,6 @@ function unitCard(unit) {
 
         <div class="unit-side-stack">
           ${indicators}
-          ${rainVisible ? `<section class="dashboard-block rain-turn-block">
-            <div class="compact-block-title">Chuva turno / acum. (mm)</div>
-            <div class="rain-box">${rain}</div>
-          </section>` : ''}
-
           <section class="dashboard-block notes-changes-block">
             <div class="notes-changes-grid">
               <div class="text-panel">

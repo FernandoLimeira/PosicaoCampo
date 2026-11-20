@@ -1,5 +1,5 @@
 // Painel: observações e detalhes de cada frente (acompanhamento compartilhado entre analistas).
-// Ocorrências independentes da posição oficial (status/ATR/chuva/exportação).
+// Ocorrências independentes da posição oficial e da exportação.
 let fieldFrontNotesSummary = {};
 let fieldNotesRequest = 0;
 let fieldCurrentPeriod = null;
@@ -185,11 +185,7 @@ function openFieldFrontDetails(index, summaryOnly = false) {
   if (!Array.isArray(row) || !modal || !content) return;
   const [front = '', sector = '', , status = '', atr = ''] = row;
   const farm = fieldFarmFromSector(sector);
-  const matchKey = canonicalFieldFrontKey(front);
-  const rainRow = (Array.isArray(unit.rain) ? unit.rain : []).find(item => Array.isArray(item) && canonicalFieldFrontKey(item[0]) === matchKey);
   const statusClass = fieldStatusClass(status);
-  const rainSection = rainRow ? `<p class="field-front-detail-rain"><strong>Chuva:</strong>
-    turno ${escapeHtml(rainRow[1] ?? '—')} mm · acumulado ${escapeHtml(rainRow[2] ?? '—')} mm</p>` : '';
   content.innerHTML = `
     <div class="field-front-detail-unit">
       <span>${escapeHtml(unit.code)} · ${escapeHtml(unit.name)}</span>
@@ -201,7 +197,6 @@ function openFieldFrontDetails(index, summaryOnly = false) {
         ${farm.note ? `<small>${escapeHtml(farm.note)}</small>` : ''}</dd></div>
       <div><dt>ATR</dt><dd>${escapeHtml(atr || '—')}</dd></div>
     </dl>
-    ${rainSection}
     ${summaryOnly ? '' : `<div class="field-front-edit-row">
       ${fieldFrontStatusForm(status)}
       ${fieldFrontNoteForm()}

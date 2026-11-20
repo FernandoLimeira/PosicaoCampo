@@ -224,7 +224,7 @@ def _daily_projection(hours, metric, *, by_shift: bool) -> float | None:
 
 
 def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time: Any = None,
-                     unit_code: str | None = None) -> dict[str, Any]:
+                     unit_code: str | None = None, include_shift_totals: bool = False) -> dict[str, Any]:
     """Resumo do dia da pesagem importada (sem data: o dia mais recente do arquivo).
 
     As horas vão de 00:00 até a última hora que veio no SELECT importado, independente do
@@ -389,6 +389,27 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
         )
         shift_hours = [item for item in exact if item["shift"] == unit_shift]
         recent_hours = exact[-LAST_HOURS:]
+        shift_totals = {}
+        if include_shift_totals:
+            # O Excel do Polo SP agrega os valores antes do arredondamento por hora.
+            # No Polo MS, a aba Turnos segue os valores exibidos na aba Hora a hora.
+            report_hours = exact if code not in MS_UNIT_CODES else [
+                {"shift": item["shift"], "milling": item["milling_t"], "delivery": item["delivery_t"]}
+                for item in hours
+            ]
+            for shift in SHIFT_HOURS:
+                group = [item for item in report_hours if item["shift"] == shift]
+                if not group:
+                    continue
+                milling = sum(item["milling"] for item in group)
+                delivery = sum(item["delivery"] for item in group)
+                shift_totals[shift] = {
+                    "hours": len(group),
+                    "milling_t": _round(milling),
+                    "delivery_t": _round(delivery),
+                    "milling_tph": _round(milling / len(group)),
+                    "delivery_tph": _round(delivery / len(group)),
+                }
         fronts: dict[str, list] = {}
         for row in rows:
             fronts.setdefault(row["front"], []).append(row)
@@ -432,6 +453,7 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
             "stock_loads": len(stock),
             "atr": _weighted_atr(rows),
             "hours": hours,
+            **({"shift_totals": shift_totals} if include_shift_totals else {}),
             "fronts": front_list,
             "received": [front for front in front_list if front["external"]],
         })

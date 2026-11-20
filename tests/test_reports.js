@@ -282,6 +282,7 @@ async function main() {
   ctx.setReportUnit('PPT');
   vm.runInContext('units[0] = testOverviewUnit; weighingSummary = testProjectionSummary', ctx);
   assert.match(ctx.managementReportHtml(), /Unidade parada/);
+  assert.match(ctx.managementReportHtml(), /300 cargas pesadas/);
   ctx.testOverviewUnit = resumedUnit;
   vm.runInContext('units[0] = testOverviewUnit', ctx);
   assert.doesNotMatch(ctx.managementReportHtml(), /Unidade parada/);

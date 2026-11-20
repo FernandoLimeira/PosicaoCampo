@@ -1,5 +1,5 @@
-// Emissão da Posição de Campo: normalização das unidades e chuva por frente.
-// Depende de core/common.js e core/field-fronts.js.
+// Normalização das unidades para a emissão da Posição de Campo.
+// Depende de core/common.js.
 const REPORT_METRICS = [
   ['🏭', 'INDÚSTRIA PARADA', 'TN/H'], ['⚙️', 'MOAGEM TURNO', 'TN/H'],
   ['🚚', 'ENTREGA TURNO', 'TN/H'], ['⬡', 'ESTOQUE', 'CARGAS', 'stock'],
@@ -25,8 +25,7 @@ function normalizeReportUnit(unit, index) {
     changes: String(cloned.changes || '-'),
     support: String(cloned.support || '-'),
     // Correções da imagem (etapa Imagem CTT), válidas só no fechamento em que foram feitas.
-    ...(cloned.image_overrides ? { image_overrides: cloned.image_overrides } : {}),
-    rain: standardizeFieldRainLabels(cloned.code || fallbackCodes[index], cloned.rows, cloned.rain)
+    ...(cloned.image_overrides ? { image_overrides: cloned.image_overrides } : {})
   };
 
   if (normalized.code === 'PST' && (!normalized.name || normalized.name === 'PARAÍSA TEMPO')) normalized.name = 'PASSA TEMPO';
@@ -34,44 +33,4 @@ function normalizeReportUnit(unit, index) {
     .map(row => row[3]);
   normalized.border = fieldUnitBorder(statuses);
   return normalized;
-}
-
-function parseRainValue(value) {
-  const match = String(value ?? '').match(/-?\d[\d.,]*/);
-  const number = match ? parseBrNumber(match[0]) : NaN;
-  return Number.isFinite(number) ? number : 0;
-}
-
-// Só considera chuva das frentes que realmente aparecem no informativo.
-// Cadastros antigos de outras frentes não podem criar colunas preenchidas
-// apenas com traços. Vazios, traços, valores inválidos e zeros não as ativam.
-function reportHasRainData(unit) {
-  const lookup = buildRainLookup(unit, { rawValues: true });
-  const positiveRain = value => {
-    const text = String(value ?? '').trim().replace(',', '.');
-    if (!/^\d+(?:\.\d+)?$/.test(text)) return false;
-    const number = Number(text);
-    return Number.isFinite(number) && number > 0;
-  };
-  return (Array.isArray(unit?.rows) ? unit.rows : []).some(row => {
-    if (!Array.isArray(row)) return false;
-    const key = canonicalFieldFrontKey(row[0]);
-    const rain = key ? lookup.get(key) : null;
-    return rain && (positiveRain(rain.turn) || positiveRain(rain.accum));
-  });
-}
-
-function buildRainLookup(unit, { rawValues = false } = {}) {
-  const lookup = new Map();
-  // Cadastro legado de NRD (EQ 3–12 = frentes 13–22; FT 8 = frente 08) é
-  // convertido pela mesma regra do painel e do backend (core/field-fronts.js).
-  standardizeFieldRainLabels(unit?.code ?? '', unit?.rows, unit?.rain).filter(Array.isArray).forEach(entry => {
-    // Valor ausente fica vazio (não vira zero) para não entrar nas médias.
-    const [front = '', turn = '', accum = ''] = entry;
-    const key = canonicalFieldFrontKey(front);
-    if (!key) return;
-    lookup.set(key, rawValues ? { turn, accum }
-      : { turn: parseRainValue(turn), accum: parseRainValue(accum) });
-  });
-  return lookup;
 }

@@ -92,6 +92,12 @@ async function main() {
   // Salvar em Ver usa a versão aberta e mantém observações, chuva, ATR e demais frentes/unidades.
   vm.runInContext('unitMeta.PPT = { version: 7 };', ctx);
   const opened = vm.runInContext('clone(units[0])', ctx);
+  assert(opened.rain.some(([, turn]) => turn > 0));
+  assert.doesNotMatch(ctx.unitCard(opened), /rain-turn-block|Chuva turno/);
+  ctx.openModal = () => {};
+  ctx.loadFieldFrontHistory = () => {};
+  ctx.openFieldFrontDetails(0);
+  assert.doesNotMatch(ctx.document.querySelector('#field-front-detail-content').innerHTML, /field-front-detail-rain|Chuva:/);
   const otherUnit = vm.runInContext('JSON.stringify(units[1])', ctx);
   const detailContext = { unit: 'PPT', front: opened.rows[0][0], sector: opened.rows[0][1], index: 0,
     unitSnapshot: JSON.parse(JSON.stringify(opened)), version: 7 };

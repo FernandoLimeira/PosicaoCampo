@@ -926,8 +926,6 @@ async function refreshProductionPage(unit = currentProductionUnit(), { keepFilte
   if (!keepFilters) renderProductionFilters();
   renderProductionItems();
   try {
-    // Chuva das 4 unidades (quadro fixo do painel): carrega junto, sem travar a página se falhar.
-    if (typeof loadDashboardRainOverview === 'function') loadDashboardRainOverview();
     await Promise.all([loadProductionCatalog(unit, epoch), loadProductionStatuses()]);
     if (!isCurrentProductionRequest(unit, epoch)) return;
     renderStatusOptions(defaultStatusCode());

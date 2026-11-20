@@ -54,8 +54,10 @@ function managementReportHtml() {
     ? new Date((weighing.closed_until - 1) * 1000).toLocaleString('pt-BR', {
       timeZone, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
     }).replace(',', '') : '';
+  const loadCount = ['PPT', 'NRD'].includes(unit.code) && Number.isInteger(weighing?.loads_day)
+    ? ` · ${fieldIndicatorNumber(weighing.loads_day)} ${weighing.loads_day === 1 ? 'carga pesada' : 'cargas pesadas'}` : '';
   const source = until
-    ? `Balança até ${escapeHtml(until)}${timeZone === 'America/Sao_Paulo' ? '' : ' (MS)'}`
+    ? `Balança até ${escapeHtml(until)}${timeZone === 'America/Sao_Paulo' ? '' : ' (MS)'}${loadCount}`
     : 'Sem pesagem no fechamento. Indicadores do Preencher.';
   return `<section class="dashboard-block management-report" aria-labelledby="management-report-title">
     <header class="mr-header">

@@ -223,8 +223,7 @@ function sectorRow(sector, status = 'ATIVO') {
   assert.equal(savedPayload.sectors[0].farm, 'Fazenda 400');
   assert.equal(savedPayload.sectors[0].section, '40');
 
-  // Busca de setor: as O.S. do setor (só o setor igual ao digitado) aparecem no lugar da
-  // chuva; com a busca vazia, a chuva volta.
+  // A busca mostra apenas O.S. do setor digitado e esconde o cartão ao limpar.
   context.URLSearchParams = URLSearchParams;
   context.apiRequest = async url => {
     assert.match(url, /service-orders\?unit=NRD&search=42/);
@@ -232,10 +231,12 @@ function sectorRow(sector, status = 'ATIVO') {
       { number: '7002', sector: '420', section: '1', operation: '205', operation_name: 'Calagem', plots: [] }] };
   };
   await context.searchDashboardSector('042');
-  const rainCard = element('#production-rain-card').innerHTML;
-  assert.match(rainCard, /O\.S\. do setor 042/);
-  assert.match(rainCard, /7001/);
-  assert.doesNotMatch(rainCard, /7002/);
+  const sectorCard = element('#production-sector-card');
+  assert.equal(sectorCard.hidden, false);
+  assert.match(sectorCard.innerHTML, /O\.S\. do setor 042/);
+  assert.match(sectorCard.innerHTML, /7001/);
+  assert.doesNotMatch(sectorCard.innerHTML, /7002/);
   await context.searchDashboardSector('');
-  assert.match(element('#production-rain-card').innerHTML, /Chuva nas 4 unidades/);
+  assert.equal(sectorCard.hidden, true);
+  assert.equal(sectorCard.innerHTML, '');
 })().catch(error => { console.error(error); process.exitCode = 1; });

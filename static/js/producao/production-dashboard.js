@@ -247,7 +247,7 @@ function dashboardFrontTile(item) {
     </article>`;
 }
 
-// Resumo analítico (topo do painel): indicadores por grupo da unidade e a chuva das 4 unidades.
+// Resumo analítico (topo do painel): indicadores por grupo da unidade.
 function dashboardGroupStats(items) {
   const stats = { total: items.length, active: 0, stopped: 0, ok: 0, missing: 0, noOperation: 0, today: 0 };
   items.forEach(item => {
@@ -296,54 +296,7 @@ function dashboardOverviewRow(name, stats, total = false) {
     </tr>`;
 }
 
-// Chuva do dia nas 4 unidades (quadro gerencial fixo: não muda com a unidade escolhida).
-// Vem do botão "Informar chuva" da Produção (a média das frentes); só a chuva de hoje.
-let productionRainOverview = null;
-
-async function loadDashboardRainOverview() {
-  try {
-    const data = await apiRequest(`/api/production/rain-overview?date=${encodeURIComponent(saoPauloIsoDate())}`);
-    productionRainOverview = data?.rain || null;
-  } catch (error) {
-    console.error(error);
-    productionRainOverview = null;
-  }
-  renderDashboardRainCard();
-}
-
-function dashboardRainValue(value) {
-  return value === null || value === undefined ? '-' : `${Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}`;
-}
-
-function dashboardRainCardHtml() {
-  const rain = productionRainOverview;
-  if (!rain) return '<p class="production-empty">Não foi possível carregar a chuva das unidades.</p>';
-  const max = Math.max(1, ...rain.units.map(unit => Number(unit.rain_accumulated_mm) || 0), ...rain.units.map(unit => Number(unit.rain_turn_mm) || 0));
-  const units = rain.units.map(unit => {
-    const informed = unit.rain_turn_mm !== null || unit.rain_accumulated_mm !== null;
-    const accumulated = Number(unit.rain_accumulated_mm) || 0;
-    const turn = Number(unit.rain_turn_mm) || 0;
-    return `<li class="${informed ? '' : 'is-empty'}" title="${escapeHtml(productionUnitLabel(unit.unit))}">
-        <span class="pdash-rain-unit"><b>${escapeHtml(unit.unit)}</b><small>${escapeHtml(PRODUCTION_UNIT_NAMES[unit.unit] || '')}</small></span>
-        <span class="pdash-rain-bars" aria-hidden="true">
-          <i class="is-accumulated" data-rain-width="${Math.round(accumulated * 100 / max)}"></i>
-          <i class="is-turn" data-rain-width="${Math.round(turn * 100 / max)}"></i>
-        </span>
-        <span class="pdash-rain-values">${informed
-          ? `<b>${dashboardRainValue(unit.rain_turn_mm)}</b> turno · <b>${dashboardRainValue(unit.rain_accumulated_mm)}</b> acum.`
-          : 'Não informada'}</span>
-      </li>`;
-  }).join('');
-  return `<div class="pdash-rain-average">
-      <div><span>Média do turno</span><strong>${dashboardRainValue(rain.average_turn_mm)}<small>mm</small></strong></div>
-      <div><span>Média acumulada</span><strong>${dashboardRainValue(rain.average_accumulated_mm)}<small>mm</small></strong></div>
-    </div>
-    <ul class="pdash-rain-units">${units}</ul>
-    <p class="pdash-rain-legend"><i class="is-turn"></i>Turno <i class="is-accumulated"></i>Acumulada · ${rain.informed} de ${rain.units.length} unidades informaram (botão Informar chuva)</p>`;
-}
-
-// Busca de setor (ao lado de "Informar chuva"): as O.S. abertas do setor aparecem no lugar
-// do cartão da chuva; com a busca vazia, a chuva volta.
+// Busca de ordens de serviço abertas por setor.
 const dashboardSectorSearch = { term: '', orders: [], loading: false, error: '' };
 let dashboardSectorSearchTimer = null;
 let dashboardSectorSearchSeq = 0;
@@ -351,7 +304,7 @@ const dashboardSectorKey = value => String(value ?? '').trim().replace(/^0+(?=\d
 
 function dashboardSectorSearchHtml() {
   const { term, orders, loading, error } = dashboardSectorSearch;
-  const head = `<header><h3>O.S. do setor ${escapeHtml(term)}</h3><span>Apague a busca para voltar à chuva</span></header>`;
+  const head = `<header><h3>O.S. do setor ${escapeHtml(term)}</h3></header>`;
   if (loading) return `${head}<p class="production-empty">Buscando O.S. do setor…</p>`;
   if (error) return `${head}<p class="production-empty">${escapeHtml(error)}</p>`;
   return `${head}<div class="pdash-sector-result">${orders.length ? serviceOrdersPanelHtml(orders)
@@ -362,7 +315,7 @@ async function searchDashboardSector(value) {
   const term = String(value || '').trim();
   const seq = ++dashboardSectorSearchSeq;
   Object.assign(dashboardSectorSearch, { term, orders: [], loading: Boolean(term), error: '' });
-  renderDashboardRainCard();
+  renderDashboardSectorCard();
   if (!term) return;
   try {
     const params = new URLSearchParams({ unit: currentProductionUnit(), search: dashboardSectorKey(term) });
@@ -375,20 +328,14 @@ async function searchDashboardSector(value) {
     dashboardSectorSearch.error = error.message || 'Não foi possível buscar as O.S. do setor.';
   }
   dashboardSectorSearch.loading = false;
-  renderDashboardRainCard();
+  renderDashboardSectorCard();
 }
 
-function renderDashboardRainCard() {
-  const card = document.querySelector('#production-rain-card');
+function renderDashboardSectorCard() {
+  const card = document.querySelector('#production-sector-card');
   if (!card) return;
-  if (dashboardSectorSearch.term) {
-    card.innerHTML = dashboardSectorSearchHtml();
-    return;
-  }
-  card.innerHTML = `<header><h3>Chuva nas 4 unidades</h3><span>${productionRainOverview ? escapeHtml(formatIsoDateBr(productionRainOverview.work_date)) : ''}</span></header>
-    <div class="pdash-rain-body">${dashboardRainCardHtml()}</div>`;
-  // A CSP bloqueia "style" no HTML; a largura das barras é aplicada pelo script.
-  card.querySelectorAll?.('[data-rain-width]').forEach(bar => { bar.style.width = `${bar.dataset.rainWidth}%`; });
+  card.hidden = !dashboardSectorSearch.term;
+  card.innerHTML = card.hidden ? '' : dashboardSectorSearchHtml();
 }
 
 // Resumo por grupo só com as frentes atualizadas pelo analista no turno atual:
@@ -415,8 +362,8 @@ function renderDashboardOverview(groups, allItems) {
       ${totals.shiftUpdated ? '' : '<p class="pdash-overview-note">Nenhuma frente foi atualizada neste turno ainda.</p>'}`
     : '<header><h3>Resumo do turno</h3></header><p class="production-empty">Nenhuma frente lançada nesta unidade.</p>';
   box.innerHTML = `<article class="pdash-overview-card">${groupsCard}</article>
-    <article id="production-rain-card" class="pdash-overview-card pdash-rain-card"></article>`;
-  renderDashboardRainCard();
+    <article id="production-sector-card" class="pdash-overview-card pdash-sector-card" hidden></article>`;
+  renderDashboardSectorCard();
 }
 
 function dashboardGroupInitials(name) {
@@ -574,7 +521,6 @@ document.querySelector('#production-group-cards')?.addEventListener('keydown', e
 document.querySelector('#production-sector-search')?.addEventListener('input', event => {
   clearTimeout(dashboardSectorSearchTimer);
   const value = event.target.value;
-  // Busca vazia volta à chuva na hora; com setor, espera parar de digitar.
   if (!value.trim()) searchDashboardSector('');
   else dashboardSectorSearchTimer = setTimeout(() => searchDashboardSector(value), 300);
 });

@@ -18,7 +18,6 @@ from .units import parse_br_number, list_units
 from .weighings import weighing_summary
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-SHIFTS = ("A", "B", "C")
 
 
 def _time(timestamp: int | None, unit_code: str) -> str:
@@ -50,7 +49,7 @@ def _position_indicators(unit: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_weighing_report(work_date: Any = None, at_time: Any = None) -> tuple[bytes, str]:
-    summary = weighing_summary(work_date, at_time=at_time)
+    summary = weighing_summary(work_date, at_time=at_time, include_shift_totals=True)
     positions = {unit.get("code"): _position_indicators(unit) for unit in list_units()}
     day = summary["work_date"]
 
@@ -61,7 +60,7 @@ def build_weighing_report(work_date: Any = None, at_time: Any = None) -> tuple[b
     resumo = [["Relatório gerencial · Balança CTT"], ["Dia", day],
               ["Fechamento", f"às {at_time}" if at_time else "até a última hora do SELECT importado"],
               ["Gerado em", datetime.now(FIELD_TIMEZONE).strftime("%d/%m/%Y %H:%M")], [], header]
-    hours_rows = [["Unidade", "Hora", "Turno", "Moagem (t)", "Cargas", "Densidade (t)", "Qtd. CVs", "Cana entregue (t)", "Diferença (t)"]]
+    hours_rows = [["Unidade", "Hora", "Turno", "Moagem (t)", "Cargas pesadas", "Densidade (t)", "Qtd. CVs", "Cana entregue (t)", "Diferença (t)"]]
     shift_rows = [["Unidade", "Turno", "Horas", "Moagem total (t)", "Entrega total (t)", "Diferença (t)", "Média moagem (t/h)", "Média entrega (t/h)"]]
     front_rows = [["Unidade", "Frente", "Setor", "Seção", "Cargas", "Toneladas", "ATR (kg/t)", "Frente de outra unidade"]]
     totals = {"active": 0, "fronts": 0, "milling": [], "delivery": [], "stock": [], "atr": [], "day": [], "delivery_day": [], "projection": []}
@@ -93,14 +92,10 @@ def build_weighing_report(work_date: Any = None, at_time: Any = None) -> tuple[b
         for item in unit["hours"]:
             hours_rows.append([code, f"{item['hour']:02d}:00", item["shift"], item["milling_t"], item["loads"], item["density_t"],
                                item["trucks"], item["delivery_t"], _diff(item["delivery_t"], item["milling_t"])])
-        for shift in SHIFTS:
-            hours = [item for item in unit["hours"] if item["shift"] == shift]
-            if not hours:
-                continue
-            milling = round(sum(item["milling_t"] or 0 for item in hours), 1)
-            delivery = round(sum(item["delivery_t"] or 0 for item in hours), 1)
-            shift_rows.append([code, shift, len(hours), milling, delivery, _diff(delivery, milling),
-                               _average(item["milling_t"] for item in hours), _average(item["delivery_t"] for item in hours)])
+        for shift, item in unit["shift_totals"].items():
+            milling, delivery = item["milling_t"], item["delivery_t"]
+            shift_rows.append([code, shift, item["hours"], milling, delivery, _diff(delivery, milling),
+                               item["milling_tph"], item["delivery_tph"]])
         for front in unit["fronts"]:
             front_rows.append([code, front["front"], front["sector"], front["section"], front["loads"], front["tons"], front["atr"],
                                front["home_unit"] if front["external"] else ""])

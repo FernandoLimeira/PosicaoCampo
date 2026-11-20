@@ -83,9 +83,7 @@
 .production-summary-item.is-waiting { border-left-color: #879094; }
 .production-summary-item.is-stopped { border-left-color: #e8731a; }
 
-.production-rain-modal { width: min(560px, calc(100vw - 30px)); }
 .production-daily-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 16px 20px; align-items: start; }
-.production-rain-context { grid-column: 1 / -1; margin: 0 0 4px; color: #606b71; font-size: 11px; }
 .production-daily-form .field { min-width: 0; }
 .production-daily-form .field + .field { margin-top: 0; }
 .production-daily-form input { width: 100%; }
@@ -325,7 +323,7 @@
 .production-tab-panel { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .production-tab-panel[hidden] { display: none; }
 
-/* Filtros à esquerda e ações (chuva / adicionar) à direita, como no modelo. */
+/* Filtros à esquerda e ações à direita, como no modelo. */
 .production-toolbar { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #e5eaec; background: #f8fbf9; }
 .production-toolbar .production-filters { padding: 0; border: 0; background: transparent; }
 .production-toolbar-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
@@ -946,7 +944,7 @@
 .pdash-detail-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--data-border); }
 
 /* Resumo analítico da unidade (topo do painel). */
-.pdash-overview { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
+.pdash-overview { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .pdash-overview[hidden] { display: none; }
 .pdash-overview-card { min-width: 0; border: 1px solid var(--data-border); border-radius: 10px; background: #fff; box-shadow: var(--data-shadow); overflow: hidden; }
 .pdash-overview-card > header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
@@ -964,7 +962,9 @@
 .pdash-overview-table td.is-amber { color: #a8680d; }
 .pdash-overview-table td.is-gray { color: #6c777d; }
 .pdash-overview-table tr.is-total th, .pdash-overview-table tr.is-total td { border-bottom: 0; background: #e8ecef; }
-@media (max-width: 980px) { .pdash-overview { grid-template-columns: 1fr; } }
+@media (min-width: 981px) {
+  .pdash-overview:has(.pdash-sector-card:not([hidden])) { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+}
 
 /* ===== Painel gerencial: barra do topo com os grupos, botões modernos e animações ===== */
 .production-view-bar { flex-wrap: nowrap; align-items: center; gap: 14px; }
@@ -1024,33 +1024,9 @@
   .pdash-action, .pdash-group-tab, .pdash-tile[data-panel-detail], .pdash-overview-card { transition: none !important; }
 }
 
-/* Quadro "Chuva nas 4 unidades" (fixo, não muda com a unidade) e aviso do turno. */
+/* Legenda e aviso do turno. */
 .pdash-overview-card h3 small { margin-left: 6px; color: #6f7a80; font-size: 11px; font-weight: 700; }
 .pdash-overview-note { margin: 0; padding: 10px 16px; color: #8a6a14; font-size: 12px; font-weight: 700; background: #fff8e6; }
-.pdash-rain-body { display: grid; gap: 12px; padding: 14px 16px 16px; }
-.pdash-rain-average { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.pdash-rain-average div { display: grid; gap: 2px; padding: 10px 12px; border-radius: 8px; background: linear-gradient(135deg, #22474e, #122e34); }
-.pdash-rain-average span { color: #abafb5; font-size: 11px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; }
-.pdash-rain-average strong { color: #ffffff; font-size: 26px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.pdash-rain-average strong small { margin-left: 4px; color: #abafb5; font-size: 13px; font-weight: 700; }
-.pdash-rain-units { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.pdash-rain-units li { display: grid; grid-template-columns: 112px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
-.pdash-rain-units li.is-empty { opacity: .6; }
-.pdash-rain-unit { display: grid; min-width: 0; }
-.pdash-rain-unit b { color: #1f262a; font-size: 13px; }
-.pdash-rain-unit small { overflow: hidden; color: #6f7a80; font-size: 10px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.pdash-rain-bars { position: relative; height: 12px; border-radius: 999px; background: #e8ecef; overflow: hidden; }
-.pdash-rain-bars i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 999px; transition: width .7s cubic-bezier(.2, .7, .2, 1); }
-.pdash-rain-bars i.is-accumulated { background: #abafb5; }
-.pdash-rain-bars i.is-turn { top: 3px; bottom: 3px; background: #22474e; }
-.pdash-rain-values { color: #4d5a61; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.pdash-rain-values b { color: #22474e; }
-.pdash-rain-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0; color: #6f7a80; font-size: 11px; font-weight: 700; }
-.pdash-rain-legend i { display: inline-block; width: 12px; height: 8px; border-radius: 999px; }
-.pdash-rain-legend i.is-turn { background: #22474e; }
-.pdash-rain-legend i.is-accumulated { margin-left: 6px; background: #abafb5; }
-@media (max-width: 520px) { .pdash-rain-units li { grid-template-columns: 70px minmax(0, 1fr); } .pdash-rain-values { grid-column: 1 / -1; } }
-
 /* Nome da frente: maior e sempre numa linha (nome inteiro no "title"). */
 .pdash-tile-top { align-items: center; }
 .pdash-tile-top strong { flex: 1 1 auto; min-width: 0; font-size: 17px !important; font-weight: 800; letter-spacing: -.1px; line-height: 1.25; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis; overflow-wrap: normal !important; }
@@ -1132,13 +1108,13 @@ button.pdash-kpi.is-amber.is-active { box-shadow: 0 0 0 3px rgba(213, 163, 38, .
 .pdash-tile-foot { min-height: 0; margin-top: 1px; padding-top: 7px; border-top: 1px dashed #e3e8eb; }
 .pdash-tile-who { overflow: hidden; color: var(--slate); font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Busca de setor (antes de "Informar chuva"): resultado no lugar do cartão da chuva. */
+/* Resultado da busca de ordens de serviço por setor. */
 .pdash-sector-search { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; padding: 0 10px; border: 1px solid var(--data-border); border-radius: 8px; background: #fff; color: #7a8489; }
 .pdash-sector-search:focus-within { border-color: #2f8f5b; box-shadow: 0 0 0 3px rgba(47, 143, 91, .15); }
 .pdash-sector-search svg { flex: 0 0 auto; width: 16px; height: 16px; }
 .pdash-sector-search input { width: 112px; min-width: 0; border: 0; outline: 0; background: transparent; color: #1f262a; font: inherit; font-size: 14px; font-weight: 700; }
 .pdash-sector-result { display: grid; gap: 10px; max-height: 340px; padding: 14px 16px 16px; overflow-y: auto; }
-.pdash-rain-card > .production-empty { padding: 14px 16px; }
+.pdash-sector-card > .production-empty { padding: 14px 16px; }
 /* Abas do detalhe da frente. */
 .pfd-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--data-border); }
 .pfd-tab { display: inline-flex; align-items: center; gap: 6px; margin-bottom: -1px; padding: 8px 14px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #66737a; font: inherit; font-size: 13px; font-weight: 800; white-space: nowrap; cursor: pointer; }
