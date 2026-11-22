@@ -92,6 +92,7 @@ function openDashboardFrontDetail(itemId) {
   const body = document.querySelector('#production-front-detail-body');
   if (!item || !body) return;
   const entry = item.entry || {};
+  const editable = canFillProduction();
   const meta = statusMeta(entry.status);
   const codes = splitProductionOperations(entry.operation);
   const title = document.querySelector('#production-front-detail-title');
@@ -153,8 +154,8 @@ function openDashboardFrontDetail(itemId) {
     ${entry.sector ? `<section class="pfd-section" data-pfd-panel="others" hidden>
       ${otherOrders || `<p class="production-empty">Nenhuma outra O.S. aberta no setor ${escapeHtml(entry.sector)}.</p>`}
     </section>` : ''}
-    ${entry.observation || entry.changes ? dashboardSectorNotes(item, false) : ''}
-    ${canFillProduction() ? `<div class="pdash-detail-actions">
+    ${item.entry ? dashboardSectorNotes(item, editable) : ''}
+    ${editable ? `<div class="pdash-detail-actions">
       <button class="modal-button danger" type="button" data-panel-remove="${item.id}">Remover</button>
       <button class="modal-button save" type="button" data-panel-edit="${item.id}">Editar frente</button>
     </div>` : ''}`;
@@ -204,19 +205,19 @@ function dashboardSortTiles(items) {
 const DASHBOARD_NOTE_FIELDS = { observation: ['Observação', 'Adicionar observação'], changes: ['Previsão de mudança', 'Adicionar previsão'] };
 
 function dashboardSectorNotes(item, editable) {
-  const entry = item.entry || {};
-  return `<dl class="pdash-sector-notes">${Object.entries(DASHBOARD_NOTE_FIELDS).map(([field, [label, addLabel]]) => {
-    const value = String(entry[field] || '').trim();
-    const text = escapeHtml(value || (editable ? addLabel : '—'));
-    const location = `${item.service_name || 'Frente'} · ${productionPlaceLabel(entry)}`;
+  const fields = Object.entries(DASHBOARD_NOTE_FIELDS).map(([field, [label, addLabel]]) => {
+    const value = String(item.entry[field] || '').trim();
+    if (!editable && !value) return '';
+    const text = escapeHtml(value || addLabel);
     const action = value ? `Editar ${label.toLocaleLowerCase('pt-BR')}` : addLabel;
     return `<div><dt>${label}</dt><dd>${editable
-      ? `<button type="button" class="pdash-note${value ? '' : ' is-empty'}" data-panel-note="${field}" data-item-id="${item.id}" title="${escapeHtml(`${action} · ${location}`)}">${text}</button>`
+      ? `<button type="button" class="pdash-note${value ? '' : ' is-empty'}" data-panel-note="${field}" data-item-id="${item.id}" title="${action}">${text}</button>`
       : `<span class="pdash-note">${text}</span>`}</dd></div>`;
-  }).join('')}</dl>`;
+  }).join('');
+  return fields ? `<dl class="pdash-sector-notes">${fields}</dl>` : '';
 }
 
-function dashboardSectorRow(item, editable) {
+function dashboardSectorRow(item) {
   const entry = item.entry || {};
   const meta = statusMeta(entry.status);
   const codes = splitProductionOperations(entry.operation);
@@ -237,26 +238,22 @@ function dashboardSectorRow(item, editable) {
   const updated = dashboardUpdateText(item);
   const place = productionPlaceLabel(entry);
   return `<section class="pdash-sector-row" aria-label="${escapeHtml(place)}">
-    <div class="pdash-sector-operation">
+    <div class="pdash-tile-meta">
       <h5 class="pdash-place">${dashboardIcon('pin')}<span>${escapeHtml(place)}</span></h5>
-      <div class="pdash-tile-meta">
-        <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
-        ${stale}
-      </div>
-      <div class="pdash-tile-ops">${operations}</div>
-      <div class="pdash-sector-footer">
-        ${updated ? `<small>${escapeHtml(updated)}</small>` : ''}${section}
-        <button type="button" class="pdash-sector-detail" data-panel-detail="${item.id}" aria-label="Ver detalhes · ${escapeHtml(place)}">Ver detalhes</button>
-      </div>
+      <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
+      ${stale}
     </div>
-    ${dashboardSectorNotes(item, editable && Boolean(item.entry))}
+    <div class="pdash-tile-ops">${operations}</div>
+    <div class="pdash-sector-footer">
+      ${updated ? `<small>${escapeHtml(updated)}</small>` : ''}${section}
+      <button type="button" class="pdash-sector-detail" data-panel-detail="${item.id}" aria-label="Ver detalhes · ${escapeHtml(place)}">Ver detalhes</button>
+    </div>
   </section>`;
 }
 
 function dashboardFrontTile(sectors, shift) {
   const front = dashboardFrontStatus(sectors);
   const meta = statusMeta(front.entry?.status);
-  const editable = canFillProduction();
   const ordered = [...sectors].sort((a, b) => compareFrontLabels(a.entry?.sector || '', b.entry?.sector || '')
     || compareFrontLabels(a.entry?.section || '', b.entry?.section || ''));
   return `<article class="pdash-tile ${meta.className}" data-panel-front-card="${front.service_front_id ?? front.id}">
@@ -267,9 +264,7 @@ function dashboardFrontTile(sectors, shift) {
       </div>
       <div class="pdash-tile-who">${escapeHtml(productionResponsibleName(front, shift))}</div>
     </header>
-    <div class="pdash-front-sectors">
-      ${ordered.map(item => dashboardSectorRow(item, editable)).join('')}
-    </div>
+    ${ordered.map(dashboardSectorRow).join('')}
   </article>`;
 }
 
@@ -433,6 +428,7 @@ function openDashboardNote(itemId, field) {
   input.value = expected;
   document.querySelector('#production-note-form button[type="submit"]').disabled = false;
   showDashboardNoteError();
+  closeModal('production-front-detail-modal');
   openModal('production-note-modal');
   input.focus();
   input.setSelectionRange(input.value.length, input.value.length);
@@ -495,11 +491,6 @@ document.querySelector('#production-front-cards')?.addEventListener('click', eve
     renderProductionDashboard();
     return;
   }
-  const note = event.target.closest('[data-panel-note]');
-  if (note) {
-    openDashboardNote(Number(note.dataset.itemId), note.dataset.panelNote);
-    return;
-  }
   const detail = event.target.closest('[data-panel-detail]');
   if (detail) openDashboardFrontDetail(Number(detail.dataset.panelDetail));
 });
@@ -542,6 +533,11 @@ document.querySelector('#production-front-cards')?.addEventListener('change', ev
   renderProductionDashboard();
 });
 document.querySelector('#production-front-detail-body')?.addEventListener('click', event => {
+  const note = event.target.closest('[data-panel-note]');
+  if (note) {
+    openDashboardNote(Number(note.dataset.itemId), note.dataset.panelNote);
+    return;
+  }
   const edit = event.target.closest('[data-panel-edit]');
   const remove = event.target.closest('[data-panel-remove]');
   if (!edit && !remove) return;

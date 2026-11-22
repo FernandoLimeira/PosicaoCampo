@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{% if page == 'service_orders' %}Ordem de serviço{% elif page == 'production_queries' %}Consultas SQL{% elif page == 'production_catalog' %}Cadastros{% else %}Produção Agrícola{% endif %} · Posição de Campo{% endblock %}
 {% block styles %}
-  <link rel="stylesheet" href="/css/pages/producao.css?v={{ asset_version }}-sector-columns" />
-  <link rel="stylesheet" href="/css/pages/producao.dark.css?v={{ asset_version }}-sector-columns" media="(prefers-color-scheme: dark)" />
+  <link rel="stylesheet" href="/css/pages/producao.css?v={{ asset_version }}-compact-sectors" />
+  <link rel="stylesheet" href="/css/pages/producao.dark.css?v={{ asset_version }}-compact-sectors" media="(prefers-color-scheme: dark)" />
 {% endblock %}
 
 {% block content %}
@@ -538,7 +538,7 @@
   <script src="/js/producao/producao.js?v={{ asset_version }}-status-groups"></script>
   <script src="/js/producao/service-orders.js?v={{ asset_version }}"></script>
   <script src="/js/producao/production-sheet.js?v={{ asset_version }}"></script>
-  <script src="/js/producao/production-dashboard.js?v={{ asset_version }}-sector-columns"></script>
+  <script src="/js/producao/production-dashboard.js?v={{ asset_version }}-compact-sectors"></script>
   <script src="/js/producao/production-catalog.js?v={{ asset_version }}"></script>
   <script src="/js/producao/production-queries.js?v={{ asset_version }}"></script>
 {% endblock %}

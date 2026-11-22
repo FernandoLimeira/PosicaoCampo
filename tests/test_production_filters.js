@@ -11,10 +11,14 @@ const sectorRows = [];
 const toasts = [];
 const confirmations = [];
 const groupEvents = {};
+const detailClicks = [];
 function element(selector) {
   if (!elements.has(selector)) elements.set(selector, {
     innerHTML: '', textContent: '', value: '', hidden: false,
-    addEventListener(type, listener) { if (selector === '#production-groups-list') groupEvents[type] = listener; },
+    addEventListener(type, listener) {
+      if (selector === '#production-groups-list') groupEvents[type] = listener;
+      if (selector === '#production-front-detail-body' && type === 'click') detailClicks.push(listener);
+    },
     setAttribute() {}, reset() {}, focus() {}, setSelectionRange() {},
     querySelector(name) { return element(`${selector} ${name}`); }
   });
@@ -102,6 +106,7 @@ const detail = element('#production-front-detail-body').innerHTML;
 assert.match(detail, /Outras O\.S\. no setor <small>1<\/small>/);
 assert.match(detail, /205<\/span>\s*<span class="pfd-op-name">Calagem/);
 assert.match(detail, /O\.S\. 5002/);
+assert.match(detail, /Adicionar observação/);
 // Outras O.S. ficam numa aba própria (escondida até clicar), separadas das operações.
 const othersPanel = detail.split('data-pfd-panel="others" hidden')[1];
 assert.ok(othersPanel);
@@ -129,7 +134,8 @@ context.updateProductionResponsibilityFields(schedulingForm);
 assert.equal(schedulingForm.elements.responsible_name.required, true);
 assert.equal(schedulingForm.elements.relief_name.disabled, false);
 // Todos os setores ficam no mesmo cartão. Um filtro por O.S. mantém os demais setores da frente.
-vm.runInContext("productionItems[0].entry.sector = '41'; productionItems[0].entry.observation = '<teste>';", context);
+vm.runInContext(`Object.assign(productionItems[0].entry, { sector: '4', farm: 'IZAURA', observation: '<teste>' });
+  Object.assign(productionItems[1].entry, { sector: '6', farm: 'IZAURA' });`, context);
 context.renderProductionDashboard();
 context.renderProductionSummary();
 assert.match(element('#production-summary').innerHTML, /title="Em atividade: 1"/);
@@ -142,10 +148,17 @@ assert.doesNotMatch(cards.innerHTML, /Resumo do turno/);
 assert.match(cards.innerHTML, /data-panel-filter="ok"/);
 vm.runInContext("dashboardPanelFilter.flag = 'ok'", context);
 context.renderProductionDashboard();
-assert.match(cards.innerHTML, /data-panel-front-card="7".*class="pdash-front-sectors".*Setor 41.*&lt;teste>.*Setor 42.*class="pdash-status is-wet".*Observação anterior.*Mudança anterior/s);
-assert.match(cards.innerHTML, /data-panel-note="changes" data-item-id="2"/);
+const frontCard = cards.innerHTML.match(/<article[^>]*data-panel-front-card="7">.*?<\/article>/s)?.[0];
+assert.ok(frontCard);
+assert.match(frontCard, /aria-label="Setor 4 · IZAURA".*aria-label="Setor 6 · IZAURA".*class="pdash-status is-wet"/s);
+assert.doesNotMatch(frontCard, /data-panel-note|Observação anterior|Mudança anterior|&lt;teste>/);
 assert.doesNotMatch(cards.innerHTML, /data-panel-front-card="9"/);
-vm.runInContext("productionItems[0].entry.sector = '42'", context);
+context.openDashboardFrontDetail(1);
+assert.match(element('#production-front-detail-body').innerHTML, /&lt;teste>/);
+context.openDashboardFrontDetail(2);
+assert.match(element('#production-front-detail-body').innerHTML, /data-panel-note="changes" data-item-id="2"[^>]*>Mudança anterior/);
+vm.runInContext(`Object.assign(productionItems[0].entry, { sector: '42', farm: '' });
+  Object.assign(productionItems[1].entry, { sector: '42', farm: '' });`, context);
 // Filtro ligado cuja condição deixou de existir volta para "todas as frentes".
 vm.runInContext("dashboardPanelFilter.flag = 'stopped'", context);
 context.renderProductionDashboard();
@@ -345,8 +358,9 @@ function sectorRow(sector, status = 'ATIVO', operations = []) {
 
   context.loadProductionItems = async () => true;
   context.apiRequest = async (url, options) => { requests.push({ url, options }); return { ok: true }; };
-  context.openDashboardNote(2, 'changes');
-  assert.equal(modalEvents.at(-1), 'open:production-note-modal');
+  const noteClick = { dataset: { itemId: '2', panelNote: 'changes' } };
+  detailClicks.forEach(listener => listener({ target: { closest: selector => selector === '[data-panel-note]' ? noteClick : null } }));
+  assert.deepEqual(modalEvents.slice(-2), ['close:production-front-detail-modal', 'open:production-note-modal']);
   assert.equal(element('#production-note-input').value, 'Mudança anterior');
   element('#production-note-input').value = 'Ir ao novo setor após 16h';
   await context.submitDashboardNote({ currentTarget: element('#production-note-form'), preventDefault() {} });
