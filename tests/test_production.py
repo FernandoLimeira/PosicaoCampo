@@ -115,6 +115,30 @@ class ProductionTests(unittest.TestCase):
         production.save_responsibility_rule(self.admin["id"], {**rule, "relief_name": ""}, rule_id=rule_id)
         self.assertEqual(responsibles("NRD", 25), {"B": ""})
 
+    def test_existing_database_adds_responsibility_table_without_losing_entries(self):
+        front = self._front()
+        day = "2026-11-22"
+        saved = production.save_my_item(self.user["id"], {
+            "unit_code": "NRD", "service_front_id": front["id"], "work_date": day,
+            "sector": "3392", "status": "EM ATIVIDADE",
+        })
+        with storage.connection() as conn:
+            conn.execute("DROP TABLE production_front_responsibilities")
+            conn.execute("UPDATE schema_info SET value='5' WHERE key='production_schema_version'")
+        db.init_db()
+
+        def current_item():
+            return production.list_my_items(self.viewer["id"], "NRD", day, scope="all")["items"][0]
+
+        item = current_item()
+        self.assertEqual((item["id"], item["entry"], item["responsibles"]), (saved["id"], saved["entry"], {}))
+        production.save_responsibility_rule(self.admin["id"], {
+            "unit_code": "NRD", "service_front_id": front["id"], "shift": "B", "work_date": day,
+            "kind": "cycle", "responsible_name": "Titular", "relief_name": "Folguista",
+        })
+        db.init_db()
+        self.assertEqual(current_item()["responsibles"], {"B": "Titular"})
+
     def test_daily_summary_is_scoped_to_unit_date_and_shared_with_analysts(self):
         empty = production.get_daily_summary(self.user["id"], "NRD", "2026-10-16")
         self.assertIsNone(empty["rain_turn_mm"])

@@ -337,6 +337,24 @@ def _create_field_weighing_table(conn):
     """)
 
 
+_PRODUCTION_FRONT_RESPONSIBILITIES_SQL = """
+CREATE TABLE IF NOT EXISTS main.production_front_responsibilities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    unit_code TEXT NOT NULL COLLATE NOCASE,
+    service_front_id INTEGER NOT NULL,
+    shift TEXT NOT NULL CHECK (shift IN ('A','B','C')),
+    kind TEXT NOT NULL CHECK (kind IN ('cycle','replacement')),
+    work_date TEXT NOT NULL,
+    responsible_name TEXT NOT NULL,
+    relief_name TEXT NOT NULL DEFAULT '',
+    updated_by INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE (unit_code, service_front_id, shift, kind, work_date),
+    FOREIGN KEY (service_front_id) REFERENCES production_service_fronts(id) ON DELETE CASCADE
+)
+"""
+
+
 def _create_production_tables(conn):
     statements = (
         """
@@ -397,6 +415,7 @@ def _create_production_tables(conn):
             FOREIGN KEY (service_front_id) REFERENCES production_service_fronts(id) ON DELETE CASCADE
         )
         """,
+        _PRODUCTION_FRONT_RESPONSIBILITIES_SQL,
         """
         CREATE TABLE IF NOT EXISTS main.production_user_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -508,7 +527,7 @@ def _create_production_tables(conn):
     )
     for statement in statements:
         conn.execute(statement)
-    conn.execute("INSERT OR REPLACE INTO main.schema_info(key,value) VALUES ('production_schema_version','5')")
+    conn.execute("INSERT OR REPLACE INTO main.schema_info(key,value) VALUES ('production_schema_version','6')")
 
 
 def seed_production_defaults(conn):
@@ -898,21 +917,6 @@ CREATE TABLE IF NOT EXISTS production_service_front_units (
     FOREIGN KEY (service_front_id) REFERENCES production_service_fronts(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS production_front_responsibilities (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    unit_code TEXT NOT NULL COLLATE NOCASE,
-    service_front_id INTEGER NOT NULL,
-    shift TEXT NOT NULL CHECK (shift IN ('A','B','C')),
-    kind TEXT NOT NULL CHECK (kind IN ('cycle','replacement')),
-    work_date TEXT NOT NULL,
-    responsible_name TEXT NOT NULL,
-    relief_name TEXT NOT NULL DEFAULT '',
-    updated_by INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    UNIQUE (unit_code, service_front_id, shift, kind, work_date),
-    FOREIGN KEY (service_front_id) REFERENCES production_service_fronts(id) ON DELETE CASCADE
-);
-
 CREATE TABLE IF NOT EXISTS production_user_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     owner_user_id INTEGER NOT NULL,
@@ -1027,4 +1031,4 @@ CREATE INDEX IF NOT EXISTS idx_production_daily_unit_date ON production_daily_en
 CREATE INDEX IF NOT EXISTS idx_production_daily_owner_date ON production_daily_entries(owner_user_id, work_date);
 CREATE INDEX IF NOT EXISTS idx_production_daily_item_date ON production_daily_entries(user_item_id, work_date, id);
 CREATE INDEX IF NOT EXISTS idx_production_daily_unit_item_date ON production_daily_entries(unit_code, user_item_id, work_date);
-"""
+""" + _PRODUCTION_FRONT_RESPONSIBILITIES_SQL + ";\n"
