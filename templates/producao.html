@@ -115,7 +115,9 @@
       <button class="catalog-tab is-active" type="button" role="tab" aria-selected="true" data-catalog-tab="groups">
         <span>Grupos</span><b data-catalog-count="groups">0</b></button>
       <button class="catalog-tab" type="button" role="tab" aria-selected="false" data-catalog-tab="responsibilities">
-        <span>Escala 5×1</span><b data-catalog-count="responsibilities">0</b></button>
+        <span>Responsáveis por frente</span><b data-catalog-count="responsibilities">0</b></button>
+      <button class="catalog-tab" type="button" role="tab" aria-selected="false" data-catalog-tab="responsibility-roles">
+        <span>Cargos</span><b data-catalog-count="responsibility-roles">0</b></button>
       <button class="catalog-tab" type="button" role="tab" aria-selected="false" data-catalog-tab="operations">
         <span>Operações</span><b data-catalog-count="operations">0</b></button>
       <button class="catalog-tab" type="button" role="tab" aria-selected="false" data-catalog-tab="status">
@@ -167,15 +169,16 @@
 
     <section class="catalog-section" data-catalog-section="responsibilities" role="tabpanel" hidden>
       <header class="catalog-section-header">
-        <div><h2>Escala 5×1</h2><p>O titular responde pela frente nos cinco dias de trabalho. O folguista assume no sexto dia.</p></div>
-        <button class="production-primary-button catalog-new" type="button" data-catalog-new="responsibilities">+ Nova escala</button>
+        <div><h2>Responsáveis por frente</h2><p>Cadastre a escala de cada cargo por turno. No ciclo 5×1, o folguista assume no sexto dia.</p></div>
+        <button class="production-primary-button catalog-new" type="button" data-catalog-new="responsibilities" data-responsibility-permission="edit_schedules" hidden>+ Nova escala</button>
       </header>
-      <details id="production-responsibility-editor" class="production-config-editor catalog-editor">
+      <details id="production-responsibility-editor" class="production-config-editor catalog-editor" data-responsibility-permission="edit_schedules" hidden>
         <summary class="production-config-editor-summary"><span id="production-responsibility-title">Nova escala</span></summary>
         <form id="production-responsibility-form" class="production-config-form production-config-form-collapsible">
           <input type="hidden" name="rule_id" />
-          <label class="field"><span>Tipo</span><select name="kind"><option value="cycle">Ciclo 5×1</option><option value="replacement">Substituição pontual</option></select></label>
+          <label class="field"><span>Tipo de escala</span><select name="kind"><option value="cycle">Ciclo 5×1</option><option value="fixed">Fixo (sem revezamento)</option><option value="replacement">Substituição pontual</option><option value="day_off">Folga por data</option></select></label>
           <label class="field"><span>Frente / serviço</span><select name="service_front_id" required></select></label>
+          <label class="field"><span>Cargo</span><select name="role_id" required></select></label>
           <label class="field"><span>Turno</span><select name="shift" required><option value="">Selecione</option><option value="A">A · 00h–07h20</option><option value="B">B · 07h20–15h40</option><option value="C">C · 15h40–00h</option></select></label>
           <label class="field"><span id="production-responsibility-date-label">Primeiro dia de trabalho</span><input name="work_date" type="date" required /></label>
           <label class="field"><span id="production-responsibility-name-label">Titular</span><input name="responsible_name" type="text" maxlength="80" required /></label>
@@ -186,8 +189,29 @@
           </div>
         </form>
       </details>
-      <div class="catalog-toolbar"><input type="search" data-catalog-search="responsibilities" autocomplete="off" placeholder="Buscar frente ou responsável" aria-label="Buscar frente ou responsável" /></div>
+      <div class="catalog-toolbar"><input type="search" data-catalog-search="responsibilities" autocomplete="off" placeholder="Buscar frente, cargo ou pessoa" aria-label="Buscar frente, cargo ou pessoa" /></div>
       <div id="production-responsibilities-list" class="production-config-list catalog-list" data-catalog-list="responsibilities"></div>
+    </section>
+
+    <section class="catalog-section" data-catalog-section="responsibility-roles" role="tabpanel" hidden>
+      <header class="catalog-section-header">
+        <div><h2>Cargos</h2><p>Defina se cada cargo responde pelo turno ou dá apoio à frente.</p></div>
+        <button class="production-primary-button catalog-new" type="button" data-catalog-new="responsibility-roles" data-responsibility-permission="edit_roles" hidden>+ Novo cargo</button>
+      </header>
+      <details id="production-responsibility-role-editor" class="production-config-editor catalog-editor" data-responsibility-permission="edit_roles" hidden>
+        <summary class="production-config-editor-summary"><span id="production-responsibility-role-title">Novo cargo</span></summary>
+        <form id="production-responsibility-role-form" class="production-config-form production-config-form-collapsible">
+          <input type="hidden" name="role_id" />
+          <label class="field"><span>Nome do cargo</span><input name="name" type="text" maxlength="80" required /></label>
+          <label class="field"><span>Tipo de atuação</span><select name="role_type" required><option value="">Selecione</option><option value="lead">Responsável pelo turno</option><option value="support">Apoio à frente</option></select></label>
+          <div class="production-config-form-actions">
+            <button class="production-secondary-button" type="button" id="production-responsibility-role-clear">Cancelar</button>
+            <button class="production-primary-button" type="submit">Salvar cargo</button>
+          </div>
+        </form>
+      </details>
+      <div class="catalog-toolbar"><input type="search" data-catalog-search="responsibility-roles" autocomplete="off" placeholder="Buscar cargo" aria-label="Buscar cargo" /></div>
+      <div id="production-responsibility-roles-list" class="production-config-list catalog-list" data-catalog-list="responsibility-roles"></div>
     </section>
 
     <section class="catalog-section" data-catalog-section="operations" role="tabpanel" hidden>

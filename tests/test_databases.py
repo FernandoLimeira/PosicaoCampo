@@ -149,6 +149,8 @@ class DatabaseTests(unittest.TestCase):
                 conn.execute(statement.replace("auth.", ""))
             from backend.models.front_notes import initialize_front_notes
             initialize_front_notes(conn)
+            if "production_responsibility_roles" in storage._tables(conn):
+                storage._seed_production_responsibility_roles(conn)
             conn.execute("INSERT INTO users VALUES (7, 'LegacyAdmin', ?, 'admin', 1, ?)",
                          (hash_password("Legacy-pass-42"), now))
             conn.execute("INSERT INTO users VALUES (17, 'LegacyOperator', ?, 'user', 1, ?)",

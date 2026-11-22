@@ -3,6 +3,8 @@
 // aqui ficam a abertura da página e o cadastro de operações (código da O.S.).
 let productionOperations = [];
 let productionResponsibilities = [];
+let productionResponsibilityRoles = [];
+let productionResponsibilityPermissions = {};
 let productionResponsibilityUnit = '';
 
 function productionCatalogPageActive() {
@@ -107,19 +109,78 @@ async function deleteProductionOperation(operationId) {
   }
 }
 
+function canEditProductionResponsibility(action) {
+  return productionResponsibilityUnit === currentProductionUnit() && Boolean(productionResponsibilityPermissions[action]);
+}
+
+function renderProductionResponsibilityControls() {
+  document.querySelectorAll('[data-responsibility-permission]').forEach(control => {
+    control.hidden = !canEditProductionResponsibility(control.dataset.responsibilityPermission);
+    if (control.hidden && control.open) control.open = false;
+  });
+}
+
+function renderProductionResponsibilityRoles() {
+  const list = document.querySelector('#production-responsibility-roles-list');
+  if (!list) return;
+  const editable = canEditProductionResponsibility('edit_roles');
+  list.innerHTML = productionResponsibilityRoles.map(role => `<div class="production-config-list-item">
+    <div class="production-config-list-item-copy"><strong>${escapeHtml(role.name)}</strong>
+      <span>${role.role_type === 'lead' ? 'Responsável pelo turno' : 'Apoio à frente'}</span></div>
+    ${editable ? `<div class="production-config-list-actions" data-responsibility-actions>
+      <button class="icon-edit-button" type="button" data-responsibility-role-edit="${role.id}" title="Editar cargo" aria-label="Editar ${escapeHtml(role.name)}">${PENCIL_ICON}</button>
+    </div>` : ''}</div>`).join('') || '<p class="production-empty">Nenhum cargo cadastrado.</p>';
+}
+
+function openProductionResponsibilityRoleForm(role = null, { keepOpen = false } = {}) {
+  const form = document.querySelector('#production-responsibility-role-form');
+  if (!form) return;
+  form.reset();
+  form.elements.role_id.value = role?.id ?? '';
+  form.elements.name.value = role?.name ?? '';
+  form.elements.role_type.value = role?.role_type ?? '';
+  document.querySelector('#production-responsibility-role-title').textContent = role ? 'Editar cargo' : 'Novo cargo';
+  document.querySelector('#production-responsibility-role-editor').open = keepOpen;
+}
+
+async function submitProductionResponsibilityRole(event) {
+  event.preventDefault();
+  if (!canEditProductionResponsibility('edit_roles')) return;
+  const form = event.currentTarget;
+  const { role_id: id, name, role_type } = Object.fromEntries(new FormData(form));
+  const button = form.querySelector('button[type="submit"]');
+  if (button.disabled) return;
+  button.disabled = true;
+  try {
+    await apiRequest(`/api/production/catalog/responsibility-roles${id ? `/${id}` : ''}`, {
+      method: id ? 'PUT' : 'POST', body: JSON.stringify({ name, role_type })
+    });
+    openProductionResponsibilityRoleForm();
+    await loadProductionResponsibilities();
+    showToast('Cargo salvo.');
+  } catch (error) {
+    showToast(error.message || 'Não foi possível salvar o cargo.', true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function renderProductionResponsibilities() {
   const list = document.querySelector('#production-responsibilities-list');
   if (!list) return;
-  const editable = canConfigureProduction();
+  const editable = canEditProductionResponsibility('edit_schedules');
   list.innerHTML = productionResponsibilities.map(rule => {
-    const temporary = rule.kind === 'replacement';
     const date = formatIsoDateBr(rule.work_date);
-    const details = temporary ? `Substituição em ${date} · ${rule.responsible_name}`
-      : `Ciclo desde ${date} · Titular: ${rule.responsible_name} · Folguista: ${rule.relief_name || 'Sem cobertura'}`;
+    const details = {
+      replacement: `Substituição em ${date} · ${rule.responsible_name}`,
+      day_off: `Folga em ${date} · ${rule.responsible_name ? `Cobertura de ${rule.responsible_name}` : 'Sem cobertura'}`,
+      fixed: `Fixo desde ${date} · ${rule.responsible_name}`,
+      cycle: `Ciclo 5×1 desde ${date} · Titular ${rule.responsible_name} · Folguista ${rule.relief_name || 'sem cobertura'}`
+    }[rule.kind];
     return `<div class="production-config-list-item">
-      <div class="production-config-list-item-copy"><strong>${escapeHtml(rule.service_name)} · Turno ${escapeHtml(rule.shift)}</strong>
+      <div class="production-config-list-item-copy"><strong>${escapeHtml(rule.service_name)} · ${escapeHtml(rule.role_name)} · Turno ${escapeHtml(rule.shift)}</strong>
         <span>${escapeHtml(details)}</span></div>
-      ${editable ? `<div class="production-config-list-actions">
+      ${editable ? `<div class="production-config-list-actions" data-responsibility-actions>
         <button class="icon-edit-button" type="button" data-responsibility-edit="${rule.id}" title="Editar escala" aria-label="Editar escala de ${escapeHtml(rule.service_name)}">${PENCIL_ICON}</button>
         <button class="icon-delete-button" type="button" data-responsibility-delete="${rule.id}" title="Remover escala" aria-label="Remover escala de ${escapeHtml(rule.service_name)}">${TRASH_ICON}</button>
       </div>` : ''}</div>`;
@@ -130,22 +191,36 @@ async function loadProductionResponsibilities(unit = currentProductionUnit()) {
   const epoch = productionPageEpoch;
   if (productionResponsibilityUnit !== unit) {
     productionResponsibilities = [];
+    productionResponsibilityRoles = [];
+    productionResponsibilityPermissions = {};
     productionResponsibilityUnit = '';
+    renderProductionResponsibilityControls();
+    renderProductionResponsibilityRoles();
     renderProductionResponsibilities();
   }
   const data = await apiRequest(`/api/production/catalog/responsibilities?unit=${encodeURIComponent(unit)}`);
   if (!isCurrentProductionRequest(unit, epoch)) return;
   productionResponsibilities = Array.isArray(data?.rules) ? data.rules : [];
+  productionResponsibilityRoles = Array.isArray(data?.roles) ? data.roles : [];
+  productionResponsibilityPermissions = data?.permissions || {};
   productionResponsibilityUnit = unit;
+  renderProductionResponsibilityControls();
+  renderProductionResponsibilityRoles();
   renderProductionResponsibilities();
 }
 
 function updateProductionResponsibilityFields(form) {
-  const temporary = form.elements.kind.value === 'replacement';
-  document.querySelector('#production-responsibility-date-label').textContent = temporary ? 'Data da substituição' : 'Primeiro dia de trabalho';
-  document.querySelector('#production-responsibility-name-label').textContent = temporary ? 'Substituto' : 'Titular';
-  document.querySelector('#production-responsibility-relief').hidden = temporary;
-  form.elements.relief_name.disabled = temporary;
+  const kind = form.elements.kind.value;
+  const cycle = kind === 'cycle';
+  document.querySelector('#production-responsibility-date-label').textContent = {
+    cycle: 'Primeiro dia de trabalho', fixed: 'Válido a partir de', replacement: 'Data da substituição', day_off: 'Data da folga'
+  }[kind];
+  document.querySelector('#production-responsibility-name-label').textContent = {
+    cycle: 'Titular', fixed: 'Pessoa escalada', replacement: 'Substituto', day_off: 'Quem cobre a folga (opcional)'
+  }[kind];
+  form.elements.responsible_name.required = kind !== 'day_off';
+  document.querySelector('#production-responsibility-relief').hidden = !cycle;
+  form.elements.relief_name.disabled = !cycle;
 }
 
 function openProductionResponsibilityForm(rule = null, { keepOpen = false } = {}) {
@@ -155,11 +230,13 @@ function openProductionResponsibilityForm(rule = null, { keepOpen = false } = {}
   form.reset();
   form.dataset.unit = currentProductionUnit();
   fields.rule_id.value = rule?.id ?? '';
+  fields.role_id.innerHTML = '<option value="">Selecione</option>' + productionResponsibilityRoles.map(role =>
+    `<option value="${role.id}">${escapeHtml(role.name)}</option>`).join('');
   fields.service_front_id.innerHTML = '<option value="">Selecione</option>' + groupsForEntry().map(group => `
     <optgroup label="${escapeHtml(group.name)}">${(group.fronts || []).map(front =>
       `<option value="${front.id}">${escapeHtml(front.name)}</option>`).join('')}</optgroup>`).join('');
   if (rule) {
-    for (const key of ['kind', 'service_front_id', 'shift', 'work_date', 'responsible_name', 'relief_name']) {
+    for (const key of ['kind', 'role_id', 'service_front_id', 'shift', 'work_date', 'responsible_name', 'relief_name']) {
       fields[key].value = rule[key];
     }
   }
@@ -172,7 +249,7 @@ async function submitProductionResponsibility(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const unit = form.dataset.unit;
-  if (!canConfigureProduction() || unit !== currentProductionUnit()) return;
+  if (!canEditProductionResponsibility('edit_schedules') || unit !== currentProductionUnit()) return;
   const fields = form.elements;
   const id = fields.rule_id.value;
   const payload = Object.fromEntries(new FormData(form));
@@ -199,7 +276,7 @@ async function submitProductionResponsibility(event) {
 async function removeProductionResponsibility(rule) {
   const unit = productionResponsibilityUnit;
   if (unit !== currentProductionUnit() || !await askConfirmation({
-    kicker: 'Escala 5×1', title: 'Remover escala?', message: `${rule.service_name} · Turno ${rule.shift}.`,
+    kicker: 'Responsáveis por frente', title: 'Remover escala?', message: `${rule.service_name} · ${rule.role_name} · Turno ${rule.shift}.`,
     confirmLabel: 'Remover'
   })) return;
   try {
@@ -216,7 +293,7 @@ async function initializeProductionCatalogPage() {
   const readonly = document.querySelector('#production-catalog-readonly');
   if (readonly) readonly.hidden = editable;
   // Sem a configuração global, a página só consulta: os formulários ficam ocultos.
-  document.querySelectorAll('.catalog-editor, #production-catalog-panel .catalog-new')
+  document.querySelectorAll('.catalog-editor:not([data-responsibility-permission]), #production-catalog-panel .catalog-new:not([data-responsibility-permission])')
     .forEach(element => { element.hidden = !editable; });
   document.querySelector('#production-catalog-panel')?.classList.toggle('is-readonly', !editable);
   const tasks = [loadProductionOperations(), loadProductionResponsibilities()];
@@ -252,13 +329,14 @@ const CATALOG_TAB_KEY = 'posicao-campo-production-catalog-tab';
 const CATALOG_EDITOR_IDS = {
   groups: '#production-group-editor',
   operations: '#production-operation-editor', status: '#production-status-editor',
-  responsibilities: '#production-responsibility-editor'
+  responsibilities: '#production-responsibility-editor', 'responsibility-roles': '#production-responsibility-role-editor'
 };
 const CATALOG_NEW_ACTIONS = {
   groups: () => clearGroupConfigForm({ keepOpen: true }),
   operations: () => clearOperationForm({ keepOpen: true }),
   status: () => clearStatusConfigForm({ keepOpen: true }),
-  responsibilities: () => openProductionResponsibilityForm(null, { keepOpen: true })
+  responsibilities: () => openProductionResponsibilityForm(null, { keepOpen: true }),
+  'responsibility-roles': () => openProductionResponsibilityRoleForm(null, { keepOpen: true })
 };
 
 function selectCatalogTab(tab) {
@@ -313,9 +391,17 @@ if (productionCatalogPageActive()) {
   responsibilityForm?.addEventListener('submit', submitProductionResponsibility);
   responsibilityForm?.elements?.kind?.addEventListener('change', () => updateProductionResponsibilityFields(responsibilityForm));
   document.querySelector('#production-responsibility-clear')?.addEventListener('click', () => openProductionResponsibilityForm());
+  document.querySelector('#production-responsibility-role-form')?.addEventListener('submit', submitProductionResponsibilityRole);
+  document.querySelector('#production-responsibility-role-clear')?.addEventListener('click', () => openProductionResponsibilityRoleForm());
+  document.querySelector('#production-responsibility-roles-list')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-responsibility-role-edit]');
+    if (!button || !canEditProductionResponsibility('edit_roles')) return;
+    const role = productionResponsibilityRoles.find(item => item.id === Number(button.dataset.responsibilityRoleEdit));
+    if (role) openProductionResponsibilityRoleForm(role, { keepOpen: true });
+  });
   document.querySelector('#production-responsibilities-list')?.addEventListener('click', event => {
     const button = event.target.closest('[data-responsibility-edit], [data-responsibility-delete]');
-    if (!button || !canConfigureProduction() || productionResponsibilityUnit !== currentProductionUnit()) return;
+    if (!button || !canEditProductionResponsibility('edit_schedules')) return;
     const id = Number(button.dataset.responsibilityEdit || button.dataset.responsibilityDelete);
     const rule = productionResponsibilities.find(item => item.id === id);
     if (!rule) return;
@@ -334,6 +420,7 @@ if (productionCatalogPageActive()) {
   document.querySelectorAll('[data-catalog-new]').forEach(button => {
     button.addEventListener('click', () => {
       const key = button.dataset.catalogNew;
+      if (button.dataset.responsibilityPermission && !canEditProductionResponsibility(button.dataset.responsibilityPermission)) return;
       CATALOG_NEW_ACTIONS[key]?.();
       const editor = document.querySelector(CATALOG_EDITOR_IDS[key]);
       if (editor) editor.open = true;
@@ -344,7 +431,8 @@ if (productionCatalogPageActive()) {
   const CANCEL_BUTTONS = {
     'production-group-editor': '#production-group-clear', 'production-front-editor': '#production-front-clear',
     'production-operation-editor': '#production-operation-clear', 'production-status-editor': '#production-status-clear',
-    'production-responsibility-editor': '#production-responsibility-clear'
+    'production-responsibility-editor': '#production-responsibility-clear',
+    'production-responsibility-role-editor': '#production-responsibility-role-clear'
   };
   const closeCatalogEditor = editor => {
     document.querySelector(CANCEL_BUTTONS[editor.id])?.click();

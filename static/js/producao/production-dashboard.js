@@ -130,7 +130,7 @@ function openDashboardFrontDetail(itemId) {
     ...(productionUnitUsesSection(currentProductionUnit()) ? [['Seção', entry.section || '-']] : []),
     ['Fazenda', entry.farm || '-'],
     ['Atualização', entry.work_date ? formatIsoDateBr(entry.work_date) : 'Sem registro'],
-    ['Responsável no turno', productionResponsibleName(item)]
+    ['Equipe do turno', productionResponsibleName(item)]
   ];
   const okCount = codes.filter(code => productionOperationTone(item, code) === 'is-order-ok').length;
   const operations = codes.map(code => {

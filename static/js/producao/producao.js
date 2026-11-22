@@ -416,6 +416,13 @@ function serviceOrderCell(item) {
 }
 
 function productionResponsibleName(item, shift = dashboardCurrentShift().name) {
+  const team = item.responsibility_team?.[shift];
+  if (team?.length) {
+    const labels = team.map(person => `${person.role_name} ${person.name
+      ? `${person.name}${person.day_off ? ' (cobertura)' : ''}` : 'em folga sem cobertura'}`);
+    if (!team.some(person => person.role_type === 'lead')) labels.unshift('Sem responsável escalado');
+    return labels.join(' · ');
+  }
   return item.responsibles?.[shift] || 'Sem responsável escalado';
 }
 

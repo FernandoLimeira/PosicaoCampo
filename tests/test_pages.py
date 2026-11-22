@@ -1158,6 +1158,32 @@ class PageTests(unittest.TestCase):
         blocked = production.save_my_item(self.admin['id'], {**base, 'unit_code': 'PPT', 'sector': 'HTTP1', 'status': 'EM ATIVIDADE'})
         self.assertEqual(self.request(f"/api/production/my-items/{blocked['id']}", cookie=cookie, method='DELETE')['status'], 403)
 
+    def test_production_responsibility_catalog_accepts_roles_and_day_off(self):
+        from backend.models import production
+        rules_path = "/api/production/catalog/responsibilities"
+        roles_path = "/api/production/catalog/responsibility-roles"
+        query = {"QUERY_STRING": "unit=NRD"}
+        role = {"name": "Focal de turno HTTP", "role_type": "support"}
+        self.assertEqual(self.request(roles_path, role="member", method="POST", body=role)["status"], 403)
+        created = self.request(roles_path, role="admin", method="POST", body=role)
+        self.assertEqual(created["status"], 201, created["body"])
+        role_id = json.loads(created["body"])["id"]
+        edited = self.request(f"{roles_path}/{role_id}", role="admin", method="PUT",
+                              body={**role, "name": "Focal HTTP atualizado"})
+        self.assertEqual(edited["status"], 200, edited["body"])
+        group = production.list_catalog(self.admin["id"])["groups"][0]
+        front = production.save_service_front(self.admin["id"], {"group_id": group["id"], "name": "Escala HTTP",
+                                              "units": ["NRD"], "display_style": "front"})
+        created_rule = self.request(rules_path, role="admin", method="POST", body={"unit_code": "NRD",
+            "service_front_id": front["id"], "role_id": role_id, "shift": "B", "kind": "day_off", "work_date": "2026-11-22"})
+        self.assertEqual(created_rule["status"], 201, created_rule["body"])
+        catalog = self.request(rules_path, role="admin", overrides=query)
+        self.assertEqual(catalog["status"], 200, catalog["body"])
+        result = json.loads(catalog["body"])
+        self.assertEqual(result["permissions"], {"edit_roles": True, "edit_schedules": True})
+        rule = next(item for item in result["rules"] if item["id"] == json.loads(created_rule["body"])["id"])
+        self.assertEqual((rule["role_name"], rule["kind"], rule["responsible_name"]), ("Focal HTTP atualizado", "day_off", ""))
+
     def test_ctt_report_independent_permissions_and_seven_access_sections(self):
         from backend.models.module_access import MODULES
         modules = {spec["key"]: {"view": False, "edit": False} for spec in MODULES}

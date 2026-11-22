@@ -508,7 +508,7 @@
 }
 
 /* ===== Página Cadastros ===== */
-.production-catalog-panel.is-readonly .production-config-list-actions { display: none; }
+.production-catalog-panel.is-readonly .production-config-list-actions:not([data-responsibility-actions]) { display: none; }
 .production-operation-active { display: flex; align-items: center; gap: 6px; color: #405159; font-size: 11px; font-weight: 700; }
 .production-operation-active input { width: 16px; height: 16px; min-height: 0; }
 .production-entry-form.is-editing .production-status-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1134,7 +1134,7 @@ button.pdash-kpi.is-amber.is-active { box-shadow: 0 0 0 3px rgba(213, 163, 38, .
 :is(.production-operation-codes span, .pdash-op).is-order-ok { border-color: #b4dcc8; background: var(--status-ok-soft); color: var(--status-ok-text); }
 :is(.production-operation-codes span, .pdash-op).is-order-missing { border-color: #efc3c8; background: var(--status-stop-soft); color: var(--status-stop-text); }
 .pdash-tile-foot { min-height: 0; margin-top: 1px; padding-top: 7px; border-top: 1px dashed #e3e8eb; }
-.pdash-tile-who { overflow: hidden; color: var(--slate); font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.pdash-tile-who { min-width: 0; color: var(--slate); font-size: 11px; font-weight: 700; overflow-wrap: anywhere; white-space: normal; }
 
 /* Consulta de O.S. disponível durante a rolagem, com o resultado junto ao campo. */
 .pdash-sector-bar { position: sticky; top: 8px; z-index: 8; }

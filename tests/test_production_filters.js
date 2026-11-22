@@ -109,10 +109,24 @@ assert.doesNotMatch(othersPanel, /5001/);
 assert.match(detail, /data-pfd-tab="others"/);
 context.openDashboardFrontDetail(2);
 assert.match(element('#production-front-detail-body').innerHTML, /Nenhuma outra O\.S\. aberta no setor 42/);
-assert.match(element('#production-front-detail-body').innerHTML, /Responsável no turno.*Ana/s);
+assert.match(element('#production-front-detail-body').innerHTML, /Equipe do turno.*Ana/s);
 const scheduledTile = vm.runInContext("dashboardFrontTile({ ...findProductionItem(2), responsibles: { A: 'Ana', B: 'João' } }, 'B')", context);
 assert.match(scheduledTile, /João · Atualização/);
 assert.doesNotMatch(scheduledTile, /Folguista|Ana/);
+const teamTile = vm.runInContext(`dashboardFrontTile({ ...findProductionItem(2), responsibility_team: { B: [
+  {role_name: 'Encarregado', role_type: 'lead', name: 'Ana', day_off: true},
+  {role_name: 'Ponto focal', role_type: 'support', name: 'Maria', day_off: false}
+] } }, 'B')`, context);
+assert.match(teamTile, /Encarregado Ana \(cobertura\) · Ponto focal Maria/);
+const schedulingForm = { elements: { kind: { value: 'day_off' }, responsible_name: {}, relief_name: {} } };
+context.updateProductionResponsibilityFields(schedulingForm);
+assert.equal(element('#production-responsibility-date-label').textContent, 'Data da folga');
+assert.equal(schedulingForm.elements.responsible_name.required, false);
+assert.equal(schedulingForm.elements.relief_name.disabled, true);
+schedulingForm.elements.kind.value = 'cycle';
+context.updateProductionResponsibilityFields(schedulingForm);
+assert.equal(schedulingForm.elements.responsible_name.required, true);
+assert.equal(schedulingForm.elements.relief_name.disabled, false);
 // Filtros do grupo: só aparecem quando alguma frente está na condição (Plantio: 1 sem O.S.,
 // 1 sem operação, nenhuma parada).
 vm.runInContext("productionPanelGroup = '1'", context);

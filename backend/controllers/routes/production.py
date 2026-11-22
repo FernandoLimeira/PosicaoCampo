@@ -20,11 +20,11 @@ from ...models.production import (
     delete_service_front as delete_production_service_front,
     delete_status as delete_production_status,
     get_daily_summary as get_production_daily_summary,
+    get_responsibility_catalog,
     get_rain_overview as get_production_rain_overview,
     get_user_access as get_production_user_access,
     list_catalog as list_production_catalog,
     list_my_items as list_production_my_items,
-    list_responsibility_rules,
     list_sector_base_entries as list_production_sector_base,
     list_sector_options as list_production_sector_options,
     list_statuses as list_production_statuses,
@@ -35,6 +35,7 @@ from ...models.production import (
     save_items_sheet as save_production_items_sheet,
     save_my_items as save_production_my_items,
     save_responsibility_rule,
+    save_responsibility_role,
     save_service_front as save_production_service_front,
     save_status as save_production_status,
 )
@@ -180,9 +181,7 @@ def handle(req):
         if not user:
             return req.unauthorized()
         if method == "GET":
-            return req.guarded(lambda: req.json(HTTPStatus.OK, {
-                "rules": list_responsibility_rules(user["id"], req.param("unit", "")),
-            }))
+            return req.guarded(lambda: req.json(HTTPStatus.OK, get_responsibility_catalog(user["id"], req.param("unit", ""))))
         return req.guarded(lambda: req.json(HTTPStatus.CREATED, {
             "id": save_responsibility_rule(user["id"], req.body()),
         }))
@@ -199,6 +198,20 @@ def handle(req):
             return req.json(HTTPStatus.OK, {"ok": True})
 
         return req.guarded(responsibility_item)
+
+    if path == "/api/production/catalog/responsibility-roles" and method == "POST":
+        if not user:
+            return req.unauthorized()
+        return req.guarded(lambda: req.json(HTTPStatus.CREATED, {
+            "id": save_responsibility_role(user["id"], req.body()),
+        }))
+
+    if path.startswith("/api/production/catalog/responsibility-roles/") and method == "PUT":
+        if not user:
+            return req.unauthorized()
+        return req.guarded(lambda: req.json(HTTPStatus.OK, {
+            "id": save_responsibility_role(user["id"], req.body(), role_id=_last_id(path)),
+        }))
 
     if path == "/api/production/catalog/groups" and method == "POST":
         if not user:

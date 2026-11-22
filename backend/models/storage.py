@@ -20,7 +20,7 @@ CORE_DATA_TABLES = (
 )
 PRODUCTION_TABLES = (
     "production_statuses", "production_status_history", "production_groups", "production_service_fronts", "production_service_front_units",
-    "production_front_responsibilities",
+    "production_responsibility_roles", "production_front_responsibilities",
     "production_user_items", "production_daily_entries", "production_daily_summaries",
     "production_service_orders", "production_operations", "production_sql_queries",
 )
@@ -36,6 +36,7 @@ OPTIONAL_USER_REFERENCES = (
     ("field_sql_queries", "created_by"), ("field_sql_queries", "updated_by"),
     ("production_groups", "created_by"), ("production_groups", "updated_by"),
     ("production_service_fronts", "created_by"), ("production_service_fronts", "updated_by"),
+    ("production_responsibility_roles", "updated_by"),
     ("production_daily_entries", "owner_user_id"), ("production_daily_entries", "created_by"),
     ("production_daily_entries", "updated_by"),
     ("production_daily_summaries", "updated_by"),
@@ -194,6 +195,8 @@ def _copy_legacy(conn):
         for schema, names in (("auth", AUTH_TABLES), ("main", DATA_TABLES)):
             for table in names:
                 if table in tables:
+                    if table == "production_front_responsibilities" and "production_responsibility_roles" not in tables:
+                        _seed_production_responsibility_roles(conn)
                     _copy_table(source, conn, table, schema)
         return "return_analysis_fronts" in tables
     finally:
@@ -337,22 +340,60 @@ def _create_field_weighing_table(conn):
     """)
 
 
-_PRODUCTION_FRONT_RESPONSIBILITIES_SQL = """
+DEFAULT_PRODUCTION_RESPONSIBILITY_ROLE_ID = 1
+_PRODUCTION_RESPONSIBILITY_ROLES_SQL = """
+CREATE TABLE IF NOT EXISTS main.production_responsibility_roles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    role_type TEXT NOT NULL CHECK (role_type IN ('lead','support')),
+    updated_by INTEGER,
+    updated_at INTEGER NOT NULL DEFAULT 0
+)
+"""
+
+_PRODUCTION_FRONT_RESPONSIBILITIES_SQL = f"""
 CREATE TABLE IF NOT EXISTS main.production_front_responsibilities (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     unit_code TEXT NOT NULL COLLATE NOCASE,
     service_front_id INTEGER NOT NULL,
+    role_id INTEGER NOT NULL DEFAULT {DEFAULT_PRODUCTION_RESPONSIBILITY_ROLE_ID},
     shift TEXT NOT NULL CHECK (shift IN ('A','B','C')),
-    kind TEXT NOT NULL CHECK (kind IN ('cycle','replacement')),
+    kind TEXT NOT NULL CHECK (kind IN ('cycle','fixed','replacement','day_off')),
     work_date TEXT NOT NULL,
     responsible_name TEXT NOT NULL,
     relief_name TEXT NOT NULL DEFAULT '',
     updated_by INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    UNIQUE (unit_code, service_front_id, shift, kind, work_date),
-    FOREIGN KEY (service_front_id) REFERENCES production_service_fronts(id) ON DELETE CASCADE
+    FOREIGN KEY (service_front_id) REFERENCES production_service_fronts(id) ON DELETE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES production_responsibility_roles(id) ON DELETE RESTRICT
 )
 """
+
+
+def _seed_production_responsibility_roles(conn):
+    conn.execute("""INSERT OR IGNORE INTO main.production_responsibility_roles(id,name,role_type)
+                    VALUES (?, 'Encarregado', 'lead'), (2, 'Ponto focal', 'support')""",
+                 (DEFAULT_PRODUCTION_RESPONSIBILITY_ROLE_ID,))
+
+
+def _upgrade_production_responsibilities(conn):
+    _seed_production_responsibility_roles(conn)
+    columns = {row[1] for row in conn.execute("PRAGMA main.table_info(production_front_responsibilities)")}
+    if "role_id" not in columns:
+        conn.execute("ALTER TABLE main.production_front_responsibilities RENAME TO production_front_responsibilities_v6")
+        sequence = conn.execute("SELECT seq FROM main.sqlite_sequence WHERE name='production_front_responsibilities_v6'").fetchone()
+        conn.execute(_PRODUCTION_FRONT_RESPONSIBILITIES_SQL)
+        fields = "id,unit_code,service_front_id,shift,kind,work_date,responsible_name,relief_name,updated_by,updated_at"
+        conn.execute(f"INSERT INTO main.production_front_responsibilities ({fields}) "
+                     f"SELECT {fields} FROM main.production_front_responsibilities_v6")
+        if sequence:
+            conn.execute("DELETE FROM main.sqlite_sequence WHERE name='production_front_responsibilities'")
+            conn.execute("INSERT INTO main.sqlite_sequence(name,seq) VALUES ('production_front_responsibilities',?)", (sequence[0],))
+        conn.execute("DROP TABLE main.production_front_responsibilities_v6")
+    # Para o mesmo cargo, pode haver uma escala vigente e uma exceção na mesma data.
+    conn.execute("""CREATE UNIQUE INDEX IF NOT EXISTS main.idx_production_responsibility_date
+                    ON production_front_responsibilities(unit_code,service_front_id,role_id,shift,work_date,
+                                                         (kind IN ('cycle','fixed')))""")
 
 
 def _create_production_tables(conn):
@@ -415,6 +456,7 @@ def _create_production_tables(conn):
             FOREIGN KEY (service_front_id) REFERENCES production_service_fronts(id) ON DELETE CASCADE
         )
         """,
+        _PRODUCTION_RESPONSIBILITY_ROLES_SQL,
         _PRODUCTION_FRONT_RESPONSIBILITIES_SQL,
         """
         CREATE TABLE IF NOT EXISTS main.production_user_items (
@@ -527,7 +569,8 @@ def _create_production_tables(conn):
     )
     for statement in statements:
         conn.execute(statement)
-    conn.execute("INSERT OR REPLACE INTO main.schema_info(key,value) VALUES ('production_schema_version','6')")
+    _upgrade_production_responsibilities(conn)
+    conn.execute("INSERT OR REPLACE INTO main.schema_info(key,value) VALUES ('production_schema_version','7')")
 
 
 def seed_production_defaults(conn):
@@ -1031,4 +1074,4 @@ CREATE INDEX IF NOT EXISTS idx_production_daily_unit_date ON production_daily_en
 CREATE INDEX IF NOT EXISTS idx_production_daily_owner_date ON production_daily_entries(owner_user_id, work_date);
 CREATE INDEX IF NOT EXISTS idx_production_daily_item_date ON production_daily_entries(user_item_id, work_date, id);
 CREATE INDEX IF NOT EXISTS idx_production_daily_unit_item_date ON production_daily_entries(unit_code, user_item_id, work_date);
-""" + _PRODUCTION_FRONT_RESPONSIBILITIES_SQL + ";\n"
+""" + _PRODUCTION_RESPONSIBILITY_ROLES_SQL + ";\n" + _PRODUCTION_FRONT_RESPONSIBILITIES_SQL + ";\n"

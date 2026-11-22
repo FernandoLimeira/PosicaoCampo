@@ -139,6 +139,68 @@ class ProductionTests(unittest.TestCase):
         db.init_db()
         self.assertEqual(current_item()["responsibles"], {"B": "Titular"})
 
+    def test_responsibility_roles_upgrade_preserves_legacy_schedules_and_ids(self):
+        front = self._front()
+        with storage.connection() as conn:
+            conn.execute("DROP TABLE production_front_responsibilities")
+            conn.execute("DROP TABLE production_responsibility_roles")
+            conn.execute("""CREATE TABLE production_front_responsibilities (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, unit_code TEXT NOT NULL COLLATE NOCASE,
+                service_front_id INTEGER NOT NULL, shift TEXT NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('cycle','replacement')),
+                work_date TEXT NOT NULL, responsible_name TEXT NOT NULL, relief_name TEXT NOT NULL,
+                updated_by INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+                UNIQUE(unit_code,service_front_id,shift,kind,work_date),
+                FOREIGN KEY(service_front_id) REFERENCES production_service_fronts(id) ON DELETE CASCADE
+            )""")
+            conn.execute("""INSERT INTO production_front_responsibilities VALUES
+                          (31,'NRD',?,'B','cycle','2026-11-20','Titular','Folguista',?,1795000000)""", (front["id"], self.admin["id"]))
+            conn.execute("UPDATE sqlite_sequence SET seq=42 WHERE name='production_front_responsibilities'")
+            conn.execute("UPDATE schema_info SET value='6' WHERE key='production_schema_version'")
+        for _ in range(2):
+            db.init_db()
+            rule, = production.list_responsibility_rules(self.viewer["id"], "NRD")
+            self.assertEqual((rule["id"], rule["role_name"], rule["responsible_name"], rule["relief_name"]),
+                             (31, "Encarregado", "Titular", "Folguista"))
+        focal = production.save_responsibility_rule(self.admin["id"], {
+            "unit_code": "NRD", "service_front_id": front["id"], "role_id": 2, "shift": "B",
+            "kind": "fixed", "work_date": "2026-11-20", "responsible_name": "Maria",
+        })
+        self.assertGreater(focal, 42)
+
+    def test_responsibility_roles_and_day_off_are_independent_and_permissions_match(self):
+        front = self._front(units=["NRD", "PPT"])
+        admin = self.admin["id"]
+        viewer = self.viewer["id"]
+        catalog = production.get_responsibility_catalog(admin, "NRD")
+        self.assertEqual(catalog["permissions"], {"edit_roles": True, "edit_schedules": True})
+        self.assertEqual([(role["name"], role["role_type"]) for role in catalog["roles"]],
+                         [("Encarregado", "lead"), ("Ponto focal", "support")])
+        self.assertEqual(production.get_responsibility_catalog(viewer, "NRD")["permissions"],
+                         {"edit_roles": False, "edit_schedules": False})
+        with self.assertRaises(PermissionError):
+            production.save_responsibility_role(self.user["id"], {"name": "Apoio local", "role_type": "support"})
+        support_id = production.save_responsibility_role(admin, {"name": "Apoio local", "role_type": "support"})
+        base = {"unit_code": "NRD", "service_front_id": front["id"], "shift": "B", "work_date": "2026-11-20"}
+        production.save_my_item(self.user["id"], {**base, "sector": "3392", "status": "EM ATIVIDADE"})
+        production.save_responsibility_rule(admin, {**base, "kind": "cycle", "responsible_name": "Ana", "relief_name": "Bia"})
+        production.save_responsibility_rule(admin, {**base, "kind": "fixed", "role_id": support_id, "responsible_name": "Maria"})
+        leave = {**base, "work_date": "2026-11-23", "kind": "day_off", "role_id": support_id, "responsible_name": "José"}
+        production.save_responsibility_rule(admin, leave)
+        with self.assertRaisesRegex(ValueError, "Já existe"):
+            production.save_responsibility_rule(admin, {**leave, "kind": "replacement"})
+        production.save_responsibility_rule(admin, {**leave, "role_id": 1, "work_date": "2026-11-24", "responsible_name": ""})
+        production.save_responsibility_role(admin, {"name": "Focal de campo", "role_type": "support"}, role_id=support_id)
+
+        def team(day):
+            item, = production.list_my_items(viewer, "NRD", day, scope="all")["items"]
+            return item["responsibles"], [(person["role_name"], person["name"], person["day_off"])
+                                          for person in item["responsibility_team"]["B"]]
+
+        self.assertEqual(team("2026-11-23"), ({"B": "Ana"}, [("Encarregado", "Ana", False), ("Focal de campo", "José", True)]))
+        self.assertEqual(team("2026-11-24"), ({"B": ""}, [("Encarregado", "", True), ("Focal de campo", "Maria", False)]))
+        self.assertEqual(team("2026-11-25"), ({"B": "Bia"}, [("Encarregado", "Bia", True), ("Focal de campo", "Maria", False)]))
+        self.assertEqual(production.list_responsibility_rules(admin, "PPT"), [])
+
     def test_daily_summary_is_scoped_to_unit_date_and_shared_with_analysts(self):
         empty = production.get_daily_summary(self.user["id"], "NRD", "2026-10-16")
         self.assertIsNone(empty["rain_turn_mm"])
