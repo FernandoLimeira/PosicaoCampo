@@ -3,6 +3,7 @@
 let productionConfigCatalog = { groups: [] };
 let productionEditingFrontUnits = [];
 let productionEditingFrontActive = true;
+let openProductionConfigGroups = null;
 
 function renderConfigGroupOptions() {
   const select = document.querySelector('#production-config-front-group');
@@ -11,38 +12,71 @@ function renderConfigGroupOptions() {
   select.innerHTML = groups.map(group => `<option value="${group.id}">${escapeHtml(group.name)}${group.is_active ? '' : ' · inativo'}</option>`).join('');
 }
 
-function renderProductionConfigLists() {
-  const groups = Array.isArray(productionConfigCatalog.groups) ? productionConfigCatalog.groups : [];
-  const groupList = document.querySelector('#production-groups-list');
-  const frontList = document.querySelector('#production-fronts-list');
-  renderConfigGroupOptions();
-  if (groupList) {
-    groupList.innerHTML = groups.map(group => `
-      <div class="production-config-list-item ${group.is_active ? '' : 'is-inactive'}">
-        <div class="production-config-list-item-copy"><strong>${escapeHtml(group.name)}</strong><span>Ordem ${group.position}${group.is_active ? '' : ' · inativo'}</span></div>
-        <div class="production-config-list-actions">
-          <button class="icon-edit-button" type="button" data-config-action="edit-group" data-group-id="${group.id}" title="Editar" aria-label="Editar grupo ${escapeHtml(group.name)}">${PENCIL_ICON}</button>
-          <button class="is-delete" type="button" data-config-action="delete-group" data-group-id="${group.id}" data-group-name="${escapeHtml(group.name)}" title="Apagar" aria-label="Apagar grupo ${escapeHtml(group.name)}">${TRASH_ICON}</button>
-        </div>
-      </div>`).join('') || '<div class="production-empty"><span>Nenhum grupo cadastrado.</span></div>';
-  }
-  if (frontList) {
-    const fronts = groups.flatMap(group => (group.fronts || []).map(front => ({ ...front, group_name: group.name })));
-    frontList.innerHTML = fronts.map(front => `
-      <div class="production-config-list-item ${front.is_active ? '' : 'is-inactive'}">
-        <div class="production-config-list-item-copy"><strong>${escapeHtml(front.name)}</strong><span>${escapeHtml(front.group_name)} · ${front.display_style === 'front' ? 'frente' : 'operação'}${front.default_operations ? ` · padrão ${escapeHtml(front.default_operations)}` : ''}${front.is_active ? '' : ' · inativa'}</span></div>
-        <div class="production-config-list-actions">
-          <button class="icon-edit-button" type="button" data-config-action="edit-front" data-front-id="${front.id}" title="Editar" aria-label="Editar frente ${escapeHtml(front.name)}">${PENCIL_ICON}</button>
-          <button class="is-delete" type="button" data-config-action="delete-front" data-front-id="${front.id}" data-front-name="${escapeHtml(front.name)}" title="Apagar" aria-label="Apagar frente ${escapeHtml(front.name)}">${TRASH_ICON}</button>
-        </div>
-      </div>`).join('') || '<div class="production-empty"><span>Nenhuma frente/serviço cadastrada nesta unidade.</span></div>';
-  }
+function productionConfigGroupSearch() {
+  return productionConfigSearchText(document.querySelector('[data-catalog-search="groups"]')?.value || '');
 }
 
-async function loadProductionConfigCatalog() {
+function productionConfigSearchText(value) {
+  return value.trim().normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('pt-BR');
+}
+
+function renderProductionConfigGroups(revealGroupId = null) {
+  const groups = Array.isArray(productionConfigCatalog.groups) ? productionConfigCatalog.groups : [];
+  const groupList = document.querySelector('#production-groups-list');
+  if (!groupList) return;
+  const count = document.querySelector('[data-catalog-count="groups"]');
+  if (count) count.textContent = String(groups.length);
+  if (!openProductionConfigGroups) openProductionConfigGroups = new Set(groups.length ? [String(groups[0].id)] : []);
+  if (revealGroupId != null) openProductionConfigGroups.add(String(revealGroupId));
+  const term = productionConfigGroupSearch();
+  const editable = canConfigureProduction();
+  groupList.innerHTML = groups.map(group => {
+    const fronts = group.fronts || [];
+    const matchesGroup = productionConfigSearchText(group.name).includes(term);
+    const visibleFronts = matchesGroup ? fronts : fronts.filter(front => productionConfigSearchText(front.name).includes(term));
+    if (!matchesGroup && !visibleFronts.length) return '';
+    const name = escapeHtml(group.name);
+    return `<details class="catalog-group-card" data-catalog-group-id="${group.id}"${term || openProductionConfigGroups.has(String(group.id)) ? ' open' : ''}>
+      <summary class="catalog-group-summary">
+        <span class="catalog-group-chevron" aria-hidden="true"></span>
+        <span class="catalog-group-title"><strong>${name}</strong><small>Ordem ${group.position}${group.is_active ? '' : ' · inativo'}</small></span>
+        <span class="catalog-group-count">${fronts.length} ${fronts.length === 1 ? 'item' : 'itens'}</span>
+      </summary>
+      ${editable ? `<div class="catalog-group-actions">
+        <button class="production-secondary-button" type="button" data-config-action="add-front" data-group-id="${group.id}">+ Adicionar frente ou serviço</button>
+        <div class="production-config-list-actions">
+          <button class="icon-edit-button" type="button" data-config-action="edit-group" data-group-id="${group.id}" title="Editar grupo" aria-label="Editar grupo ${name}">${PENCIL_ICON}</button>
+          <button class="is-delete icon-delete-button" type="button" data-config-action="delete-group" data-group-id="${group.id}" data-group-name="${name}" title="Apagar grupo" aria-label="Apagar grupo ${name}">${TRASH_ICON}</button>
+        </div>
+      </div>` : ''}
+      <div class="catalog-list catalog-group-fronts">${visibleFronts.length ? visibleFronts.map(front => renderProductionConfigFront(front, editable)).join('')
+        : '<div class="production-empty">Nenhuma frente ou serviço cadastrado neste grupo para a unidade.</div>'}</div>
+    </details>`;
+  }).join('') || `<div class="production-empty">${term && groups.length ? 'Nenhum grupo, frente ou serviço encontrado.' : 'Nenhum grupo cadastrado.'}</div>`;
+}
+
+function renderProductionConfigFront(front, editable) {
+  const name = escapeHtml(front.name);
+  return `<div class="production-config-list-item ${front.is_active ? '' : 'is-inactive'}">
+    <div class="production-config-list-item-copy"><strong>${name}</strong><span>${front.display_style === 'front' ? 'Frente operacional' : 'Operação / serviço'}${front.default_operations ? ` · Operações padrão ${escapeHtml(front.default_operations)}` : ''}${front.is_active ? '' : ' · Inativa'}</span></div>
+    ${editable ? `<div class="production-config-list-actions">
+      <button class="icon-edit-button" type="button" data-config-action="edit-front" data-front-id="${front.id}" title="Editar" aria-label="Editar ${name}">${PENCIL_ICON}</button>
+      <button class="is-delete icon-delete-button" type="button" data-config-action="delete-front" data-front-id="${front.id}" data-front-name="${name}" title="Apagar" aria-label="Apagar ${name}">${TRASH_ICON}</button>
+    </div>` : ''}
+  </div>`;
+}
+
+function renderProductionConfigLists(revealGroupId) {
+  renderConfigGroupOptions();
+  renderProductionConfigGroups(revealGroupId);
+}
+
+async function loadProductionConfigCatalog(revealGroupId) {
   const unit = setProductionConfigUnit(selectedNavbarProductionUnit());
-  productionConfigCatalog = await apiRequest(`/api/production/catalog?unit=${encodeURIComponent(unit)}&include_inactive=1`);
-  renderProductionConfigLists();
+  const catalog = await apiRequest(`/api/production/catalog?unit=${encodeURIComponent(unit)}&include_inactive=1`);
+  if (unit !== currentProductionUnit()) return;
+  productionConfigCatalog = catalog;
+  renderProductionConfigLists(revealGroupId);
 }
 
 function nextGroupPosition() {
@@ -77,13 +111,13 @@ function clearGroupConfigForm({ keepOpen = false } = {}) {
 function setFrontConfigEditorMode(isEditing = false, open = false) {
   const editor = document.querySelector('#production-front-editor');
   const title = document.querySelector('#production-front-editor-title');
-  const hint = editor?.querySelector('.production-config-editor-hint');
   if (title) title.textContent = isEditing ? 'Editar frente / serviço' : 'Nova frente / serviço';
-  if (hint) hint.textContent = isEditing ? 'Alterando cadastro selecionado' : 'Clique para preencher';
+  const hint = document.querySelector('#production-config-front-name-hint');
+  if (hint) hint.hidden = isEditing;
   if (editor && open) editor.open = true;
 }
 
-function clearFrontConfigForm({ keepOpen = false } = {}) {
+function clearFrontConfigForm({ keepOpen = false, groupId = null } = {}) {
   document.querySelector('#production-config-front-id').value = '';
   document.querySelector('#production-config-front-name').value = '';
   document.querySelector('#production-config-front-position').value = '0';
@@ -94,6 +128,7 @@ function clearFrontConfigForm({ keepOpen = false } = {}) {
   const unit = setProductionConfigUnit(selectedNavbarProductionUnit());
   productionEditingFrontUnits = unit ? [unit] : [];
   renderConfigGroupOptions();
+  if (groupId != null) document.querySelector('#production-config-front-group').value = String(groupId);
   setFrontConfigEditorMode(false, keepOpen);
 }
 
@@ -138,13 +173,13 @@ async function submitConfigGroup(event) {
     is_active: id ? Boolean(existingGroup?.is_active) : true
   };
   try {
-    await apiRequest(id ? `/api/production/catalog/groups/${id}` : '/api/production/catalog/groups', {
+    const saved = await apiRequest(id ? `/api/production/catalog/groups/${id}` : '/api/production/catalog/groups', {
       method: id ? 'PUT' : 'POST', body: JSON.stringify(payload)
     });
     clearGroupConfigForm();
     const editor = document.querySelector('#production-group-editor');
     if (editor) editor.open = false;
-    await loadProductionConfigCatalog();
+    await loadProductionConfigCatalog(saved.group?.id);
     await loadProductionCatalog(currentProductionUnit());
     renderEntryGroups();
     showToast('Grupo salvo.');
@@ -177,7 +212,7 @@ async function submitConfigFront(event) {
     clearFrontConfigForm();
     const editor = document.querySelector('#production-front-editor');
     if (editor) editor.open = false;
-    await loadProductionConfigCatalog();
+    await loadProductionConfigCatalog(saved.front?.group_id ?? payload.group_id);
     await loadProductionCatalog(currentProductionUnit());
     renderEntryGroups();
     showToast(saved.front?.linked_existing

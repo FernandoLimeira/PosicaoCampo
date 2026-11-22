@@ -250,31 +250,35 @@ document.querySelector('#production-operations-list')?.addEventListener('click',
 // ---- Abas, contadores, busca e botão "Novo" -------------------------------
 const CATALOG_TAB_KEY = 'posicao-campo-production-catalog-tab';
 const CATALOG_EDITOR_IDS = {
-  groups: '#production-group-editor', fronts: '#production-front-editor',
+  groups: '#production-group-editor',
   operations: '#production-operation-editor', status: '#production-status-editor',
   responsibilities: '#production-responsibility-editor'
 };
 const CATALOG_NEW_ACTIONS = {
   groups: () => clearGroupConfigForm({ keepOpen: true }),
-  fronts: () => clearFrontConfigForm({ keepOpen: true }),
   operations: () => clearOperationForm({ keepOpen: true }),
   status: () => clearStatusConfigForm({ keepOpen: true }),
   responsibilities: () => openProductionResponsibilityForm(null, { keepOpen: true })
 };
 
 function selectCatalogTab(tab) {
-  if (!document.querySelector(`[data-catalog-section="${tab}"]`)) tab = 'groups';
+  const sections = [...document.querySelectorAll('[data-catalog-section]')];
+  if (!sections.some(section => section.dataset.catalogSection === tab)) tab = 'groups';
   document.querySelectorAll('[data-catalog-tab]').forEach(button => {
     const active = button.dataset.catalogTab === tab;
     button.classList.toggle('is-active', active);
     button.setAttribute('aria-selected', String(active));
   });
-  document.querySelectorAll('[data-catalog-section]').forEach(section => { section.hidden = section.dataset.catalogSection !== tab; });
+  sections.forEach(section => { section.hidden = section.dataset.catalogSection !== tab; });
   try { localStorage.setItem(CATALOG_TAB_KEY, tab); } catch (_) { /* preferência opcional */ }
 }
 
 // Busca simples sobre os itens já desenhados de cada lista.
 function applyCatalogSearch(key) {
+  if (key === 'groups') {
+    renderProductionConfigGroups();
+    return;
+  }
   const term = String(document.querySelector(`[data-catalog-search="${key}"]`)?.value || '').trim().toLocaleLowerCase('pt-BR');
   const list = document.querySelector(`[data-catalog-list="${key}"]`);
   if (!list) return;

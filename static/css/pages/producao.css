@@ -581,9 +581,28 @@
 .catalog-list .production-config-list-actions button { min-height: 30px; padding: 0 12px; border-radius: 6px; font-size: 11px; font-weight: 800; }
 .catalog-list > .production-empty { padding: 28px 22px; }
 
+.catalog-group-list { display: grid; gap: 12px; padding: 16px 22px 22px; }
+.catalog-group-card { min-width: 0; border: 1px solid var(--data-border); border-radius: var(--data-radius); background: var(--data-surface); }
+.catalog-group-summary { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 14px 16px; border-radius: inherit; background: var(--data-alternate); cursor: pointer; list-style: none; }
+.catalog-group-summary::-webkit-details-marker { display: none; }
+.catalog-group-summary:hover { background: var(--data-hover); }
+.catalog-group-summary:focus-visible { outline: 2px solid var(--control-text); outline-offset: -2px; }
+.catalog-group-card[open] > .catalog-group-summary { border-bottom: 1px solid var(--data-border); border-radius: var(--data-radius) var(--data-radius) 0 0; }
+.catalog-group-chevron { width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); }
+.catalog-group-card[open] .catalog-group-chevron { transform: translateY(-2px) rotate(45deg); }
+.catalog-group-title { display: grid; gap: 3px; min-width: 0; }
+.catalog-group-title strong { color: var(--text); font-size: 15px; overflow-wrap: anywhere; }
+.catalog-group-title small, .catalog-group-count { color: var(--muted); font-size: 12px; }
+.catalog-group-count { white-space: nowrap; font-weight: 700; }
+.catalog-group-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--data-border); }
+.catalog-group-fronts > :last-child { border-radius: 0 0 var(--data-radius) var(--data-radius); }
+.catalog-group-fronts > .production-empty { padding: 14px 16px; }
+.catalog-front-name-hint { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 12px; }
+
 
 @media (max-width: 560px) {
   .catalog-section-header { flex-direction: column; align-items: stretch; }
+  .catalog-group-list { padding-inline: 12px; }
   .catalog-list .production-config-list-item { flex-direction: column; align-items: stretch; }
 }
 

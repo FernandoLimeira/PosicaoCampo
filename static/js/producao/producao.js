@@ -1152,19 +1152,25 @@ document.querySelector('#production-front-clear')?.addEventListener('click', () 
   document.querySelector('#production-config-front-name')?.focus();
 });
 
-document.querySelector('#production-groups-list')?.addEventListener('click', event => {
+const productionConfigGroupsList = document.querySelector('#production-groups-list');
+productionConfigGroupsList?.addEventListener('click', event => {
   const button = event.target.closest('[data-config-action]');
-  if (!button) return;
+  if (!button || !canConfigureProduction()) return;
+  if (button.dataset.configAction === 'add-front') {
+    clearFrontConfigForm({ keepOpen: true, groupId: Number(button.dataset.groupId) });
+    document.querySelector('#production-config-front-name')?.focus();
+  }
   if (button.dataset.configAction === 'edit-group') editConfigGroup(Number(button.dataset.groupId));
   if (button.dataset.configAction === 'delete-group') deleteConfigGroup(Number(button.dataset.groupId), button.dataset.groupName || '');
-});
-
-document.querySelector('#production-fronts-list')?.addEventListener('click', event => {
-  const button = event.target.closest('[data-config-action]');
-  if (!button) return;
   if (button.dataset.configAction === 'edit-front') editConfigFront(Number(button.dataset.frontId));
   if (button.dataset.configAction === 'delete-front') deleteConfigFront(Number(button.dataset.frontId), button.dataset.frontName || '');
 });
+productionConfigGroupsList?.addEventListener('toggle', event => {
+  const id = event.target.dataset?.catalogGroupId;
+  if (!id || !openProductionConfigGroups || productionConfigGroupSearch()) return;
+  if (event.target.open) openProductionConfigGroups.add(id);
+  else openProductionConfigGroups.delete(id);
+}, true);
 
 document.addEventListener('report-unit-change', async event => {
   if (!productionAccess) return;
@@ -1177,9 +1183,14 @@ document.addEventListener('report-unit-change', async event => {
   }
   try {
     await refreshProductionPage(requested);
+    if (requested !== currentProductionUnit()) return;
     // Na página Cadastros, as frentes listadas dependem da unidade.
     if (typeof productionCatalogPageActive === 'function' && productionCatalogPageActive()) {
       openProductionResponsibilityForm();
+      if (!canConfigureProduction()) {
+        productionConfigCatalog = productionCatalog;
+        renderProductionConfigLists();
+      }
       await Promise.all([
         loadProductionResponsibilities(requested),
         canConfigureProduction() ? loadProductionConfigCatalog().then(() => clearFrontConfigForm()) : null

@@ -114,8 +114,6 @@
     <nav class="catalog-tabs" role="tablist" aria-label="Cadastros da Produção Agrícola">
       <button class="catalog-tab is-active" type="button" role="tab" aria-selected="true" data-catalog-tab="groups">
         <span>Grupos</span><b data-catalog-count="groups">0</b></button>
-      <button class="catalog-tab" type="button" role="tab" aria-selected="false" data-catalog-tab="fronts">
-        <span>Frentes / serviços</span><b data-catalog-count="fronts">0</b></button>
       <button class="catalog-tab" type="button" role="tab" aria-selected="false" data-catalog-tab="responsibilities">
         <span>Escala 5×1</span><b data-catalog-count="responsibilities">0</b></button>
       <button class="catalog-tab" type="button" role="tab" aria-selected="false" data-catalog-tab="operations">
@@ -126,7 +124,7 @@
 
     <section id="production-config-pane" class="catalog-section" data-catalog-section="groups" role="tabpanel">
       <header class="catalog-section-header">
-        <div><h2>Grupos</h2><p>Agrupam as frentes/serviços nos filtros e na tabela. Ex.: Preparo e Plantio, Fertirrigação.</p></div>
+        <h2>Grupos, frentes e serviços</h2>
         <button class="production-primary-button catalog-new" type="button" data-catalog-new="groups">+ Novo grupo</button>
       </header>
       <details id="production-group-editor" class="production-config-editor catalog-editor">
@@ -144,36 +142,27 @@
           </div>
         </form>
       </details>
-      <div class="catalog-toolbar"><input type="search" data-catalog-search="groups" autocomplete="off" placeholder="Buscar grupo" aria-label="Buscar grupo" /></div>
-      <div id="production-groups-list" class="production-config-list catalog-list" data-catalog-list="groups"></div>
-    </section>
-
-    <section class="catalog-section" data-catalog-section="fronts" role="tabpanel" hidden>
-      <header class="catalog-section-header">
-        <div><h2>Frentes / serviços</h2><p>Aparecem no select “Frente” do popup. Use o mesmo nome para vincular uma frente existente a esta unidade.</p></div>
-        <button class="production-primary-button catalog-new" type="button" data-catalog-new="fronts">+ Nova frente</button>
-      </header>
       <details id="production-front-editor" class="production-config-editor catalog-editor">
         <summary class="production-config-editor-summary">
           <span id="production-front-editor-title">Nova frente / serviço</span>
-          <span class="production-config-editor-hint">Clique para preencher</span>
         </summary>
         <form id="production-front-form" class="production-config-form production-config-form-collapsible">
           <input id="production-config-front-id" type="hidden" />
-          <label class="field"><span>Nome</span><input id="production-config-front-name" type="text" maxlength="80" required /></label>
+          <label class="field"><span>Nome</span><input id="production-config-front-name" type="text" maxlength="80" aria-describedby="production-config-front-name-hint" required /></label>
           <label class="field"><span>Grupo</span><select id="production-config-front-group" required></select></label>
           <label class="field"><span>Tipo de exibição</span><select id="production-config-front-style"><option value="operation">Operação / serviço</option><option value="front">Frente operacional</option></select></label>
           <label class="field"><span>Ordem</span><input id="production-config-front-position" type="number" min="0" max="9999" value="0" /></label>
           <label class="field"><span>Operações padrão <small>(preenchidas ao lançar; ex.: 346, 342)</small></span><input id="production-config-front-operations" type="text" maxlength="160" inputmode="numeric" autocomplete="off" placeholder="Ex.: 346, 342" /></label>
           <input id="production-config-unit-input" type="hidden" />
+          <p id="production-config-front-name-hint" class="catalog-front-name-hint">Use o mesmo nome para vincular à unidade uma frente já cadastrada.</p>
           <div class="production-config-form-actions">
             <button class="production-secondary-button" type="button" id="production-front-clear">Cancelar</button>
             <button class="production-primary-button" type="submit">Salvar frente</button>
           </div>
         </form>
       </details>
-      <div class="catalog-toolbar"><input type="search" data-catalog-search="fronts" autocomplete="off" placeholder="Buscar frente ou grupo" aria-label="Buscar frente" /></div>
-      <div id="production-fronts-list" class="production-config-list catalog-list" data-catalog-list="fronts"></div>
+      <div class="catalog-toolbar"><input type="search" data-catalog-search="groups" autocomplete="off" placeholder="Buscar grupo, frente ou serviço" aria-label="Buscar grupo, frente ou serviço" /></div>
+      <div id="production-groups-list" class="catalog-group-list"></div>
     </section>
 
     <section class="catalog-section" data-catalog-section="responsibilities" role="tabpanel" hidden>

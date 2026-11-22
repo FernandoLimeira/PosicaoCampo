@@ -10,10 +10,12 @@ const requests = [];
 const sectorRows = [];
 const toasts = [];
 const confirmations = [];
+const groupEvents = {};
 function element(selector) {
   if (!elements.has(selector)) elements.set(selector, {
     innerHTML: '', textContent: '', value: '', hidden: false,
-    addEventListener() {}, setAttribute() {}, reset() {}, focus() {},
+    addEventListener(type, listener) { if (selector === '#production-groups-list') groupEvents[type] = listener; },
+    setAttribute() {}, reset() {}, focus() {},
     querySelector(name) { return element(`${selector} ${name}`); }
   });
   return elements.get(selector);
@@ -286,4 +288,41 @@ function sectorRow(sector, status = 'ATIVO', operations = []) {
   assert.equal(sectorCard.innerHTML, '');
   assert.equal(element('#production-sector-search').value, '');
   assert.equal(element('#production-sector-clear').hidden, true);
+
+  vm.runInContext(`
+    productionAccess.permissions.configure = true;
+    productionConfigCatalog = { groups: [
+      {id: 1, name: 'Preparo', position: 0, is_active: true, fronts: [
+        {id: 7, group_id: 1, name: 'Sulcação', display_style: 'operation', is_active: true}
+      ]},
+      {id: 2, name: 'Colheita', position: 1, is_active: true, fronts: [
+        {id: 8, group_id: 2, name: 'Frente 19', display_style: 'front', is_active: true}
+      ]},
+      {id: 3, name: 'Tratos', position: 2, is_active: true, fronts: []}
+    ]};
+  `, context);
+  context.renderProductionConfigLists();
+  const configGroups = element('#production-groups-list');
+  const [prep, harvest, emptyGroup] = configGroups.innerHTML.split('</details>');
+  assert.match(prep, /data-catalog-group-id="1" open.*Sulcação/s);
+  assert.doesNotMatch(prep, /Frente 19/);
+  assert.match(harvest, /data-catalog-group-id="2".*Frente 19/s);
+  assert.match(emptyGroup, /data-catalog-group-id="3".*Nenhuma frente ou serviço cadastrado/s);
+  assert.equal(element('[data-catalog-count="groups"]').textContent, '3');
+
+  groupEvents.click({ target: { closest: () => ({ dataset: { configAction: 'add-front', groupId: '2' } }) } });
+  assert.equal(element('#production-config-front-group').value, '2');
+  assert.equal(element('#production-front-editor').open, true);
+  groupEvents.toggle({ target: { dataset: { catalogGroupId: '2' }, open: true } });
+  const groupSearch = element('[data-catalog-search="groups"]');
+  groupSearch.value = 'sulcacao';
+  context.applyCatalogSearch('groups');
+  assert.match(configGroups.innerHTML, /Preparo.*Sulcação/s);
+  assert.doesNotMatch(configGroups.innerHTML, /Frente 19/);
+  groupSearch.value = '';
+  vm.runInContext('productionAccess.permissions.configure = false', context);
+  context.applyCatalogSearch('groups');
+  assert.match(configGroups.innerHTML, /data-catalog-group-id="2" open/);
+  assert.doesNotMatch(configGroups.innerHTML, /data-config-action/);
+  console.log('OK: frentes dentro dos grupos, inclusão com grupo selecionado, busca e consulta sem edição.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
