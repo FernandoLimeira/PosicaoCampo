@@ -534,7 +534,7 @@ class PageTests(unittest.TestCase):
             'id="production-status-options"',
             'id="production-status-config-pane"', 'id="production-config-pane"',
             'id="production-front-form"', 'id="production-dashboard"', 'id="production-front-cards"',
-            'id="production-overview"', 'id="production-front-detail-modal"',
+            'id="production-front-detail-modal"',
         ):
             self.assertIn(marker, page["body"])
         # O preenchimento de chuva saiu da Produção (botão, modal e formulário).
@@ -545,6 +545,7 @@ class PageTests(unittest.TestCase):
         self.assertNotIn('id="production-items-body"', page["body"])
         self.assertNotIn('data-production-view', page["body"])
         self.assertNotIn('id="production-group-tabs"', page["body"])
+        self.assertNotIn('id="production-overview"', page["body"])
         self.assertIn('id="production-note-form"', page["body"])
         self.assertNotIn('Configurar status', page["body"])  # status ficam só na página Cadastros
         self.assertNotIn('Configurar nova frente', page["body"])  # frentes também

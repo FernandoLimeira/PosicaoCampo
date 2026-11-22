@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{% if page == 'service_orders' %}Ordem de serviço{% elif page == 'production_queries' %}Consultas SQL{% elif page == 'production_catalog' %}Cadastros{% else %}Produção Agrícola{% endif %} · Posição de Campo{% endblock %}
 {% block styles %}
-  <link rel="stylesheet" href="/css/pages/producao.css?v={{ asset_version }}-detail-actions" />
-  <link rel="stylesheet" href="/css/pages/producao.dark.css?v={{ asset_version }}-detail-actions" media="(prefers-color-scheme: dark)" />
+  <link rel="stylesheet" href="/css/pages/producao.css?v={{ asset_version }}-stacked-sectors" />
+  <link rel="stylesheet" href="/css/pages/producao.dark.css?v={{ asset_version }}-stacked-sectors" media="(prefers-color-scheme: dark)" />
 {% endblock %}
 
 {% block content %}
@@ -37,7 +37,7 @@
       </div>
       <button class="production-primary-button pdash-sector-submit" type="submit">Buscar</button>
     </form>
-    <section id="production-sector-card" class="pdash-overview-card pdash-sector-card" aria-label="Resultado da consulta por setor" aria-live="polite" hidden></section>
+    <section id="production-sector-card" class="pdash-sector-card" aria-label="Resultado da consulta por setor" aria-live="polite" hidden></section>
   </div>
   <div class="production-view-bar">
     <div class="production-toolbar-actions">
@@ -51,7 +51,6 @@
   <section id="production-summary" class="production-summary" aria-label="Resumo dos status"></section>
 
   <section id="production-dashboard" class="production-dashboard" aria-label="Frentes e serviços da unidade">
-    <section id="production-overview" class="pdash-overview" aria-label="Resumo analítico da unidade"></section>
     <div id="production-front-cards"></div>
   </section>
 
@@ -539,7 +538,7 @@
   <script src="/js/producao/producao.js?v={{ asset_version }}-status-groups"></script>
   <script src="/js/producao/service-orders.js?v={{ asset_version }}"></script>
   <script src="/js/producao/production-sheet.js?v={{ asset_version }}"></script>
-  <script src="/js/producao/production-dashboard.js?v={{ asset_version }}-detail-actions"></script>
+  <script src="/js/producao/production-dashboard.js?v={{ asset_version }}-stacked-sectors"></script>
   <script src="/js/producao/production-catalog.js?v={{ asset_version }}"></script>
   <script src="/js/producao/production-queries.js?v={{ asset_version }}"></script>
 {% endblock %}

@@ -138,13 +138,13 @@ const cards = element('#production-front-cards');
 assert.equal((cards.innerHTML.match(/data-panel-front-card="7"/g) || []).length, 1);
 assert.match(cards.innerHTML, /data-panel-front-card="9"/);
 assert.doesNotMatch(cards.innerHTML, /Plantio|Tratos|data-panel-group/);
+assert.doesNotMatch(cards.innerHTML, /Resumo do turno/);
 assert.match(cards.innerHTML, /data-panel-filter="ok"/);
 vm.runInContext("dashboardPanelFilter.flag = 'ok'", context);
 context.renderProductionDashboard();
-assert.match(cards.innerHTML, /data-panel-front-card="7".*Setor 41.*&lt;teste>.*Setor 42.*Observação anterior.*Mudança anterior/s);
+assert.match(cards.innerHTML, /data-panel-front-card="7".*Setor 41.*&lt;teste>.*Setor 42.*class="pdash-status is-wet".*Observação anterior.*Mudança anterior/s);
 assert.match(cards.innerHTML, /data-panel-note="changes" data-item-id="2"/);
 assert.doesNotMatch(cards.innerHTML, /data-panel-front-card="9"/);
-assert.doesNotMatch(element('#production-overview').innerHTML, /Grupo|Plantio|Tratos/);
 vm.runInContext("productionItems[0].entry.sector = '42'", context);
 // Filtro ligado cuja condição deixou de existir volta para "todas as frentes".
 vm.runInContext("dashboardPanelFilter.flag = 'stopped'", context);
@@ -257,12 +257,6 @@ function sectorRow(sector, status = 'ATIVO', operations = []) {
 
   assert.equal(context.productionPlaceLabel({ sector: '201', section: '20', farm: 'Fazenda 201' }, 'NRD'), 'Setor 201 · Fazenda 201');
   assert.equal(context.productionPlaceLabel({ sector: '201', section: '20', farm: 'Fazenda 201' }, 'RBR'), 'Setor 201 / Seção 20 · Fazenda 201');
-  const grouped = vm.runInContext(`productionStatuses.push({code: 'PARADA', name: 'Parada', style_key: 'stopped'});
-    dashboardUnitStats([
-      { service_front_id: 7, entry: { sector: '201', status: 'ATIVO' } },
-      { service_front_id: 7, entry: { sector: '202', status: 'PARADA' } }
-    ])`, context);
-  assert.deepEqual([grouped.total, grouped.active, grouped.stopped], [1, 1, 0]);
 
   let finishLookup;
   let savedPayload;
@@ -295,7 +289,7 @@ function sectorRow(sector, status = 'ATIVO', operations = []) {
   assert.match(sectorCard.innerHTML, /7001/);
   assert.doesNotMatch(sectorCard.innerHTML, /7002/);
   context.renderProductionDashboard();
-  assert.doesNotMatch(element('#production-overview').innerHTML, /production-sector-card/);
+  assert.doesNotMatch(cards.innerHTML, /production-sector-card/);
   assert.match(sectorCard.innerHTML, /7001/);
 
   let finishSectorSearch;

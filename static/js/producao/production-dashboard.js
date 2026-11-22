@@ -216,7 +216,7 @@ function dashboardSectorNotes(item, editable) {
   }).join('')}</dl>`;
 }
 
-function dashboardSectorRow(item, multiple, editable) {
+function dashboardSectorRow(item, editable) {
   const entry = item.entry || {};
   const meta = statusMeta(entry.status);
   const codes = splitProductionOperations(entry.operation);
@@ -238,9 +238,9 @@ function dashboardSectorRow(item, multiple, editable) {
   const place = productionPlaceLabel(entry);
   return `<section class="pdash-sector-row" aria-label="${escapeHtml(place)}">
     <div class="pdash-sector-operation">
+      <h5 class="pdash-place">${dashboardIcon('pin')}<span>${escapeHtml(place)}</span></h5>
       <div class="pdash-tile-meta">
-        <strong class="pdash-place">${dashboardIcon('pin')}<span>${escapeHtml(place)}</span></strong>
-        ${multiple ? `<span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>` : ''}
+        <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
         ${stale}
       </div>
       <div class="pdash-tile-ops">${operations}</div>
@@ -264,43 +264,23 @@ function dashboardFrontTile(sectors, shift) {
       <div class="pdash-tile-name">
         <i class="pdash-status-icon ${meta.className}">${dashboardSvg(DASHBOARD_STATUS_ICONS[meta.className] || DASHBOARD_STATUS_ICONS['is-waiting'], meta.className !== 'is-waiting')}</i>
         <h4>${escapeHtml(front.service_name || '-')}</h4>
-        <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
       </div>
       <div class="pdash-tile-who">${escapeHtml(productionResponsibleName(front, shift))}</div>
     </header>
-    ${ordered.map(item => dashboardSectorRow(item, ordered.length > 1, editable)).join('')}
+    ${ordered.map(item => dashboardSectorRow(item, editable)).join('')}
   </article>`;
 }
 
-// Status por frente e conferência de O.S. por setor.
-function dashboardUnitStats(items) {
-  const fronts = dashboardFrontGroups(items);
-  const stats = { total: fronts.length, active: 0, stopped: 0, ok: 0, missing: 0 };
-  fronts.map(dashboardFrontStatus).forEach(item => {
-    const className = statusMeta(item.entry?.status).className;
-    if (className === 'is-active') stats.active += 1;
-    if (className === 'is-stopped') stats.stopped += 1;
-  });
-  items.forEach(item => {
-    const state = dashboardOrderState(item);
-    if (state === 'ok') stats.ok += 1;
-    if (state === 'missing') stats.missing += 1;
-  });
-  return stats;
-}
-
 // Turno atual no horário de Brasília (mesmo calendário do campo: A 00:00–07:20,
-// B 07:20–15:40, C 15:40–00:00) e o instante em que ele começou.
+// B 07:20–15:40, C 15:40–00:00).
 const DASHBOARD_SHIFTS = [['A', 0, 440], ['B', 440, 940], ['C', 940, 1440]];
 function dashboardCurrentShift(now = new Date()) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
   }).formatToParts(now).map(part => [part.type, part.value]));
   const minutes = Number(parts.hour) * 60 + Number(parts.minute);
-  const [name, start, end] = DASHBOARD_SHIFTS.find(([, from, to]) => minutes >= from && minutes < to) || DASHBOARD_SHIFTS[0];
-  const startAt = Math.floor(now.getTime() / 1000) - ((minutes - start) * 60 + Number(parts.second));
-  const clock = value => `${String(Math.floor(value / 60) % 24).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
-  return { name, startAt, label: `${clock(start)}–${clock(end)}` };
+  const [name] = DASHBOARD_SHIFTS.find(([, from, to]) => minutes >= from && minutes < to) || DASHBOARD_SHIFTS[0];
+  return { name };
 }
 
 function startProductionResponsibilityClock() {
@@ -322,24 +302,6 @@ function startProductionResponsibilityClock() {
   }, 15000);
 }
 document.addEventListener('production-page-ready', startProductionResponsibilityClock, { once: true });
-
-// Atualizada pelo analista no turno atual (hoje e depois do início do turno).
-function dashboardUpdatedInShift(item, shift) {
-  return Boolean(item.is_current_day) && Number(item.entry?.updated_at || 0) >= shift.startAt;
-}
-
-function dashboardOverviewRow(stats) {
-  const percent = (part, all) => (all ? `${Math.round(part * 100 / all)}%` : '-');
-  const checked = stats.ok + stats.missing;
-  return `<tr>
-      <td>${stats.total}</td>
-      <td>${stats.active}</td>
-      <td class="${stats.stopped ? 'is-red' : ''}">${stats.stopped}</td>
-      <td class="${checked && stats.ok < checked ? 'is-red' : checked ? 'is-green' : ''}">${checked ? `${stats.ok}/${checked}` : '-'}<small>${percent(stats.ok, checked)}</small></td>
-      <td class="${stats.missing ? 'is-red' : ''}">${stats.missing}</td>
-      <td class="${stats.shiftUpdated < stats.unitTotal ? 'is-gray' : 'is-green'}">${stats.shiftUpdated}/${stats.unitTotal}<small>${percent(stats.shiftUpdated, stats.unitTotal)}</small></td>
-    </tr>`;
-}
 
 // Busca de ordens de serviço abertas por setor.
 const dashboardSectorSearch = { term: '', orders: [], loading: false, error: '' };
@@ -394,39 +356,15 @@ function renderDashboardSectorCard() {
   card.innerHTML = card.hidden ? '' : dashboardSectorSearchHtml();
 }
 
-// Resumo da unidade com o que foi atualizado no turno atual.
-function dashboardShiftStats(items, shift) {
-  const updated = items.filter(item => dashboardUpdatedInShift(item, shift));
-  const stats = dashboardUnitStats(updated);
-  return { ...stats, shiftUpdated: stats.total, unitTotal: dashboardFrontGroups(items).length };
-}
-
-function renderDashboardOverview(items, shift) {
-  const box = document.querySelector('#production-overview');
-  if (!box) return;
-  const totals = dashboardShiftStats(items, shift);
-  const content = items.length
-    ? `<header><h3>Resumo do turno ${shift.name} <small>${shift.label}</small></h3><span>${totals.shiftUpdated} de ${totals.unitTotal} ${totals.unitTotal === 1 ? 'frente atualizada' : 'frentes atualizadas'} no turno</span></header>
-      <div class="pdash-overview-scroll"><table class="pdash-overview-table">
-        <thead><tr><th scope="col">Frentes</th><th scope="col">Em atividade</th><th scope="col">Paradas</th>
-          <th scope="col">O.S. OK por setor</th><th scope="col">Setores sem O.S.</th><th scope="col">Atualizadas no turno</th></tr></thead>
-        <tbody>${dashboardOverviewRow(totals)}</tbody>
-      </table></div>
-      ${totals.shiftUpdated ? '' : '<p class="pdash-overview-note">Nenhuma frente foi atualizada neste turno ainda.</p>'}`
-    : '<header><h3>Resumo do turno</h3></header><p class="production-empty">Nenhuma frente lançada nesta unidade.</p>';
-  box.innerHTML = `<article class="pdash-overview-card">${content}</article>`;
-}
-
 function renderProductionDashboard() {
   const cards = document.querySelector('#production-front-cards');
   if (!cards) return;
   const shift = dashboardCurrentShift();
   const items = dashboardItems();
-  renderDashboardOverview(items, shift);
   const fronts = dashboardFrontGroups(dashboardSortTiles(items));
   const total = fronts.length;
   if (!total) {
-    cards.innerHTML = '';
+    cards.innerHTML = '<p class="production-empty">Nenhuma frente lançada nesta unidade.</p>';
     return;
   }
   const options = fronts.map(([item]) => [String(item.service_front_id ?? item.id), item.service_name])
