@@ -25,13 +25,23 @@
 
   {# Lançamentos (/producao) e Ordem de serviço (/producao/ordens-servico) usam a mesma página. #}
   <div id="production-entries-panel" class="production-tab-panel"{% if page in ('service_orders', 'production_queries', 'production_catalog') %} hidden{% endif %}>
+  <div class="pdash-sector-bar">
+    <form id="production-sector-form" class="pdash-sector-form" role="search" aria-label="Ordens de serviço por setor">
+      <label for="production-sector-search">Buscar O.S. por setor</label>
+      <div class="pdash-sector-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+        <input id="production-sector-search" type="search" maxlength="12" autocomplete="off" placeholder="Código do setor" aria-controls="production-sector-card" required />
+        <button id="production-sector-clear" type="button" aria-label="Limpar busca" title="Limpar busca" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <button class="production-primary-button pdash-sector-submit" type="submit">Buscar</button>
+    </form>
+    <section id="production-sector-card" class="pdash-overview-card pdash-sector-card" aria-label="Resultado da consulta por setor" aria-live="polite" hidden></section>
+  </div>
   <div class="production-view-bar">
     <nav id="production-group-tabs" class="pdash-group-tabs" role="tablist" aria-label="Grupo"></nav>
     <div class="production-toolbar-actions">
-      <label class="pdash-sector-search" for="production-sector-search">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
-        <input id="production-sector-search" type="search" maxlength="12" autocomplete="off" placeholder="Buscar setor" aria-label="Buscar O.S. do setor" title="Mostra as O.S. abertas do setor" />
-      </label>
       <button id="production-add-button" class="production-primary-button pdash-action" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         <span>Adicionar frente</span>

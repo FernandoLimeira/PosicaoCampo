@@ -24,7 +24,7 @@ const document = {
   addEventListener() {}
 };
 const context = vm.createContext({
-  document, console, URLSearchParams,
+  document, console, URLSearchParams, setTimeout, clearTimeout,
   window: { confirm(message) { confirmations.push(message); return true; } },
   getReportUnit: () => 'NRD',
   escapeHtml: value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;'),
@@ -268,7 +268,22 @@ function sectorRow(sector, status = 'ATIVO', operations = []) {
   assert.match(sectorCard.innerHTML, /O\.S\. do setor 042/);
   assert.match(sectorCard.innerHTML, /7001/);
   assert.doesNotMatch(sectorCard.innerHTML, /7002/);
-  await context.searchDashboardSector('');
+  context.renderProductionDashboard();
+  assert.doesNotMatch(element('#production-overview').innerHTML, /production-sector-card/);
+  assert.match(sectorCard.innerHTML, /7001/);
+
+  let finishSectorSearch;
+  context.apiRequest = () => new Promise(resolve => { finishSectorSearch = resolve; });
+  const previousQuery = context.searchDashboardSector('042');
+  await context.searchDashboardSector('043', { delay: 300 });
+  finishSectorSearch({ orders: [{ sector: '42', number: '7001', operation: '101' }] });
+  await previousQuery;
+  assert.match(sectorCard.innerHTML, /O\.S\. do setor 043/);
+  assert.doesNotMatch(sectorCard.innerHTML, /7001/);
+  element('#production-sector-search').value = '043';
+  context.clearDashboardSectorSearch();
   assert.equal(sectorCard.hidden, true);
   assert.equal(sectorCard.innerHTML, '');
+  assert.equal(element('#production-sector-search').value, '');
+  assert.equal(element('#production-sector-clear').hidden, true);
 })().catch(error => { console.error(error); process.exitCode = 1; });

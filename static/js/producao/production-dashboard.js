@@ -352,12 +352,23 @@ function dashboardSectorSearchHtml() {
     : `<p class="production-empty">Nenhuma O.S. aberta para o setor ${escapeHtml(term)}.</p>`}</div>`;
 }
 
-async function searchDashboardSector(value) {
+async function searchDashboardSector(value, { delay = 0 } = {}) {
+  clearTimeout(dashboardSectorSearchTimer);
   const term = String(value || '').trim();
   const seq = ++dashboardSectorSearchSeq;
   Object.assign(dashboardSectorSearch, { term, orders: [], loading: Boolean(term), error: '' });
+  const clear = document.querySelector('#production-sector-clear');
+  if (clear) clear.hidden = !term;
   renderDashboardSectorCard();
   if (!term) return;
+  if (delay) {
+    dashboardSectorSearchTimer = setTimeout(() => loadDashboardSectorOrders(term, seq), delay);
+    return;
+  }
+  await loadDashboardSectorOrders(term, seq);
+}
+
+async function loadDashboardSectorOrders(term, seq) {
   try {
     const params = new URLSearchParams({ unit: currentProductionUnit(), search: dashboardSectorKey(term) });
     const data = await apiRequest(`/api/production/service-orders?${params}`);
@@ -403,9 +414,7 @@ function renderDashboardOverview(groups, allItems) {
       </table></div>
       ${totals.shiftUpdated ? '' : '<p class="pdash-overview-note">Nenhuma frente foi atualizada neste turno ainda.</p>'}`
     : '<header><h3>Resumo do turno</h3></header><p class="production-empty">Nenhuma frente lançada nesta unidade.</p>';
-  box.innerHTML = `<article class="pdash-overview-card">${groupsCard}</article>
-    <article id="production-sector-card" class="pdash-overview-card pdash-sector-card" hidden></article>`;
-  renderDashboardSectorCard();
+  box.innerHTML = `<article class="pdash-overview-card">${groupsCard}</article>`;
 }
 
 function dashboardGroupInitials(name) {
@@ -568,11 +577,25 @@ document.querySelector('#production-group-cards')?.addEventListener('keydown', e
   event.preventDefault();
   openDashboardFrontDetail(Number(event.target.dataset.panelDetail));
 });
-document.querySelector('#production-sector-search')?.addEventListener('input', event => {
-  clearTimeout(dashboardSectorSearchTimer);
-  const value = event.target.value;
-  if (!value.trim()) searchDashboardSector('');
-  else dashboardSectorSearchTimer = setTimeout(() => searchDashboardSector(value), 300);
+const dashboardSectorInput = document.querySelector('#production-sector-search');
+
+function clearDashboardSectorSearch() {
+  if (!dashboardSectorInput) return;
+  dashboardSectorInput.value = '';
+  searchDashboardSector('');
+  dashboardSectorInput.focus();
+}
+
+dashboardSectorInput?.addEventListener('input', event => searchDashboardSector(event.target.value, { delay: 300 }));
+document.querySelector('#production-sector-form')?.addEventListener('submit', event => {
+  event.preventDefault();
+  searchDashboardSector(dashboardSectorInput?.value);
+});
+document.querySelector('#production-sector-clear')?.addEventListener('click', clearDashboardSectorSearch);
+dashboardSectorInput?.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || !dashboardSectorSearch.term) return;
+  event.preventDefault();
+  clearDashboardSectorSearch();
 });
 // Abas do detalhe da frente: Operações do lançamento e Outras O.S. no setor.
 document.querySelector('#production-front-detail-body')?.addEventListener('click', event => {

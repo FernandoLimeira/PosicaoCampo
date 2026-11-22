@@ -974,9 +974,6 @@
 .pdash-overview-table td.is-amber { color: #a8680d; }
 .pdash-overview-table td.is-gray { color: #6c777d; }
 .pdash-overview-table tr.is-total th, .pdash-overview-table tr.is-total td { border-bottom: 0; background: #e8ecef; }
-@media (min-width: 981px) {
-  .pdash-overview:has(.pdash-sector-card:not([hidden])) { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
-}
 
 /* ===== Painel gerencial: barra do topo com os grupos, botões modernos e animações ===== */
 .production-view-bar { flex-wrap: nowrap; align-items: center; gap: 14px; }
@@ -1120,13 +1117,26 @@ button.pdash-kpi.is-amber.is-active { box-shadow: 0 0 0 3px rgba(213, 163, 38, .
 .pdash-tile-foot { min-height: 0; margin-top: 1px; padding-top: 7px; border-top: 1px dashed #e3e8eb; }
 .pdash-tile-who { overflow: hidden; color: var(--slate); font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Resultado da busca de ordens de serviço por setor. */
-.pdash-sector-search { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; padding: 0 10px; border: 1px solid var(--data-border); border-radius: 8px; background: #fff; color: #7a8489; }
+/* Consulta de O.S. disponível durante a rolagem, com o resultado junto ao campo. */
+.pdash-sector-bar { position: sticky; top: 8px; z-index: 8; }
+.pdash-sector-form { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; width: min(100%, 37rem); padding: 8px 10px; border: 1px solid var(--data-border); border-radius: 10px; background: #fff; box-shadow: var(--data-shadow); }
+.pdash-sector-form label { padding-inline: 4px; color: #263a40; font-size: 13px; font-weight: 800; }
+.pdash-sector-search { display: flex; align-items: center; gap: 8px; min-height: 44px; min-width: 0; padding: 0 8px 0 12px; border: 1px solid var(--data-border); border-radius: 8px; background: var(--data-surface); color: #52636b; }
 .pdash-sector-search:focus-within { border-color: #2f8f5b; box-shadow: 0 0 0 3px rgba(47, 143, 91, .15); }
-.pdash-sector-search svg { flex: 0 0 auto; width: 16px; height: 16px; }
-.pdash-sector-search input { width: 112px; min-width: 0; border: 0; outline: 0; background: transparent; color: #1f262a; font: inherit; font-size: 14px; font-weight: 700; }
-.pdash-sector-result { display: grid; gap: 10px; max-height: 340px; padding: 14px 16px 16px; overflow-y: auto; }
+.pdash-sector-search svg { flex: 0 0 auto; width: 18px; height: 18px; }
+.pdash-sector-search input { width: 100%; min-width: 0; padding: 0; border: 0; outline: 0; background: transparent; color: #1f262a; font: inherit; font-size: 16px; font-weight: 650; }
+.pdash-sector-search input::-webkit-search-cancel-button { display: none; }
+.pdash-sector-search button { display: grid; flex: 0 0 32px; min-height: 32px; place-items: center; padding: 0; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.pdash-sector-search button:hover { background: var(--data-hover); }
+.pdash-sector-search button[hidden] { display: none; }
+.pdash-sector-submit { min-height: 44px; }
+.pdash-sector-card { position: absolute; top: calc(100% + 6px); inset-inline-start: 0; width: min(100%, 37rem); box-shadow: 0 12px 28px rgba(30, 56, 64, .16); }
+.pdash-sector-result { display: grid; gap: 10px; max-height: min(340px, 42dvh); padding: 14px 16px 16px; overflow-y: auto; overscroll-behavior: contain; }
 .pdash-sector-card > .production-empty { padding: 14px 16px; }
+@media (max-width: 520px) {
+  .pdash-sector-form { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 8px; }
+  .pdash-sector-form label { grid-column: 1 / -1; }
+}
 /* Abas do detalhe da frente. */
 .pfd-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--data-border); }
 .pfd-tab { display: inline-flex; align-items: center; gap: 6px; margin-bottom: -1px; padding: 8px 14px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #66737a; font: inherit; font-size: 13px; font-weight: 800; white-space: nowrap; cursor: pointer; }
@@ -1134,4 +1144,3 @@ button.pdash-kpi.is-amber.is-active { box-shadow: 0 0 0 3px rgba(213, 163, 38, .
 .pfd-tab.is-active { border-bottom-color: #2f8f5b; color: #1f262a; }
 .pfd-tab small { padding: 1px 7px; border-radius: 999px; background: #eef3f1; color: #4d5a61; font-size: 11px; }
 .pfd-section[hidden] { display: none; }
-@media (max-width: 760px) { .pdash-sector-search { flex: 1 1 100%; } .pdash-sector-search input { width: 100%; } }
