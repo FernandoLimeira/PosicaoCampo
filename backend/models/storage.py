@@ -20,6 +20,7 @@ CORE_DATA_TABLES = (
 )
 PRODUCTION_TABLES = (
     "production_statuses", "production_status_history", "production_groups", "production_service_fronts", "production_service_front_units",
+    "production_front_responsibilities",
     "production_user_items", "production_daily_entries", "production_daily_summaries",
     "production_service_orders", "production_operations", "production_sql_queries",
 )
@@ -894,6 +895,21 @@ CREATE TABLE IF NOT EXISTS production_service_front_units (
     service_front_id INTEGER NOT NULL,
     unit_code TEXT NOT NULL COLLATE NOCASE,
     PRIMARY KEY (service_front_id, unit_code),
+    FOREIGN KEY (service_front_id) REFERENCES production_service_fronts(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS production_front_responsibilities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    unit_code TEXT NOT NULL COLLATE NOCASE,
+    service_front_id INTEGER NOT NULL,
+    shift TEXT NOT NULL CHECK (shift IN ('A','B','C')),
+    kind TEXT NOT NULL CHECK (kind IN ('cycle','replacement')),
+    work_date TEXT NOT NULL,
+    responsible_name TEXT NOT NULL,
+    relief_name TEXT NOT NULL DEFAULT '',
+    updated_by INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE (unit_code, service_front_id, shift, kind, work_date),
     FOREIGN KEY (service_front_id) REFERENCES production_service_fronts(id) ON DELETE CASCADE
 );
 

@@ -101,26 +101,27 @@ def _item(row):
     }
 
 
-def front_notes_summary(unit, actor):
+def front_notes_summary(unit, actor, *, before=None):
     code = _unit(unit)
+    preview = '1' if before is not None else 'highlighted=1 AND resolved_at IS NULL'
     with connection() as conn:
         conn.execute('BEGIN')
         _authorize(conn, actor, 'view')
-        rows = conn.execute('''
+        rows = conn.execute(f'''
           SELECT t.front_key, t.note_count, t.highlight_count, n.*
           FROM (
              SELECT front_key, COUNT(*) AS note_count, MAX(id) AS latest_id,
-                    SUM(CASE WHEN highlighted=1 AND resolved_at IS NULL THEN 1 ELSE 0 END) AS highlight_count
-             FROM field_front_notes WHERE unit_code=? GROUP BY front_key
+                    SUM(CASE WHEN {preview} THEN 1 ELSE 0 END) AS highlight_count
+             FROM field_front_notes WHERE unit_code=?1 AND (?2 IS NULL OR created_at<?2) GROUP BY front_key
           ) t
           JOIN field_front_notes n ON n.id=t.latest_id
-        ''', (code,)).fetchall()
-        highlights = conn.execute('''
+        ''', (code, before)).fetchall()
+        highlights = conn.execute(f'''
           SELECT * FROM (
             SELECT n.*, ROW_NUMBER() OVER (PARTITION BY front_key ORDER BY id DESC) AS rank
-            FROM field_front_notes n WHERE unit_code=? AND highlighted=1 AND resolved_at IS NULL
+            FROM field_front_notes n WHERE unit_code=?1 AND (?2 IS NULL OR created_at<?2) AND ({preview})
           ) WHERE rank<=3 ORDER BY id DESC
-        ''', (code,)).fetchall()
+        ''', (code, before)).fetchall()
     result = {row['front_key']: {'count': row['note_count'], 'latest': _item(row),
               'highlight_count': row['highlight_count'], 'highlights': []} for row in rows}
     for row in highlights:
@@ -128,7 +129,7 @@ def front_notes_summary(unit, actor):
     return result
 
 
-def list_front_notes(unit, front, actor, limit=100, before_id=None, open_only=False):
+def list_front_notes(unit, front, actor, limit=100, before_id=None, open_only=False, *, before=None):
     code = _unit(unit)
     key = _front_key(front)
     if before_id is not None and (not isinstance(before_id, int) or before_id < 1):
@@ -140,13 +141,14 @@ def list_front_notes(unit, front, actor, limit=100, before_id=None, open_only=Fa
         _authorize(conn, actor, 'view')
         total = conn.execute('''
           SELECT COUNT(*) FROM field_front_notes WHERE unit_code=? AND front_key=?
-          AND (?=0 OR (highlighted=1 AND resolved_at IS NULL))
-        ''', (code, key, int(open_only))).fetchone()[0]
+          AND (?3=0 OR (highlighted=1 AND resolved_at IS NULL)) AND (?4 IS NULL OR created_at<?4)
+        ''', (code, key, int(open_only), before)).fetchone()[0]
         rows = conn.execute('''
           SELECT * FROM field_front_notes
-          WHERE unit_code=? AND front_key=? AND (? IS NULL OR id<?)
-          AND (?=0 OR (highlighted=1 AND resolved_at IS NULL)) ORDER BY id DESC LIMIT ?
-        ''', (code, key, before_id, before_id, int(open_only), limit + 1)).fetchall()
+          WHERE unit_code=?1 AND front_key=?2 AND (?3 IS NULL OR id<?3)
+          AND (?4=0 OR (highlighted=1 AND resolved_at IS NULL)) AND (?5 IS NULL OR created_at<?5)
+          ORDER BY id DESC LIMIT ?6
+        ''', (code, key, before_id, int(open_only), before, limit + 1)).fetchall()
     return {'entries': [_item(row) for row in rows[:limit]], 'total': total,
             'next_cursor': rows[limit - 1]['id'] if len(rows) > limit else None}
 

@@ -4,7 +4,7 @@
 // /api/weighings/summary: dia e horas do último SELECT importado); sem pesagem da unidade, valem
 // os indicadores digitados no Preencher. "Indústria" é sempre a digitada. Inconsistência na
 // balança: os "Indicadores do turno" do Preencher gravam correções (unit.image_overrides) que valem
-// só para o fechamento em que foram feitas (``ref`` = "dados até" da pesagem da unidade).
+// para a mesma importação (``batch_id``) e fechamento (``ref`` = "dados até" da unidade).
 // Depende de core/format.js, core/common.js e core/field-fronts.js.
 
 // Número no padrão brasileiro; ausente ou inválido vira "—" (sem dado enviado).
@@ -32,10 +32,11 @@ function fieldProjectionStopped(rows, weighing) {
 
 const FIELD_IMAGE_OVERRIDE_KEYS = ['millingShift', 'deliveryShift', 'milling3h', 'delivery3h', 'stock', 'atr', 'day', 'projection'];
 
-// Correções salvas para o fechamento atual da balança da unidade (vazio se o fechamento mudou).
+// Correções salvas para a importação e o fechamento exibidos.
 function fieldImageOverrides(unit, weighing) {
   const saved = unit?.image_overrides;
   if (!weighing?.data_until || !saved || saved.ref !== weighing.data_until) return {};
+  if ((saved.batch_id ?? null) !== (weighing.batch_id ?? null)) return {};
   // O relatório pode consultar um corte anterior dentro da mesma importação.
   if (weighing.closed_until && weighing.closed_until <= saved.ref) return {};
   return Object.fromEntries(Object.entries(saved.values || {})
@@ -46,14 +47,15 @@ function fieldImageOverrides(unit, weighing) {
 // ATR médio ponderado pela tonelada de cana: soma(ATR × t) ÷ soma(t), só com os pares que
 // têm ATR e tonelada. Sem tonelada em nenhum, média simples dos ATR (preenchimento manual).
 function fieldWeightedAtr(pairs) {
-  const valid = pairs.filter(([atr]) => atr !== null && atr !== undefined && Number(atr) > 0);
-  if (!valid.length) return { atr: null, count: 0, weighted: false };
+  const valid = pairs.filter(([atr, , sample]) => Number(atr) > 0 || sample > 0);
+  if (!valid.length) return { atr: null, count: 0, weight: 0 };
   const weighed = valid.filter(([, tons]) => Number(tons) > 0);
   if (weighed.length) {
-    const tons = weighed.reduce((sum, [, value]) => sum + Number(value), 0);
-    return { atr: weighed.reduce((sum, [atr, value]) => sum + Number(atr) * Number(value), 0) / tons, count: weighed.length, weighted: true };
+    const weight = weighed.reduce((sum, [, tons]) => sum + Number(tons), 0);
+    const atrKg = weighed.reduce((sum, [atr, tons, sample]) => sum + (sample ?? Number(atr) * Number(tons)), 0);
+    return { atr: atrKg / weight, count: weighed.length, weight };
   }
-  return { atr: valid.reduce((sum, [atr]) => sum + Number(atr), 0) / valid.length, count: valid.length, weighted: false };
+  return { atr: valid.reduce((sum, [atr]) => sum + Number(atr), 0) / valid.length, count: valid.length, weight: 0 };
 }
 
 function fieldUnitIndicators(unit, summary) {
@@ -74,8 +76,9 @@ function fieldUnitIndicators(unit, summary) {
     ? fieldIndicatorNumber(weighedFrontAtr.get(canonicalFieldFrontKey(row[0])), 2) : '');
   // ATR da unidade: o da balança (média ponderada pelo peso) quando o SELECT traz o ATR das
   // cargas; sem ele, a média do ATR das frentes ponderada pela tonelada de cada frente na balança.
-  const frontsAtr = fieldWeightedAtr(rows.map(row => [fieldLeadingNumber(frontAtr(row)),
-    weighedFronts.get(canonicalFieldFrontKey(row[0]))?.tons])).atr;
+  const frontSample = fieldWeightedAtr(rows.map(row => [fieldLeadingNumber(frontAtr(row)),
+    weighedFronts.get(canonicalFieldFrontKey(row[0]))?.tons]));
+  const frontsAtr = frontSample.atr;
   const weighedAtr = hasWeighing && weighing.atr !== null && weighing.atr !== undefined ? weighing.atr : null;
   // Valores da balança (sem as correções), mostrados ao lado das correções no Preencher.
   const balance = {
@@ -95,6 +98,8 @@ function fieldUnitIndicators(unit, summary) {
     milling3h: value('milling3h'),
     delivery3h: value('delivery3h'),
     atr: value('atr'),
+    atrWeight: weighedAtr !== null ? weighing.atr_weight_t : frontSample.weight || null,
+    atrSample: weighedAtr !== null && !('atr' in overrides) ? weighing.atr_sample_kg : null,
     atrSource: weighedAtr !== null ? 'balança' : frontsAtr !== null ? 'frentes' : null,
     day: value('day'),
     deliveryDay: hasWeighing ? weighing.delivery_day_t : null,
@@ -103,6 +108,7 @@ function fieldUnitIndicators(unit, summary) {
     balance,
     corrected: Object.keys(overrides),
     closingRef: hasWeighing ? weighing.data_until || null : null,
+    closingBatchId: hasWeighing ? weighing.batch_id ?? null : null,
     hours: hasWeighing ? weighing.hours || [] : [],
     fronts: hasWeighing ? weighing.fronts || [] : [],
     frontAtr,
@@ -124,10 +130,10 @@ function fieldIndicatorSum(values) {
 }
 
 // Totais das unidades: frentes, indústrias em operação, moagem/entrega/estoque do turno,
-// ATR médio geral (média do ATR das unidades ponderada pelo processado do dia de cada uma),
+// ATR médio geral ponderado pelo peso das cargas com ATR informado,
 // processado e projeção do dia.
 function fieldIndicatorTotals(items) {
-  const atr = fieldWeightedAtr(items.map(item => [item.atr, item.day]));
+  const atr = fieldWeightedAtr(items.map(item => [item.atr, item.atrWeight ?? item.day, item.atrSample]));
   return {
     units: items.length,
     fronts: items.reduce((sum, item) => sum + item.rows.length, 0),
@@ -138,7 +144,7 @@ function fieldIndicatorTotals(items) {
     stock: fieldIndicatorSum(items.map(item => item.stock)),
     atr: atr.atr,
     atrUnits: atr.count,
-    atrWeighted: atr.weighted,
+    atrWeighted: atr.weight > 0,
     day: fieldIndicatorSum(items.map(item => item.day)),
     deliveryDay: fieldIndicatorSum(items.map(item => item.deliveryDay)),
     projection: fieldIndicatorSum(items.map(item => item.projection))

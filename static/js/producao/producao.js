@@ -370,6 +370,10 @@ function serviceOrderCell(item) {
   return `<div class="production-os">${state}${view}</div>`;
 }
 
+function productionResponsibleName(item, shift = dashboardCurrentShift().name) {
+  return item.responsibles?.[shift] || 'Sem responsável escalado';
+}
+
 function renderProductionItems(data) {
   const body = document.querySelector('#production-items-body');
   const empty = document.querySelector('#production-empty');
@@ -392,7 +396,7 @@ function renderProductionItems(data) {
     const current = Boolean(item.is_current_day);
     const updatedDetail = entry.work_date ? `Último registro: ${formatIsoDateBr(entry.work_date)}` : 'Nenhum registro salvo';
     const styleLabel = item.display_style === 'front' ? 'Frente operacional' : 'Operação / serviço';
-    const owner = entry.updated_by_name || item.owner_name || '';
+    const responsible = productionResponsibleName(item);
     const actions = canFillProduction() ? `
       <div class="production-row-actions">
         <button class="production-row-action icon-edit-button" type="button" data-production-action="edit" data-item-id="${item.id}"
@@ -402,9 +406,9 @@ function renderProductionItems(data) {
     const actionCell = canFillProduction() ? `<td>${actions}</td>` : '';
     const observation = String(entry.observation || '').trim();
     const changes = String(entry.changes || '').trim();
-    // Analista e data do último registro ficam sob o nome e o status (sem colunas próprias).
+    // Responsável no turno e data do último registro ficam sob o nome e o status.
     return `<tr class="${current ? '' : 'is-pending'}" title="${escapeHtml(item.group_name || '')}">
-      <td><div class="production-item-name"><strong>${escapeHtml(item.service_name || '-')}</strong><small>${escapeHtml(styleLabel)}${owner ? ` · ${escapeHtml(owner)}` : ''}</small></div></td>
+      <td><div class="production-item-name"><strong>${escapeHtml(item.service_name || '-')}</strong><small>${escapeHtml(styleLabel)} · ${escapeHtml(responsible)}</small></div></td>
       <td class="production-cell-number">${escapeHtml(entry.sector || '-')}</td>
       <td class="production-cell-number">${escapeHtml(entry.section || '-')}</td>
       <td class="production-cell-farm">${escapeHtml(entry.farm || '-')}</td>
@@ -1116,9 +1120,12 @@ document.addEventListener('report-unit-change', async event => {
   try {
     await refreshProductionPage(requested);
     // Na página Cadastros, as frentes listadas dependem da unidade.
-    if (typeof productionCatalogPageActive === 'function' && productionCatalogPageActive() && canConfigureProduction()) {
-      await loadProductionConfigCatalog();
-      clearFrontConfigForm();
+    if (typeof productionCatalogPageActive === 'function' && productionCatalogPageActive()) {
+      openProductionResponsibilityForm();
+      await Promise.all([
+        loadProductionResponsibilities(requested),
+        canConfigureProduction() ? loadProductionConfigCatalog().then(() => clearFrontConfigForm()) : null
+      ]);
     }
   } catch (error) {
     console.error(error);

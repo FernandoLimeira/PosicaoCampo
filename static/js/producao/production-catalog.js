@@ -2,6 +2,8 @@
 // status e operações. Grupos, frentes e status usam producao/production-config.js;
 // aqui ficam a abertura da página e o cadastro de operações (código da O.S.).
 let productionOperations = [];
+let productionResponsibilities = [];
+let productionResponsibilityUnit = '';
 
 function productionCatalogPageActive() {
   return String(globalThis.location?.pathname || '').startsWith('/producao/cadastros');
@@ -105,6 +107,110 @@ async function deleteProductionOperation(operationId) {
   }
 }
 
+function renderProductionResponsibilities() {
+  const list = document.querySelector('#production-responsibilities-list');
+  if (!list) return;
+  const editable = canConfigureProduction();
+  list.innerHTML = productionResponsibilities.map(rule => {
+    const temporary = rule.kind === 'replacement';
+    const date = formatIsoDateBr(rule.work_date);
+    const details = temporary ? `Substituição em ${date} · ${rule.responsible_name}`
+      : `Ciclo desde ${date} · Titular: ${rule.responsible_name} · Folguista: ${rule.relief_name || 'Sem cobertura'}`;
+    return `<div class="production-config-list-item">
+      <div class="production-config-list-item-copy"><strong>${escapeHtml(rule.service_name)} · Turno ${escapeHtml(rule.shift)}</strong>
+        <span>${escapeHtml(details)}</span></div>
+      ${editable ? `<div class="production-config-list-actions">
+        <button class="icon-edit-button" type="button" data-responsibility-edit="${rule.id}" title="Editar escala" aria-label="Editar escala de ${escapeHtml(rule.service_name)}">${PENCIL_ICON}</button>
+        <button class="icon-delete-button" type="button" data-responsibility-delete="${rule.id}" title="Remover escala" aria-label="Remover escala de ${escapeHtml(rule.service_name)}">${TRASH_ICON}</button>
+      </div>` : ''}</div>`;
+  }).join('') || '<p class="production-empty">Nenhuma escala cadastrada nesta unidade.</p>';
+}
+
+async function loadProductionResponsibilities(unit = currentProductionUnit()) {
+  const epoch = productionPageEpoch;
+  if (productionResponsibilityUnit !== unit) {
+    productionResponsibilities = [];
+    productionResponsibilityUnit = '';
+    renderProductionResponsibilities();
+  }
+  const data = await apiRequest(`/api/production/catalog/responsibilities?unit=${encodeURIComponent(unit)}`);
+  if (!isCurrentProductionRequest(unit, epoch)) return;
+  productionResponsibilities = Array.isArray(data?.rules) ? data.rules : [];
+  productionResponsibilityUnit = unit;
+  renderProductionResponsibilities();
+}
+
+function updateProductionResponsibilityFields(form) {
+  const temporary = form.elements.kind.value === 'replacement';
+  document.querySelector('#production-responsibility-date-label').textContent = temporary ? 'Data da substituição' : 'Primeiro dia de trabalho';
+  document.querySelector('#production-responsibility-name-label').textContent = temporary ? 'Substituto' : 'Titular';
+  document.querySelector('#production-responsibility-relief').hidden = temporary;
+  form.elements.relief_name.disabled = temporary;
+}
+
+function openProductionResponsibilityForm(rule = null, { keepOpen = false } = {}) {
+  const form = document.querySelector('#production-responsibility-form');
+  if (!form) return;
+  const fields = form.elements;
+  form.reset();
+  form.dataset.unit = currentProductionUnit();
+  fields.rule_id.value = rule?.id ?? '';
+  fields.service_front_id.innerHTML = '<option value="">Selecione</option>' + groupsForEntry().map(group => `
+    <optgroup label="${escapeHtml(group.name)}">${(group.fronts || []).map(front =>
+      `<option value="${front.id}">${escapeHtml(front.name)}</option>`).join('')}</optgroup>`).join('');
+  if (rule) {
+    for (const key of ['kind', 'service_front_id', 'shift', 'work_date', 'responsible_name', 'relief_name']) {
+      fields[key].value = rule[key];
+    }
+  }
+  document.querySelector('#production-responsibility-title').textContent = rule ? 'Editar escala' : 'Nova escala';
+  updateProductionResponsibilityFields(form);
+  document.querySelector('#production-responsibility-editor').open = keepOpen;
+}
+
+async function submitProductionResponsibility(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const unit = form.dataset.unit;
+  if (!canConfigureProduction() || unit !== currentProductionUnit()) return;
+  const fields = form.elements;
+  const id = fields.rule_id.value;
+  const payload = Object.fromEntries(new FormData(form));
+  payload.unit_code = unit;
+  const button = form.querySelector('button[type="submit"]');
+  if (button.disabled) return;
+  button.disabled = true;
+  try {
+    await apiRequest(`/api/production/catalog/responsibilities${id ? `/${id}` : ''}`, {
+      method: id ? 'PUT' : 'POST', body: JSON.stringify(payload)
+    });
+    showToast('Escala salva.');
+    if (unit === currentProductionUnit()) {
+      openProductionResponsibilityForm();
+      await loadProductionResponsibilities(unit);
+    }
+  } catch (error) {
+    showToast(error.message || 'Não foi possível salvar a escala.', true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function removeProductionResponsibility(rule) {
+  const unit = productionResponsibilityUnit;
+  if (unit !== currentProductionUnit() || !await askConfirmation({
+    kicker: 'Escala 5×1', title: 'Remover escala?', message: `${rule.service_name} · Turno ${rule.shift}.`,
+    confirmLabel: 'Remover'
+  })) return;
+  try {
+    await apiRequest(`/api/production/catalog/responsibilities/${rule.id}?unit=${encodeURIComponent(unit)}`, { method: 'DELETE' });
+    if (unit === currentProductionUnit()) await loadProductionResponsibilities(unit);
+    showToast('Escala removida.');
+  } catch (error) {
+    showToast(error.message || 'Não foi possível remover a escala.', true);
+  }
+}
+
 async function initializeProductionCatalogPage() {
   const editable = canConfigureProduction();
   const readonly = document.querySelector('#production-catalog-readonly');
@@ -113,7 +219,7 @@ async function initializeProductionCatalogPage() {
   document.querySelectorAll('.catalog-editor, #production-catalog-panel .catalog-new')
     .forEach(element => { element.hidden = !editable; });
   document.querySelector('#production-catalog-panel')?.classList.toggle('is-readonly', !editable);
-  const tasks = [loadProductionOperations()];
+  const tasks = [loadProductionOperations(), loadProductionResponsibilities()];
   if (editable) {
     tasks.push(loadProductionConfigCatalog().then(() => {
       clearGroupConfigForm();
@@ -145,13 +251,15 @@ document.querySelector('#production-operations-list')?.addEventListener('click',
 const CATALOG_TAB_KEY = 'posicao-campo-production-catalog-tab';
 const CATALOG_EDITOR_IDS = {
   groups: '#production-group-editor', fronts: '#production-front-editor',
-  operations: '#production-operation-editor', status: '#production-status-editor'
+  operations: '#production-operation-editor', status: '#production-status-editor',
+  responsibilities: '#production-responsibility-editor'
 };
 const CATALOG_NEW_ACTIONS = {
   groups: () => clearGroupConfigForm({ keepOpen: true }),
   fronts: () => clearFrontConfigForm({ keepOpen: true }),
   operations: () => clearOperationForm({ keepOpen: true }),
-  status: () => clearStatusConfigForm({ keepOpen: true })
+  status: () => clearStatusConfigForm({ keepOpen: true }),
+  responsibilities: () => openProductionResponsibilityForm(null, { keepOpen: true })
 };
 
 function selectCatalogTab(tab) {
@@ -197,6 +305,19 @@ function updateCatalogCount(key) {
 
 if (productionCatalogPageActive()) {
   document.addEventListener('production-page-ready', initializeProductionCatalogPage);
+  const responsibilityForm = document.querySelector('#production-responsibility-form');
+  responsibilityForm?.addEventListener('submit', submitProductionResponsibility);
+  responsibilityForm?.elements?.kind?.addEventListener('change', () => updateProductionResponsibilityFields(responsibilityForm));
+  document.querySelector('#production-responsibility-clear')?.addEventListener('click', () => openProductionResponsibilityForm());
+  document.querySelector('#production-responsibilities-list')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-responsibility-edit], [data-responsibility-delete]');
+    if (!button || !canConfigureProduction() || productionResponsibilityUnit !== currentProductionUnit()) return;
+    const id = Number(button.dataset.responsibilityEdit || button.dataset.responsibilityDelete);
+    const rule = productionResponsibilities.find(item => item.id === id);
+    if (!rule) return;
+    if (button.dataset.responsibilityEdit) openProductionResponsibilityForm(rule, { keepOpen: true });
+    else removeProductionResponsibility(rule);
+  });
   let savedTab = 'groups';
   try { savedTab = localStorage.getItem(CATALOG_TAB_KEY) || 'groups'; } catch (_) { /* sem armazenamento */ }
   selectCatalogTab(savedTab);
@@ -218,7 +339,8 @@ if (productionCatalogPageActive()) {
   // Formulários de "Novo"/"Editar" abrem como popup simples: fecha no ×, no Esc ou fora do quadro.
   const CANCEL_BUTTONS = {
     'production-group-editor': '#production-group-clear', 'production-front-editor': '#production-front-clear',
-    'production-operation-editor': '#production-operation-clear', 'production-status-editor': '#production-status-clear'
+    'production-operation-editor': '#production-operation-clear', 'production-status-editor': '#production-status-clear',
+    'production-responsibility-editor': '#production-responsibility-clear'
   };
   const closeCatalogEditor = editor => {
     document.querySelector(CANCEL_BUTTONS[editor.id])?.click();

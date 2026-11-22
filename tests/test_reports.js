@@ -182,21 +182,62 @@ async function main() {
   assert.match(pptOverview, /Balança até 18\/11/);
   assert.doesNotMatch(pptOverview, /NRD|880/);
   assert.doesNotMatch(refresh.elements.get('#units-grid').innerHTML, /Painel gerencial · Balança/);
+  vm.runInContext(`units[0].rows = [['FT 99', '9900', '', 'EM ATIVIDADE', '']];
+    units[0].observation = 'Observação atual';`, refresh.ctx);
   refresh.ctx.apiRequest = async path => {
     assert.match(path, /^\/api\/weighings\/summary\?date=2026-11-18/);
+    assert.match(path, /unit=PPT&position=1/);
     return {
       work_date: '2026-11-18', reference_at: 1795046400,
       units: [{ code: 'PPT', work_date: '2026-11-18', data_until: 1795046400,
-        closed_until: 1795032000, loads_day: 2, milling_day_t: 700 }]
+        closed_until: 1795032000, position_until: 1795032000, loads_day: 2, milling_day_t: 700,
+        milling_shift_tph: 275, fronts: [{ front: '5', atr: 119.5 }] }],
+      position: { unit: { code: 'PPT', rows: [['FT 05', '5010', '', 'PARADA', '']],
+        observation: 'Observação do fechamento' } },
+      note_summaries: { 'ft 05': { highlights: [{ text: 'Acontecimento do corte' }], highlight_count: 1 } }
     };
   };
   vm.runInContext("managementReportDate = '2026-11-18'; managementReportTime = '17:00';", refresh.ctx);
   await refresh.ctx.loadManagementReport();
   assert.match(refresh.ctx.managementReportHtml(), /Processado no dia<\/small><strong>700 /);
   assert.match(refresh.ctx.managementReportHtml(), /value="17:00"/);
+  refresh.ctx.renderDashboard();
+  const closingGrid = refresh.elements.get('#units-grid').innerHTML;
+  for (const text of ['FT 05', 'PARADA', '5010', '119,50', '275', 'Observação do fechamento', 'Acontecimento do corte']) {
+    assert(closingGrid.includes(text), text);
+  }
+  assert.doesNotMatch(closingGrid, /FT 99|Observação atual/);
+  assert.equal(refresh.elements.get('#open-data-modal').hidden, true);
+  refresh.ctx.openModal = () => {};
+  refresh.ctx.apiRequest = async path => {
+    assert.match(path, /front=FT%2005&cutoff=1795032000/);
+    return { entries: [{ text: 'Detalhe no horário' }], total: 1 };
+  };
+  const loadClosingNotes = refresh.ctx.loadFieldFrontHistory;
+  let closingNotes;
+  refresh.ctx.loadFieldFrontHistory = (...args) => (closingNotes = loadClosingNotes(...args));
+  refresh.ctx.openFieldFrontDetails(0);
+  assert.doesNotMatch(refresh.elements.get('#field-front-detail-content').innerHTML, /field-front-note-form/);
+  await closingNotes;
+  assert.match(refresh.elements.get('#field-front-note-history').innerHTML, /Detalhe no horário/);
+
+  let resolveOld;
+  refresh.ctx.apiRequest = path => path.includes('hora=17%3A00')
+    ? new Promise(resolve => { resolveOld = resolve; })
+    : Promise.resolve({ units: [{ code: 'PPT', position_until: 1795035600 }], position: null });
+  const outdatedClosing = refresh.ctx.loadManagementReport();
+  vm.runInContext("managementReportTime = '18:00';", refresh.ctx);
+  await refresh.ctx.loadManagementReport();
+  resolveOld({ units: [{ code: 'PPT', position_until: 1795032000 }] });
+  await outdatedClosing;
+  assert.equal(refresh.ctx.managementReportView().cutoff, 1795035600);
+
   vm.runInContext("managementReportTime = '';", refresh.ctx);
   await refresh.ctx.loadManagementReport();
   assert.match(refresh.ctx.managementReportHtml(), /Processado no dia<\/small><strong>1\.500 /);
+  refresh.ctx.renderDashboard();
+  assert.match(refresh.elements.get('#units-grid').innerHTML, /FT 99|Observação atual/);
+  assert.equal(refresh.elements.get('#open-data-modal').hidden, false);
 
   loadScripts(ctx, pageScripts('/relatorios'));
   const report = { performance_rows: [{ unit: 'PPT', front: '1' }, { unit: 'NRD', front: '1' }, { unit: '' }], timeline: [{ unit: 'PPT' }, { unit: 'NRD' }] };
@@ -258,6 +299,17 @@ async function main() {
   const earlier = { ...summary, units: [{ ...summary.units[0], closed_until: 1794751200, stock_loads: 31, milling_day_t: 5367.7 }] };
   const historical = standalone.fieldUnitIndicators(corrected, earlier);
   assert.deepEqual([historical.day, historical.stock, historical.corrected.length], [5367.7, 31, 0]);
+
+  const batchId = 'a'.repeat(32);
+  const batchCorrection = standalone.normalizeReportUnit({ ...corrected,
+    image_overrides: { ...corrected.image_overrides, batch_id: batchId } }, 0);
+  const currentBatch = { ...summary, units: [{ ...summary.units[0], batch_id: batchId }] };
+  assert.equal(standalone.fieldUnitIndicators(batchCorrection, currentBatch).day, 11945);
+  assert.equal(standalone.fieldUnitIndicators(corrected, currentBatch).day, 11763, 'Correção antiga sem lote');
+  const replacedBatch = { ...summary, units: [{ ...summary.units[0], batch_id: 'b'.repeat(32), milling_day_t: 11900 }] };
+  const reimported = standalone.fieldUnitIndicators(batchCorrection, replacedBatch);
+  assert.deepEqual([reimported.closingRef, reimported.closingBatchId, reimported.day, reimported.corrected.length],
+    [1794772799, 'b'.repeat(32), 11900, 0]);
 
   const stoppedUnit = { ...corrected, rows: [['FT 02', '', '', 'PARADA'], ['FT 19', '', '', 'PARADO']] };
   const currentWeighing = { ...summary.units[0], zero_milling_at_latest_close: true,
@@ -322,6 +374,15 @@ async function main() {
   assert.equal(weighted.atrUnits, 2);
   assert.equal(weighted.atrWeighted, true);
   assert(Math.abs(weighted.atr - (118.64 * 11763 + 128.41 * 16498) / 28261) < 1e-9);
+  // A amostra de PPT é de 25 t das 50 t processadas. Usa o ATR da carga antes de arredondar por unidade.
+  const sampledSummary = { reference_at: 1, units: [
+    { code: 'PPT', loads_day: 2, milling_day_t: 50, atr: 100, atr_weight_t: 25, atr_sample_kg: 2500.125 },
+    { code: 'NRD', loads_day: 1, milling_day_t: 75, atr: 120, atr_weight_t: 75, atr_sample_kg: 9000.375 }
+  ] };
+  const sampled = standalone.fieldIndicatorTotals([ppt, { ...ppt, code: 'NRD' }]
+    .map(unit => standalone.fieldUnitIndicators(unit, sampledSummary)));
+  assert.equal(sampled.atr, 115.005);
+  assert.equal(standalone.fieldIndicatorNumber(sampled.atr, 2), '115,01');
   // Sem processado do dia (só ATR digitado): média simples das unidades que têm ATR.
   const atrTotals = standalone.fieldIndicatorTotals([118.64, 128.41, 119.8, 113.78, null]
     .map(atr => ({ rows: [], active: 0, day: null, projection: null, atr })));

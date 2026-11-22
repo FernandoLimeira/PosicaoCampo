@@ -76,6 +76,45 @@ class ProductionTests(unittest.TestCase):
             },
         )
 
+    def test_responsibility_uses_the_sixth_day_and_unit_specific_replacements(self):
+        front = self._front(units=["NRD", "PPT"])
+        rule = {
+            "unit_code": "NRD", "service_front_id": front["id"], "shift": "B",
+            "kind": "cycle", "work_date": "2026-11-20", "responsible_name": "João", "relief_name": "Maria",
+        }
+        with self.assertRaises(PermissionError):
+            production.save_responsibility_rule(self.user["id"], rule)
+        with self.assertRaises(ValueError):
+            production.save_responsibility_rule(self.admin["id"], {**rule, "unit_code": "RBR"})
+        rule_id = production.save_responsibility_rule(self.admin["id"], rule)
+        self.assertEqual(production.list_responsibility_rules(self.viewer["id"], "NRD")[0]["id"], rule_id)
+        with self.assertRaises(PermissionError):
+            production.list_responsibility_rules(self.viewer["id"], "PPT")
+        for unit in ("NRD", "PPT"):
+            production.save_my_item(self.user["id"], {
+                "unit_code": unit, "service_front_id": front["id"], "work_date": "2026-11-20",
+                "sector": "3392", "section": "10", "farm": "SANTA TEREZINHA", "status": "EM ATIVIDADE",
+            })
+
+        def responsibles(unit, day):
+            data = production.list_my_items(self.user["id"], unit, f"2026-11-{day}", with_orders=False)
+            return data["items"][0]["responsibles"]
+
+        self.assertEqual(responsibles("NRD", 19), {})
+        for day in (20, 21, 22, 23, 24, 26):
+            self.assertEqual(responsibles("NRD", day), {"B": "João"})
+        self.assertEqual(responsibles("NRD", 25), {"B": "Maria"})
+        self.assertEqual(responsibles("PPT", 25), {})
+        replacement = production.save_responsibility_rule(self.admin["id"], {
+            **rule, "kind": "replacement", "work_date": "2026-11-25", "responsible_name": "Ana",
+        })
+        self.assertEqual(responsibles("NRD", 25), {"B": "Ana"})
+        self.assertEqual(responsibles("NRD", 26), {"B": "João"})
+        production.delete_responsibility_rule(self.admin["id"], "NRD", replacement)
+        self.assertEqual(responsibles("NRD", 25), {"B": "Maria"})
+        production.save_responsibility_rule(self.admin["id"], {**rule, "relief_name": ""}, rule_id=rule_id)
+        self.assertEqual(responsibles("NRD", 25), {"B": ""})
+
     def test_daily_summary_is_scoped_to_unit_date_and_shared_with_analysts(self):
         empty = production.get_daily_summary(self.user["id"], "NRD", "2026-10-16")
         self.assertIsNone(empty["rain_turn_mm"])

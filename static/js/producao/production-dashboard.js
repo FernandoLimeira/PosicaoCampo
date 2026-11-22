@@ -113,7 +113,7 @@ function openDashboardFrontDetail(itemId) {
     ['Seção', entry.section || '-'],
     ['Fazenda', entry.farm || '-'],
     ['Atualização', entry.work_date ? formatIsoDateBr(entry.work_date) : 'Sem registro'],
-    ['Responsável', entry.updated_by_name || item.owner_name || '-']
+    ['Responsável no turno', productionResponsibleName(item)]
   ];
   const okCount = codes.filter(code => productionOperationTone(item, code) === 'is-order-ok').length;
   const operations = codes.map(code => {
@@ -185,15 +185,15 @@ function dashboardSvg(paths, filled = false) {
   return `<svg viewBox="0 0 24 24" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 }
 
-// Quem atualizou e quando (hoje: só a hora; antes: dia e hora), no horário de Brasília.
-function dashboardUpdatedLabel(item) {
+// Horário da atualização separado do responsável escalado para o turno atual.
+function dashboardUpdatedLabel(item, shift) {
   const entry = item.entry || {};
-  const who = entry.updated_by_name || item.owner_name || '';
+  const who = productionResponsibleName(item, shift);
   if (!entry.updated_at) return who;
   const when = new Date(entry.updated_at * 1000);
   const time = when.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
   const day = item.is_current_day ? `hoje ${time}` : `${formatIsoDateBr(entry.work_date || '').slice(0, 5)} ${time}`;
-  return [who, day].filter(Boolean).join(' · ');
+  return `${who} · Atualização ${day}`;
 }
 
 // Ordem dos cartões no grupo: problemas primeiro (parada, sem O.S., sem operação,
@@ -212,7 +212,7 @@ function dashboardSortTiles(items) {
     .map(({ item }) => item);
 }
 
-function dashboardFrontTile(item) {
+function dashboardFrontTile(item, shift) {
   const entry = item.entry || {};
   const meta = statusMeta(entry.status);
   const codes = splitProductionOperations(entry.operation);
@@ -231,7 +231,7 @@ function dashboardFrontTile(item) {
   const stale = item.is_current_day ? ''
     : `<span class="pdash-stale">${dashboardIcon('clock')}${entry.work_date ? `Último registro ${escapeHtml(formatIsoDateBr(entry.work_date))}` : 'Sem registro'}</span>`;
   // Cartão clicável (abre o detalhe, também por Enter/Espaço); editar fica só dentro do detalhe.
-  const updated = dashboardUpdatedLabel(item);
+  const updated = dashboardUpdatedLabel(item, shift);
   return `<article tabindex="0" role="button" data-panel-detail="${item.id}" class="pdash-tile ${meta.className}${item.is_current_day ? '' : ' is-stale'}" title="${escapeHtml(`${item.service_name} · ${meta.name} · ver detalhes`)}">
       <span class="pdash-tile-name">
         <i class="pdash-status-icon ${meta.className}">${dashboardSvg(DASHBOARD_STATUS_ICONS[meta.className] || DASHBOARD_STATUS_ICONS['is-waiting'], meta.className !== 'is-waiting')}</i>
@@ -243,7 +243,7 @@ function dashboardFrontTile(item) {
       </span>
       <span class="pdash-place">${dashboardIcon('pin')}<span>Setor ${escapeHtml(entry.sector || '-')}${entry.section ? ` / ${escapeHtml(entry.section)}` : ''}${entry.farm ? ` · ${escapeHtml(entry.farm)}` : ''}</span></span>
       <span class="pdash-tile-ops">${operations}</span>
-      <span class="pdash-tile-foot"><span class="pdash-tile-who">${escapeHtml(updated)}</span>${section}</span>
+      <span class="pdash-tile-foot"><span class="pdash-tile-who" title="${escapeHtml(updated)}">${escapeHtml(updated)}</span>${section}</span>
     </article>`;
 }
 
@@ -276,6 +276,26 @@ function dashboardCurrentShift(now = new Date()) {
   const clock = value => `${String(Math.floor(value / 60) % 24).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
   return { name, startAt, label: `${clock(start)}–${clock(end)}` };
 }
+
+function startProductionResponsibilityClock() {
+  if (!/^\/producao\/?$/.test(window.location?.pathname || '') || typeof window.setInterval !== 'function') return;
+  const periodKey = () => `${saoPauloIsoDate()} ${dashboardCurrentShift().name}`;
+  let period = periodKey();
+  let loadingPeriod = false;
+  window.setInterval(async () => {
+    const nextPeriod = periodKey();
+    if (document.hidden || loadingPeriod || nextPeriod === period) return;
+    loadingPeriod = true;
+    try {
+      if (await loadProductionItems(currentProductionUnit())) period = nextPeriod;
+    } catch (error) {
+      console.error(error);
+    } finally {
+      loadingPeriod = false;
+    }
+  }, 15000);
+}
+document.addEventListener('production-page-ready', startProductionResponsibilityClock, { once: true });
 
 // Atualizada pelo analista no turno atual (hoje e depois do início do turno).
 function dashboardUpdatedInShift(item, shift) {
@@ -374,6 +394,7 @@ function dashboardGroupInitials(name) {
 function renderProductionDashboard() {
   const cards = document.querySelector('#production-group-cards');
   if (!cards) return;
+  const shift = dashboardCurrentShift().name;
   const allItems = dashboardItems();
   const empty = document.querySelector('#production-dashboard-empty');
   if (empty) empty.hidden = allItems.length > 0;
@@ -445,7 +466,7 @@ function renderProductionDashboard() {
       </div>
       <div class="pdash-group-status">${dashboardStatusBar(group.items)}</div>
       ${visible.length
-        ? `<div class="pdash-tiles">${visible.map(dashboardFrontTile).join('')}</div>`
+        ? `<div class="pdash-tiles">${visible.map(item => dashboardFrontTile(item, shift)).join('')}</div>`
         : '<p class="production-empty pdash-filter-empty">Nenhuma frente neste filtro.</p>'}
     </article>`;
   }).join('');

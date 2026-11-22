@@ -106,6 +106,8 @@
         <span>Grupos</span><b data-catalog-count="groups">0</b></button>
       <button class="catalog-tab" type="button" role="tab" aria-selected="false" data-catalog-tab="fronts">
         <span>Frentes / serviços</span><b data-catalog-count="fronts">0</b></button>
+      <button class="catalog-tab" type="button" role="tab" aria-selected="false" data-catalog-tab="responsibilities">
+        <span>Escala 5×1</span><b data-catalog-count="responsibilities">0</b></button>
       <button class="catalog-tab" type="button" role="tab" aria-selected="false" data-catalog-tab="operations">
         <span>Operações</span><b data-catalog-count="operations">0</b></button>
       <button class="catalog-tab" type="button" role="tab" aria-selected="false" data-catalog-tab="status">
@@ -162,6 +164,31 @@
       </details>
       <div class="catalog-toolbar"><input type="search" data-catalog-search="fronts" autocomplete="off" placeholder="Buscar frente ou grupo" aria-label="Buscar frente" /></div>
       <div id="production-fronts-list" class="production-config-list catalog-list" data-catalog-list="fronts"></div>
+    </section>
+
+    <section class="catalog-section" data-catalog-section="responsibilities" role="tabpanel" hidden>
+      <header class="catalog-section-header">
+        <div><h2>Escala 5×1</h2><p>O titular responde pela frente nos cinco dias de trabalho. O folguista assume no sexto dia.</p></div>
+        <button class="production-primary-button catalog-new" type="button" data-catalog-new="responsibilities">+ Nova escala</button>
+      </header>
+      <details id="production-responsibility-editor" class="production-config-editor catalog-editor">
+        <summary class="production-config-editor-summary"><span id="production-responsibility-title">Nova escala</span></summary>
+        <form id="production-responsibility-form" class="production-config-form production-config-form-collapsible">
+          <input type="hidden" name="rule_id" />
+          <label class="field"><span>Tipo</span><select name="kind"><option value="cycle">Ciclo 5×1</option><option value="replacement">Substituição pontual</option></select></label>
+          <label class="field"><span>Frente / serviço</span><select name="service_front_id" required></select></label>
+          <label class="field"><span>Turno</span><select name="shift" required><option value="">Selecione</option><option value="A">A · 00h–07h20</option><option value="B">B · 07h20–15h40</option><option value="C">C · 15h40–00h</option></select></label>
+          <label class="field"><span id="production-responsibility-date-label">Primeiro dia de trabalho</span><input name="work_date" type="date" required /></label>
+          <label class="field"><span id="production-responsibility-name-label">Titular</span><input name="responsible_name" type="text" maxlength="80" required /></label>
+          <label id="production-responsibility-relief" class="field"><span>Folguista (opcional)</span><input name="relief_name" type="text" maxlength="80" /></label>
+          <div class="production-config-form-actions">
+            <button class="production-secondary-button" type="button" id="production-responsibility-clear">Cancelar</button>
+            <button class="production-primary-button" type="submit">Salvar escala</button>
+          </div>
+        </form>
+      </details>
+      <div class="catalog-toolbar"><input type="search" data-catalog-search="responsibilities" autocomplete="off" placeholder="Buscar frente ou responsável" aria-label="Buscar frente ou responsável" /></div>
+      <div id="production-responsibilities-list" class="production-config-list catalog-list" data-catalog-list="responsibilities"></div>
     </section>
 
     <section class="catalog-section" data-catalog-section="operations" role="tabpanel" hidden>

@@ -61,6 +61,7 @@ vm.runInContext(`
       is_current_day: true, entry: { id: 1, work_date: '2026-10-18', updated_at: 10, sector: '42', status: 'ATIVO' } },
     { id: 2, group_id: 1, group_name: 'Plantio', service_front_id: 7,
       service_name: 'Preparo', owner_name: 'Folguista', owner_user_id: 2, is_own: false,
+      responsibles: { A: 'Ana', B: 'Ana', C: 'Ana' },
       is_current_day: true, entry: { id: 2, work_date: '2026-10-18', updated_at: 20, sector: '42', status: 'UMIDO',
         observation: 'Observação anterior', changes: 'Mudança anterior' } },
     { id: 3, group_id: 2, group_name: 'Tratos', service_front_id: 9,
@@ -71,8 +72,9 @@ vm.runInContext(`
 
 context.renderProductionFilters();
 context.renderProductionItems();
-assert.match(element('#production-items-body').innerHTML, /Folguista/);
-assert.doesNotMatch(element('#production-items-body').innerHTML, /Titular.*Preparo/s);
+assert.match(element('#production-items-body').innerHTML, /Preparo<\/strong><small>Operação \/ serviço · Ana/);
+assert.match(element('#production-items-body').innerHTML, /Cultivo<\/strong><small>Operação \/ serviço · Sem responsável escalado/);
+assert.doesNotMatch(element('#production-items-body').innerHTML, /Titular|Folguista/);
 assert.match(element('#production-items-body').innerHTML, /Atualizar/);
 assert.match(element('#production-items-body').innerHTML, /data-production-action="remove" data-item-id="2"/);
 assert.match(element('#production-items-body').innerHTML, /Último registro: 17\/10\/2026/);
@@ -105,6 +107,10 @@ assert.doesNotMatch(othersPanel, /5001/);
 assert.match(detail, /data-pfd-tab="others"/);
 context.openDashboardFrontDetail(2);
 assert.match(element('#production-front-detail-body').innerHTML, /Nenhuma outra O\.S\. aberta no setor 42/);
+assert.match(element('#production-front-detail-body').innerHTML, /Responsável no turno.*Ana/s);
+const scheduledTile = vm.runInContext("dashboardFrontTile({ ...findProductionItem(2), responsibles: { A: 'Ana', B: 'João' } }, 'B')", context);
+assert.match(scheduledTile, /João · Atualização/);
+assert.doesNotMatch(scheduledTile, /Folguista|Ana/);
 // Filtros do grupo: só aparecem quando alguma frente está na condição (Plantio: 1 sem O.S.,
 // 1 sem operação, nenhuma parada).
 vm.runInContext("productionPanelGroup = '1'", context);

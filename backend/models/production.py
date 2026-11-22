@@ -16,6 +16,7 @@ from typing import Any
 
 from .constants import ALLOWED_UNIT_CODES
 from .storage import auth_connection, connection, validate_actor
+from ..services.operational_shifts import SHIFT_MINUTES
 
 MODULE_KEY = "production"
 STATUS_STYLE_KEYS = {"active", "wet", "waiting", "stopped"}
@@ -681,6 +682,93 @@ def _catalog_front_for_unit(conn: sqlite3.Connection, front_id: int, unit: str, 
     return row
 
 
+def list_responsibility_rules(user_id: int, unit_code: Any) -> list[dict[str, Any]]:
+    unit = _normalize_unit(unit_code)
+    with connection() as conn:
+        _require_access(conn, user_id, unit=unit)
+        return [dict(row) for row in conn.execute(
+            """SELECT r.id,r.service_front_id,r.shift,r.kind,r.work_date,r.responsible_name,r.relief_name,
+                      f.name AS service_name
+               FROM production_front_responsibilities r
+               JOIN production_service_fronts f ON f.id=r.service_front_id
+               WHERE r.unit_code=?
+               ORDER BY r.work_date DESC,f.name COLLATE NOCASE,r.shift,r.id""",
+            (unit,),
+        )]
+
+
+def save_responsibility_rule(user_id: int, payload: Any, *, rule_id: int | None = None) -> int:
+    if not isinstance(payload, dict):
+        raise ValueError("Escala inválida.")
+    unit = _normalize_unit(payload.get("unit_code"))
+    try:
+        front_id = int(payload.get("service_front_id"))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("Selecione a frente/serviço.") from exc
+    if not 0 < front_id < 2 ** 62:
+        raise ValueError("Frente/serviço inválida.")
+    shift = str(payload.get("shift") or "").strip().upper()
+    kind = payload.get("kind")
+    if shift not in SHIFT_MINUTES or kind not in ("cycle", "replacement"):
+        raise ValueError("Selecione o turno e o tipo de escala.")
+    work_date = _normalize_work_date(payload.get("work_date"))
+    name = _clean_text(payload.get("responsible_name"), "o responsável", 80, required=True)
+    relief = _clean_text(payload.get("relief_name"), "o folguista", 80) if kind == "cycle" else ""
+    if relief and relief.casefold() == name.casefold():
+        raise ValueError("Titular e folguista devem ser pessoas diferentes.")
+    values = (front_id, shift, kind, work_date, name, relief, user_id, int(time.time()))
+    with connection() as conn:
+        _require_configure(conn, user_id)
+        _catalog_front_for_unit(conn, front_id, unit)
+        try:
+            if rule_id is None:
+                cursor = conn.execute(
+                    """INSERT INTO production_front_responsibilities
+                       (service_front_id,shift,kind,work_date,responsible_name,relief_name,updated_by,updated_at,unit_code)
+                       VALUES (?,?,?,?,?,?,?,?,?)""",
+                    (*values, unit),
+                )
+                return int(cursor.lastrowid)
+            cursor = conn.execute(
+                """UPDATE production_front_responsibilities SET service_front_id=?,shift=?,kind=?,work_date=?,
+                       responsible_name=?,relief_name=?,updated_by=?,updated_at=? WHERE unit_code=? AND id=?""",
+                (*values, unit, rule_id),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError("Já existe uma escala desse tipo para a frente, turno e data. Edite o registro existente.") from exc
+        if not cursor.rowcount:
+            raise ValueError("Escala não encontrada nesta unidade.")
+        return rule_id
+
+
+def delete_responsibility_rule(user_id: int, unit_code: Any, rule_id: int) -> None:
+    unit = _normalize_unit(unit_code)
+    with connection() as conn:
+        _require_configure(conn, user_id)
+        if not conn.execute(
+            "DELETE FROM production_front_responsibilities WHERE unit_code=? AND id=?", (unit, rule_id)
+        ).rowcount:
+            raise ValueError("Escala não encontrada nesta unidade.")
+
+
+def _scheduled_responsibles(conn: sqlite3.Connection, unit: str, work_date: str) -> dict[int, dict[str, str]]:
+    day = date.fromisoformat(work_date)
+    assignments: dict[int, dict[str, str]] = {}
+    for row in conn.execute(
+        """SELECT r.* FROM production_front_responsibilities r
+           JOIN production_service_front_units fu
+             ON fu.service_front_id=r.service_front_id AND fu.unit_code=r.unit_code
+           WHERE r.unit_code=? AND ((r.kind='cycle' AND r.work_date<=?) OR (r.kind='replacement' AND r.work_date=?))
+           ORDER BY r.kind DESC,r.work_date DESC""",
+        (unit, work_date, work_date),
+    ):
+        # A substituição da data precede o ciclo vigente mais recente.
+        days = (day - date.fromisoformat(row["work_date"])).days
+        name = row["relief_name"] if row["kind"] == "cycle" and days % 6 == 5 else row["responsible_name"]
+        assignments.setdefault(row["service_front_id"], {}).setdefault(row["shift"], name)
+    return assignments
+
+
 def _entry_payload(row: sqlite3.Row | None) -> dict[str, Any] | None:
     if row is None:
         return None
@@ -739,6 +827,7 @@ def list_my_items(user_id: int, unit_code: Any, work_date: Any, *, scope: str = 
                 (unit, selected_date, unit),
             )
         }
+        responsibles = _scheduled_responsibles(conn, unit, selected_date)
         items = []
         for row in rows:
             latest = latest_entries.get(row["item_id"])
@@ -748,6 +837,7 @@ def list_my_items(user_id: int, unit_code: Any, work_date: Any, *, scope: str = 
                 "id": int(row["item_id"]), "owner_user_id": owner_user_id,
                 "owner_name": row["owner_name"], "is_own": owner_user_id == int(user_id),
                 "service_front_id": int(row["service_front_id"]),
+                "responsibles": responsibles.get(row["service_front_id"], {}),
                 "service_name": row["service_name"], "display_style": row["display_style"],
                 "group_id": int(row["group_id"]), "group_name": row["group_name"],
                 "catalog_active": bool(row["service_active"]) and bool(row["group_active"]),

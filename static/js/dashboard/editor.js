@@ -106,15 +106,17 @@ function setEditorStep(step) {
   requestAnimationFrame(() => focusTarget?.focus());
 }
 
-// Fechamento da balança sobre o qual os "Indicadores do turno" do formulário foram montados.
-let editorWeighingRef = null;
+// Importação e fechamento usados para montar os "Indicadores do turno" do formulário.
+let editorWeighingClosing = null;
 
 // A tela não se atualiza sozinha (botão "Atualizar dados"): ao salvar, confere se outra pessoa
 // importou um SELECT novo enquanto o Preencher estava aberto.
 async function refreshEditorWeighing() {
-  const before = weighingSummary?.last_import?.imported_at ?? null;
+  const previous = weighingSummary;
+  const importKey = data => data?.last_import?.batch_id ?? data?.last_import?.imported_at ?? null;
   const summary = await loadWeighingSummary();
-  if (summary && (summary.last_import?.imported_at ?? null) !== before && serverStateReady) renderDashboard();
+  if (!summary) weighingSummary = previous;
+  else if (importKey(summary) !== importKey(previous) && serverStateReady) renderDashboard();
   return summary;
 }
 
@@ -212,7 +214,7 @@ function metricFieldHtml({ label, unit, value, key = '', balance = '', corrected
 function renderMetricsForm(unit) {
   const container = document.querySelector('#metrics-form');
   const item = fieldUnitIndicators(unit, weighingSummary);
-  editorWeighingRef = item.closingRef;
+  editorWeighingClosing = item.closingRef ? { ref: item.closingRef, batch_id: item.closingBatchId } : null;
   if (!item.closingRef) {
     container.innerHTML = metricDefinitions.map((definition, index) => metricFieldHtml({
       label: definition.label, unit: definition.unit, value: metricNumber(unit.metrics[index]?.[2]), index })).join('');
@@ -234,10 +236,9 @@ function renderMetricsForm(unit) {
   container.innerHTML = note + typed.join('') + balanceOnly.join('');
 }
 
-// Correções dos "Indicadores do turno": só os campos diferentes do valor da balança, presos ao
-// fechamento atual (``ref``). Sem diferença, nada é gravado e a imagem segue a balança.
-function collectImageOverrides(unit, ref = fieldUnitIndicators(unit, weighingSummary).closingRef) {
-  if (!ref) return null;
+// Guarda os campos diferentes do valor da balança junto da importação e do fechamento exibidos.
+function collectImageOverrides(closing) {
+  if (!closing) return null;
   const values = {};
   document.querySelectorAll('#metrics-form [data-override-key]').forEach(input => {
     const text = input.value.trim();
@@ -248,7 +249,7 @@ function collectImageOverrides(unit, ref = fieldUnitIndicators(unit, weighingSum
       values[input.dataset.overrideKey] = value;
     }
   });
-  return Object.keys(values).length ? { ref, values } : null;
+  return Object.keys(values).length ? { ...closing, values } : null;
 }
 
 function autoResizeTextarea(textarea) {
@@ -421,16 +422,18 @@ function setupEditorEvents() {
       if (saveButton) saveButton.disabled = false;
       return;
     }
-    // Pesagem importada por outra pessoa com o formulário aberto: os indicadores do formulário
-    // são de outro fechamento. As correções feitas (campos diferentes da balança) não se perdem:
-    // com a confirmação, passam para o fechamento novo; os demais campos seguem a balança nova.
-    let overridesRef;
-    if (editorWeighingRef) {
-      await refreshEditorWeighing();
-      const currentRef = fieldUnitIndicators(currentUnit, weighingSummary).closingRef;
-      if (currentRef !== editorWeighingRef) {
-        const corrections = collectImageOverrides(currentUnit, editorWeighingRef);
-        const keep = corrections && currentRef ? await askConfirmation({
+    const closing = editorWeighingClosing;
+    const imageOverrides = collectImageOverrides(closing);
+    if (closing) {
+      const summary = await refreshEditorWeighing();
+      if (!summary && imageOverrides) {
+        showToast('Não foi possível conferir a importação da balança. Tente salvar novamente.', true);
+        if (saveButton) saveButton.disabled = false;
+        return;
+      }
+      const current = fieldUnitIndicators(currentUnit, summary ?? weighingSummary);
+      if (current.closingRef !== closing.ref || current.closingBatchId !== closing.batch_id) {
+        const keep = imageOverrides && current.closingRef ? await askConfirmation({
           kicker: 'Nova pesagem importada',
           title: 'Manter as correções no novo fechamento?',
           message: `Outra pessoa importou um SELECT novo (dados até ${weighingReferenceTime(currentUnit.code)}) com o Preencher aberto. `
@@ -447,7 +450,8 @@ function setupEditorEvents() {
           if (saveButton) saveButton.disabled = false;
           return;
         }
-        overridesRef = currentRef;
+        imageOverrides.ref = current.closingRef;
+        imageOverrides.batch_id = current.closingBatchId;
       }
     }
 
@@ -459,8 +463,6 @@ function setupEditorEvents() {
     updatedUnit.observation_period = editorObservationContext?.appliedPeriod || currentUnit.observation_period || null;
     updatedUnit.changes = document.querySelector('#changes-input').value.trim() || '-';
     updatedUnit.support = document.querySelector('#support-input')?.value.trim() || '-';
-    // Correções = campos alterados em relação ao valor mostrado; presas ao fechamento atual.
-    const imageOverrides = collectImageOverrides(updatedUnit, overridesRef || editorWeighingRef);
     if (imageOverrides) updatedUnit.image_overrides = imageOverrides;
     else delete updatedUnit.image_overrides;
     selectedUnitIndex = index;

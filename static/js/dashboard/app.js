@@ -5,7 +5,7 @@ function setupEvents() {
   setupFieldViewEvents();
   document.addEventListener('click', event => {
     const fillButton = event.target.closest('#open-data-modal');
-    if (!fillButton) return;
+    if (!fillButton || managementReportHistorical()) return;
     openUnitEditor(selectedUnitIndex);
   });
 
@@ -20,7 +20,7 @@ function setupEvents() {
       const result = await importWeighingFile(file);
       const warnings = weighingImportWarnings(result);
       showToast(`${weighingImportMessage(result)}${warnings.length ? ` Atenção: ${warnings.join(' ')}` : ''}`, warnings.length > 0);
-      if (await loadWeighingSummary()) renderDashboard();
+      if (await loadWeighingSummary()) await renderManagementClosing();
     } catch (error) {
       console.error(error);
       showToast(error.message || 'Não foi possível importar a pesagem.', true);
@@ -37,10 +37,13 @@ function setupEvents() {
     button.disabled = true;
     try {
       await refreshDashboardUnit(code);
-      renderDashboard();
       if (getReportUnit() === code) {
-        await refreshFieldFrontNotes(code).catch(error => console.warn('Não foi possível atualizar o acompanhamento.', error));
-      }
+        if (managementReportHistorical()) await renderManagementClosing();
+        else {
+          renderDashboard();
+          await refreshFieldFrontNotes(code).catch(error => console.warn('Não foi possível atualizar o acompanhamento.', error));
+        }
+      } else renderDashboard();
       showToast(`Dados de ${code} atualizados.`);
     } catch (error) {
       console.error(error);
@@ -56,8 +59,13 @@ function setupEvents() {
     closeAllModals();
     activeFieldFrontContext = null;
     fieldFrontNotesSummary = {};
-    renderDashboard();
-    refreshFieldFrontNotes().catch(error => console.error('Falha ao consultar observações.', error));
+    fieldCurrentPeriod = null;
+    if (managementReportHistorical()) {
+      renderManagementClosing().catch(error => showToast(error.message || 'Não foi possível carregar o fechamento.', true));
+    } else {
+      renderDashboard();
+      refreshFieldFrontNotes().catch(error => console.error('Falha ao consultar observações.', error));
+    }
   });
   setupFieldNotesEvents();
   setupEditorEvents();

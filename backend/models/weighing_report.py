@@ -9,12 +9,13 @@ frentes/indústria da posição.
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from ..services.field_status import field_status
 from ..services.operational_shifts import FIELD_TIMEZONE, unit_timezone
 from ..services.xlsx_writer import build_xlsx
-from .units import parse_br_number, list_units
+from .units import parse_br_number, list_units, unit_position_before
 from .weighings import weighing_summary
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -27,11 +28,6 @@ def _time(timestamp: int | None, unit_code: str) -> str:
 
 def _diff(a, b):
     return round(a - b, 1) if a is not None and b is not None else None
-
-
-def _average(values) -> float | None:
-    values = [value for value in values if value is not None]
-    return round(sum(values) / len(values), 1) if values else None
 
 
 def _position_indicators(unit: dict[str, Any]) -> dict[str, Any]:
@@ -48,9 +44,18 @@ def _position_indicators(unit: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_weighing_report(work_date: Any = None, at_time: Any = None) -> tuple[bytes, str]:
-    summary = weighing_summary(work_date, at_time=at_time, include_shift_totals=True)
-    positions = {unit.get("code"): _position_indicators(unit) for unit in list_units()}
+def build_weighing_report(work_date: Any = None, at_time: Any = None, *,
+                         historical_position: bool = False) -> tuple[bytes, str]:
+    summary = weighing_summary(work_date, at_time=at_time, include_shift_totals=True,
+                               historical_position=historical_position)
+    positions = {}
+    if historical_position:
+        for unit in summary["units"]:
+            saved = unit_position_before(unit["code"], unit["position_until"])
+            if saved:
+                positions[unit["code"]] = _position_indicators(saved["unit"])
+    else:
+        positions = {unit.get("code"): _position_indicators(unit) for unit in list_units()}
     day = summary["work_date"]
 
     header = ["Unidade", "Frentes em atividade", "Frentes", "Indústria (t/h)", "Moagem turno (t/h)", "% da indústria",
@@ -63,7 +68,8 @@ def build_weighing_report(work_date: Any = None, at_time: Any = None) -> tuple[b
     hours_rows = [["Unidade", "Hora", "Turno", "Moagem (t)", "Cargas pesadas", "Densidade (t)", "Qtd. CVs", "Cana entregue (t)", "Diferença (t)"]]
     shift_rows = [["Unidade", "Turno", "Horas", "Moagem total (t)", "Entrega total (t)", "Diferença (t)", "Média moagem (t/h)", "Média entrega (t/h)"]]
     front_rows = [["Unidade", "Frente", "Setor", "Seção", "Cargas", "Toneladas", "ATR (kg/t)", "Frente de outra unidade"]]
-    totals = {"active": 0, "fronts": 0, "milling": [], "delivery": [], "stock": [], "atr": [], "day": [], "delivery_day": [], "projection": []}
+    totals = {"active": 0, "fronts": 0, "milling": [], "delivery": [], "stock": [], "day": [], "delivery_day": [], "projection": []}
+    atr_weight_t = atr_sample_kg = 0.0
     for unit in summary["units"]:
         code = unit["code"]
         position = positions.get(code, {"fronts": 0, "active": 0, "industry": None})
@@ -82,7 +88,9 @@ def build_weighing_report(work_date: Any = None, at_time: Any = None) -> tuple[b
                        unit["shift"], _time(unit["closed_until"] - 1 if unit["closed_until"] else None, code)])
         totals["active"] += position["active"]
         totals["fronts"] += position["fronts"]
-        for key, source in (("milling", "milling_shift_tph"), ("delivery", "delivery_shift_tph"), ("atr", "atr"),
+        atr_weight_t += unit["atr_weight_t"]
+        atr_sample_kg += unit["atr_sample_kg"]
+        for key, source in (("milling", "milling_shift_tph"), ("delivery", "delivery_shift_tph"),
                             ("day", "milling_day_t"), ("delivery_day", "delivery_day_t")):
             if value(source) is not None:
                 totals[key].append(value(source))
@@ -99,13 +107,15 @@ def build_weighing_report(work_date: Any = None, at_time: Any = None) -> tuple[b
         for front in unit["fronts"]:
             front_rows.append([code, front["front"], front["sector"], front["section"], front["loads"], front["tons"], front["atr"],
                                front["home_unit"] if front["external"] else ""])
+    total_atr = (float(Decimal(str(atr_sample_kg / atr_weight_t)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+                 if atr_weight_t else None)
     resumo.append(["Total", totals["active"], totals["fronts"], None, round(sum(totals["milling"]), 1) if totals["milling"] else None, None,
                    round(sum(totals["delivery"]), 1) if totals["delivery"] else None, None, None, None, sum(totals["stock"]),
-                   _average(totals["atr"]) if totals["atr"] else None,
+                   total_atr,
                    round(sum(totals["day"]), 1) if totals["day"] else None, round(sum(totals["delivery_day"]), 1) if totals["delivery_day"] else None,
                    round(sum(totals["projection"]), 1) if totals["projection"] else None, None, None, None])
     resumo.append([])
-    resumo.append(["ATR do total: média das unidades com pesagem. % da indústria: moagem do turno ÷ Indústria digitada no Preencher."])
+    resumo.append(["ATR geral ponderado pelo peso das cargas com ATR informado. % da indústria = moagem do turno ÷ indústria digitada no Preencher."])
 
     exchange = [["Frente", "Unidade dona", "Entregou em", "Cargas", "Toneladas", "ATR (kg/t)", "ATR entra na média de"]]
     for item in summary["support"]:

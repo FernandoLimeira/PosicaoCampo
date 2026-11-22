@@ -2,7 +2,8 @@
 // O Excel gerencial continua disponível no botão Exportar Excel.
 let managementReportDate = '';
 let managementReportTime = '';
-let managementReportCustomSummary = null;
+let managementClosing = null;
+let managementClosingRequest = 0;
 
 function managementReportWeighing(summary) {
   return summary?.units?.find(item => item.code === getReportUnit());
@@ -12,27 +13,81 @@ function managementReportLiveDay() {
   return managementReportWeighing(weighingSummary)?.work_date || weighingSummary?.work_date || '';
 }
 
+function managementReportHistorical() {
+  return Boolean(managementReportTime || (managementReportDate && managementReportDate !== managementReportLiveDay()));
+}
+
 function managementReportQuery() {
-  const date = managementReportDate || managementReportLiveDay();
+  const date = managementReportDate || managementReportLiveDay() || saoPauloIsoDate();
   const query = new URLSearchParams({ date });
   if (managementReportTime) query.set('hora', managementReportTime);
   return query;
 }
 
+function managementClosingKey(code) {
+  return `${code}?${managementReportQuery()}`;
+}
+
+function managementReportView(base = units[selectedUnitIndex]) {
+  if (!base) return {};
+  if (!managementReportHistorical()) return {
+    unit: base, summary: weighingSummary, meta: unitMeta[base.code], period: fieldCurrentPeriod,
+    notes: fieldFrontNotesSummary, ready: true, historical: false
+  };
+  const closing = managementClosing?.key === managementClosingKey(base.code) ? managementClosing : null;
+  const data = closing?.data;
+  return {
+    unit: data?.position?.unit || null, summary: data, meta: data?.position?.meta,
+    period: data?.period, notes: data?.note_summaries || {}, cutoff: data?.units?.[0]?.position_until,
+    ready: Boolean(data), error: closing?.error, historical: true
+  };
+}
+
 async function loadManagementReport() {
-  managementReportCustomSummary = managementReportDate || managementReportTime
-    ? await apiRequest(`/api/weighings/summary?${managementReportQuery()}`) : null;
+  const request = ++managementClosingRequest;
+  managementClosing = null;
+  if (!managementReportHistorical()) return;
+  const code = getReportUnit();
+  const key = managementClosingKey(code);
+  const query = managementReportQuery();
+  query.set('unit', code);
+  query.set('position', '1');
+  const isCurrent = () => request === managementClosingRequest && key === managementClosingKey(getReportUnit());
+  try {
+    const data = await apiRequest(`/api/weighings/summary?${query}`, { cache: 'no-store' });
+    if (!isCurrent()) return;
+    if (data?.units?.[0]?.code !== code) throw new Error('Fechamento da unidade indisponível.');
+    if (data.position?.unit) {
+      data.position.unit = normalizeDashboardUnit(data.position.unit, units.findIndex(unit => unit.code === code));
+    }
+    managementClosing = { key, data };
+  } catch (error) {
+    if (!isCurrent()) return;
+    managementClosing = { key, error: true };
+    throw error;
+  }
+}
+
+async function renderManagementClosing() {
+  const loading = loadManagementReport();
+  renderDashboard();
+  try {
+    await loading;
+  } finally {
+    renderDashboard();
+  }
 }
 
 function managementKpi(label, value, detail = '', tone = '') {
   return `<article class="mr-kpi ${tone}"><small>${escapeHtml(label)}</small><strong>${value}</strong>${detail ? `<span>${escapeHtml(detail)}</span>` : ''}</article>`;
 }
 
-function managementReportHtml() {
-  const unit = units.find(item => item.code === getReportUnit());
-  if (!unit) return '';
-  const live = !managementReportTime && (!managementReportDate || managementReportDate === managementReportLiveDay());
-  const summary = live ? weighingSummary : managementReportCustomSummary || weighingSummary;
+function managementReportHtml(view) {
+  const base = units.find(item => item.code === getReportUnit());
+  if (!base) return '';
+  view ||= managementReportView(base);
+  const unit = view.unit || { code: base.code, rows: [] };
+  const summary = view.summary;
   const weighing = managementReportWeighing(summary);
   const item = fieldUnitIndicators(unit, summary);
   const share = fieldIndustryShare(item);
@@ -56,9 +111,10 @@ function managementReportHtml() {
     }).replace(',', '') : '';
   const loadCount = ['PPT', 'NRD'].includes(unit.code) && Number.isInteger(weighing?.loads_day)
     ? ` · ${fieldIndicatorNumber(weighing.loads_day)} ${weighing.loads_day === 1 ? 'carga pesada' : 'cargas pesadas'}` : '';
-  const source = until
-    ? `Balança até ${escapeHtml(until)}${timeZone === 'America/Sao_Paulo' ? '' : ' (MS)'}${loadCount}`
-    : 'Sem pesagem no fechamento. Indicadores do Preencher.';
+  const source = view.error ? 'Fechamento indisponível.'
+    : !view.ready ? 'Carregando fechamento…'
+    : until ? `Balança até ${escapeHtml(until)}${timeZone === 'America/Sao_Paulo' ? '' : ' (MS)'}${loadCount}`
+    : view.unit ? 'Sem pesagem no fechamento. Indicadores do Preencher.' : 'Sem pesagem ou posição no fechamento.';
   return `<section class="dashboard-block management-report" aria-labelledby="management-report-title">
     <header class="mr-header">
       <div><h2 id="management-report-title">Visão geral · ${escapeHtml(unit.code)}</h2><p>${source}</p></div>
@@ -68,19 +124,21 @@ function managementReportHtml() {
           <input id="management-report-time" type="time" value="${escapeHtml(managementReportTime)}" /></label>
       </div>
     </header>
-    <div class="mr-kpis">${kpis}</div>
+    ${view.ready ? `<div class="mr-kpis">${kpis}</div>` : ''}
   </section>`;
 }
 
-function renderManagementReport() {
+function renderManagementReport(view) {
   const overview = document.querySelector('#field-overview');
-  if (overview) overview.innerHTML = managementReportHtml();
+  if (overview) overview.innerHTML = managementReportHtml(view);
 }
 
 async function exportManagementReport(button) {
   button.disabled = true;
   try {
-    const response = await fetch(`/api/weighings/report.xlsx?${managementReportQuery()}`, { credentials: 'same-origin' });
+    const query = managementReportQuery();
+    if (managementReportHistorical()) query.set('position', '1');
+    const response = await fetch(`/api/weighings/report.xlsx?${query}`, { credentials: 'same-origin' });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       throw new Error(data.error || 'Não foi possível gerar o Excel.');
@@ -102,11 +160,11 @@ function setupManagementReportEvents() {
     managementReportDate = document.querySelector('#management-report-date')?.value || '';
     managementReportTime = document.querySelector('#management-report-time')?.value || '';
     try {
-      await loadManagementReport();
-      renderManagementReport();
+      await renderManagementClosing();
+      if (!managementReportHistorical()) await refreshFieldFrontNotes();
     } catch (error) {
       console.error(error);
-      showToast(error.message || 'Não foi possível carregar os indicadores.', true);
+      showToast(error.message || 'Não foi possível carregar o fechamento.', true);
     }
   });
   document.addEventListener('click', event => {

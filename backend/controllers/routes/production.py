@@ -16,6 +16,7 @@ from ...services.service_order_import import MAX_SERVICE_ORDER_UPLOAD_BYTES, par
 from ..http import _multipart_file
 from ...models.production import (
     delete_group as delete_production_group,
+    delete_responsibility_rule,
     delete_service_front as delete_production_service_front,
     delete_status as delete_production_status,
     get_daily_summary as get_production_daily_summary,
@@ -23,6 +24,7 @@ from ...models.production import (
     get_user_access as get_production_user_access,
     list_catalog as list_production_catalog,
     list_my_items as list_production_my_items,
+    list_responsibility_rules,
     list_sector_base_entries as list_production_sector_base,
     list_sector_options as list_production_sector_options,
     list_statuses as list_production_statuses,
@@ -32,6 +34,7 @@ from ...models.production import (
     save_my_item as save_production_my_item,
     save_items_sheet as save_production_items_sheet,
     save_my_items as save_production_my_items,
+    save_responsibility_rule,
     save_service_front as save_production_service_front,
     save_status as save_production_status,
 )
@@ -171,6 +174,30 @@ def handle(req):
             return req.json(HTTPStatus.OK, list_production_catalog(user["id"], unit_code=unit_code, include_inactive=include_inactive))
 
         return req.guarded(catalog, bad_request=ValueError)
+
+    if path == "/api/production/catalog/responsibilities" and method in {"GET", "POST"}:
+        if not user:
+            return req.unauthorized()
+        if method == "GET":
+            return req.guarded(lambda: req.json(HTTPStatus.OK, {
+                "rules": list_responsibility_rules(user["id"], req.param("unit", "")),
+            }))
+        return req.guarded(lambda: req.json(HTTPStatus.CREATED, {
+            "id": save_responsibility_rule(user["id"], req.body()),
+        }))
+
+    if path.startswith("/api/production/catalog/responsibilities/") and method in {"PUT", "DELETE"}:
+        if not user:
+            return req.unauthorized()
+
+        def responsibility_item():
+            rule_id = _last_id(path)
+            if method == "PUT":
+                return req.json(HTTPStatus.OK, {"id": save_responsibility_rule(user["id"], req.body(), rule_id=rule_id)})
+            delete_responsibility_rule(user["id"], req.param("unit", ""), rule_id)
+            return req.json(HTTPStatus.OK, {"ok": True})
+
+        return req.guarded(responsibility_item)
 
     if path == "/api/production/catalog/groups" and method == "POST":
         if not user:

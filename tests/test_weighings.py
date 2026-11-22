@@ -365,6 +365,47 @@ class WeighingTests(unittest.TestCase):
             self.assertEqual([(h["hour"], h["loads"], h["milling_t"]) for h in cutoff_17["hours"][-2:]],
                              [(15, 1, 30.0), (16, 2, 90.0)])
 
+    def test_sp_uses_the_scale_exit_day_when_movement_date_differs(self):
+        rows = [HEADER]
+        for instance, front in (("201", "05"), ("204", "20")):
+            rows.extend((
+                load(instance, "1", front, "361", "1173", "30000", "13/11/2026 23:59:59",
+                     patio="13/11/2026 23:30:00"),
+                load(instance, "2", front, "361", "1173", "70000", "14/11/2026 00:00:00",
+                     patio="13/11/2026 23:40:00"),
+            ))
+            rows[-1][1] = "13/11/2026"
+        records = parse_weighing_file(xlsx(rows))["records"]
+        imported = weighings.import_weighings(self.admin["id"], records)
+        latest = weighings.weighing_summary()
+        self.assertEqual(latest["work_date"], "2026-11-14")
+        for code in ("PPT", "NRD"):
+            self.assertEqual(imported["dates_by_unit"][code], {"2026-11-13": 1, "2026-11-14": 1})
+            before = weighings.weighing_summary("2026-11-13", unit_code=code)["units"][0]
+            after = next(unit for unit in latest["units"] if unit["code"] == code)
+            for unit, hour, tons in ((before, 23, 30.0), (after, 0, 70.0)):
+                self.assertEqual((unit["loads_day"], unit["milling_day_t"]), (1, tons))
+                self.assertEqual([(h["hour"], h["loads"], h["milling_t"]) for h in unit["hours"] if h["loads"]],
+                                 [(hour, 1, tons)])
+
+    def test_reimports_have_distinct_batch_ids_at_the_same_closing_and_second(self):
+        source = [HEADER + ["DT_EXTRACAO"],
+                  load("204", "1", "20", "300", "3500", "30000", "14/11/2026 15:30:00",
+                       patio="14/11/2026 15:10:00") + ["14/11/2026 16:20:00"]]
+        records = parse_weighing_file(xlsx(source))["records"]
+        with patch.object(weighings.time, "time", return_value=clock("16:20")):
+            weighings.import_weighings(self.admin["id"], records, filename="a.xlsx")
+            before = weighings.weighing_summary(unit_code="NRD")
+            records[0]["net_kg"] = 35000
+            weighings.import_weighings(self.admin["id"], records, filename="a.xlsx")
+            after = weighings.weighing_summary(unit_code="NRD")
+        self.assertEqual(before["last_import"]["imported_at"], after["last_import"]["imported_at"])
+        self.assertEqual(before["units"][0]["data_until"], after["units"][0]["data_until"])
+        self.assertNotEqual(before["last_import"]["batch_id"], after["last_import"]["batch_id"])
+        for summary, tons in ((before, 30.0), (after, 35.0)):
+            self.assertEqual(summary["units"][0]["batch_id"], summary["last_import"]["batch_id"])
+            self.assertEqual(summary["units"][0]["milling_day_t"], tons)
+
     def test_ms_stock_uses_the_selected_hour_with_or_without_extraction_time(self):
         rows = [
             load("402", "1", "411", "90441", "2", "30000", "14/11/2026 10:36:30", patio="14/11/2026 10:10:00"),
@@ -494,6 +535,28 @@ class WeighingTests(unittest.TestCase):
         for code in ("PPT", "NRD"):
             self.assertEqual((turns[code][3], turns[code][6]), ("90.2", "22.6"))
         self.assertEqual((turns["RBR"][3], turns["RBR"][6]), ("90.1", "30"))
+
+    def test_report_atr_weights_just_the_loads_with_valid_atr_and_rounds_the_total(self):
+        from backend.models.weighing_report import build_weighing_report
+        from backend.services.xlsx_reader import open_archive, plain_cell_value, read_sheet_rows, workbook_sheets
+
+        source = [HEADER + ["DT_EXTRACAO"], *[
+            row + ["14/11/2026 16:20:00"] for row in (
+                load("201", "1", "05", "361", "1173", "25000", "14/11/2026 15:15:00", atr="100,005"),
+                load("201", "2", "05", "361", "1173", "25000", "14/11/2026 15:35:00"),
+                load("204", "3", "20", "300", "3500", "75000", "14/11/2026 15:40:00", atr="120,005"),
+            )
+        ]]
+        weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx(source))["records"])
+        summary = {unit["code"]: unit for unit in weighings.weighing_summary()["units"]}
+        self.assertEqual((summary["PPT"]["milling_day_t"], summary["PPT"]["atr_weight_t"]), (50.0, 25.0))
+        self.assertEqual((summary["NRD"]["milling_day_t"], summary["NRD"]["atr_weight_t"]), (75.0, 75.0))
+        content, _ = build_weighing_report()
+        with open_archive(content, "inválido") as archive:
+            path = dict(workbook_sheets(archive))["Resumo"]
+            rows = dict((row[0], row) for row, _ in read_sheet_rows(
+                archive, path, lambda cell: plain_cell_value(cell, []), max_rows=50, max_columns=24, keep_empty_rows=False))
+        self.assertEqual(rows["Total"][11], "115.01")
 
     def test_stopped_projection_in_the_latest_close_and_excel(self):
         from backend.models.weighing_report import build_weighing_report

@@ -36,6 +36,7 @@ from datetime import date, datetime, time as dtime
 from decimal import ROUND_HALF_UP, Decimal
 from functools import partial
 from typing import Any
+from uuid import uuid4
 
 from ..services.front_identifiers import front_key, natural_key
 from ..services.operational_shifts import FIELD_TIMEZONE, MS_UNIT_CODES, unit_timezone
@@ -44,6 +45,7 @@ from .storage import connection, validate_actor
 
 MAX_WEIGHING_RECORDS = 150_000
 STOCK_WINDOW_SECONDS = 24 * 3600
+WEIGHING_BATCH_KEY = "field_weighings_batch_id"
 LAST_HOURS = 3
 JULIETAS_PER_TRUCK = 2
 # Julietas do mesmo caminhão que chegam até 30 min depois da primeira são o mesmo CV.
@@ -102,7 +104,26 @@ def import_weighings(user_id: int, records: Any, *, filename: str = "") -> dict[
         except (KeyError, TypeError, ValueError, AttributeError) as exc:
             raise ValueError(f"Carga {position} com dados inválidos.") from exc
 
+    keys = {(values[0], values[1]) for values in prepared}
+    by_unit = {code: 0 for code in ALLOWED_UNIT_CODES}
+    # Data usada no fechamento: saída da balança no Polo SP, movimento no Polo MS.
+    dates_by_unit: dict[str, dict[str, int]] = {code: {} for code in ALLOWED_UNIT_CODES}
+    for position, values in enumerate(prepared, start=1):
+        code, _, movement = values[:3]
+        by_unit[code] += 1
+        work_day = movement
+        if code not in MS_UNIT_CODES:
+            try:
+                work_day = datetime.fromtimestamp(values[12], FIELD_TIMEZONE).date().isoformat() if values[12] else ""
+            except (OSError, OverflowError, ValueError) as exc:
+                raise ValueError(f"Carga {position} com saída da balança inválida.") from exc
+        if work_day:
+            days = dates_by_unit[code]
+            days[work_day] = days.get(work_day, 0) + 1
+    dates = sorted({day for days in dates_by_unit.values() for day in days})
+
     now = int(time.time())
+    batch_id = uuid4().hex
     placeholders = ", ".join("?" for _ in range(len(_COLUMNS) + 3))
     updates = ", ".join(f"{column}=excluded.{column}" for column in _COLUMNS[2:])
     with connection() as conn:
@@ -121,16 +142,7 @@ def import_weighings(user_id: int, records: Any, *, filename: str = "") -> dict[
                     imported_at=excluded.imported_at""",
             [values + (str(filename or "")[:200], user_id, now) for values in prepared],
         )
-    keys = {(values[0], values[1]) for values in prepared}
-    by_unit = {code: 0 for code in ALLOWED_UNIT_CODES}
-    # Cargas pesadas por unidade e data de movimento: mostra na importação se uma
-    # unidade veio sem cargas ou com outra data.
-    dates_by_unit: dict[str, dict[str, int]] = {code: {} for code in ALLOWED_UNIT_CODES}
-    for values in prepared:
-        by_unit[values[0]] += 1
-        if values[2]:
-            dates_by_unit[values[0]][values[2]] = dates_by_unit[values[0]].get(values[2], 0) + 1
-    dates = sorted({values[2] for values in prepared if values[2]})
+        conn.execute("INSERT OR REPLACE INTO schema_info(key,value) VALUES (?,?)", (WEIGHING_BATCH_KEY, batch_id))
     return {
         "imported": len(keys), "removed": removed,
         "by_unit": by_unit, "dates": dates, "dates_by_unit": dates_by_unit,
@@ -158,10 +170,19 @@ def _tons(rows) -> float:
     return sum((row["net_kg"] or 0) for row in rows) / 1000
 
 
+def _atr_sample(rows) -> tuple[float, float]:
+    weight_kg = atr_times_weight_kg = 0.0
+    for row in rows:
+        atr, weight = row["atr"], row["net_kg"]
+        if atr is not None and 0 < atr < 1000 and weight and weight > 0:
+            weight_kg += weight
+            atr_times_weight_kg += atr * weight
+    return weight_kg / 1000, atr_times_weight_kg / 1000
+
+
 def _weighted_atr(rows) -> float | None:
-    weighted = [(row["atr"], row["net_kg"] or 0) for row in rows if row["atr"] is not None and row["net_kg"]]
-    total = sum(weight for _, weight in weighted)
-    return round(sum(atr * weight for atr, weight in weighted) / total, 2) if total else None
+    tons, atr_kg = _atr_sample(rows)
+    return round(atr_kg / tons, 2) if tons else None
 
 
 def _round(value: float | None, digits: int = 1) -> float | None:
@@ -224,7 +245,8 @@ def _daily_projection(hours, metric, *, by_shift: bool) -> float | None:
 
 
 def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time: Any = None,
-                     unit_code: str | None = None, include_shift_totals: bool = False) -> dict[str, Any]:
+                     unit_code: str | None = None, include_shift_totals: bool = False,
+                     historical_position: bool = False) -> dict[str, Any]:
     """Resumo do dia da pesagem importada (sem data: o dia mais recente do arquivo).
 
     As horas vão de 00:00 até a última hora que veio no SELECT importado, independente do
@@ -236,40 +258,47 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
         if unit_code not in ALLOWED_UNIT_CODES:
             raise ValueError("Unidade inválida.")
     with connection() as conn:
-        extracted = conn.execute("SELECT MAX(extracted_at) FROM field_weighings").fetchone()[0]
-        latest = conn.execute(
-            "SELECT MAX(movement_date) FROM field_weighings WHERE scale_out_at IS NOT NULL AND movement_date <> ''"
-        ).fetchone()[0]
-    # Com DT_EXTRACAO: fecha até a última hora cheia encerrada quando o SELECT rodou (os fusos
-    # dos polos diferem em horas inteiras, então a hora cheia é a mesma nos dois).
-    extraction_cut = extracted - extracted % 3600 if extracted else None
-    if extraction_cut:
-        # Dia da última hora fechada (00:20 fecha a hora 23 do dia anterior).
-        latest_day = datetime.fromtimestamp(extraction_cut - 1, FIELD_TIMEZONE).date()
-    else:
-        latest_day = date.fromisoformat(latest) if latest else datetime.now(FIELD_TIMEZONE).date()
-    if work_date in (None, ""):
-        selected = latest_day
-    else:
+        # A data de extração, as cargas e o identificador precisam vir da mesma importação.
+        conn.execute("BEGIN")
+        extracted, latest_sp, latest_ms = conn.execute(
+            """SELECT MAX(extracted_at),
+                      MAX(CASE WHEN unit_code IN ('PPT','NRD') THEN scale_out_at END),
+                      MAX(CASE WHEN unit_code IN ('RBR','PST') AND scale_out_at IS NOT NULL
+                               THEN NULLIF(movement_date, '') END)
+               FROM field_weighings"""
+        ).fetchone()
+        extraction_cut = extracted - extracted % 3600 if extracted else None
+        if extraction_cut:
+            # 00:20 fecha a hora 23 do dia anterior.
+            latest_day = datetime.fromtimestamp(extraction_cut - 1, FIELD_TIMEZONE).date()
+        else:
+            latest_days = []
+            if latest_sp:
+                latest_days.append(datetime.fromtimestamp(latest_sp, FIELD_TIMEZONE).date())
+            if latest_ms:
+                latest_days.append(date.fromisoformat(latest_ms))
+            latest_day = max(latest_days, default=datetime.now(FIELD_TIMEZONE).date())
         try:
-            selected = date.fromisoformat(str(work_date))
+            selected = latest_day if work_date in (None, "") else date.fromisoformat(str(work_date))
         except ValueError as exc:
             raise ValueError("Data da pesagem inválida.") from exc
-    day = selected.isoformat()
-    day_start = int(datetime.combine(selected, dtime.min, FIELD_TIMEZONE).timestamp())
-    day_end = day_start + 86400
-    if at_time not in (None, ""):
-        try:
-            hour, minute = (int(part) for part in str(at_time).split(":"))
-            if not (0 <= hour <= 23 and 0 <= minute <= 59):
-                raise ValueError
-        except ValueError as exc:
-            raise ValueError("Horário de fechamento inválido (use HH:MM).") from exc
-        now = day_start + hour * 3600 + minute * 60
-    with connection() as conn:
+        day = selected.isoformat()
+        day_start = int(datetime.combine(selected, dtime.min, FIELD_TIMEZONE).timestamp())
+        day_end = day_start + 86400
+        if at_time not in (None, ""):
+            try:
+                hour, minute = (int(part) for part in str(at_time).split(":"))
+                if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                    raise ValueError
+            except ValueError as exc:
+                raise ValueError("Horário de fechamento inválido (use HH:MM).") from exc
+            now = day_start + hour * 3600 + minute * 60
         owners = _front_owners(conn)
         weighed = conn.execute(
-            "SELECT * FROM field_weighings WHERE scale_out_at IS NOT NULL AND movement_date=?", (day,)
+            """SELECT * FROM field_weighings WHERE
+               (unit_code IN ('PPT','NRD') AND scale_out_at>=? AND scale_out_at<?)
+               OR (unit_code IN ('RBR','PST') AND scale_out_at IS NOT NULL AND movement_date=?)""",
+            (day_start, day_end, day),
         ).fetchall()
         # Folga de 1 h para o Polo MS e cargas anteriores que ainda podem compor o estoque de NRD.
         arrival_rows = conn.execute(
@@ -285,6 +314,8 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
                FROM field_weighings w LEFT JOIN auth.users u ON u.id=w.imported_by
                ORDER BY w.imported_at DESC LIMIT 1"""
         ).fetchone()
+        batch = conn.execute("SELECT value FROM schema_info WHERE key=?", (WEIGHING_BATCH_KEY,)).fetchone()
+        batch_id = batch["value"] if batch and last_import else None
 
     # Referência = momento em que o arquivo está completo: a última saída da balança,
     # limitada à última chegada do dia. Saídas depois dela ficam para a próxima importação.
@@ -380,11 +411,11 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
                 "loads": len(milled), "density_t": density, "trucks": trucks,
                 "delivery_t": _round(delivery),
             })
-        # O status atual das frentes só vale no fechamento mais recente. Exige dados
-        # da própria unidade para distinguir moagem zero de uma unidade sem pesagem.
+        # A posição histórica permite cruzar o status das frentes com a moagem do corte.
+        # Na visão atual, os status só valem para o fechamento mais recente.
         zero_milling_at_latest_close = bool(
-            selected == latest_day and exact and exact[-1]["milling"] == 0
-            and unit_data_until < unit_closed_until
+            exact and exact[-1]["milling"] == 0
+            and (historical_position or (selected == latest_day and unit_data_until < unit_closed_until))
             and (rows or stock or any(unit_start <= _arrival(row) < unit_closed_until for row in arrivals))
         )
         shift_hours = [item for item in exact if item["shift"] == unit_shift]
@@ -427,6 +458,7 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
             if entry["external"]:
                 support.append({"front": front, "from_unit": owner, "to_unit": code,
                                 "loads": entry["loads"], "tons": entry["tons"], "atr": entry["atr"]})
+        atr_weight_t, atr_sample_kg = _atr_sample(rows)
         units.append({
             "code": code,
             "work_date": day,
@@ -435,8 +467,10 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
             "reference_at": unit_reference,
             # Último dado do SELECT importado para esta unidade (polo), no seu fuso.
             "data_until": unit_data_until,
+            "batch_id": batch_id,
             "closed_hours": len(unit_hours),
             "closed_until": unit_closed_until,
+            "position_until": unit_closed_until or (int(now) // 3600 * 3600 if now is not None else unit_start + 86400),
             "shift": unit_shift,
             # Faixas dos turnos A, B e C da unidade ([início, fim) em horas), para o gráfico.
             "shift_hours": {shift: [span.start, span.stop] for shift, span in _shift_table(code).items()},
@@ -451,7 +485,9 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
             "delivery_projection_t": _daily_projection(exact, "delivery", by_shift=code == "NRD"),
             "zero_milling_at_latest_close": zero_milling_at_latest_close,
             "stock_loads": len(stock),
-            "atr": _weighted_atr(rows),
+            "atr": round(atr_sample_kg / atr_weight_t, 2) if atr_weight_t else None,
+            "atr_weight_t": atr_weight_t,
+            "atr_sample_kg": atr_sample_kg,
             "hours": hours,
             **({"shift_totals": shift_totals} if include_shift_totals else {}),
             "fronts": front_list,
@@ -466,7 +502,7 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
         "closed_until": closed_until,
         "units": units,
         "support": support,
-        "last_import": dict(last_import) if last_import else None,
+        "last_import": {**dict(last_import), "batch_id": batch_id} if last_import else None,
     }
 
 

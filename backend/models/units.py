@@ -76,8 +76,7 @@ def _nonnegative_number(value: Any, field: str) -> int | float:
 
 
 # Correções da imagem "Troca de Turno CTT" sobre os indicadores da balança ("Indicadores do
-# turno" do Preencher). Valem só para o fechamento em que foram feitas: ``ref`` é o "dados até" da
-# pesagem da unidade naquele momento; outra importação muda o fechamento e elas deixam de valer.
+# turno" do Preencher). Valem para a importação (``batch_id``) e seu fechamento (``ref``).
 IMAGE_OVERRIDE_KEYS = ("millingShift", "deliveryShift", "milling3h", "delivery3h", "stock", "atr", "day", "projection")
 
 
@@ -89,6 +88,9 @@ def _image_overrides(raw: Any) -> dict[str, Any] | None:
     ref = raw.get("ref")
     if isinstance(ref, bool) or not isinstance(ref, int) or not 0 < ref < 2 ** 40:
         raise ValueError("Fechamento das correções da imagem inválido.")
+    batch_id = raw.get("batch_id")
+    if batch_id is not None and (not isinstance(batch_id, str) or not re.fullmatch(r"[0-9a-f]{32}", batch_id)):
+        raise ValueError("Importação das correções da imagem inválida.")
     values: dict[str, float] = {}
     for key, value in raw["values"].items():
         if key not in IMAGE_OVERRIDE_KEYS:
@@ -97,7 +99,7 @@ def _image_overrides(raw: Any) -> dict[str, Any] | None:
         if number > 10_000_000:
             raise ValueError("Correção da imagem excede o valor permitido.")
         values[key] = number
-    return {"ref": ref, "values": values} if values else None
+    return {"ref": ref, "values": values, **({"batch_id": batch_id} if batch_id is not None else {})} if values else None
 
 
 def _metric_value_text(value: Any, unit: str) -> str:
@@ -316,6 +318,26 @@ def list_unit_versions() -> dict[str, Any]:
     with connection() as conn:
         rows = conn.execute("SELECT code,version FROM units WHERE code IN ('PPT','NRD','RBR','PST')").fetchall()
     return {"meta": {row["code"]: {"version": int(row["version"] or 1)} for row in rows}}
+
+
+def unit_position_before(unit_code: str, cutoff: int) -> dict[str, Any] | None:
+    """Última posição registrada antes do início da hora seguinte ao fechamento."""
+    with connection() as conn:
+        row = conn.execute(
+            """SELECT saved.*,users.name AS updated_by_name FROM (
+                 SELECT data_json,version,updated_at,updated_by FROM units WHERE code=?1 AND updated_at<?2
+                 UNION ALL
+                 SELECT after_json,version,created_at,user_id FROM unit_history WHERE unit_code=?1 AND created_at<?2
+               ) saved LEFT JOIN auth.users users ON users.id=saved.updated_by
+               ORDER BY saved.updated_at DESC,saved.version DESC LIMIT 1""",
+            (unit_code, cutoff),
+        ).fetchone()
+    unit = _decode_unit(row) if row else None
+    if not unit:
+        return None
+    return {"unit": {**unit, "code": unit_code, "name": UNIT_DEFINITIONS[unit_code]["name"]},
+            "meta": {"version": row["version"], "updated_at": row["updated_at"],
+                     "updated_by": row["updated_by_name"] or "-"}}
 
 
 def list_units() -> list[dict[str, Any]]:

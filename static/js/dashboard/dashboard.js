@@ -64,17 +64,17 @@ async function loadWeighingSummary() {
   return weighingSummary;
 }
 
-function unitWeighing(code) {
-  if (!weighingSummary?.reference_at) return null;
-  const unit = (weighingSummary.units || []).find(item => item.code === code);
+function unitWeighing(code, summary = weighingSummary) {
+  if (!summary?.reference_at) return null;
+  const unit = (summary.units || []).find(item => item.code === code);
   return unit && (unit.loads_day > 0 || unit.zero_milling_at_latest_close) ? unit : null;
 }
 
 // Último dado do SELECT importado (dia e hora), no horário local da unidade (Polo MS: uma
 // hora a menos que Brasília). Ex.: "14/11 22:29".
-function weighingReferenceTime(code) {
-  const unit = code ? (weighingSummary?.units || []).find(item => item.code === code) : null;
-  const moment = unit?.data_until || weighingSummary?.reference_at;
+function weighingReferenceTime(code, summary = weighingSummary, closed = false) {
+  const unit = code ? (summary?.units || []).find(item => item.code === code) : null;
+  const moment = closed && unit?.closed_until ? unit.closed_until - 1 : unit?.data_until || summary?.reference_at;
   const timeZone = unit?.timezone || 'America/Sao_Paulo';
   const text = moment ? new Date(moment * 1000).toLocaleString('pt-BR', {
     timeZone, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '') : '';
@@ -83,8 +83,8 @@ function weighingReferenceTime(code) {
 
 // ATR da frente pela balança desta unidade (média ponderada pelo peso), usado quando não foi
 // digitado. Cana da frente pesada em outra unidade entra no ATR daquela (troca de cana).
-function weighingFrontAtr(unitCode, front) {
-  const weighing = unitWeighing(unitCode);
+function weighingFrontAtr(unitCode, front, summary = weighingSummary) {
+  const weighing = unitWeighing(unitCode, summary);
   const key = canonicalFieldFrontKey(front);
   const match = key && weighing?.fronts?.find(item => canonicalFieldFrontKey(item.front) === key);
   return match?.atr ? match.atr.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
@@ -213,38 +213,42 @@ function getUnitStateLabel(border) {
   return 'Operação normal';
 }
 
-function renderUnitSelection() {
+function renderUnitSelection(view) {
   selectedUnitIndex = Math.max(0, units.findIndex(unit => unit.code === getReportUnit()));
   if (!units[selectedUnitIndex]) selectedUnitIndex = 0;
 
   const unit = units[selectedUnitIndex];
+  view ||= managementReportView(unit);
   const previewLabel = document.querySelector('#preview-unit-label');
   if (previewLabel) previewLabel.textContent = `${unit.code} — ${unit.name}`;
   const shiftLabel = document.querySelector('#preview-unit-shift');
-  if (shiftLabel && fieldCurrentPeriod) {
-    shiftLabel.textContent = `Turno ${fieldCurrentPeriod.shift} · ${fieldCurrentPeriod.work_date.split('-').reverse().join('/')}`;
+  if (shiftLabel) {
+    const period = view.period;
+    shiftLabel.textContent = period ? `Turno ${period.shift} · ${period.work_date.split('-').reverse().join('/')}`
+      : view.historical ? 'Fechamento selecionado' : 'Consultando turno…';
     const hours = { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo', hour12: false };
-    const start = new Date(fieldCurrentPeriod.start_at * 1000).toLocaleTimeString('pt-BR', hours);
-    const end = new Date(fieldCurrentPeriod.end_at * 1000).toLocaleTimeString('pt-BR', hours);
-    shiftLabel.setAttribute('title', `${start}–${end} · Horário de Brasília`);
+    const range = period ? [period.start_at, period.end_at].map(time => new Date(time * 1000).toLocaleTimeString('pt-BR', hours)).join('–') : '';
+    shiftLabel.setAttribute('title', range ? `${range} · Horário de Brasília` : '');
   }
 
-  const meta = unitMeta[unit.code] || {};
+  const meta = view.meta || {};
   const updatedAt = document.querySelector('#preview-unit-updated');
   if (updatedAt) {
     updatedAt.textContent = meta.updated_at
       ? `Posição atualizada: ${formatServerTimestamp(meta.updated_at, 'America/Sao_Paulo')}`
-      : 'Posição ainda não atualizada';
-    updatedAt.setAttribute('title', meta.updated_at ? `Atualização feita por ${meta.updated_by || '-'}` : 'Aguardando primeira atualização no servidor');
+      : view.error ? 'Fechamento indisponível' : !view.ready ? 'Consultando posição…'
+        : view.historical ? 'Sem posição salva no corte' : 'Posição ainda não atualizada';
+    updatedAt.setAttribute('title', meta.updated_at ? `Atualização feita por ${meta.updated_by || '-'}` : '');
   }
   const state = document.querySelector('#preview-unit-state');
   if (state) {
-    state.textContent = getUnitStateLabel(unit.border);
-    state.className = `unit-state dashboard-unit-state ${unit.border}`;
+    state.textContent = view.unit ? getUnitStateLabel(view.unit.border) : !view.ready && !view.error ? 'Consultando situação…' : 'Posição indisponível';
+    state.className = `unit-state dashboard-unit-state ${view.unit?.border || ''}`;
   }
 
   const fillButton = document.querySelector('#open-data-modal');
   if (fillButton) {
+    fillButton.hidden = view.historical;
     fillButton.textContent = `Preencher ${unit.code}`;
     fillButton.setAttribute('aria-label', `Preencher informações da unidade ${unit.code} — ${unit.name}`);
   }
@@ -315,8 +319,9 @@ function panelGauge(fraction, tone) {
     ${width ? `<rect class="dash-gauge-fill is-${escapeHtml(tone)}" width="${width.toFixed(1)}" height="8" rx="1.6" ry="4"></rect>` : ''}</svg>`;
 }
 
-function unitIndicatorsHtml(unit) {
-  const item = fieldUnitIndicators(unit, weighingSummary);
+function unitIndicatorsHtml(unit, view) {
+  const summary = view ? view.summary : weighingSummary;
+  const item = fieldUnitIndicators(unit, summary);
   const number = fieldIndicatorNumber;
   const share = fieldIndustryShare(item);
   const corrected = key => (item.corrected?.includes(key) ? ' <span class="uc-corrected" title="Corrigido no Preencher">corrigido</span>' : '');
@@ -324,7 +329,8 @@ function unitIndicatorsHtml(unit) {
     ? panelDiff(delivery - milling, 't/h') : '');
   const cell = (label, value, unitLabel, key, extra = '') => `<div class="uc-metric"><small>${escapeHtml(label)}${corrected(key)}</small>
       <strong>${number(value)} <em>${escapeHtml(unitLabel)}</em></strong>${extra}</div>`;
-  const source = item.closingRef ? `Balança até ${escapeHtml(weighingReferenceTime(unit.code))}` : 'Digitados no Preencher';
+  const source = item.closingRef ? `Balança até ${escapeHtml(weighingReferenceTime(unit.code, summary, view?.historical))}`
+    : view && !view.unit ? 'Sem registro no fechamento' : 'Digitados no Preencher';
   return `<section class="dashboard-block uc-indicators" aria-label="Indicadores do turno">
       <header class="uc-indicators-head"><h3>Indicadores do turno</h3><small>${source}</small></header>
       <div class="uc-milling">
@@ -341,7 +347,7 @@ function unitIndicatorsHtml(unit) {
     </section>`;
 }
 
-function unitCard(unit) {
+function unitCard(unit, view) {
   const summary = fieldUnitSummary(unit);
   const filters = [
     ['all', 'Todas', summary.total],
@@ -357,20 +363,22 @@ function unitCard(unit) {
       const statusClass = fieldDashboardStatusClass(status);
       const group = getFieldStatus(status).group === 'active' ? 'active' : 'attention';
       const farm = fieldFarmFromSector(sector);
+      const weighedAtr = atr ? '' : weighingFrontAtr(unit.code, front, view ? view.summary : weighingSummary);
       return `
       <tr class="field-front-row" data-field-front-index="${index}" data-field-group="${group}">
         <td data-label="Frente" class="field-front-id-cell"><span class="front-cell"><i class="status-dot ${escapeHtml(color)}" aria-hidden="true"></i><strong>${escapeHtml(front)}</strong></span></td>
         <td data-label="Setor" class="field-sector-cell">${escapeHtml(sector)}</td>
         <td data-label="Fazenda" class="field-farm-cell" title="${escapeHtml(farm.note || farm.name)}">${escapeHtml(farm.name)}</td>
         <td data-label="Status" class="field-front-status-cell"><span class="field-status-chip ${statusClass}">${escapeHtml(status)}</span></td>
-        <td data-label="ATR" class="field-atr-cell"${!atr && weighingFrontAtr(unit.code, front) ? ' title="ATR da balança (Entrega CTT)"' : ''}>${escapeHtml(atr || weighingFrontAtr(unit.code, front) || '—')}</td>
-        <td data-label="Observações" class="field-observation-cell" data-field-summary-index="${index}" tabindex="0" aria-label="Ver acontecimentos em aberto da Frente ${escapeHtml(front)}">${fieldNotePreview(front)}</td>
+        <td data-label="ATR" class="field-atr-cell"${weighedAtr ? ' title="ATR da balança (Entrega CTT)"' : ''}>${escapeHtml(atr || weighedAtr || '—')}</td>
+        <td data-label="Observações" class="field-observation-cell" data-field-summary-index="${index}" tabindex="0" aria-label="Ver acontecimentos${view?.historical ? '' : ' em aberto'} da Frente ${escapeHtml(front)}">${fieldNotePreview(front, view)}</td>
         <td data-label="Detalhes" class="field-front-action-cell"><button type="button" class="field-front-details-button" data-field-front-index="${index}" aria-label="Ver detalhes da Frente ${escapeHtml(front)}" title="Ver detalhes da Frente ${escapeHtml(front)}">Ver</button></td>
       </tr>`;
     }).join('')
     : '';
 
-  const indicators = unitIndicatorsHtml(unit);
+  const indicators = unitIndicatorsHtml(unit, view);
+  const empty = view?.historical && !view.unit ? 'Sem posição registrada antes deste fechamento.' : 'Aguardando preenchimento do turno';
 
   return `
     <article class="unit-card ${escapeHtml(unit.border)}">
@@ -396,7 +404,7 @@ function unitCard(unit) {
           <div class="table-wrap status-table-wrap">
             <table class="data-table field-data-table">
               <thead><tr><th scope="col">Frente</th><th scope="col">Setor</th><th scope="col">Fazenda</th><th scope="col">Status</th><th scope="col">ATR</th><th scope="col">Observações</th><th scope="col">Ação</th></tr></thead>
-              <tbody>${rows || '<tr class="field-table-empty"><td colspan="7">Aguardando preenchimento do turno</td></tr>'}
+              <tbody>${rows || `<tr class="field-table-empty"><td colspan="7">${empty}</td></tr>`}
                 <tr class="field-filter-empty" hidden><td colspan="7">Nenhuma frente encontrada para este filtro.</td></tr>
               </tbody>
             </table>
@@ -459,16 +467,18 @@ function renderDashboard() {
   if (!units[selectedUnitIndex]) selectedUnitIndex = 0;
 
   const selectedUnit = units[selectedUnitIndex];
+  const view = managementReportView(selectedUnit);
   if (fieldViewUnitCode !== selectedUnit.code) {
     fieldViewUnitCode = selectedUnit.code;
     fieldViewFilter = 'all';
     fieldSearchQuery = '';
   }
   // Resumo e detalhes da unidade selecionada.
-  renderManagementReport();
-  document.querySelector('#units-grid').innerHTML = unitCard(selectedUnit);
+  renderManagementReport(view);
+  const unit = view.unit || { code: selectedUnit.code, name: selectedUnit.name, rows: [], metrics: [], border: 'active' };
+  document.querySelector('#units-grid').innerHTML = view.ready ? unitCard(unit, view) : '';
   applyFieldViewFilters();
-  renderUnitSelection();
+  renderUnitSelection(view);
   document.querySelectorAll('[data-unit-context]').forEach(link => {
     link.href = `${link.pathname}?unit=${encodeURIComponent(selectedUnit.code)}`;
   });

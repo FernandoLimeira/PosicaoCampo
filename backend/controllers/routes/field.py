@@ -17,6 +17,7 @@ from ...models.units import (
     list_unit_versions,
     list_units_payload,
     save_unit,
+    unit_position_before,
 )
 from ...models.module_access import user_can
 from ...models.weighing_report import XLSX_MIME, build_weighing_report
@@ -47,11 +48,12 @@ def _front_notes(req):
                 unit = req.param("unit", "")
                 front = req.param("front", "")
                 before = req.param("before_id")
+                cutoff = req.param("cutoff")
                 open_only = req.param("open_only", "0")
                 if open_only not in {"0", "1"}:
                     raise ValueError("Filtro de acontecimentos inválido.")
                 result = list_front_notes(unit, front, user, before_id=int(before) if before is not None else None,
-                                          open_only=open_only == "1") if front else {
+                                          open_only=open_only == "1", before=int(cutoff) if cutoff is not None else None) if front else {
                     "summaries": front_notes_summary(unit, user), "period": shift_at(int(time.time()))
                 }
                 return req.json(HTTPStatus.OK, result)
@@ -99,9 +101,13 @@ def handle(req):
     if path == "/api/weighings/report.xlsx" and method == "GET":
         if not user:
             return req.unauthorized()
+        historical_position = req.param("position") == "1"
+        if historical_position and not user_can(user, "dashboard", "view"):
+            return req.error(HTTPStatus.FORBIDDEN, "Sem permissão para consultar a posição de campo.")
 
         def report():
-            content, filename = build_weighing_report(req.param("date"), at_time=req.param("hora"))
+            content, filename = build_weighing_report(req.param("date"), at_time=req.param("hora"),
+                                                     historical_position=historical_position)
             return _respond(req.start_response, HTTPStatus.OK, content, [
                 ("Content-Type", XLSX_MIME), ("Cache-Control", "no-store"),
                 ("Content-Disposition", f'attachment; filename="{filename}"'),
@@ -112,8 +118,25 @@ def handle(req):
     if path == "/api/weighings/summary" and method == "GET":
         if not user:
             return req.unauthorized()
-        return req.guarded(lambda: req.json(HTTPStatus.OK, weighing_summary(
-            req.param("date"), at_time=req.param("hora"), unit_code=req.param("unit"))), bad_request=ValueError)
+        position_requested = req.param("position") == "1"
+        if position_requested and not user_can(user, "dashboard", "view"):
+            return req.error(HTTPStatus.FORBIDDEN, "Sem permissão para consultar a posição de campo.")
+
+        def summary():
+            unit = req.param("unit")
+            if position_requested and not unit:
+                raise ValueError("Selecione uma unidade para consultar o fechamento.")
+            result = weighing_summary(req.param("date"), at_time=req.param("hora"), unit_code=unit,
+                                      historical_position=position_requested)
+            if position_requested:
+                weighing = result["units"][0]
+                code, cutoff = weighing["code"], weighing["position_until"]
+                result["position"] = unit_position_before(code, cutoff)
+                result["period"] = shift_at(cutoff - 1)
+                result["note_summaries"] = front_notes_summary(code, user, before=cutoff)
+            return req.json(HTTPStatus.OK, result)
+
+        return req.guarded(summary)
 
     # Consultas SQL salvas da Entrega CTT (só guardadas, não executadas).
     if path == "/api/delivery/queries":
