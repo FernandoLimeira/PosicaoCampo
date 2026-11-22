@@ -551,6 +551,13 @@
 .catalog-section-header h2 { margin: 0; color: #1f262a; font-size: 18px; }
 .catalog-section-header p { margin: 4px 0 0; color: #6c777d; font-size: 12px; }
 .catalog-new[hidden] { display: none; }
+.catalog-responsibility-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.catalog-responsibility-feedback { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; padding: 10px 22px; background: var(--data-alternate); border-bottom: 1px solid var(--data-border); }
+.catalog-responsibility-feedback p { margin: 0; color: var(--muted); font-size: 13px; }
+.catalog-responsibility-roles { border-bottom: 1px solid var(--data-border); }
+.catalog-responsibility-roles > summary { padding: 12px 22px; color: var(--text); font-size: 13px; font-weight: 750; cursor: pointer; }
+.catalog-responsibility-roles > summary span { margin-left: 6px; color: var(--muted); font-size: 12px; }
+.catalog-responsibility-roles[open] > summary { background: var(--data-alternate); }
 
 /* Formulário em painel destacado, aberto por "Novo" ou "Editar". */
 .catalog-editor { margin: 0; border: 0; border-bottom: 1px solid #e5eaec; border-radius: 0; background: #f5faf7; }

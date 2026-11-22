@@ -6,6 +6,7 @@ let productionResponsibilities = [];
 let productionResponsibilityRoles = [];
 let productionResponsibilityPermissions = {};
 let productionResponsibilityUnit = '';
+let productionResponsibilityState = 'loading';
 
 function productionCatalogPageActive() {
   return String(globalThis.location?.pathname || '').startsWith('/producao/cadastros');
@@ -110,14 +111,35 @@ async function deleteProductionOperation(operationId) {
 }
 
 function canEditProductionResponsibility(action) {
-  return productionResponsibilityUnit === currentProductionUnit() && Boolean(productionResponsibilityPermissions[action]);
+  return productionResponsibilityState === 'ready' && productionResponsibilityUnit === currentProductionUnit()
+    && Boolean(productionResponsibilityPermissions[action]);
 }
 
 function renderProductionResponsibilityControls() {
   document.querySelectorAll('[data-responsibility-permission]').forEach(control => {
-    control.hidden = !canEditProductionResponsibility(control.dataset.responsibilityPermission);
-    if (control.hidden && control.open) control.open = false;
+    const allowed = canEditProductionResponsibility(control.dataset.responsibilityPermission);
+    if (control.tagName === 'BUTTON') {
+      control.disabled = !allowed;
+    } else {
+      control.hidden = !allowed;
+      if (!allowed && control.open) control.open = false;
+    }
   });
+  const feedback = document.querySelector('#production-responsibility-feedback');
+  const status = document.querySelector('#production-responsibility-status');
+  const retry = document.querySelector('#production-responsibility-retry');
+  if (!feedback || !status || !retry) return;
+  const schedules = canEditProductionResponsibility('edit_schedules');
+  const roles = canEditProductionResponsibility('edit_roles');
+  const messages = {
+    loading: 'Carregando responsáveis e cargos…',
+    error: 'Não foi possível carregar responsáveis e cargos.',
+    ready: schedules && roles ? '' : schedules ? 'Seu perfil pode cadastrar responsáveis e consultar os cargos.'
+      : roles ? 'Seu perfil pode cadastrar cargos e consultar os responsáveis.' : 'Seu perfil tem acesso de consulta a responsáveis e cargos.'
+  };
+  status.textContent = messages[productionResponsibilityState];
+  feedback.hidden = !status.textContent;
+  retry.hidden = productionResponsibilityState !== 'error';
 }
 
 function renderProductionResponsibilityRoles() {
@@ -139,7 +161,7 @@ function openProductionResponsibilityRoleForm(role = null, { keepOpen = false } 
   form.elements.role_id.value = role?.id ?? '';
   form.elements.name.value = role?.name ?? '';
   form.elements.role_type.value = role?.role_type ?? '';
-  document.querySelector('#production-responsibility-role-title').textContent = role ? 'Editar cargo' : 'Novo cargo';
+  document.querySelector('#production-responsibility-role-title').textContent = role ? 'Editar cargo' : 'Cadastrar cargo';
   document.querySelector('#production-responsibility-role-editor').open = keepOpen;
 }
 
@@ -157,6 +179,8 @@ async function submitProductionResponsibilityRole(event) {
     });
     openProductionResponsibilityRoleForm();
     await loadProductionResponsibilities();
+    const roles = document.querySelector('#production-responsibility-roles');
+    if (roles && productionResponsibilityState === 'ready') roles.open = true;
     showToast('Cargo salvo.');
   } catch (error) {
     showToast(error.message || 'Não foi possível salvar o cargo.', true);
@@ -188,22 +212,35 @@ function renderProductionResponsibilities() {
 }
 
 async function loadProductionResponsibilities(unit = currentProductionUnit()) {
+  if (unit !== currentProductionUnit()) return;
   const epoch = productionPageEpoch;
+  productionResponsibilityState = 'loading';
   if (productionResponsibilityUnit !== unit) {
     productionResponsibilities = [];
     productionResponsibilityRoles = [];
     productionResponsibilityPermissions = {};
     productionResponsibilityUnit = '';
-    renderProductionResponsibilityControls();
-    renderProductionResponsibilityRoles();
-    renderProductionResponsibilities();
   }
-  const data = await apiRequest(`/api/production/catalog/responsibilities?unit=${encodeURIComponent(unit)}`);
-  if (!isCurrentProductionRequest(unit, epoch)) return;
-  productionResponsibilities = Array.isArray(data?.rules) ? data.rules : [];
-  productionResponsibilityRoles = Array.isArray(data?.roles) ? data.roles : [];
-  productionResponsibilityPermissions = data?.permissions || {};
-  productionResponsibilityUnit = unit;
+  renderProductionResponsibilityControls();
+  renderProductionResponsibilityRoles();
+  renderProductionResponsibilities();
+  try {
+    const data = await apiRequest(`/api/production/catalog/responsibilities?unit=${encodeURIComponent(unit)}`);
+    if (!isCurrentProductionRequest(unit, epoch)) return;
+    if (!Array.isArray(data?.rules) || !Array.isArray(data?.roles)
+      || typeof data.permissions?.edit_schedules !== 'boolean' || typeof data.permissions?.edit_roles !== 'boolean') {
+      throw new Error('Resposta incompleta do cadastro de responsáveis.');
+    }
+    productionResponsibilities = data.rules;
+    productionResponsibilityRoles = data.roles;
+    productionResponsibilityPermissions = data.permissions;
+    productionResponsibilityUnit = unit;
+    productionResponsibilityState = 'ready';
+  } catch (error) {
+    if (!isCurrentProductionRequest(unit, epoch)) return;
+    console.warn(error);
+    productionResponsibilityState = 'error';
+  }
   renderProductionResponsibilityControls();
   renderProductionResponsibilityRoles();
   renderProductionResponsibilities();
@@ -240,7 +277,7 @@ function openProductionResponsibilityForm(rule = null, { keepOpen = false } = {}
       fields[key].value = rule[key];
     }
   }
-  document.querySelector('#production-responsibility-title').textContent = rule ? 'Editar escala' : 'Nova escala';
+  document.querySelector('#production-responsibility-title').textContent = rule ? 'Editar responsável ou escala' : 'Cadastrar responsável';
   updateProductionResponsibilityFields(form);
   document.querySelector('#production-responsibility-editor').open = keepOpen;
 }
@@ -340,6 +377,11 @@ const CATALOG_NEW_ACTIONS = {
 };
 
 function selectCatalogTab(tab) {
+  if (tab === 'responsibility-roles') {
+    tab = 'responsibilities';
+    const roles = document.querySelector('#production-responsibility-roles');
+    if (roles) roles.open = true;
+  }
   const sections = [...document.querySelectorAll('[data-catalog-section]')];
   if (!sections.some(section => section.dataset.catalogSection === tab)) tab = 'groups';
   document.querySelectorAll('[data-catalog-tab]').forEach(button => {
@@ -391,6 +433,7 @@ if (productionCatalogPageActive()) {
   responsibilityForm?.addEventListener('submit', submitProductionResponsibility);
   responsibilityForm?.elements?.kind?.addEventListener('change', () => updateProductionResponsibilityFields(responsibilityForm));
   document.querySelector('#production-responsibility-clear')?.addEventListener('click', () => openProductionResponsibilityForm());
+  document.querySelector('#production-responsibility-retry')?.addEventListener('click', () => loadProductionResponsibilities());
   document.querySelector('#production-responsibility-role-form')?.addEventListener('submit', submitProductionResponsibilityRole);
   document.querySelector('#production-responsibility-role-clear')?.addEventListener('click', () => openProductionResponsibilityRoleForm());
   document.querySelector('#production-responsibility-roles-list')?.addEventListener('click', event => {

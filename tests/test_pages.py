@@ -560,6 +560,12 @@ class PageTests(unittest.TestCase):
         catalog_page = self.request("/producao/cadastros", cookie=cookie)
         self.assertEqual(catalog_page["status"], 200)
         self.assertIn('id="production-operation-form"', catalog_page["body"])
+        self.assertNotIn('data-catalog-tab="responsibility-roles"', catalog_page["body"])
+        responsibility_panel = catalog_page["body"].split('data-catalog-section="responsibilities"', 1)[1].split(
+            'data-catalog-section="operations"', 1)[0]
+        self.assertIn('id="production-responsibility-add"', responsibility_panel)
+        self.assertIn('id="production-responsibility-role-add"', responsibility_panel)
+        self.assertIn('id="production-responsibility-roles-list"', responsibility_panel)
         self.assertNotIn('id="production-catalog-panel" class="production-tab-panel production-catalog-panel" hidden', catalog_page["body"])
         self.assertEqual(self.request("/producao/cadastros", role="member")["status"], 403)
         # "Consultas SQL" (SELECT das O.S.) também fica no menu da Produção.

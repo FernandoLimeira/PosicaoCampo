@@ -73,6 +73,54 @@ async function main() {
   assert.equal(s.pending.length, 7, 'Obsolete refreshes never launch an item request');
   assert.equal(s.state().productionItems[0].latest, true);
   assert.notEqual(s.state().productionCatalog.groups[0].name, 'obsolete');
+
+  const catalog = setup();
+  const { context } = catalog;
+  context.document.body = { dataset: { page: 'production_catalog' } };
+  const refreshCatalog = context.refreshProductionPage('PPT');
+  finishDependencies(catalog.pending.slice(0, 2), 'PPT');
+  await tick();
+  assert.equal(catalog.pending.length, 2, 'Cadastros opens without loading daily production items');
+  await refreshCatalog;
+
+  const scheduleButton = context.document.querySelector('#production-responsibility-add');
+  Object.assign(scheduleButton, { tagName: 'BUTTON', dataset: { responsibilityPermission: 'edit_schedules' } });
+  const roleButton = context.document.querySelector('#production-responsibility-role-add');
+  Object.assign(roleButton, { tagName: 'BUTTON', dataset: { responsibilityPermission: 'edit_roles' } });
+  context.document.querySelectorAll = selector => selector === '[data-responsibility-permission]' ? [scheduleButton, roleButton] : [];
+  const status = context.document.querySelector('#production-responsibility-status');
+  const feedback = context.document.querySelector('#production-responsibility-feedback');
+  const retry = context.document.querySelector('#production-responsibility-retry');
+  const load = context.loadProductionResponsibilities();
+  assert.equal(scheduleButton.hidden, false);
+  assert.equal(scheduleButton.disabled, true);
+  assert.match(status.textContent, /Carregando/);
+  const data = { roles: [{ id: 1, name: 'Encarregado', role_type: 'lead' }], rules: [] };
+  catalog.pending.at(-1).resolve({ ...data, permissions: { edit_schedules: true, edit_roles: true } });
+  await load;
+  assert.equal(scheduleButton.disabled, false);
+  assert.equal(roleButton.disabled, false);
+  assert.equal(feedback.hidden, true);
+
+  const restricted = context.loadProductionResponsibilities();
+  catalog.pending.at(-1).resolve({ ...data, permissions: { edit_schedules: false, edit_roles: false } });
+  await restricted;
+  assert.equal(scheduleButton.disabled, true);
+  assert.equal(roleButton.disabled, true);
+  assert.match(status.textContent, /acesso de consulta/);
+
+  context.console = { ...console, warn() {} };
+  const failed = context.loadProductionResponsibilities();
+  catalog.pending.at(-1).reject(new Error('Servidor indisponível'));
+  await failed;
+  assert.match(status.textContent, /Não foi possível carregar/);
+  assert.equal(retry.hidden, false);
+  const retried = context.loadProductionResponsibilities();
+  catalog.pending.at(-1).resolve({ ...data, permissions: { edit_schedules: true, edit_roles: false } });
+  await retried;
+  assert.equal(retry.hidden, true);
+  assert.equal(scheduleButton.disabled, false);
+  assert.equal(roleButton.disabled, true);
   console.log('OK: responses from obsolete production units/epochs cannot replace current data.');
 }
 

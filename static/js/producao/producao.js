@@ -982,7 +982,7 @@ async function refreshProductionPage(unit = currentProductionUnit(), { keepFilte
     await Promise.all([loadProductionCatalog(unit, epoch), loadProductionStatuses()]);
     if (!isCurrentProductionRequest(unit, epoch)) return;
     renderStatusOptions(defaultStatusCode());
-    await loadProductionItems(unit, epoch);
+    if (document.body?.dataset?.page !== 'production_catalog') await loadProductionItems(unit, epoch);
   } catch (error) {
     if (!isCurrentProductionRequest(unit, epoch)) return;
     throw error;
