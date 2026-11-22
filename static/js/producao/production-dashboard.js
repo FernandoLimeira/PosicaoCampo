@@ -17,10 +17,10 @@ function dashboardFrontMatchesFlag(sectors, flag) {
   });
 }
 
-function dashboardFrontGroups(items) {
+function dashboardFrontGroups(items, groupKey = item => item.service_front_id ?? item.id) {
   const groups = new Map();
   for (const item of items) {
-    const key = item.service_front_id ?? item.id;
+    const key = groupKey(item);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(item);
   }
@@ -358,22 +358,23 @@ function renderProductionDashboard() {
   if (!cards) return;
   const shift = dashboardCurrentShift();
   const items = dashboardItems();
-  const fronts = dashboardFrontGroups(dashboardSortTiles(items));
-  const total = fronts.length;
+  const blocks = dashboardFrontGroups(dashboardSortTiles(items), item => item.sector_group_id
+    ? `${item.service_front_id}:${item.sector_group_id}` : item.id);
+  const total = blocks.length;
   if (!total) {
     cards.innerHTML = '<p class="production-empty">Nenhuma frente lançada nesta unidade.</p>';
     return;
   }
-  const options = fronts.map(([item]) => [String(item.service_front_id ?? item.id), item.service_name])
+  const options = [...new Map(blocks.map(([item]) => [String(item.service_front_id ?? item.id), item.service_name]))]
     .sort((a, b) => compareFrontLabels(a[1] || '', b[1] || ''));
   if (!options.some(([id]) => id === dashboardPanelFilter.front)) dashboardPanelFilter.front = '';
   const filters = [
     ['stopped', 'Paradas', 'is-red'], ['ok', 'O.S. OK', 'is-green'], ['noOrder', 'Sem O.S.', 'is-red'],
     ['noOperation', 'Sem operação', 'is-amber'], ['today', 'Atualizadas hoje', 'is-green']
   ];
-  const counts = Object.fromEntries(filters.map(([key]) => [key, fronts.filter(sectors => dashboardFrontMatchesFlag(sectors, key)).length]));
+  const counts = Object.fromEntries(filters.map(([key]) => [key, blocks.filter(sectors => dashboardFrontMatchesFlag(sectors, key)).length]));
   if (!counts[dashboardPanelFilter.flag]) dashboardPanelFilter.flag = '';
-  const visible = fronts.filter(sectors => {
+  const visible = blocks.filter(sectors => {
     const [item] = sectors;
     return (!dashboardPanelFilter.front || String(item.service_front_id ?? item.id) === dashboardPanelFilter.front)
       && dashboardFrontMatchesFlag(sectors, dashboardPanelFilter.flag);
@@ -397,7 +398,7 @@ function renderProductionDashboard() {
           ${options.map(([id, name]) => `<option value="${escapeHtml(id)}"${id === dashboardPanelFilter.front ? ' selected' : ''}>${escapeHtml(name || '-')}</option>`).join('')}
         </select>
       </label>
-      <span class="pdash-filter-count">${filtering ? `Mostrando ${visible.length} de ${total}` : `${total} ${total === 1 ? 'frente' : 'frentes'}`}</span>
+      <span class="pdash-filter-count">${filtering ? `Mostrando ${visible.length} de ${total}` : `${total} ${total === 1 ? 'lançamento' : 'lançamentos'}`}</span>
       ${filtering ? '<button type="button" class="pdash-filter-clear" data-panel-filter-clear>Limpar filtros</button>' : ''}
     </div>
     <div class="pdash-group-status">${dashboardStatusBar(items)}</div>

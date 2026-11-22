@@ -810,7 +810,7 @@
 .pdash-legend-item.is-stopped i { background: #e8731a; }
 .pdash-legend-item small { color: #8a9397; }
 
-.pdash-tiles { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 14px 20px 20px; }
+.pdash-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr)); align-items: start; gap: 12px; padding: 14px 20px 20px; }
 .pdash-tile {
   display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 6px; min-width: 0;
   padding: 12px 14px; border: 1px solid #e3e8eb; border-top: 4px solid #9aa3a7; border-radius: 8px;

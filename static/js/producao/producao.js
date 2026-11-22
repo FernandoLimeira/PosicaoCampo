@@ -564,21 +564,27 @@ function updateProductionSectorRows() {
   if (add) add.disabled = rows.length >= 100;
 }
 
-function addProductionSector() {
+function addProductionSector(item = null) {
   const rows = productionSectorRows();
   if (!rows.length || rows.length >= 100) return;
   const row = rows[0].cloneNode(true);
   const suffix = `-${++productionSectorSequence}`;
   row.querySelectorAll('[id]').forEach(element => { element.id += suffix; });
   row.querySelectorAll('label[for]').forEach(label => { label.htmlFor += suffix; });
-  productionSectorField(row, 'sector').value = '';
-  productionSectorField(row, 'farm').value = '';
-  resetSectorFields(row);
-  renderEntryOperations(row);
   clearProductionSectorScan(row);
   renderStatusOptions(defaultStatusCode(), row.querySelector('.production-status-options'));
   document.querySelector('#production-sector-rows').append(row);
   updateProductionSectorRows();
+  if (item) {
+    row.dataset.linkedItemId = String(item.id);
+    row.querySelector('[data-remove-sector]').textContent = 'Separar setor';
+    fillProductionSectorRow(row, item);
+    return;
+  }
+  productionSectorField(row, 'sector').value = '';
+  productionSectorField(row, 'farm').value = '';
+  resetSectorFields(row);
+  renderEntryOperations(row);
   productionSectorField(row, productionEntryUsesSection() ? 'section' : 'sector').focus();
 }
 
@@ -814,6 +820,26 @@ function findProductionItem(itemId) {
   return productionItems.find(item => Number(item.id) === Number(itemId));
 }
 
+function fillProductionSectorRow(row, item) {
+  const entry = item.entry || {};
+  const section = productionSectorField(row, 'section');
+  productionSectorField(row, 'sector').value = entry.sector || '';
+  productionSectorField(row, 'farm').value = entry.farm || '';
+  if (productionEntryUsesSection()) {
+    section.value = entry.section || '';
+    renderProductionSectorChoices(row, { keep: entry.sector || '' });
+  } else {
+    resetSectorFields(row);
+    section.innerHTML = `<option value="${escapeHtml(entry.section || '')}">${escapeHtml(entry.section || 'Sem seção')}</option>`;
+    section.value = entry.section || '';
+  }
+  setSelectedStatus(entry.status || defaultStatusCode(), row);
+  let operations = splitProductionOperations(entry.operation);
+  if (!operations.length && !item.sector_group_id) operations = productionFrontDefaultOperations(item.service_front_id);
+  renderEntryOperations(row, operations.length ? operations : ['']);
+  scanProductionSector(row);
+}
+
 function openEditProductionItem(itemId) {
   if (!canFillProduction()) return;
   const item = findProductionItem(itemId);
@@ -828,27 +854,15 @@ function openEditProductionItem(itemId) {
   setProductionEntryUnit(currentProductionUnit());
   applyProductionLocationMode();
   renderEntryGroups(item.group_id, item.service_front_id, item);
-  document.querySelector('#production-sector-input').value = entry.sector || '';
-  document.querySelector('#production-farm-input').value = entry.farm || '';
   document.querySelector('#production-observation-input').value = entry.observation || '';
   document.querySelector('#production-changes-input').value = entry.changes || '';
-  setSelectedStatus(entry.status || defaultStatusCode());
-  const [row] = productionSectorRows();
-  const section = document.querySelector('#production-section-input');
-  if (productionEntryUsesSection()) {
-    // Polo MS: seção digitada; o setor salvo fica escolhido na lista da seção.
-    section.value = entry.section || '';
-    renderProductionSectorChoices(row, { keep: entry.sector || '' });
-  } else {
-    resetSectorFields(row);
-    section.innerHTML = `<option value="${escapeHtml(entry.section || '')}">${escapeHtml(entry.section || 'Sem seção')}</option>`;
-    section.value = entry.section || '';
+  const [row = document] = productionSectorRows();
+  fillProductionSectorRow(row, item);
+  if (item.sector_group_id) {
+    productionItems.filter(other => other.id !== item.id && other.service_front_id === item.service_front_id
+      && other.sector_group_id === item.sector_group_id && other.entry).forEach(addProductionSector);
   }
   setProductionEntryEditMode(true);
-  let operations = splitProductionOperations(entry.operation);
-  if (!operations.length) operations = productionFrontDefaultOperations(item.service_front_id);
-  renderEntryOperations(row, operations.length ? operations : ['']);
-  scanProductionSector(row);
   // O nome da frente em edição fica em destaque no topo do popup.
   document.querySelector('#production-modal-title').textContent = item.service_name || 'Frente';
   const subtitle = document.querySelector('#production-modal-subtitle');
@@ -937,9 +951,11 @@ function collectProductionSectors() {
     if (!status) throw new Error(`Selecione o status do setor ${sector}.`);
     seen.add(sector.toLocaleUpperCase('pt-BR'));
     const operations = productionEntryOperationValues(row).map(value => value.trim()).filter(Boolean);
+    const linkedItemId = row.dataset?.linkedItemId;
     return { sector, section: productionSectorField(row, 'section').value.trim(),
       farm: productionSectorField(row, 'farm').value.trim(), status,
-      ...(operations.length || index === 0 && productionEditingItemId
+      ...(linkedItemId ? { id: Number(linkedItemId) } : {}),
+      ...(operations.length || linkedItemId || index === 0 && productionEditingItemId
         ? { operation: operations.join(', ') } : {}) };
   });
 }
@@ -1027,7 +1043,7 @@ document.querySelector('#production-entry-form')?.addEventListener('submit', sub
 
 document.querySelector('#production-group-input')?.addEventListener('change', () => renderEntryFronts());
 
-document.querySelector('#production-add-sector')?.addEventListener('click', addProductionSector);
+document.querySelector('#production-add-sector')?.addEventListener('click', () => addProductionSector());
 
 document.querySelector('#production-sector-rows')?.addEventListener('click', event => {
   const row = event.target.closest('[data-production-sector-row]');

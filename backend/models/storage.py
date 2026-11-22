@@ -464,6 +464,7 @@ def _create_production_tables(conn):
             owner_user_id INTEGER NOT NULL,
             unit_code TEXT NOT NULL COLLATE NOCASE,
             service_front_id INTEGER NOT NULL,
+            sector_group_id TEXT,
             position INTEGER NOT NULL DEFAULT 0,
             is_active INTEGER NOT NULL DEFAULT 1,
             created_at INTEGER NOT NULL,
@@ -640,6 +641,9 @@ def _upgrade_operational_schema(conn):
         conn.execute(
             "INSERT INTO main.schema_info(key,value) VALUES ('production_status_labels_version','1')"
         )
+    item_columns = {row[1] for row in conn.execute("PRAGMA main.table_info(production_user_items)")}
+    if "sector_group_id" not in item_columns:
+        conn.execute("ALTER TABLE main.production_user_items ADD COLUMN sector_group_id TEXT")
     entry_columns = {row[1] for row in conn.execute("PRAGMA main.table_info(production_daily_entries)")}
     if "changes" not in entry_columns:
         conn.execute("ALTER TABLE main.production_daily_entries ADD COLUMN changes TEXT NOT NULL DEFAULT ''")
@@ -965,6 +969,7 @@ CREATE TABLE IF NOT EXISTS production_user_items (
     owner_user_id INTEGER NOT NULL,
     unit_code TEXT NOT NULL COLLATE NOCASE,
     service_front_id INTEGER NOT NULL,
+    sector_group_id TEXT,
     position INTEGER NOT NULL DEFAULT 0,
     is_active INTEGER NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL,

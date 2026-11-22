@@ -514,6 +514,8 @@ class ProductionTests(unittest.TestCase):
         items = production.save_my_items(self.user["id"], payload)
         self.assertEqual([item["entry"]["sector"] for item in items], ["3392", "3400"])
         self.assertEqual([item["entry"]["status"] for item in items], ["EM ATIVIDADE", "SOLO ÚMIDO / TESTE"])
+        self.assertTrue(items[0]["sector_group_id"])
+        self.assertEqual(items[0]["sector_group_id"], items[1]["sector_group_id"])
         retried = production.save_my_items(self.user["id"], payload)
         self.assertEqual([item["id"] for item in retried], [item["id"] for item in items])
         ppt = production.save_my_items(self.user["id"], {**payload, "unit_code": "PPT"})
@@ -555,6 +557,27 @@ class ProductionTests(unittest.TestCase):
         saved = production.list_my_items(self.user["id"], "NRD", base["work_date"], scope="all")["items"]
         self.assertEqual({item["entry"]["sector"]: item["entry"]["status"] for item in saved},
                          {"3392": "EM ATIVIDADE", "3400": "SOLO ÚMIDO / TESTE"})
+
+        updated = production.save_my_items(self.user["id"], {**base, "sectors": [
+            {"sector": "3392", "status": "EM ATIVIDADE"},
+            {"id": items[1]["id"], "sector": "3400", "status": "EM ATIVIDADE"},
+        ]}, item_id=original["id"])
+        self.assertEqual([item["id"] for item in updated], [item["id"] for item in items])
+        self.assertEqual(updated[0]["sector_group_id"], updated[1]["sector_group_id"])
+        production.save_my_items(self.user["id"], {**base, "sectors": [
+            {"sector": "3392", "status": "EM ATIVIDADE"},
+        ]}, item_id=original["id"])
+        separate = production.list_my_items(self.user["id"], "NRD", base["work_date"], scope="all")["items"]
+        self.assertEqual({item["id"]: item["sector_group_id"] for item in separate},
+                         {items[0]["id"]: None, items[1]["id"]: None})
+        self.assertEqual(next(item for item in separate if item["id"] == items[1]["id"])["entry"]["operation"], "205")
+
+        linked_again = production.save_my_items(self.user["id"], {**base, "sectors": [
+            {"sector": "3392", "status": "EM ATIVIDADE"}, {"sector": "3400", "status": "EM ATIVIDADE"},
+        ]}, item_id=original["id"])
+        self.assertEqual([item["id"] for item in linked_again], [item["id"] for item in items])
+        self.assertTrue(linked_again[0]["sector_group_id"])
+        self.assertEqual(linked_again[0]["sector_group_id"], linked_again[1]["sector_group_id"])
 
     def test_multiple_sectors_reject_duplicates_and_invalid_batches(self):
         front = self._front()

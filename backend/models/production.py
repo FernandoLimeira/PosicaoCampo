@@ -865,7 +865,7 @@ def list_my_items(user_id: int, unit_code: Any, work_date: Any, *, scope: str = 
 
         rows = conn.execute(
             f"""
-            SELECT ui.id AS item_id,ui.owner_user_id,ui.service_front_id,ui.position,
+            SELECT ui.id AS item_id,ui.owner_user_id,ui.service_front_id,ui.sector_group_id,ui.position,
                    f.name AS service_name,f.display_style,f.is_active AS service_active,
                    g.id AS group_id,g.name AS group_name,g.is_active AS group_active,
                    COALESCE(owner.name, 'Usuário removido') AS owner_name
@@ -904,6 +904,7 @@ def list_my_items(user_id: int, unit_code: Any, work_date: Any, *, scope: str = 
                 "id": int(row["item_id"]), "owner_user_id": owner_user_id,
                 "owner_name": row["owner_name"], "is_own": owner_user_id == int(user_id),
                 "service_front_id": int(row["service_front_id"]),
+                "sector_group_id": row["sector_group_id"],
                 "responsibles": {shift: people[0]["name"] for shift, people in team.items() if people[0]["role_type"] == "lead"},
                 "responsibility_team": team,
                 "service_name": row["service_name"], "display_style": row["display_style"],
@@ -1073,7 +1074,7 @@ def _normalize_operations(value: Any) -> str:
 
 def _active_front_entries(conn: sqlite3.Connection, unit: str, front_id: int, work_date: str | None = None):
     return conn.execute(
-        """SELECT ui.id,e.sector FROM production_user_items ui
+        """SELECT ui.id,ui.sector_group_id,e.sector FROM production_user_items ui
            JOIN production_daily_entries e ON e.id=(
              SELECT latest.id FROM production_daily_entries latest
              WHERE latest.user_item_id=ui.id AND (? IS NULL OR latest.work_date<=?)
@@ -1133,10 +1134,12 @@ def save_my_items(user_id: int, payload: Any, *, item_id: int | None = None) -> 
     sectors = payload.get("sectors")
     if not isinstance(sectors, list) or not 1 <= len(sectors) <= 100:
         raise ValueError("Informe entre 1 e 100 setores por lançamento.")
-    return _save_my_items(user_id, payload, sectors, item_id=item_id)
+    return _save_my_items(user_id, payload, sectors, item_id=item_id, edit_sectors=True)
 
 
-def _save_my_items(user_id: int, payload: Any, sectors: list[Any], *, item_id: int | None = None) -> list[dict[str, Any]]:
+def _save_my_items(
+    user_id: int, payload: Any, sectors: list[Any], *, item_id: int | None = None, edit_sectors: bool = False,
+) -> list[dict[str, Any]]:
     """Grava um ou vários setores na mesma transação, preservando o histórico individual."""
     if not isinstance(payload, dict):
         raise ValueError("Dados do apontamento inválidos.")
@@ -1164,18 +1167,30 @@ def _save_my_items(user_id: int, payload: Any, sectors: list[Any], *, item_id: i
         validate_actor(conn, user_id)
         front = _catalog_front_for_unit(conn, front_id, unit, allow_inactive=item_id is not None and len(entries) == 1)
         existing = _active_front_entries(conn, unit, front_id, entries[0]["work_date"])
+        by_id = {row["id"]: row for row in existing}
+        edited = by_id.get(item_id)
+        previous_group = edited["sector_group_id"] if edited else None
         existing_sectors = {}
         for row in existing:
             existing_sectors.setdefault(row["sector"].strip().upper(), []).append(row["id"])
         for index, (entry, source) in enumerate(zip(entries, sectors)):
             entry["status"] = _validate_status_code(conn, entry["status"])
             matching_ids = existing_sectors.get(entry["sector"].upper(), [])
-            edited_id = item_id if index == 0 else None
-            if item_id is not None and index > 0:
-                matching_ids = [candidate for candidate in matching_ids if candidate != item_id]
-            if item_id is not None and matching_ids and edited_id not in matching_ids:
+            target_id = item_id if index == 0 else None
+            if item_id is not None and index > 0 and source.get("id") is not None:
+                linked = by_id.get(source["id"]) if type(source["id"]) is int else None
+                if not previous_group or not linked or linked["sector_group_id"] != previous_group or linked["id"] == item_id:
+                    raise ValueError("O vínculo dos setores mudou. Reabra a frente para editar.")
+                target_id = linked["id"]
+            if item_id is not None and index > 0 and target_id is None:
+                # Uma linha adicionada à edição pode vincular um setor já lançado separadamente.
+                target_id = next((candidate for candidate in matching_ids if candidate != item_id
+                                  and not by_id[candidate]["sector_group_id"]), None)
+            if item_id is not None and matching_ids and target_id not in matching_ids:
                 raise ValueError(f"O setor {entry['sector']} já está cadastrado nesta frente. Edite o lançamento existente.")
-            target_id = edited_id if edited_id is not None else next(iter(matching_ids), None)
+            if target_id in item_ids:
+                raise ValueError("O mesmo lançamento foi informado mais de uma vez.")
+            target_id = target_id if item_id is not None else next(iter(matching_ids), None)
             _keep_previous_fields(conn, target_id, entry, source)
             saved_id = _save_my_item(conn, user_id, unit, front_id, front, entry, now, item_id=target_id)
             item_ids.append(saved_id)
@@ -1183,6 +1198,14 @@ def _save_my_items(user_id: int, payload: Any, sectors: list[Any], *, item_id: i
             # Keep all entries, and never retire a copy with a later work date.
             duplicate_ids = [candidate for candidate in matching_ids if candidate != saved_id]
             _deactivate_items(conn, duplicate_ids, now, entry["work_date"])
+        if edit_sectors and (item_id is not None or len(item_ids) > 1):
+            if previous_group:
+                conn.execute("""UPDATE production_user_items SET sector_group_id=NULL
+                                WHERE unit_code=? AND service_front_id=? AND sector_group_id=?""",
+                             (unit, front_id, previous_group))
+            group_id = (previous_group or uuid.uuid4().hex) if len(item_ids) > 1 else None
+            conn.executemany("UPDATE production_user_items SET sector_group_id=? WHERE id=?",
+                             [(group_id, saved_id) for saved_id in item_ids])
     result = list_my_items(user_id, unit, entries[0]["work_date"], scope="all", with_orders=False)
     by_id = {item["id"]: item for item in result["items"]}
     return [by_id[saved_id] for saved_id in item_ids]
@@ -1319,8 +1342,10 @@ def _save_my_item(
         if item["unit_code"] != unit:
             raise ValueError("A unidade de uma frente já salva não pode ser alterada. Remova e adicione novamente.")
         conn.execute(
-            "UPDATE production_user_items SET service_front_id=?,updated_at=? WHERE id=?",
-            (front_id, now, item_id),
+            """UPDATE production_user_items
+               SET sector_group_id=CASE WHEN service_front_id=? THEN sector_group_id END,service_front_id=?,updated_at=?
+               WHERE id=?""",
+            (front_id, front_id, now, item_id),
         )
 
     conn.execute(

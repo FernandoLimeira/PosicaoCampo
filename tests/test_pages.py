@@ -1151,9 +1151,12 @@ class PageTests(unittest.TestCase):
         saved = json.loads(response['body'])['items']
         self.assertEqual(saved[0]['id'], original['id'])
         self.assertEqual(saved[0]['entry']['updated_by'], actor['id'])
+        self.assertTrue(saved[0]['sector_group_id'])
+        self.assertEqual(saved[0]['sector_group_id'], saved[1]['sector_group_id'])
         response = self.request(f"/api/production/my-items/{original['id']}", cookie=cookie, method='PUT',
             body={**base, "sector": "HTTP1", "status": "EM ATIVIDADE"})
         self.assertEqual(response['status'], 200, response['body'])
+        self.assertEqual(json.loads(response['body'])['item']['sector_group_id'], saved[0]['sector_group_id'])
         self.assertEqual(len(production.list_my_items(self.admin['id'], 'NRD', '2026-10-19', scope='all')['items']), 2)
         self.assertEqual(self.request('/api/production/my-items/batch', method='POST', body=base)['status'], 401)
         for unit in ('PPT', 'PST'):
