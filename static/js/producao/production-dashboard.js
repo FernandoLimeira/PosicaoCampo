@@ -360,13 +360,14 @@ function renderDashboardGroupSelector(items) {
   for (const item of items) {
     if (item.group_id != null) groups.set(String(item.group_id), item.group_name || 'Sem grupo');
   }
-  if (dashboardPanelFilter.group && !groups.has(dashboardPanelFilter.group)) {
-    Object.assign(dashboardPanelFilter, { group: '', front: '', flag: '' });
+  if (!groups.has(dashboardPanelFilter.group)) {
+    const group = groups.keys().next().value ?? '';
+    if (group !== dashboardPanelFilter.group) Object.assign(dashboardPanelFilter, { group, front: '', flag: '' });
   }
   tabs.hidden = !groups.size;
-  tabs.innerHTML = groups.size ? [['', 'Todos os grupos'], ...groups].map(([id, name]) =>
+  tabs.innerHTML = [...groups].map(([id, name]) =>
     `<button type="button" class="pdash-group-tab" data-panel-group="${escapeHtml(id)}" aria-pressed="${id === dashboardPanelFilter.group}" aria-controls="production-front-cards">${escapeHtml(name)}</button>`
-  ).join('') : '';
+  ).join('');
 }
 
 function renderProductionDashboard() {

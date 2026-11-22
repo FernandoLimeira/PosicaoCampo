@@ -157,14 +157,14 @@ assert.equal(separateCards.filter(card => /Setor 4 · IZAURA/.test(card)).length
 assert.equal(separateCards.filter(card => /Setor 6 · IZAURA/.test(card)).length, 1);
 assert.ok(separateCards.every(card => !/Setor 4 · IZAURA.*Setor 6 · IZAURA|Setor 6 · IZAURA.*Setor 4 · IZAURA/s.test(card)));
 assert.equal((cards.innerHTML.match(/<option value="7"/g) || []).length, 1);
-assert.match(cards.innerHTML, /data-panel-front-card="9"/);
+assert.doesNotMatch(cards.innerHTML, /data-panel-front-card="9"/);
 assert.doesNotMatch(cards.innerHTML, /Plantio|Tratos|data-panel-group/);
 assert.doesNotMatch(cards.innerHTML, /Resumo do turno/);
 assert.match(cards.innerHTML, /data-panel-filter="ok"/);
 const dashboardGroups = element('#production-group-tabs');
 assert.equal(dashboardGroups.hidden, false);
-assert.match(dashboardGroups.innerHTML, /data-panel-group="" aria-pressed="true"[^>]*>Todos os grupos/);
-assert.match(dashboardGroups.innerHTML, /data-panel-group="1"[^>]*>Plantio/);
+assert.doesNotMatch(dashboardGroups.innerHTML, /Todos os grupos|data-panel-group=""/);
+assert.match(dashboardGroups.innerHTML, /data-panel-group="1" aria-pressed="true"[^>]*>Plantio/);
 assert.match(dashboardGroups.innerHTML, /data-panel-group="2"[^>]*>Tratos/);
 function selectDashboardGroup(groupId) {
   let focused = false;
@@ -178,9 +178,9 @@ assert.match(dashboardGroups.innerHTML, /data-panel-group="2" aria-pressed="true
 assert.match(cards.innerHTML, /data-panel-front-card="9"/);
 assert.doesNotMatch(cards.innerHTML, /data-panel-front-card="7"/);
 assert.equal(vm.runInContext('dashboardPanelFilter.front || dashboardPanelFilter.flag', context), '');
-selectDashboardGroup('');
+selectDashboardGroup('1');
 assert.match(cards.innerHTML, /data-panel-front-card="7"/);
-assert.match(cards.innerHTML, /data-panel-front-card="9"/);
+assert.doesNotMatch(cards.innerHTML, /data-panel-front-card="9"/);
 // Um filtro por O.S. mantém juntos os setores vinculados no formulário.
 vm.runInContext(`productionItems[0].sector_group_id = productionItems[1].sector_group_id = 'saved-group';
   dashboardPanelFilter.flag = 'ok';`, context);
