@@ -1,7 +1,7 @@
 // Painel gerencial da Produção Agrícola: a página da Produção concentra tudo nele.
 // Usa os mesmos lançamentos da tabela (productionItems) e os status cadastrados.
 // Filtros da unidade, com todos os setores de cada frente visível.
-const dashboardPanelFilter = { front: '', flag: '' };
+const dashboardPanelFilter = { group: '', front: '', flag: '' };
 
 function dashboardFrontMatchesFlag(sectors, flag) {
   if (flag === 'stopped') return sectors.every(item => dashboardFlags(item).stopped);
@@ -353,11 +353,30 @@ function renderDashboardSectorCard() {
   card.innerHTML = card.hidden ? '' : dashboardSectorSearchHtml();
 }
 
+function renderDashboardGroupSelector(items) {
+  const tabs = document.querySelector('#production-group-tabs');
+  if (!tabs) return;
+  const groups = new Map();
+  for (const item of items) {
+    if (item.group_id != null) groups.set(String(item.group_id), item.group_name || 'Sem grupo');
+  }
+  if (dashboardPanelFilter.group && !groups.has(dashboardPanelFilter.group)) {
+    Object.assign(dashboardPanelFilter, { group: '', front: '', flag: '' });
+  }
+  tabs.hidden = !groups.size;
+  tabs.innerHTML = groups.size ? [['', 'Todos os grupos'], ...groups].map(([id, name]) =>
+    `<button type="button" class="pdash-group-tab" data-panel-group="${escapeHtml(id)}" aria-pressed="${id === dashboardPanelFilter.group}" aria-controls="production-front-cards">${escapeHtml(name)}</button>`
+  ).join('') : '';
+}
+
 function renderProductionDashboard() {
   const cards = document.querySelector('#production-front-cards');
   if (!cards) return;
   const shift = dashboardCurrentShift();
-  const items = dashboardItems();
+  const allItems = dashboardItems();
+  renderDashboardGroupSelector(allItems);
+  const items = dashboardPanelFilter.group
+    ? allItems.filter(item => String(item.group_id) === dashboardPanelFilter.group) : allItems;
   const blocks = dashboardFrontGroups(dashboardSortTiles(items), item => item.sector_group_id
     ? `${item.service_front_id}:${item.sector_group_id}` : item.id);
   const total = blocks.length;
@@ -479,6 +498,16 @@ async function submitDashboardNote(event) {
 }
 
 document.querySelector('#production-note-form')?.addEventListener('submit', submitDashboardNote);
+document.querySelector('#production-group-tabs')?.addEventListener('click', event => {
+  const tab = event.target.closest('[data-panel-group]');
+  if (!tab || tab.dataset.panelGroup === dashboardPanelFilter.group) return;
+  const group = tab.dataset.panelGroup;
+  Object.assign(dashboardPanelFilter, { group, front: '', flag: '' });
+  renderProductionDashboard();
+  const selected = [...event.currentTarget.querySelectorAll('[data-panel-group]')]
+    .find(button => button.dataset.panelGroup === dashboardPanelFilter.group);
+  selected?.focus();
+});
 document.querySelector('#production-front-cards')?.addEventListener('click', event => {
   const filter = event.target.closest('[data-panel-filter]');
   if (filter) {

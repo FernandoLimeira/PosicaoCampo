@@ -156,19 +156,17 @@
 .production-entry-unit-context strong { color: #243a41; font-size: 12px; }
 .production-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px 12px; }
 .production-location-grid { grid-template-columns: minmax(110px, .72fr) minmax(120px, .72fr) minmax(220px, 1.56fr); }
-.production-sector-rows { display: grid; gap: 16px; }
-.production-sector-row { min-width: 0; }
-.production-sector-row + .production-sector-row { padding-top: 16px; border-top: 1px solid #dce2e5; }
-.production-sector-row-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.production-sector-number { color: #435259; font-size: 11px; }
+.production-sector-rows { display: grid; gap: 10px; }
+.production-sector-row { display: grid; min-width: 0; gap: 6px; }
+.production-sector-row > [data-remove-sector] { justify-self: end; }
 .production-sector-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .production-sector-actions .production-secondary-button { min-height: 32px; padding: 0 10px; }
 .production-form-section > .production-status-field { margin: 0 0 14px; }
 .production-sector-row [data-sector-field="section"] { min-width: 0; }
 .production-sector-row .field[hidden] { display: none; }
 .production-sector-scan { display: grid; gap: 6px; font-size: 12px; }
-.production-sector-row > .production-sector-scan { margin-top: 6px; }
 .production-sector-scan:empty { display: none; }
+.production-sector-scan.is-missing { color: var(--status-stop-text); font-weight: 700; overflow-wrap: anywhere; }
 .production-sector-scan-options { display: flex; flex-wrap: wrap; gap: 6px; }
 .production-sector-scan-options button { text-align: left; }
 .production-remove-sector { color: #a12d35; }
@@ -952,6 +950,11 @@
 
 /* Painel gerencial: botões e animações */
 .production-view-bar { flex-wrap: nowrap; align-items: center; gap: 14px; }
+.pdash-group-tabs { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; padding: 4px; border: 1px solid var(--data-border); border-radius: 10px; background: var(--data-surface); }
+.pdash-group-tabs[hidden] { display: none; }
+.pdash-group-tab { min-height: 36px; max-width: 100%; padding: 6px 12px; border: 0; border-radius: 7px; background: transparent; color: var(--control-text); font: inherit; font-size: 13px; font-weight: 800; overflow-wrap: anywhere; cursor: pointer; }
+.pdash-group-tab:hover { background: var(--control-hover); }
+.pdash-group-tab[aria-pressed="true"] { background: var(--data-header); color: #fff; }
 
 .pdash-action { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 18px; border-radius: 8px; font-weight: 800; white-space: nowrap;
   transition: transform .15s ease, box-shadow .25s ease, background-color .2s ease, border-color .2s ease; }

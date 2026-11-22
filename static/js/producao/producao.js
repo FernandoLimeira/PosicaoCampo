@@ -322,8 +322,8 @@ function productionOperationCell(entry, item) {
     : '<span class="production-os-state is-no-operation">Sem operação</span>';
 }
 
-function renderEntryOperations(row, operations = ['']) {
-  const container = row?.querySelector('[data-sector-operations]');
+function renderEntryOperations(operations = ['']) {
+  const container = document.querySelector('#production-operation-inputs');
   if (!container) return;
   container.innerHTML = operations.map((value, index) => `<div class="production-sheet-operation">
       <input data-entry-op="${index}" value="${escapeHtml(value)}" maxlength="40"
@@ -333,8 +333,8 @@ function renderEntryOperations(row, operations = ['']) {
       aria-label="Adicionar operação" ${operations.length >= 10 ? 'disabled' : ''}>+</button>`;
 }
 
-function productionEntryOperationValues(row) {
-  return [...row.querySelectorAll('[data-entry-op]')].map(input => input.value);
+function productionEntryOperationValues() {
+  return [...document.querySelectorAll('#production-operation-inputs [data-entry-op]')].map(input => input.value);
 }
 
 function productionPlaceLabel(entry, unit = currentProductionUnit()) {
@@ -347,7 +347,32 @@ const productionSectorScans = new WeakMap();
 function clearProductionSectorScan(row) {
   productionSectorScans.delete(row);
   const target = row?.querySelector('[data-sector-scan]');
-  if (target) target.innerHTML = '';
+  if (target) {
+    target.textContent = '';
+    target.classList?.remove('is-missing');
+  }
+  if (row === productionSectorRows()[0]) {
+    const suggestions = document.querySelector('#production-operation-suggestions');
+    if (suggestions) suggestions.innerHTML = '';
+  }
+}
+
+function renderProductionSectorWarning(row, codes) {
+  const available = productionSectorScans.get(row)?.operations;
+  const target = row.querySelector('[data-sector-scan]');
+  if (!available || !target) return;
+  const sector = productionSectorField(row, 'sector').value.trim();
+  const missing = codes.filter(code => !available.has(productionOperationKey(code)));
+  const message = missing.length
+    ? `Setor ${sector} sem O.S. aberta para ${missing.length === 1 ? 'a operação' : 'as operações'} ${missing.join(', ')}.`
+    : available.size ? '' : `Setor ${sector} sem O.S. aberta.`;
+  target.textContent = message;
+  target.classList?.toggle('is-missing', Boolean(message));
+}
+
+function refreshProductionSectorWarnings() {
+  const codes = productionEntryOperationValues().flatMap(splitProductionOperations);
+  productionSectorRows().forEach(row => renderProductionSectorWarning(row, codes));
 }
 
 async function scanProductionSector(row) {
@@ -370,18 +395,17 @@ async function scanProductionSector(row) {
       const key = productionOperationKey(order.operation);
       if (key && !operations.has(key)) operations.set(key, order);
     }
+    request.operations = operations;
+    renderProductionSectorWarning(row, productionEntryOperationValues().flatMap(splitProductionOperations));
+    if (productionEditingItemId !== null || row !== productionSectorRows()[0] || !operations.size) return;
+    const suggestions = document.querySelector('#production-operation-suggestions');
+    if (!suggestions) return;
     const frontId = document.querySelector('#production-front-input')?.value;
     const defaults = productionFrontDefaultOperations(frontId).map(productionOperationKey);
     const options = [...operations].sort(([a], [b]) => Number(defaults.includes(b)) - Number(defaults.includes(a)));
-    if (!options.length) {
-      target.textContent = 'Nenhuma operação com O.S. aberta neste setor.';
-    } else if (row.querySelector('[data-sector-operations]')) {
-      target.innerHTML = `<span>Operações com O.S. aberta neste setor</span><div class="production-sector-scan-options">${options.map(([, order]) =>
+    suggestions.innerHTML = `<span>Operações com O.S. aberta no setor ${escapeHtml(sector)}</span><div class="production-sector-scan-options">${options.map(([, order]) =>
         `<button type="button" class="production-secondary-button" data-sector-operation="${escapeHtml(order.operation)}">${escapeHtml(serviceOrderOperationLabel(order))}</button>`
       ).join('')}</div>`;
-    } else {
-      target.textContent = `O.S. abertas para as operações ${options.map(([, order]) => order.operation).join(', ')}.`;
-    }
   } catch (error) {
     if (productionSectorScans.get(row) === request) {
       target.innerHTML = '<span>Não foi possível consultar as O.S.</span> <button type="button" class="production-secondary-button" data-retry-sector-scan>Consultar novamente</button>';
@@ -549,29 +573,25 @@ function productionSectorRows() {
 }
 
 function updateProductionSectorRows() {
-  const rows = productionSectorRows();
-  rows.forEach((row, index) => {
-    row.querySelector('.production-sector-number').textContent = `Setor ${index + 1}`;
-    row.querySelector('[data-remove-sector]').hidden = index === 0;
-  });
   const add = document.querySelector('#production-add-sector');
-  if (add) add.disabled = rows.length >= 100;
+  if (add) add.disabled = productionSectorRows().length >= 100;
 }
 
 function addProductionSector(item = null) {
   const rows = productionSectorRows();
   if (!rows.length || rows.length >= 100) return;
   const row = rows[0].cloneNode(true);
-  row.querySelector('.production-entry-operations-field').replaceWith(row.querySelector('[data-sector-scan]'));
   const suffix = `-${++productionSectorSequence}`;
   row.querySelectorAll('[id]').forEach(element => { element.id += suffix; });
   row.querySelectorAll('label[for]').forEach(label => { label.htmlFor += suffix; });
+  const remove = row.querySelector('[data-remove-sector]');
+  remove.hidden = false;
   clearProductionSectorScan(row);
   document.querySelector('#production-sector-rows').append(row);
   updateProductionSectorRows();
   if (item) {
     row.dataset.linkedItemId = String(item.id);
-    row.querySelector('[data-remove-sector]').textContent = 'Separar setor';
+    remove.textContent = 'Separar setor';
     fillProductionSectorRow(row, item);
     return;
   }
@@ -802,10 +822,8 @@ function clearEntryForm(defaultUnit = selectedNavbarProductionUnit()) {
   applyProductionLocationMode();
   renderEntryGroups();
   setSelectedStatus(defaultStatusCode());
-  if (first) {
-    resetSectorFields(first);
-    renderEntryOperations(first);
-  }
+  if (first) resetSectorFields(first);
+  renderEntryOperations();
   setProductionEntryEditMode(false);
 }
 
@@ -826,11 +844,6 @@ function fillProductionSectorRow(row, item) {
     section.innerHTML = `<option value="${escapeHtml(entry.section || '')}">${escapeHtml(entry.section || 'Sem seção')}</option>`;
     section.value = entry.section || '';
   }
-  if (row.querySelector('[data-sector-operations]')) {
-    let operations = splitProductionOperations(entry.operation);
-    if (!operations.length && !item.sector_group_id) operations = productionFrontDefaultOperations(item.service_front_id);
-    renderEntryOperations(row, operations.length ? operations : ['']);
-  }
   scanProductionSector(row);
 }
 
@@ -850,6 +863,9 @@ function openEditProductionItem(itemId) {
   renderEntryGroups(item.group_id, item.service_front_id, item);
   document.querySelector('#production-observation-input').value = entry.observation || '';
   document.querySelector('#production-changes-input').value = entry.changes || '';
+  let operations = splitProductionOperations(entry.operation);
+  if (!operations.length && !item.sector_group_id) operations = productionFrontDefaultOperations(item.service_front_id);
+  renderEntryOperations(operations.length ? operations : ['']);
   const [row = document] = productionSectorRows();
   fillProductionSectorRow(row, item);
   setSelectedStatus(entry.status || defaultStatusCode());
@@ -937,9 +953,9 @@ function collectProductionSectors() {
   const rows = productionSectorRows();
   const status = selectedStatus();
   if (!status) throw new Error('Selecione o status da frente.');
-  const operation = rows.length ? productionEntryOperationValues(rows[0]).map(value => value.trim()).filter(Boolean).join(', ') : '';
+  const operation = productionEntryOperationValues().map(value => value.trim()).filter(Boolean).join(', ');
   const seen = new Set();
-  return rows.map((row, index) => {
+  return rows.map(row => {
     const input = productionSectorField(row, 'sector');
     const sector = input.value.trim();
     if (!sector || seen.has(sector.toLocaleUpperCase('pt-BR'))) {
@@ -951,8 +967,7 @@ function collectProductionSectors() {
     return { sector, section: productionSectorField(row, 'section').value.trim(),
       farm: productionSectorField(row, 'farm').value.trim(), status,
       ...(linkedItemId ? { id: Number(linkedItemId) } : {}),
-      ...(index === 0 && (operation || productionEditingItemId) ? { operation } : {}),
-      ...(index > 0 && !linkedItemId && operation ? { default_operation: operation } : {}) };
+      ...(operation || productionEditingItemId || rows.length > 1 ? { operation } : {}) };
   });
 }
 
@@ -1054,11 +1069,14 @@ document.querySelector('#production-sector-rows')?.addEventListener('click', eve
     return;
   }
   if (event.target.closest('[data-retry-sector-scan]')) scanProductionSector(row);
+});
+
+document.querySelector('#production-entry-operations')?.addEventListener('click', event => {
   const add = event.target.closest('[data-entry-op-add]');
   const remove = event.target.closest('[data-entry-op-remove]');
   const suggestion = event.target.closest('[data-sector-operation]');
   if (!add && !remove && !suggestion) return;
-  const operations = productionEntryOperationValues(row);
+  const operations = productionEntryOperationValues();
   if (remove) operations.splice(Number(remove.dataset.entryOpRemove), 1);
   else if (suggestion) {
     const code = suggestion.dataset.sectorOperation;
@@ -1068,9 +1086,12 @@ document.querySelector('#production-sector-rows')?.addEventListener('click', eve
     else if (operations.length < 10) operations.push(code);
     else return;
   } else if (operations.length < 10) operations.push('');
-  renderEntryOperations(row, operations);
-  if (add) row.querySelector(`[data-entry-op="${operations.length - 1}"]`)?.focus();
+  renderEntryOperations(operations);
+  refreshProductionSectorWarnings();
+  if (add) event.currentTarget.querySelector(`[data-entry-op="${operations.length - 1}"]`)?.focus();
 });
+
+document.querySelector('#production-operation-inputs')?.addEventListener('input', refreshProductionSectorWarnings);
 
 document.querySelector('#production-sector-rows')?.addEventListener('input', event => {
   if (!event.target.matches('input[data-sector-field="sector"], input[data-sector-field="section"]')) return;

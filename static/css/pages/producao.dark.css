@@ -42,8 +42,6 @@
 .production-entry-unit-context { border: 1px solid #444444; background: #262626; }
 .production-entry-unit-context span { color: #999999; }
 .production-entry-unit-context strong { color: #d2d2d2; }
-.production-sector-row + .production-sector-row { border-top: 1px solid #454545; }
-.production-sector-number { color: #b6b6b6; }
 .production-remove-sector { color: #d4666e; }
 .production-remove-sector:hover { color: #dd868d; }
 .production-status-field legend { color: #999999; }
@@ -274,6 +272,7 @@
 .pfd-op-badge.is-order-missing { background: #291e1f; color: #d4626b; }
 .pfd-op-line { color: #cbcbcb; }
 .pfd-op-line b { color: #999999; }
+.pdash-group-tab[aria-pressed="true"] { color: #ffffff; }
 .production-primary-button.pdash-action { background: linear-gradient(135deg, #3d3d3d 0%, #2b2b2b 100%); }
 .production-primary-button.pdash-action:hover:not(:disabled) { background: linear-gradient(135deg, #3e7883 0%, #2b2b2b 100%); }
 .production-secondary-button.pdash-action { background: #2a2a2a; }

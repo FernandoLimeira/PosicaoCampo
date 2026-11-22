@@ -8,16 +8,19 @@ const elements = new Map();
 const modalEvents = [];
 const requests = [];
 const sectorRows = [];
+const operationInputs = [];
 const toasts = [];
 const confirmations = [];
 const groupEvents = {};
 const detailClicks = [];
+let dashboardGroupClick;
 function element(selector) {
   if (!elements.has(selector)) elements.set(selector, {
     innerHTML: '', textContent: '', value: '', hidden: false,
     addEventListener(type, listener) {
       if (selector === '#production-groups-list') groupEvents[type] = listener;
       if (selector === '#production-front-detail-body' && type === 'click') detailClicks.push(listener);
+      if (selector === '#production-group-tabs' && type === 'click') dashboardGroupClick = listener;
     },
     setAttribute() {}, reset() {}, focus() {}, setSelectionRange() {},
     querySelector(name) { return element(`${selector} ${name}`); }
@@ -26,7 +29,10 @@ function element(selector) {
 }
 const document = {
   querySelector: element,
-  querySelectorAll(selector) { return selector === '[data-production-sector-row]' ? sectorRows : []; },
+  querySelectorAll(selector) {
+    if (selector === '[data-production-sector-row]') return sectorRows;
+    return selector === '#production-operation-inputs [data-entry-op]' ? operationInputs : [];
+  },
   addEventListener() {}
 };
 const context = vm.createContext({
@@ -88,8 +94,11 @@ assert.equal(element('#production-list-status').textContent, '2 lançamentos · 
 context.openEditProductionItem(2);
 assert.equal(vm.runInContext('productionEditingItemId', context), 2);
 assert.equal(element('#production-item-id').value, '2');
-assert.match(fs.readFileSync(path.join(__dirname, '../templates/producao.html'), 'utf8'), /id="production-item-id"\s+type="hidden"/);
-assert.match(fs.readFileSync(path.join(__dirname, '../templates/producao.html'), 'utf8'), /Status da frente\s*<\/span>\s*<div id="production-status-options"[^>]*><\/div>\s*<\/label>\s*<div id="production-sector-rows"/);
+const productionTemplate = fs.readFileSync(path.join(__dirname, '../templates/producao.html'), 'utf8');
+assert.match(productionTemplate, /id="production-item-id"\s+type="hidden"/);
+assert.match(productionTemplate, /Status da frente\s*<\/span>\s*<div id="production-status-options"[^>]*><\/div>\s*<\/label>\s*<div id="production-sector-rows"/);
+assert.match(productionTemplate, /data-sector-scan[^>]*><\/div>\s*<button[^>]*data-remove-sector[^>]*>[^<]+<\/button>\s*<\/div>\s*<\/div>\s*<div id="production-entry-operations"/);
+assert.doesNotMatch(productionTemplate, /production-sector-number/);
 assert.equal(element('#production-modal-kicker').textContent, 'Atualizar frente');
 // O título do popup de edição mostra o nome da frente.
 assert.equal(element('#production-modal-title').textContent, vm.runInContext('findProductionItem(2).service_name', context));
@@ -152,6 +161,26 @@ assert.match(cards.innerHTML, /data-panel-front-card="9"/);
 assert.doesNotMatch(cards.innerHTML, /Plantio|Tratos|data-panel-group/);
 assert.doesNotMatch(cards.innerHTML, /Resumo do turno/);
 assert.match(cards.innerHTML, /data-panel-filter="ok"/);
+const dashboardGroups = element('#production-group-tabs');
+assert.equal(dashboardGroups.hidden, false);
+assert.match(dashboardGroups.innerHTML, /data-panel-group="" aria-pressed="true"[^>]*>Todos os grupos/);
+assert.match(dashboardGroups.innerHTML, /data-panel-group="1"[^>]*>Plantio/);
+assert.match(dashboardGroups.innerHTML, /data-panel-group="2"[^>]*>Tratos/);
+function selectDashboardGroup(groupId) {
+  let focused = false;
+  const tab = { dataset: { panelGroup: groupId }, focus() { focused = true; } };
+  dashboardGroupClick({ target: { closest: () => tab }, currentTarget: { querySelectorAll: () => [tab] } });
+  assert.equal(focused, true);
+}
+vm.runInContext("dashboardPanelFilter.front = '7'; dashboardPanelFilter.flag = 'ok'", context);
+selectDashboardGroup('2');
+assert.match(dashboardGroups.innerHTML, /data-panel-group="2" aria-pressed="true"/);
+assert.match(cards.innerHTML, /data-panel-front-card="9"/);
+assert.doesNotMatch(cards.innerHTML, /data-panel-front-card="7"/);
+assert.equal(vm.runInContext('dashboardPanelFilter.front || dashboardPanelFilter.flag', context), '');
+selectDashboardGroup('');
+assert.match(cards.innerHTML, /data-panel-front-card="7"/);
+assert.match(cards.innerHTML, /data-panel-front-card="9"/);
 // Um filtro por O.S. mantém juntos os setores vinculados no formulário.
 vm.runInContext(`productionItems[0].sector_group_id = productionItems[1].sector_group_id = 'saved-group';
   dashboardPanelFilter.flag = 'ok';`, context);
@@ -192,13 +221,11 @@ vm.runInContext("productionFilterFront = '8'", context);
 context.renderProductionItems();
 assert.equal(element('#production-empty').hidden, false);
 
-function sectorRow(sector, status = 'ATIVO', operations = []) {
+function sectorRow(sector) {
   const fields = { sector: { value: sector, focus() {} }, section: { value: '' }, farm: { value: '' } };
   const scan = { innerHTML: '', textContent: '' };
-  return { fields, scan, querySelectorAll() { return operations.map(value => ({ value })); }, querySelector(selector) {
+  return { fields, scan, querySelector(selector) {
     if (selector === '[data-sector-scan]') return scan;
-    if (selector === '[data-sector-operations]') return operations.length ? {} : null;
-    if (selector === '[data-production-status]:checked') return status ? { value: status } : null;
     const match = selector.match(/^\[data-sector-field="(.+)"\]$/);
     return match ? fields[match[1]] : null;
   } };
@@ -211,7 +238,9 @@ function sectorRow(sector, status = 'ATIVO', operations = []) {
   context.refreshProductionPage = async () => {};
   element('#production-front-input').value = '7';
   element('[data-production-status-select]').value = 'UMIDO';
-  sectorRows.push(sectorRow('42', 'ATIVO', ['101']), sectorRow('43', 'ATIVO'));
+  operationInputs.push({ value: '101' });
+  sectorRows.push(sectorRow('42'), sectorRow('43'));
+  sectorRows[1].dataset = { linkedItemId: '8' };
   await context.submitProductionEntry({ preventDefault() {} });
   const update = requests.at(-1);
   assert.equal(update.url, '/api/production/my-items/2');
@@ -219,9 +248,9 @@ function sectorRow(sector, status = 'ATIVO', operations = []) {
   const updatedSectors = JSON.parse(update.options.body).sectors;
   assert.equal(updatedSectors[0].observation, 'Observação anterior');
   assert.deepEqual(updatedSectors.map(item => item.status), ['UMIDO', 'UMIDO']);
-  assert.equal(updatedSectors[0].operation, '101');
-  assert.equal(updatedSectors[1].default_operation, '101');
-  assert.equal(updatedSectors[1].operation, undefined);
+  assert.deepEqual(updatedSectors.map(item => item.operation), ['101', '101']);
+  assert.equal(updatedSectors[1].id, 8);
+  delete sectorRows[1].dataset;
   await context.removeProductionItem(2);
   assert.equal(requests.at(-1).url, '/api/production/my-items/2');
   assert.equal(requests.at(-1).options.method, 'DELETE');
@@ -231,7 +260,8 @@ function sectorRow(sector, status = 'ATIVO', operations = []) {
   await context.submitProductionEntry({ preventDefault() {} });
   const batch = requests.at(-1);
   assert.equal(batch.url, '/api/production/my-items/batch');
-  assert.deepEqual(JSON.parse(batch.options.body).sectors.map(item => [item.sector, item.status]), [['42', 'UMIDO'], ['43', 'UMIDO']]);
+  assert.deepEqual(JSON.parse(batch.options.body).sectors.map(item => [item.sector, item.status, item.operation]),
+    [['42', 'UMIDO', '101'], ['43', 'UMIDO', '101']]);
   sectorRows[1].fields.sector.value = ' 42 ';
   const requestCount = requests.length;
   await context.submitProductionEntry({ preventDefault() {} });
@@ -285,10 +315,22 @@ function sectorRow(sector, status = 'ATIVO', operations = []) {
   pending[concurrentStart + 2].resolve({ orders: [{ operation: '205', operation_name: 'Calagem' }] });
   pending[concurrentStart].resolve({ orders: [{ operation: '205', operation_name: 'Calagem' }] });
   await Promise.all([oldScan, newScan, otherScan]);
-  assert.match(first.scan.innerHTML, /Gradagem/);
-  assert.doesNotMatch(first.scan.innerHTML, /Calagem/);
-  assert.match(second.scan.textContent, /O\.S\. abertas.*205/);
-  assert.doesNotMatch(second.scan.innerHTML, /data-sector-operation/);
+  assert.match(element('#production-operation-suggestions').innerHTML, /Gradagem/);
+  assert.doesNotMatch(element('#production-operation-suggestions').innerHTML, /Calagem/);
+  assert.equal(first.scan.textContent, '');
+  assert.match(second.scan.textContent, /Setor 300 sem O\.S\. aberta para a operação 101/);
+  operationInputs[0].value = '0205';
+  context.refreshProductionSectorWarnings();
+  assert.match(first.scan.textContent, /Setor 201 sem O\.S\. aberta para a operação 0205/);
+  assert.equal(second.scan.textContent, '');
+  assert.equal(pending.length, concurrentStart + 3);
+  vm.runInContext('productionEditingItemId = 2', context);
+  const editScan = context.scanProductionSector(first);
+  pending.at(-1).resolve({ orders: [{ operation: '101', operation_name: 'Gradagem' }] });
+  await editScan;
+  assert.equal(element('#production-operation-suggestions').innerHTML, '');
+  assert.match(first.scan.textContent, /Setor 201 sem O\.S\. aberta para a operação 0205/);
+  vm.runInContext('productionEditingItemId = null', context);
 
   assert.equal(context.productionPlaceLabel({ sector: '201', section: '20', farm: 'Fazenda 201' }, 'NRD'), 'Setor 201 · Fazenda 201');
   assert.equal(context.productionPlaceLabel({ sector: '201', section: '20', farm: 'Fazenda 201' }, 'RBR'), 'Setor 201 / Seção 20 · Fazenda 201');
