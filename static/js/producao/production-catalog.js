@@ -260,18 +260,74 @@ function updateProductionResponsibilityFields(form) {
   form.elements.relief_name.disabled = !cycle;
 }
 
+let productionResponsibilityFrontRequest = 0;
+
+function renderResponsibilityFrontChoices(select, groups) {
+  select.innerHTML = '<option value="">Selecione</option>' + groups.map(group => `
+    <optgroup label="${escapeHtml(group.name)}">${(group.fronts || []).map(front =>
+      `<option value="${front.id}">${escapeHtml(front.name)}</option>`).join('')}</optgroup>`).join('');
+}
+
+function showResponsibilityUnitStatus(message = '') {
+  const status = document.querySelector('#production-responsibility-unit-status');
+  status.textContent = message;
+  status.hidden = !message;
+}
+
+async function changeProductionResponsibilityUnit(event) {
+  const form = event.currentTarget.form;
+  const unit = event.currentTarget.value;
+  const request = ++productionResponsibilityFrontRequest;
+  const submit = form.querySelector('button[type="submit"]');
+  const select = form.elements.service_front_id;
+  form.dataset.scheduleUnit = '';
+  submit.disabled = true;
+  select.disabled = true;
+  renderResponsibilityFrontChoices(select, []);
+  showResponsibilityUnitStatus('Carregando frentes da unidade…');
+  try {
+    let groups = groupsForEntry();
+    if (unit !== currentProductionUnit()) {
+      const query = encodeURIComponent(unit);
+      const [catalog, schedules] = await Promise.all([
+        apiRequest(`/api/production/catalog?unit=${query}`),
+        apiRequest(`/api/production/catalog/responsibilities?unit=${query}`)
+      ]);
+      if (request !== productionResponsibilityFrontRequest || form.dataset.unit !== currentProductionUnit()) return;
+      if (!schedules.permissions?.edit_schedules) {
+        showResponsibilityUnitStatus('Seu perfil tem acesso de consulta nesta unidade.');
+        return;
+      }
+      groups = Array.isArray(catalog.groups) ? catalog.groups : [];
+    }
+    renderResponsibilityFrontChoices(select, groups);
+    form.dataset.scheduleUnit = unit;
+    select.disabled = false;
+    submit.disabled = !groups.some(group => group.fronts?.length);
+    showResponsibilityUnitStatus(submit.disabled ? 'Nenhuma frente cadastrada nesta unidade.' : '');
+  } catch (error) {
+    if (request === productionResponsibilityFrontRequest) showResponsibilityUnitStatus(error.message || 'Não foi possível carregar as frentes.');
+  }
+}
+
 function openProductionResponsibilityForm(rule = null, { keepOpen = false } = {}) {
   const form = document.querySelector('#production-responsibility-form');
   if (!form) return;
   const fields = form.elements;
+  ++productionResponsibilityFrontRequest;
   form.reset();
   form.dataset.unit = currentProductionUnit();
+  form.dataset.scheduleUnit = form.dataset.unit;
   fields.rule_id.value = rule?.id ?? '';
+  fields.unit_code.innerHTML = allowedProductionUnits().map(unit => `<option value="${escapeHtml(unit)}">${escapeHtml(productionUnitLabel(unit))}</option>`).join('');
+  fields.unit_code.value = form.dataset.unit;
+  fields.unit_code.disabled = Boolean(rule);
+  fields.service_front_id.disabled = false;
+  form.querySelector('button[type="submit"]').disabled = false;
+  showResponsibilityUnitStatus();
   fields.role_id.innerHTML = '<option value="">Selecione</option>' + productionResponsibilityRoles.map(role =>
     `<option value="${role.id}">${escapeHtml(role.name)}</option>`).join('');
-  fields.service_front_id.innerHTML = '<option value="">Selecione</option>' + groupsForEntry().map(group => `
-    <optgroup label="${escapeHtml(group.name)}">${(group.fronts || []).map(front =>
-      `<option value="${front.id}">${escapeHtml(front.name)}</option>`).join('')}</optgroup>`).join('');
+  renderResponsibilityFrontChoices(fields.service_front_id, groupsForEntry());
   if (rule) {
     for (const key of ['kind', 'role_id', 'service_front_id', 'shift', 'work_date', 'responsible_name', 'relief_name']) {
       fields[key].value = rule[key];
@@ -285,28 +341,34 @@ function openProductionResponsibilityForm(rule = null, { keepOpen = false } = {}
 async function submitProductionResponsibility(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const unit = form.dataset.unit;
-  if (!canEditProductionResponsibility('edit_schedules') || unit !== currentProductionUnit()) return;
   const fields = form.elements;
+  const unit = fields.unit_code.value;
+  if (!canEditProductionResponsibility('edit_schedules') || form.dataset.unit !== currentProductionUnit()
+    || !unit || form.dataset.scheduleUnit !== unit) return;
   const id = fields.rule_id.value;
   const payload = Object.fromEntries(new FormData(form));
   payload.unit_code = unit;
   const button = form.querySelector('button[type="submit"]');
   if (button.disabled) return;
+  const request = ++productionResponsibilityFrontRequest;
+  fields.unit_code.disabled = true;
   button.disabled = true;
   try {
     await apiRequest(`/api/production/catalog/responsibilities${id ? `/${id}` : ''}`, {
       method: id ? 'PUT' : 'POST', body: JSON.stringify(payload)
     });
-    showToast('Escala salva.');
+    showToast(`Escala salva em ${productionUnitLabel(unit)}.`);
+    if (request === productionResponsibilityFrontRequest) openProductionResponsibilityForm();
     if (unit === currentProductionUnit()) {
-      openProductionResponsibilityForm();
       await loadProductionResponsibilities(unit);
     }
   } catch (error) {
     showToast(error.message || 'Não foi possível salvar a escala.', true);
   } finally {
-    button.disabled = false;
+    if (request === productionResponsibilityFrontRequest) {
+      fields.unit_code.disabled = Boolean(id);
+      button.disabled = false;
+    }
   }
 }
 
@@ -432,6 +494,7 @@ if (productionCatalogPageActive()) {
   const responsibilityForm = document.querySelector('#production-responsibility-form');
   responsibilityForm?.addEventListener('submit', submitProductionResponsibility);
   responsibilityForm?.elements?.kind?.addEventListener('change', () => updateProductionResponsibilityFields(responsibilityForm));
+  responsibilityForm?.elements?.unit_code?.addEventListener('change', changeProductionResponsibilityUnit);
   document.querySelector('#production-responsibility-clear')?.addEventListener('click', () => openProductionResponsibilityForm());
   document.querySelector('#production-responsibility-retry')?.addEventListener('click', () => loadProductionResponsibilities());
   document.querySelector('#production-responsibility-role-form')?.addEventListener('submit', submitProductionResponsibilityRole);

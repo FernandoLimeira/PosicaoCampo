@@ -243,11 +243,11 @@ function fitProductionSummaryColumns() {
 
 function renderProductionSummary() {
   const summary = document.querySelector('#production-summary');
-  if (!summary) return;
+  if (!summary || typeof dashboardFrontGroups !== 'function') return;
   const counts = Object.fromEntries(productionStatuses.map(status => [status.code, 0]));
-  visibleProductionItems().forEach(item => {
-    if (!item.is_current_day) return;
-    const code = item.entry?.status;
+  const currentFronts = dashboardFrontGroups(dashboardItems().filter(item => item.is_current_day));
+  currentFronts.forEach(sectors => {
+    const code = dashboardFrontStatus(sectors).entry?.status;
     if (Object.hasOwn(counts, code)) counts[code] += 1;
   });
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0);

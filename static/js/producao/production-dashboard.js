@@ -1,23 +1,20 @@
 // Painel gerencial da Produção Agrícola: a página da Produção concentra tudo nele.
 // Usa os mesmos lançamentos da tabela (productionItems) e os status cadastrados.
-// O painel mostra um grupo por vez (sem "Todos"): mais espaço para as frentes.
-const PRODUCTION_PANEL_GROUP_KEY = 'posicao-campo-production-panel-group';
-let productionPanelGroup = '';
-try { productionPanelGroup = localStorage.getItem(PRODUCTION_PANEL_GROUP_KEY) || ''; } catch (_) { /* sem armazenamento */ }
-
-// Filtros do painel (por grupo): frente escolhida e indicador clicado no cabeçalho.
+// Filtros da unidade, com todos os setores de cada frente visível.
 const dashboardPanelFilter = { front: '', flag: '' };
 
-function dashboardMatchesFilter(item) {
-  if (dashboardPanelFilter.front && String(item.service_front_id) !== dashboardPanelFilter.front) return false;
-  const state = dashboardOrderState(item);
-  switch (dashboardPanelFilter.flag) {
-    case 'ok': return state === 'ok';
-    case 'noOrder': return state === 'missing';
-    case 'noOperation': return state === 'no_operation';
-    case 'today': return Boolean(item.is_current_day);
-    default: return true;
-  }
+function dashboardFrontMatchesFlag(sectors, flag) {
+  if (flag === 'stopped') return sectors.every(item => dashboardFlags(item).stopped);
+  return sectors.some(item => {
+    const state = dashboardOrderState(item);
+    switch (flag) {
+      case 'ok': return state === 'ok';
+      case 'noOrder': return state === 'missing';
+      case 'noOperation': return state === 'no_operation';
+      case 'today': return Boolean(item.is_current_day);
+      default: return true;
+    }
+  });
 }
 
 function dashboardFrontGroups(items) {
@@ -33,30 +30,6 @@ function dashboardFrontGroups(items) {
 function dashboardFrontStatus(sectors) {
   return sectors.find(item => statusMeta(item.entry?.status).className === 'is-active')
     || sectors.find(item => !dashboardFlags(item).stopped) || sectors[0];
-}
-
-function dashboardProblemScore(items) {
-  return items.reduce((sum, item) => {
-    const flags = dashboardFlags(item);
-    return sum + (flags.stopped ? 3 : 0) + (flags.noOrder ? 2 : 0) + (flags.noOperation ? 1 : 0) + (flags.stale ? 1 : 0);
-  }, 0);
-}
-
-function renderDashboardGroupTabs(groups) {
-  const nav = document.querySelector('#production-group-tabs');
-  if (!nav) return;
-  nav.hidden = groups.length === 0;
-  nav.innerHTML = groups.map(group => {
-    const fronts = dashboardFrontGroups(group.items);
-    const red = fronts.filter(sectors => sectors.every(item => dashboardFlags(item).stopped)
-      || sectors.some(item => dashboardFlags(item).noOrder)).length;
-    const amber = fronts.filter(sectors => sectors.some(item => dashboardFlags(item).noOperation)).length;
-    const badge = red ? `<i class="is-red" title="${red} parada(s) ou sem O.S.">${red}</i>`
-      : amber ? `<i class="is-amber" title="${amber} sem operação">${amber}</i>` : '';
-    const active = String(group.id) === productionPanelGroup;
-    return `<button type="button" role="tab" class="pdash-group-tab${active ? ' is-active' : ''}" aria-selected="${active}" data-panel-group="${escapeHtml(group.id)}">
-      <span>${escapeHtml(group.name)}</span><b>${fronts.length}</b>${badge}</button>`;
-  }).join('');
 }
 
 // Situação de O.S. igual à da coluna da tabela: sem operação não confere O.S.
@@ -78,7 +51,7 @@ function dashboardFlags(item) {
 }
 
 function dashboardItems() {
-  return Array.isArray(productionItems) ? productionItems : [];
+  return Array.isArray(productionItems) ? consolidateProductionItems(productionItems) : [];
 }
 
 const DASHBOARD_ICONS = {
@@ -124,7 +97,7 @@ function openDashboardFrontDetail(itemId) {
   const title = document.querySelector('#production-front-detail-title');
   if (title) title.textContent = item.service_name || 'Frente';
   const context = document.querySelector('#production-front-detail-context');
-  if (context) context.textContent = item.group_name || '';
+  if (context) context.textContent = productionUnitLabel(currentProductionUnit());
   const info = [
     ['Setor', entry.sector || '-'],
     ...(productionUnitUsesSection(currentProductionUnit()) ? [['Seção', entry.section || '-']] : []),
@@ -180,7 +153,7 @@ function openDashboardFrontDetail(itemId) {
     ${entry.sector ? `<section class="pfd-section" data-pfd-panel="others" hidden>
       ${otherOrders || `<p class="production-empty">Nenhuma outra O.S. aberta no setor ${escapeHtml(entry.sector)}.</p>`}
     </section>` : ''}
-    ${entry.observation ? `<section class="pfd-section"><h3>Observação</h3><p class="pfd-note">${escapeHtml(entry.observation)}</p></section>` : ''}
+    ${entry.observation || entry.changes ? dashboardSectorNotes(item, false) : ''}
     ${canFillProduction() ? `<div class="pdash-detail-actions">
       <button class="modal-button danger" type="button" data-panel-remove="${item.id}">Remover</button>
       <button class="modal-button save" type="button" data-panel-edit="${item.id}">Editar frente</button>
@@ -203,19 +176,16 @@ function dashboardSvg(paths, filled = false) {
   return `<svg viewBox="0 0 24 24" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 }
 
-// Horário da atualização separado do responsável escalado para o turno atual.
-function dashboardUpdatedLabel(item, shift) {
+function dashboardUpdateText(item) {
   const entry = item.entry || {};
-  const who = productionResponsibleName(item, shift);
-  if (!entry.updated_at) return who;
+  if (!entry.updated_at) return '';
   const when = new Date(entry.updated_at * 1000);
   const time = when.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
   const day = item.is_current_day ? `hoje ${time}` : `${formatIsoDateBr(entry.work_date || '').slice(0, 5)} ${time}`;
-  return `${who} · Atualização ${day}`;
+  return `Atualização ${day}`;
 }
 
-// Ordem dos cartões no grupo: problemas primeiro (parada, sem O.S., sem operação,
-// não atualizada hoje) e depois as demais, mantendo a ordem original entre iguais.
+// Problemas primeiro (parada, sem O.S., sem operação ou registro de outro dia).
 function dashboardTilePriority(item) {
   const flags = dashboardFlags(item);
   if (flags.stopped) return 0;
@@ -226,11 +196,27 @@ function dashboardTilePriority(item) {
 }
 function dashboardSortTiles(items) {
   return items.map((item, index) => ({ item, index }))
-    .sort((a, b) => dashboardTilePriority(a.item) - dashboardTilePriority(b.item) || a.index - b.index)
+    .sort((a, b) => dashboardTilePriority(a.item) - dashboardTilePriority(b.item)
+      || compareFrontLabels(a.item.service_name || '', b.item.service_name || '') || a.index - b.index)
     .map(({ item }) => item);
 }
 
-function dashboardFrontTile(item, shift, { grouped = false } = {}) {
+const DASHBOARD_NOTE_FIELDS = { observation: ['Observação', 'Adicionar observação'], changes: ['Previsão de mudança', 'Adicionar previsão'] };
+
+function dashboardSectorNotes(item, editable) {
+  const entry = item.entry || {};
+  return `<dl class="pdash-sector-notes">${Object.entries(DASHBOARD_NOTE_FIELDS).map(([field, [label, addLabel]]) => {
+    const value = String(entry[field] || '').trim();
+    const text = escapeHtml(value || (editable ? addLabel : '—'));
+    const location = `${item.service_name || 'Frente'} · ${productionPlaceLabel(entry)}`;
+    const action = value ? `Editar ${label.toLocaleLowerCase('pt-BR')}` : addLabel;
+    return `<div><dt>${label}</dt><dd>${editable
+      ? `<button type="button" class="pdash-note${value ? '' : ' is-empty'}" data-panel-note="${field}" data-item-id="${item.id}" title="${escapeHtml(`${action} · ${location}`)}">${text}</button>`
+      : `<span class="pdash-note">${text}</span>`}</dd></div>`;
+  }).join('')}</dl>`;
+}
+
+function dashboardSectorRow(item, multiple, editable) {
   const entry = item.entry || {};
   const meta = statusMeta(entry.status);
   const codes = splitProductionOperations(entry.operation);
@@ -248,27 +234,48 @@ function dashboardFrontTile(item, shift, { grouped = false } = {}) {
     ? '<span class="pdash-os is-missing" title="No Polo MS a O.S. confere por setor e seção">Informe a seção</span>' : '';
   const stale = item.is_current_day ? ''
     : `<span class="pdash-stale">${dashboardIcon('clock')}${entry.work_date ? `Último registro ${escapeHtml(formatIsoDateBr(entry.work_date))}` : 'Sem registro'}</span>`;
-  // Cartão clicável (abre o detalhe, também por Enter/Espaço); editar fica só dentro do detalhe.
-  const updated = dashboardUpdatedLabel(item, shift);
-  return `<article tabindex="0" role="button" data-panel-detail="${item.id}" class="pdash-tile ${meta.className}${item.is_current_day ? '' : ' is-stale'}" title="${escapeHtml(`${item.service_name} · ${meta.name} · ver detalhes`)}">
-      ${grouped ? '' : `<span class="pdash-tile-name">
-        <i class="pdash-status-icon ${meta.className}">${dashboardSvg(DASHBOARD_STATUS_ICONS[meta.className] || DASHBOARD_STATUS_ICONS['is-waiting'], meta.className !== 'is-waiting')}</i>
-        <strong>${escapeHtml(item.service_name || '-')}</strong>
-      </span>`}
-      <span class="pdash-tile-meta">
-        <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
+  const updated = dashboardUpdateText(item);
+  const place = productionPlaceLabel(entry);
+  return `<section class="pdash-sector-row" aria-label="${escapeHtml(place)}">
+    <div class="pdash-sector-operation">
+      <div class="pdash-tile-meta">
+        <strong class="pdash-place">${dashboardIcon('pin')}<span>${escapeHtml(place)}</span></strong>
+        ${multiple ? `<span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>` : ''}
         ${stale}
-      </span>
-      <span class="pdash-place">${dashboardIcon('pin')}<span>${escapeHtml(productionPlaceLabel(entry))}</span></span>
-      <span class="pdash-tile-ops">${operations}</span>
-      ${!grouped || section ? `<span class="pdash-tile-foot">${grouped ? '' : `<span class="pdash-tile-who" title="${escapeHtml(updated)}">${escapeHtml(updated)}</span>`}${section}</span>` : ''}
-    </article>`;
+      </div>
+      <div class="pdash-tile-ops">${operations}</div>
+      <div class="pdash-sector-footer">
+        ${updated ? `<small>${escapeHtml(updated)}</small>` : ''}${section}
+        <button type="button" class="pdash-sector-detail" data-panel-detail="${item.id}" aria-label="Ver detalhes · ${escapeHtml(place)}">Ver detalhes</button>
+      </div>
+    </div>
+    ${dashboardSectorNotes(item, editable && Boolean(item.entry))}
+  </section>`;
 }
 
-// Resumo analítico (topo do painel): indicadores por grupo da unidade.
-function dashboardGroupStats(items) {
+function dashboardFrontTile(sectors, shift) {
+  const front = dashboardFrontStatus(sectors);
+  const meta = statusMeta(front.entry?.status);
+  const editable = canFillProduction();
+  const ordered = [...sectors].sort((a, b) => compareFrontLabels(a.entry?.sector || '', b.entry?.sector || '')
+    || compareFrontLabels(a.entry?.section || '', b.entry?.section || ''));
+  return `<article class="pdash-tile ${meta.className}" data-panel-front-card="${front.service_front_id ?? front.id}">
+    <header class="pdash-front-card-header">
+      <div class="pdash-tile-name">
+        <i class="pdash-status-icon ${meta.className}">${dashboardSvg(DASHBOARD_STATUS_ICONS[meta.className] || DASHBOARD_STATUS_ICONS['is-waiting'], meta.className !== 'is-waiting')}</i>
+        <h4>${escapeHtml(front.service_name || '-')}</h4>
+        <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
+      </div>
+      <div class="pdash-tile-who">${escapeHtml(productionResponsibleName(front, shift))}</div>
+    </header>
+    ${ordered.map(item => dashboardSectorRow(item, ordered.length > 1, editable)).join('')}
+  </article>`;
+}
+
+// Status por frente e conferência de O.S. por setor.
+function dashboardUnitStats(items) {
   const fronts = dashboardFrontGroups(items);
-  const stats = { total: fronts.length, active: 0, stopped: 0, ok: 0, missing: 0, noOperation: 0, today: 0 };
+  const stats = { total: fronts.length, active: 0, stopped: 0, ok: 0, missing: 0 };
   fronts.map(dashboardFrontStatus).forEach(item => {
     const className = statusMeta(item.entry?.status).className;
     if (className === 'is-active') stats.active += 1;
@@ -278,9 +285,7 @@ function dashboardGroupStats(items) {
     const state = dashboardOrderState(item);
     if (state === 'ok') stats.ok += 1;
     if (state === 'missing') stats.missing += 1;
-    if (state === 'no_operation') stats.noOperation += 1;
   });
-  stats.today = fronts.filter(sectors => sectors.some(item => item.is_current_day)).length;
   return stats;
 }
 
@@ -323,11 +328,10 @@ function dashboardUpdatedInShift(item, shift) {
   return Boolean(item.is_current_day) && Number(item.entry?.updated_at || 0) >= shift.startAt;
 }
 
-function dashboardOverviewRow(name, stats, total = false) {
+function dashboardOverviewRow(stats) {
   const percent = (part, all) => (all ? `${Math.round(part * 100 / all)}%` : '-');
   const checked = stats.ok + stats.missing;
-  return `<tr class="${total ? 'is-total' : ''}">
-      <th scope="row">${escapeHtml(name)}</th>
+  return `<tr>
       <td>${stats.total}</td>
       <td>${stats.active}</td>
       <td class="${stats.stopped ? 'is-red' : ''}">${stats.stopped}</td>
@@ -390,167 +394,155 @@ function renderDashboardSectorCard() {
   card.innerHTML = card.hidden ? '' : dashboardSectorSearchHtml();
 }
 
-// Resumo por grupo só com as frentes atualizadas pelo analista no turno atual:
-// informação certeira do momento (o que não foi atualizado no turno não entra na conta).
+// Resumo da unidade com o que foi atualizado no turno atual.
 function dashboardShiftStats(items, shift) {
   const updated = items.filter(item => dashboardUpdatedInShift(item, shift));
-  const stats = dashboardGroupStats(updated);
+  const stats = dashboardUnitStats(updated);
   return { ...stats, shiftUpdated: stats.total, unitTotal: dashboardFrontGroups(items).length };
 }
 
-function renderDashboardOverview(groups, allItems) {
+function renderDashboardOverview(items, shift) {
   const box = document.querySelector('#production-overview');
   if (!box) return;
-  box.hidden = false;
-  const shift = dashboardCurrentShift();
-  const totals = dashboardShiftStats(allItems, shift);
-  const groupsCard = allItems.length
+  const totals = dashboardShiftStats(items, shift);
+  const content = items.length
     ? `<header><h3>Resumo do turno ${shift.name} <small>${shift.label}</small></h3><span>${totals.shiftUpdated} de ${totals.unitTotal} ${totals.unitTotal === 1 ? 'frente atualizada' : 'frentes atualizadas'} no turno</span></header>
       <div class="pdash-overview-scroll"><table class="pdash-overview-table">
-        <thead><tr><th scope="col">Grupo</th><th scope="col">Frentes</th><th scope="col">Em atividade</th><th scope="col">Paradas</th>
-          <th scope="col">O.S. OK</th><th scope="col">Sem O.S.</th><th scope="col">Atualizadas no turno</th></tr></thead>
-        <tbody>${groups.map(group => dashboardOverviewRow(group.name, dashboardShiftStats(group.items, shift))).join('')}</tbody>
-        <tfoot>${dashboardOverviewRow('Total', totals, true)}</tfoot>
+        <thead><tr><th scope="col">Frentes</th><th scope="col">Em atividade</th><th scope="col">Paradas</th>
+          <th scope="col">O.S. OK por setor</th><th scope="col">Setores sem O.S.</th><th scope="col">Atualizadas no turno</th></tr></thead>
+        <tbody>${dashboardOverviewRow(totals)}</tbody>
       </table></div>
       ${totals.shiftUpdated ? '' : '<p class="pdash-overview-note">Nenhuma frente foi atualizada neste turno ainda.</p>'}`
     : '<header><h3>Resumo do turno</h3></header><p class="production-empty">Nenhuma frente lançada nesta unidade.</p>';
-  box.innerHTML = `<article class="pdash-overview-card">${groupsCard}</article>`;
-}
-
-function dashboardGroupInitials(name) {
-  return String(name || '?').split(/\s+/).filter(word => word.length > 2).slice(0, 2)
-    .map(word => word[0]).join('').toLocaleUpperCase('pt-BR') || '?';
+  box.innerHTML = `<article class="pdash-overview-card">${content}</article>`;
 }
 
 function renderProductionDashboard() {
-  const cards = document.querySelector('#production-group-cards');
+  const cards = document.querySelector('#production-front-cards');
   if (!cards) return;
-  const shift = dashboardCurrentShift().name;
-  const allItems = dashboardItems();
-  const empty = document.querySelector('#production-dashboard-empty');
-  if (empty) empty.hidden = allItems.length > 0;
-
-  // Agrupa na ordem do catálogo; o painel mostra só o grupo selecionado.
-  const groups = new Map();
-  allItems.forEach((item, index) => {
-    if (!groups.has(item.group_id)) groups.set(item.group_id, { id: item.group_id, name: item.group_name || 'Sem grupo', order: index, items: [] });
-    groups.get(item.group_id).items.push(item);
-  });
-  const ordered = [...groups.values()].sort((a, b) => a.order - b.order);
-  // Grupo escolhido; sem escolha válida, abre no grupo que mais precisa de atenção.
-  // Lista vazia (recarga depois de salvar): mantém o grupo para o painel voltar onde estava.
-  if (ordered.length && !ordered.some(group => String(group.id) === productionPanelGroup)) {
-    const worst = [...ordered].sort((a, b) => dashboardProblemScore(b.items) - dashboardProblemScore(a.items) || a.order - b.order)[0];
-    productionPanelGroup = worst ? String(worst.id) : '';
+  const shift = dashboardCurrentShift();
+  const items = dashboardItems();
+  renderDashboardOverview(items, shift);
+  const fronts = dashboardFrontGroups(dashboardSortTiles(items));
+  const total = fronts.length;
+  if (!total) {
+    cards.innerHTML = '';
+    return;
   }
-  renderDashboardOverview(ordered, allItems);
-  renderDashboardGroupTabs(ordered);
-  const selected = ordered.filter(group => String(group.id) === productionPanelGroup);
-
-  cards.innerHTML = selected.map(group => {
-    const sectorsByFront = dashboardFrontGroups(dashboardSortTiles(group.items));
-    const total = sectorsByFront.length;
-    const withOperation = group.items.filter(item => dashboardOrderState(item) !== 'no_operation' && item.entry?.sector).length;
-    const ok = group.items.filter(item => dashboardOrderState(item) === 'ok').length;
-    const noOrder = group.items.filter(item => dashboardOrderState(item) === 'missing').length;
-    const noOperation = group.items.filter(item => dashboardOrderState(item) === 'no_operation').length;
-    const today = sectorsByFront.filter(sectors => sectors.some(item => item.is_current_day)).length;
-    const stopped = sectorsByFront.filter(sectors => sectors.every(item => dashboardFlags(item).stopped)).length;
-    // Indicadores do grupo são filtros: clicar mostra só essas frentes; clicar de novo desfaz.
-    // Cada filtro só aparece quando alguma frente do grupo está naquela condição.
-    const counts = { stopped, ok, noOrder, noOperation, today };
-    if (dashboardPanelFilter.flag && !counts[dashboardPanelFilter.flag]) dashboardPanelFilter.flag = '';
-    const kpi = (key, label, value, tone = '') => {
-      if (!counts[key]) return '';
-      const active = dashboardPanelFilter.flag === key;
-      return `<button type="button" class="pdash-kpi ${tone}${active ? ' is-active' : ''}" data-panel-filter="${key}" aria-pressed="${active}"
-        title="${active ? 'Mostrar todas as frentes' : `Filtrar: ${label}`}"><b>${value}</b>${label}</button>`;
-    };
-    const fronts = [...new Map(group.items.map(item => [String(item.service_front_id), item.service_name])).entries()]
-      .sort((a, b) => compareFrontLabels(a[1] || '', b[1] || ''));
-    if (dashboardPanelFilter.front && !fronts.some(([id]) => id === dashboardPanelFilter.front)) dashboardPanelFilter.front = '';
-    const visible = sectorsByFront.filter(sectors => sectors.some(dashboardMatchesFilter)
-      && (dashboardPanelFilter.flag !== 'stopped' || sectors.every(item => dashboardFlags(item).stopped)));
-    const filtering = Boolean(dashboardPanelFilter.flag || dashboardPanelFilter.front);
-    return `<article class="pdash-group${stopped ? ' has-stopped' : ''}">
-      <header class="pdash-group-header">
-        <div class="pdash-group-title">
-          <span class="pdash-group-icon" aria-hidden="true">${escapeHtml(dashboardGroupInitials(group.name))}</span>
-          <div><h3>${escapeHtml(group.name)}</h3><span>${total} ${total === 1 ? 'frente' : 'frentes'}</span></div>
-        </div>
-        <div class="pdash-kpis" role="group" aria-label="Filtros do grupo">
-          ${kpi('stopped', stopped === 1 ? 'parada' : 'paradas', stopped, stopped ? 'is-red' : '')}
-          ${kpi('ok', 'O.S. OK', withOperation ? `${ok}/${withOperation}` : '-', withOperation && ok < withOperation ? 'is-red' : 'is-green')}
-          ${kpi('noOrder', 'sem O.S.', noOrder, noOrder ? 'is-red' : '')}
-          ${kpi('noOperation', 'sem operação', noOperation, noOperation ? 'is-amber' : '')}
-          ${kpi('today', 'atualizadas hoje', `${today}/${total}`, today < total ? 'is-gray' : 'is-green')}
-        </div>
-      </header>
-      <div class="pdash-group-filters">
-        <label class="pdash-front-filter">
-          <span>Frente</span>
-          <select data-panel-front aria-label="Filtrar por frente">
-            <option value="">Todas as frentes</option>
-            ${fronts.map(([id, name]) => `<option value="${escapeHtml(id)}"${id === dashboardPanelFilter.front ? ' selected' : ''}>${escapeHtml(name || '-')}</option>`).join('')}
-          </select>
-        </label>
-        <span class="pdash-filter-count">${filtering ? `Mostrando ${visible.length} de ${total}` : `${total} ${total === 1 ? 'frente' : 'frentes'}`}</span>
-        ${filtering ? '<button type="button" class="pdash-filter-clear" data-panel-filter-clear>Limpar filtros</button>' : ''}
+  const options = fronts.map(([item]) => [String(item.service_front_id ?? item.id), item.service_name])
+    .sort((a, b) => compareFrontLabels(a[1] || '', b[1] || ''));
+  if (!options.some(([id]) => id === dashboardPanelFilter.front)) dashboardPanelFilter.front = '';
+  const filters = [
+    ['stopped', 'Paradas', 'is-red'], ['ok', 'O.S. OK', 'is-green'], ['noOrder', 'Sem O.S.', 'is-red'],
+    ['noOperation', 'Sem operação', 'is-amber'], ['today', 'Atualizadas hoje', 'is-green']
+  ];
+  const counts = Object.fromEntries(filters.map(([key]) => [key, fronts.filter(sectors => dashboardFrontMatchesFlag(sectors, key)).length]));
+  if (!counts[dashboardPanelFilter.flag]) dashboardPanelFilter.flag = '';
+  const visible = fronts.filter(sectors => {
+    const [item] = sectors;
+    return (!dashboardPanelFilter.front || String(item.service_front_id ?? item.id) === dashboardPanelFilter.front)
+      && dashboardFrontMatchesFlag(sectors, dashboardPanelFilter.flag);
+  });
+  const filtering = Boolean(dashboardPanelFilter.flag || dashboardPanelFilter.front);
+  cards.innerHTML = `<section class="pdash-group" aria-label="Frentes da unidade">
+    <header class="pdash-group-header">
+      <h3>Frentes e serviços</h3>
+      <div class="pdash-kpis" role="group" aria-label="Filtros da unidade">
+        ${filters.filter(([key]) => counts[key]).map(([key, label, tone]) => {
+          const active = dashboardPanelFilter.flag === key;
+          return `<button type="button" class="pdash-kpi ${tone}${active ? ' is-active' : ''}"
+            data-panel-filter="${key}" aria-pressed="${active}"><b>${counts[key]}</b>${label}</button>`;
+        }).join('')}
       </div>
-      <div class="pdash-group-status">${dashboardStatusBar(group.items)}</div>
-      ${visible.length
-        ? `<div class="pdash-tiles">${visible.map(sectors => {
-          const [front] = sectors;
-          if (sectors.length === 1) return dashboardFrontTile(front, shift);
-          return `<section class="pdash-front-sectors"><header><strong>${escapeHtml(front.service_name)}</strong><small>${escapeHtml(productionResponsibleName(front, shift))}</small></header>
-            ${sectors.map(item => dashboardFrontTile(item, shift, { grouped: true })).join('')}</section>`;
-        }).join('')}</div>`
-        : '<p class="production-empty pdash-filter-empty">Nenhuma frente neste filtro.</p>'}
-    </article>`;
-  }).join('');
-  // A CSP bloqueia "style" no HTML; o tamanho de cada faixa é aplicado pelo script.
+    </header>
+    <div class="pdash-group-filters">
+      <label class="pdash-front-filter"><span>Frente</span>
+        <select data-panel-front>
+          <option value="">Todas as frentes</option>
+          ${options.map(([id, name]) => `<option value="${escapeHtml(id)}"${id === dashboardPanelFilter.front ? ' selected' : ''}>${escapeHtml(name || '-')}</option>`).join('')}
+        </select>
+      </label>
+      <span class="pdash-filter-count">${filtering ? `Mostrando ${visible.length} de ${total}` : `${total} ${total === 1 ? 'frente' : 'frentes'}`}</span>
+      ${filtering ? '<button type="button" class="pdash-filter-clear" data-panel-filter-clear>Limpar filtros</button>' : ''}
+    </div>
+    <div class="pdash-group-status">${dashboardStatusBar(items)}</div>
+    ${visible.length
+      ? `<div class="pdash-tiles">${visible.map(sectors => dashboardFrontTile(sectors, shift.name)).join('')}</div>`
+      : '<p class="production-empty pdash-filter-empty">Nenhuma frente neste filtro.</p>'}
+  </section>`;
   cards.querySelectorAll?.('[data-weight]').forEach(segment => { segment.style.flexGrow = segment.dataset.weight; });
-  fitDashboardTiles();
 }
 
-// Blocos das frentes ocupam a largura toda: colunas pelo espaço real (menu lateral,
-// zoom e janela contam), ~270px por bloco, com as linhas equilibradas.
-const DASHBOARD_TILE_MIN = 270;
-let dashboardTilesObserver = null;
+let dashboardNoteDraft = null;
 
-function fitDashboardTiles() {
-  const cards = document.querySelector('#production-group-cards');
-  if (!cards?.querySelectorAll) return;
-  if (!dashboardTilesObserver && typeof ResizeObserver === 'function') {
-    dashboardTilesObserver = new ResizeObserver(() => fitDashboardTiles());
-    dashboardTilesObserver.observe(cards);
+function showDashboardNoteError(message = '') {
+  const error = document.querySelector('#production-note-error');
+  error.textContent = message;
+  error.hidden = !message;
+}
+
+function openDashboardNote(itemId, field) {
+  if (!canFillProduction() || !Object.hasOwn(DASHBOARD_NOTE_FIELDS, field)) return;
+  const item = findProductionItem(itemId);
+  if (!item?.entry) return;
+  const expected = item.entry[field] || '';
+  dashboardNoteDraft = { unit: currentProductionUnit(), date: saoPauloIsoDate(), itemId, field, expected };
+  document.querySelector('#production-note-title').textContent = DASHBOARD_NOTE_FIELDS[field][0];
+  document.querySelector('#production-note-context').textContent = `${item.service_name} · ${productionPlaceLabel(item.entry)}`;
+  const input = document.querySelector('#production-note-input');
+  input.value = expected;
+  document.querySelector('#production-note-form button[type="submit"]').disabled = false;
+  showDashboardNoteError();
+  openModal('production-note-modal');
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
+async function submitDashboardNote(event) {
+  event.preventDefault();
+  const draft = dashboardNoteDraft;
+  if (!draft || !canFillProduction() || draft.unit !== currentProductionUnit()) return;
+  if (draft.date !== saoPauloIsoDate()) {
+    showDashboardNoteError('A data operacional mudou. Reabra a anotação para salvar no dia atual.');
+    return;
   }
-  const plans = [...cards.querySelectorAll('.pdash-tiles')].map(grid => {
-    const quantity = Math.max(1, grid.children.length);
-    const style = getComputedStyle(grid);
-    const width = grid.clientWidth - parseFloat(style.paddingLeft || 0) - parseFloat(style.paddingRight || 0);
-    if (width <= 0) return null;
-    const gap = parseFloat(style.columnGap) || 10;
-    const maxColumns = Math.max(1, Math.floor((width + gap) / (DASHBOARD_TILE_MIN + gap)));
-    // Poucas frentes (ex.: filtro ligado) mantêm a largura normal do cartão, sem esticar.
-    if (quantity <= maxColumns) return { grid, columns: String(maxColumns) };
-    return { grid, columns: String(Math.ceil(quantity / Math.ceil(quantity / maxColumns))) };
-  });
-  plans.forEach(plan => {
-    if (plan && plan.grid.style.getPropertyValue('--tile-cols') !== plan.columns) plan.grid.style.setProperty('--tile-cols', plan.columns);
-  });
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  if (button.disabled) return;
+  button.disabled = true;
+  showDashboardNoteError();
+  const value = document.querySelector('#production-note-input').value;
+  try {
+    await apiRequest(`/api/production/my-items/${draft.itemId}`, { method: 'PATCH', body: JSON.stringify({
+      unit_code: draft.unit, work_date: draft.date, field: draft.field, expected: draft.expected, value
+    }) });
+  } catch (error) {
+    if (dashboardNoteDraft === draft) {
+      showDashboardNoteError(error.message || 'Não foi possível salvar a anotação.');
+      button.disabled = false;
+    }
+    if (error.status === 409 && draft.unit === currentProductionUnit()) {
+      await loadProductionItems(draft.unit).catch(console.error);
+    }
+    return;
+  }
+  if (dashboardNoteDraft === draft) {
+    button.disabled = false;
+    dashboardNoteDraft = null;
+    closeModal('production-note-modal');
+  }
+  showToast('Anotação salva.');
+  if (draft.unit === currentProductionUnit()) {
+    try {
+      await loadProductionItems(draft.unit);
+    } catch (error) {
+      console.error(error);
+      showToast(PRODUCTION_REFRESH_WARNING, true);
+    }
+  }
 }
 
-document.querySelector('#production-group-tabs')?.addEventListener('click', event => {
-  const tab = event.target.closest('[data-panel-group]');
-  if (!tab) return;
-  productionPanelGroup = tab.dataset.panelGroup;
-  dashboardPanelFilter.front = '';
-  dashboardPanelFilter.flag = '';
-  try { localStorage.setItem(PRODUCTION_PANEL_GROUP_KEY, productionPanelGroup); } catch (_) { /* preferência opcional */ }
-  renderProductionDashboard();
-});
-document.querySelector('#production-group-cards')?.addEventListener('click', event => {
+document.querySelector('#production-note-form')?.addEventListener('submit', submitDashboardNote);
+document.querySelector('#production-front-cards')?.addEventListener('click', event => {
   const filter = event.target.closest('[data-panel-filter]');
   if (filter) {
     dashboardPanelFilter.flag = dashboardPanelFilter.flag === filter.dataset.panelFilter ? '' : filter.dataset.panelFilter;
@@ -563,20 +555,15 @@ document.querySelector('#production-group-cards')?.addEventListener('click', eve
     renderProductionDashboard();
     return;
   }
-  const edit = event.target.closest('[data-panel-edit]');
-  if (edit) {
-    openEditProductionItem(Number(edit.dataset.panelEdit));
+  const note = event.target.closest('[data-panel-note]');
+  if (note) {
+    openDashboardNote(Number(note.dataset.itemId), note.dataset.panelNote);
     return;
   }
-  const tile = event.target.closest('[data-panel-detail]');
-  if (tile) openDashboardFrontDetail(Number(tile.dataset.panelDetail));
+  const detail = event.target.closest('[data-panel-detail]');
+  if (detail) openDashboardFrontDetail(Number(detail.dataset.panelDetail));
 });
-// Teclado: Enter ou Espaço no cartão abre o detalhe (o cartão não é mais um <button>).
-document.querySelector('#production-group-cards')?.addEventListener('keydown', event => {
-  if (!['Enter', ' '].includes(event.key) || !event.target.matches?.('[data-panel-detail]')) return;
-  event.preventDefault();
-  openDashboardFrontDetail(Number(event.target.dataset.panelDetail));
-});
+
 const dashboardSectorInput = document.querySelector('#production-sector-search');
 
 function clearDashboardSectorSearch() {
@@ -609,7 +596,7 @@ document.querySelector('#production-front-detail-body')?.addEventListener('click
   });
   body.querySelectorAll('[data-pfd-panel]').forEach(panel => { panel.hidden = panel.dataset.pfdPanel !== tab.dataset.pfdTab; });
 });
-document.querySelector('#production-group-cards')?.addEventListener('change', event => {
+document.querySelector('#production-front-cards')?.addEventListener('change', event => {
   if (!event.target.matches?.('[data-panel-front]')) return;
   dashboardPanelFilter.front = event.target.value;
   renderProductionDashboard();
@@ -624,13 +611,12 @@ document.querySelector('#production-front-detail-body')?.addEventListener('click
   if (remove) removeProductionItem(Number(remove.dataset.panelRemove));
 });
 
-// Garantia além do ResizeObserver: refaz as colunas quando a janela muda de tamanho ou de zoom.
+// Refaz as colunas dos indicadores quando a janela muda de tamanho ou de zoom.
 let dashboardResizeFrame = 0;
 globalThis.addEventListener?.('resize', () => {
   if (dashboardResizeFrame) return;
   dashboardResizeFrame = requestAnimationFrame(() => {
     dashboardResizeFrame = 0;
-    fitDashboardTiles();
     if (typeof fitProductionSummaryColumns === 'function') fitProductionSummaryColumns();
   });
 });

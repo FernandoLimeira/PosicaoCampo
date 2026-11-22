@@ -185,7 +185,6 @@ OVERRIDES = {
     # Botões principais e aba ativa do painel mantêm o petróleo da paleta no escuro.
     "pages/producao.css": """.production-primary-button.pdash-action { background: linear-gradient(135deg, #3f6f7a 0%, #1b3a41 100%); }
 .production-primary-button.pdash-action:hover:not(:disabled) { background: linear-gradient(135deg, #4a7c87 0%, #22474e 100%); }
-.pdash-group-tab.is-active { background: linear-gradient(135deg, #3f6f7a 0%, #1b3a41 100%); color: #ffffff; }
 """,
     # Folhas decorativas do login têm cor fixa no SVG: no escuro ficam bem discretas.
     "auth.css": """.auth-panel-leaves { opacity: .06; }

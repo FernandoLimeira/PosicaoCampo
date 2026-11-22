@@ -15,7 +15,7 @@ function element(selector) {
   if (!elements.has(selector)) elements.set(selector, {
     innerHTML: '', textContent: '', value: '', hidden: false,
     addEventListener(type, listener) { if (selector === '#production-groups-list') groupEvents[type] = listener; },
-    setAttribute() {}, reset() {}, focus() {},
+    setAttribute() {}, reset() {}, focus() {}, setSelectionRange() {},
     querySelector(name) { return element(`${selector} ${name}`); }
   });
   return elements.get(selector);
@@ -110,13 +110,14 @@ assert.match(detail, /data-pfd-tab="others"/);
 context.openDashboardFrontDetail(2);
 assert.match(element('#production-front-detail-body').innerHTML, /Nenhuma outra O\.S\. aberta no setor 42/);
 assert.match(element('#production-front-detail-body').innerHTML, /Equipe do turno.*Ana/s);
-const scheduledTile = vm.runInContext("dashboardFrontTile({ ...findProductionItem(2), responsibles: { A: 'Ana', B: 'João' } }, 'B')", context);
-assert.match(scheduledTile, /João · Atualização/);
+const scheduledTile = vm.runInContext("dashboardFrontTile([{ ...findProductionItem(2), responsibles: { A: 'Ana', B: 'João' } }], 'B')", context);
+assert.match(scheduledTile, /João/);
+assert.match(scheduledTile, /Atualização/);
 assert.doesNotMatch(scheduledTile, /Folguista|Ana/);
-const teamTile = vm.runInContext(`dashboardFrontTile({ ...findProductionItem(2), responsibility_team: { B: [
+const teamTile = vm.runInContext(`dashboardFrontTile([{ ...findProductionItem(2), responsibility_team: { B: [
   {role_name: 'Encarregado', role_type: 'lead', name: 'Ana', day_off: true},
   {role_name: 'Ponto focal', role_type: 'support', name: 'Maria', day_off: false}
-] } }, 'B')`, context);
+] } }], 'B')`, context);
 assert.match(teamTile, /Encarregado Ana \(cobertura\) · Ponto focal Maria/);
 const schedulingForm = { elements: { kind: { value: 'day_off' }, responsible_name: {}, relief_name: {} } };
 context.updateProductionResponsibilityFields(schedulingForm);
@@ -127,15 +128,24 @@ schedulingForm.elements.kind.value = 'cycle';
 context.updateProductionResponsibilityFields(schedulingForm);
 assert.equal(schedulingForm.elements.responsible_name.required, true);
 assert.equal(schedulingForm.elements.relief_name.disabled, false);
-// Filtros do grupo: só aparecem quando alguma frente está na condição (Plantio: 1 sem O.S.,
-// 1 sem operação, nenhuma parada).
-vm.runInContext("productionPanelGroup = '1'", context);
+// Todos os setores ficam no mesmo cartão. Um filtro por O.S. mantém os demais setores da frente.
+vm.runInContext("productionItems[0].entry.sector = '41'; productionItems[0].entry.observation = '<teste>';", context);
 context.renderProductionDashboard();
-const groupCards = element('#production-group-cards').innerHTML;
-assert.match(groupCards, /data-panel-filter="noOperation"/);
-assert.match(groupCards, /data-panel-filter="ok"/);
-assert.doesNotMatch(groupCards, /data-panel-filter="stopped"/);
-assert.doesNotMatch(groupCards, /data-panel-filter="noOrder"/);
+context.renderProductionSummary();
+assert.match(element('#production-summary').innerHTML, /title="Em atividade: 1"/);
+assert.match(element('#production-summary').innerHTML, /title="Solo úmido: 0"/);
+const cards = element('#production-front-cards');
+assert.equal((cards.innerHTML.match(/data-panel-front-card="7"/g) || []).length, 1);
+assert.match(cards.innerHTML, /data-panel-front-card="9"/);
+assert.doesNotMatch(cards.innerHTML, /Plantio|Tratos|data-panel-group/);
+assert.match(cards.innerHTML, /data-panel-filter="ok"/);
+vm.runInContext("dashboardPanelFilter.flag = 'ok'", context);
+context.renderProductionDashboard();
+assert.match(cards.innerHTML, /data-panel-front-card="7".*Setor 41.*&lt;teste>.*Setor 42.*Observação anterior.*Mudança anterior/s);
+assert.match(cards.innerHTML, /data-panel-note="changes" data-item-id="2"/);
+assert.doesNotMatch(cards.innerHTML, /data-panel-front-card="9"/);
+assert.doesNotMatch(element('#production-overview').innerHTML, /Grupo|Plantio|Tratos/);
+vm.runInContext("productionItems[0].entry.sector = '42'", context);
 // Filtro ligado cuja condição deixou de existir volta para "todas as frentes".
 vm.runInContext("dashboardPanelFilter.flag = 'stopped'", context);
 context.renderProductionDashboard();
@@ -248,7 +258,7 @@ function sectorRow(sector, status = 'ATIVO', operations = []) {
   assert.equal(context.productionPlaceLabel({ sector: '201', section: '20', farm: 'Fazenda 201' }, 'NRD'), 'Setor 201 · Fazenda 201');
   assert.equal(context.productionPlaceLabel({ sector: '201', section: '20', farm: 'Fazenda 201' }, 'RBR'), 'Setor 201 / Seção 20 · Fazenda 201');
   const grouped = vm.runInContext(`productionStatuses.push({code: 'PARADA', name: 'Parada', style_key: 'stopped'});
-    dashboardGroupStats([
+    dashboardUnitStats([
       { service_front_id: 7, entry: { sector: '201', status: 'ATIVO' } },
       { service_front_id: 7, entry: { sector: '202', status: 'PARADA' } }
     ])`, context);
@@ -338,5 +348,52 @@ function sectorRow(sector, status = 'ATIVO', operations = []) {
   context.applyCatalogSearch('groups');
   assert.match(configGroups.innerHTML, /data-catalog-group-id="2" open/);
   assert.doesNotMatch(configGroups.innerHTML, /data-config-action/);
+
+  context.loadProductionItems = async () => true;
+  context.apiRequest = async (url, options) => { requests.push({ url, options }); return { ok: true }; };
+  context.openDashboardNote(2, 'changes');
+  assert.equal(modalEvents.at(-1), 'open:production-note-modal');
+  assert.equal(element('#production-note-input').value, 'Mudança anterior');
+  element('#production-note-input').value = 'Ir ao novo setor após 16h';
+  await context.submitDashboardNote({ currentTarget: element('#production-note-form'), preventDefault() {} });
+  const noteUpdate = requests.at(-1);
+  assert.equal(noteUpdate.url, '/api/production/my-items/2');
+  assert.equal(noteUpdate.options.method, 'PATCH');
+  assert.deepEqual(JSON.parse(noteUpdate.options.body), { unit_code: 'NRD', work_date: context.saoPauloIsoDate(),
+    field: 'changes', expected: 'Mudança anterior', value: 'Ir ao novo setor após 16h' });
+  assert.equal(modalEvents.at(-1), 'close:production-note-modal');
+
+  const responsibilityForm = element('#production-responsibility-form');
+  responsibilityForm.dataset = {};
+  responsibilityForm.elements = Object.fromEntries(['rule_id', 'unit_code', 'role_id', 'service_front_id', 'shift',
+    'kind', 'work_date', 'responsible_name', 'relief_name'].map(name => [name, { value: '' }]));
+  responsibilityForm.elements.unit_code.form = responsibilityForm;
+  responsibilityForm.elements.kind.value = 'cycle';
+  vm.runInContext(`productionAccess.units = ['NRD','PPT'];
+    productionResponsibilityUnit = 'NRD'; productionResponsibilityState = 'ready';
+    productionResponsibilityPermissions = {edit_schedules: true};`, context);
+  context.openProductionResponsibilityForm(null, { keepOpen: true });
+  assert.equal(responsibilityForm.elements.unit_code.value, 'NRD');
+  assert.match(responsibilityForm.elements.unit_code.innerHTML, /value="PPT"/);
+  assert.match(responsibilityForm.elements.service_front_id.innerHTML, /Preparo/);
+  context.apiRequest = async url => url.includes('/responsibilities?')
+    ? { permissions: { edit_schedules: true } }
+    : { groups: [{ name: 'Colheita', fronts: [{ id: 31, name: 'Frente de PPT' }] }] };
+  responsibilityForm.elements.unit_code.value = 'PPT';
+  await context.changeProductionResponsibilityUnit({ currentTarget: responsibilityForm.elements.unit_code });
+  assert.equal(responsibilityForm.dataset.scheduleUnit, 'PPT');
+  assert.match(responsibilityForm.elements.service_front_id.innerHTML, /Frente de PPT/);
+  assert.doesNotMatch(responsibilityForm.elements.service_front_id.innerHTML, /Preparo/);
+  responsibilityForm.elements.service_front_id.value = '31';
+  context.FormData = function (form) {
+    return Object.entries(form.elements).filter(([, field]) => !field.disabled).map(([key, field]) => [key, field.value]);
+  };
+  context.apiRequest = async (url, options) => { requests.push({ url, options }); return { id: 99 }; };
+  await context.submitProductionResponsibility({ currentTarget: responsibilityForm, preventDefault() {} });
+  const schedule = requests.at(-1);
+  assert.equal(schedule.url, '/api/production/catalog/responsibilities');
+  const schedulePayload = JSON.parse(schedule.options.body);
+  assert.deepEqual([schedulePayload.unit_code, schedulePayload.service_front_id], ['PPT', '31']);
+  assert.equal(context.currentProductionUnit(), 'NRD');
   console.log('OK: frentes dentro dos grupos, inclusão com grupo selecionado, busca e consulta sem edição.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

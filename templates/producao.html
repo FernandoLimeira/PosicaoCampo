@@ -40,7 +40,6 @@
     <section id="production-sector-card" class="pdash-overview-card pdash-sector-card" aria-label="Resultado da consulta por setor" aria-live="polite" hidden></section>
   </div>
   <div class="production-view-bar">
-    <nav id="production-group-tabs" class="pdash-group-tabs" role="tablist" aria-label="Grupo"></nav>
     <div class="production-toolbar-actions">
       <button id="production-add-button" class="production-primary-button pdash-action" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
@@ -51,10 +50,9 @@
 
   <section id="production-summary" class="production-summary" aria-label="Resumo dos status"></section>
 
-  <section id="production-dashboard" class="production-dashboard" aria-label="Painel gerencial por grupo">
+  <section id="production-dashboard" class="production-dashboard" aria-label="Frentes e serviços da unidade">
     <section id="production-overview" class="pdash-overview" aria-label="Resumo analítico da unidade"></section>
-    <div id="production-group-cards" class="production-group-cards"></div>
-    <p id="production-dashboard-empty" class="production-empty" hidden>Nenhuma frente lançada nesta unidade.</p>
+    <div id="production-front-cards"></div>
   </section>
 
   </div>
@@ -181,6 +179,7 @@
         <summary class="production-config-editor-summary"><span id="production-responsibility-title">Cadastrar responsável</span></summary>
         <form id="production-responsibility-form" class="production-config-form production-config-form-collapsible">
           <input type="hidden" name="rule_id" />
+          <label class="field"><span>Unidade</span><select name="unit_code" required></select></label>
           <label class="field"><span>Tipo de escala</span><select name="kind"><option value="cycle">Ciclo 5×1</option><option value="fixed">Fixo (sem revezamento)</option><option value="replacement">Substituição pontual</option><option value="day_off">Folga por data</option></select></label>
           <label class="field"><span>Frente / serviço</span><select name="service_front_id" required></select></label>
           <label class="field"><span>Cargo</span><select name="role_id" required></select></label>
@@ -188,6 +187,7 @@
           <label class="field"><span id="production-responsibility-date-label">Primeiro dia de trabalho</span><input name="work_date" type="date" required /></label>
           <label class="field"><span id="production-responsibility-name-label">Titular</span><input name="responsible_name" type="text" maxlength="80" required /></label>
           <label id="production-responsibility-relief" class="field"><span>Folguista (opcional)</span><input name="relief_name" type="text" maxlength="80" /></label>
+          <p id="production-responsibility-unit-status" class="catalog-front-name-hint" role="status" hidden></p>
           <div class="production-config-form-actions">
             <button class="production-secondary-button" type="button" id="production-responsibility-clear">Cancelar</button>
             <button class="production-primary-button" type="submit">Salvar</button>
@@ -387,6 +387,27 @@
   </section>
 </div>
 
+<div id="production-note-modal" class="modal-backdrop" hidden>
+  <section class="editor-modal production-note-modal" role="dialog" aria-modal="true" aria-labelledby="production-note-title">
+    <header class="modal-header production-modal-header">
+      <div><h2 id="production-note-title">Anotação</h2><p id="production-note-context" class="production-order-modal-context"></p></div>
+      <button class="modal-close" type="button" data-close-modal="production-note-modal" aria-label="Fechar">×</button>
+    </header>
+    <form id="production-note-form">
+      <div class="production-note-body">
+        <textarea id="production-note-input" rows="5" maxlength="2000" aria-labelledby="production-note-title"></textarea>
+        <p id="production-note-error" role="status" hidden></p>
+      </div>
+      <footer class="modal-footer">
+        <div class="modal-footer-actions">
+          <button class="modal-button secondary" type="button" data-close-modal="production-note-modal">Cancelar</button>
+          <button class="modal-button save" type="submit">Salvar</button>
+        </div>
+      </footer>
+    </form>
+  </section>
+</div>
+
 <div id="production-entry-modal" class="modal-backdrop" hidden>
   <section class="editor-modal production-editor-modal" role="dialog" aria-modal="true" aria-labelledby="production-modal-title">
     <header class="modal-header production-modal-header">
@@ -490,7 +511,7 @@
             <textarea id="production-observation-input" rows="4" maxlength="2000" placeholder="Ex.: parada no pátio do setor 396"></textarea>
           </label>
           <label class="field" for="production-changes-input">
-            <span>Mudança <small>(opcional)</small></span>
+            <span>Previsão de mudança <small>(opcional)</small></span>
             <textarea id="production-changes-input" rows="4" maxlength="2000" placeholder="Ex.: muda para o setor 2210 à tarde"></textarea>
           </label>
         </section>

@@ -32,6 +32,7 @@ from ...models.production import (
     save_daily_summary as save_production_daily_summary,
     save_group as save_production_group,
     save_my_item as save_production_my_item,
+    save_my_item_note,
     save_items_sheet as save_production_items_sheet,
     save_my_items as save_production_my_items,
     save_responsibility_rule,
@@ -347,6 +348,10 @@ def handle(req):
 
         def my_item():
             item_id = _last_id(path)
+            if method == "PATCH":
+                if not save_my_item_note(user["id"], item_id, req.body()):
+                    return req.error(HTTPStatus.CONFLICT, "Outro analista alterou esta anotação. Reabra o campo para ver a versão atual.")
+                return req.json(HTTPStatus.OK, {"ok": True})
             if method == "PUT":
                 payload = req.body()
                 if isinstance(payload, dict) and "sectors" in payload:

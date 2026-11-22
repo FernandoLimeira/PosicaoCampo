@@ -1098,6 +1098,35 @@ def save_my_item(user_id: int, payload: Any, *, item_id: int | None = None) -> d
     return _save_my_items(user_id, payload, [payload], item_id=item_id)[0]
 
 
+def save_my_item_note(user_id: int, item_id: int, payload: Any) -> bool:
+    if not isinstance(payload, dict) or payload.get("field") not in ("observation", "changes"):
+        raise ValueError("Anotação inválida.")
+    field = payload["field"]
+    unit = _normalize_unit(payload.get("unit_code"))
+    work_date = _normalize_work_date(payload.get("work_date"))
+    if not isinstance(payload.get("expected"), str) or not isinstance(payload.get("value"), str):
+        raise ValueError("Informe o texto da anotação.")
+    value = _clean_text(payload["value"], "a anotação", 2000)
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _require_access(conn, user_id, permission="fill", unit=unit)
+        item = conn.execute("""SELECT e.*, ui.service_front_id AS current_front_id
+                               FROM production_user_items ui
+                               JOIN production_daily_entries e ON e.user_item_id=ui.id AND e.unit_code=ui.unit_code
+                               WHERE ui.id=? AND ui.unit_code=? AND ui.is_active=1 AND e.work_date<=?
+                               ORDER BY e.work_date DESC LIMIT 1""", (item_id, unit, work_date)).fetchone()
+        if not item:
+            raise ValueError("Lançamento da frente não encontrado nesta unidade.")
+        if (item[field] or "") != payload["expected"]:
+            return False
+        if (item[field] or "") != value:
+            front_id = item["current_front_id"]
+            front = _catalog_front_for_unit(conn, front_id, unit, allow_inactive=True)
+            entry = {**dict(item), "work_date": work_date, field: value}
+            _save_my_item(conn, user_id, unit, front_id, front, entry, int(time.time()), item_id=item_id)
+        return True
+
+
 def save_my_items(user_id: int, payload: Any, *, item_id: int | None = None) -> list[dict[str, Any]]:
     if not isinstance(payload, dict):
         raise ValueError("Dados dos setores inválidos.")

@@ -533,7 +533,7 @@ class PageTests(unittest.TestCase):
             'id="production-entry-modal"', 'id="production-entry-form"', 'id="production-item-id"',
             'id="production-status-options"',
             'id="production-status-config-pane"', 'id="production-config-pane"',
-            'id="production-front-form"', 'id="production-dashboard"', 'id="production-group-tabs"',
+            'id="production-front-form"', 'id="production-dashboard"', 'id="production-front-cards"',
             'id="production-overview"', 'id="production-front-detail-modal"',
         ):
             self.assertIn(marker, page["body"])
@@ -544,6 +544,8 @@ class PageTests(unittest.TestCase):
         # A Produção concentra tudo no painel gerencial: sem a visão Tabela.
         self.assertNotIn('id="production-items-body"', page["body"])
         self.assertNotIn('data-production-view', page["body"])
+        self.assertNotIn('id="production-group-tabs"', page["body"])
+        self.assertIn('id="production-note-form"', page["body"])
         self.assertNotIn('Configurar status', page["body"])  # status ficam só na página Cadastros
         self.assertNotIn('Configurar nova frente', page["body"])  # frentes também
         self.assertIn('href="/producao"', page["body"])
@@ -1163,6 +1165,35 @@ class PageTests(unittest.TestCase):
         self.assertEqual([item['entry']['sector'] for item in remaining], ['HTTP2'])
         blocked = production.save_my_item(self.admin['id'], {**base, 'unit_code': 'PPT', 'sector': 'HTTP1', 'status': 'EM ATIVIDADE'})
         self.assertEqual(self.request(f"/api/production/my-items/{blocked['id']}", cookie=cookie, method='DELETE')['status'], 403)
+
+    def test_production_note_patch_preserves_other_fields_and_conflicting_edits(self):
+        from backend.models import production
+        admin = self.admin["id"]
+        group = production.list_catalog(admin)["groups"][0]
+        front = production.save_service_front(admin, {"group_id": group["id"], "name": "Anotações HTTP",
+                                                      "units": ["NRD", "PPT"], "display_style": "front"})
+        original = production.save_my_item(admin, {"unit_code": "NRD", "service_front_id": front["id"], "work_date": "2026-11-21",
+            "sector": "6001", "status": "EM ATIVIDADE", "operation": "101", "observation": "Aguardar equipe", "changes": "Ir ao 6002"})
+        item_id = original["id"]
+        url = f"/api/production/my-items/{item_id}"
+        data = {"unit_code": "NRD", "work_date": "2026-11-22", "field": "observation", "expected": "Aguardar equipe", "value": "Equipe chegou"}
+        response = self.request(url, role="admin", method="PATCH", body=data)
+        self.assertEqual(response["status"], 200, response["body"])
+        conflict = self.request(url, role="admin", method="PATCH", body={**data, "value": "Texto desatualizado"})
+        self.assertEqual(conflict["status"], 409, conflict["body"])
+        other_unit = self.request(url, role="admin", method="PATCH", body={**data, "unit_code": "PPT"})
+        self.assertEqual(other_unit["status"], 400, other_unit["body"])
+        readonly = self.request(url, role="member", method="PATCH", body=data)
+        self.assertEqual(readonly["status"], 403, readonly["body"])
+
+        def entry(date):
+            items = production.list_my_items(admin, "NRD", date, scope="all")["items"]
+            return next(item["entry"] for item in items if item["id"] == item_id)
+
+        self.assertEqual(entry("2026-11-21"), original["entry"])
+        latest = entry("2026-11-22")
+        self.assertEqual([latest[key] for key in ("sector", "status", "operation", "observation", "changes")],
+                         ["6001", "EM ATIVIDADE", "101", "Equipe chegou", "Ir ao 6002"])
 
     def test_production_responsibility_catalog_accepts_roles_and_day_off(self):
         from backend.models import production
