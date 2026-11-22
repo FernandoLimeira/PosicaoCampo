@@ -145,25 +145,17 @@ function statusMeta(code) {
   };
 }
 
-// Status do setor numa barra seletora simples (select), com a cor do status escolhido.
-function renderStatusOptions(selectedCode = selectedStatus(), container = document.querySelector('#production-status-options')) {
+function renderStatusOptions(selectedCode = selectedStatus()) {
+  const container = document.querySelector('#production-status-options');
   if (!container) return;
   if (!productionStatuses.length) {
     container.innerHTML = '<div class="production-empty"><span>Nenhum status configurado.</span></div>';
     return;
   }
-  const selected = productionStatuses.some(status => status.code === selectedCode) ? selectedCode : productionStatuses[0].code;
-  container.innerHTML = `<select class="production-status-select ${statusMeta(selected).className}" data-production-status-select aria-label="Status do setor">${
+  const selected = productionStatuses.some(status => status.code === selectedCode) ? selectedCode : defaultStatusCode();
+  container.innerHTML = `<select class="production-status-select ${statusMeta(selected).className}" data-production-status-select aria-label="Status da frente">${
     productionStatuses.map(status => `<option value="${escapeHtml(status.code)}" ${status.code === selected ? 'selected' : ''}>${escapeHtml(status.name)}</option>`).join('')
   }</select>`;
-}
-
-function refreshProductionSectorStatuses() {
-  productionSectorRows().forEach(row => {
-    const code = selectedStatus(row);
-    renderStatusOptions(productionStatuses.some(status => status.code === code) ? code : defaultStatusCode(),
-      row.querySelector('.production-status-options'));
-  });
 }
 
 function visibleProductionItems() {
@@ -381,11 +373,15 @@ async function scanProductionSector(row) {
     const frontId = document.querySelector('#production-front-input')?.value;
     const defaults = productionFrontDefaultOperations(frontId).map(productionOperationKey);
     const options = [...operations].sort(([a], [b]) => Number(defaults.includes(b)) - Number(defaults.includes(a)));
-    target.innerHTML = options.length
-      ? `<span>Operações com O.S. aberta neste setor</span><div class="production-sector-scan-options">${options.map(([, order]) =>
+    if (!options.length) {
+      target.textContent = 'Nenhuma operação com O.S. aberta neste setor.';
+    } else if (row.querySelector('[data-sector-operations]')) {
+      target.innerHTML = `<span>Operações com O.S. aberta neste setor</span><div class="production-sector-scan-options">${options.map(([, order]) =>
         `<button type="button" class="production-secondary-button" data-sector-operation="${escapeHtml(order.operation)}">${escapeHtml(serviceOrderOperationLabel(order))}</button>`
-      ).join('')}</div>`
-      : '<span>Nenhuma operação com O.S. aberta neste setor.</span>';
+      ).join('')}</div>`;
+    } else {
+      target.textContent = `O.S. abertas para as operações ${options.map(([, order]) => order.operation).join(', ')}.`;
+    }
   } catch (error) {
     if (productionSectorScans.get(row) === request) {
       target.innerHTML = '<span>Não foi possível consultar as O.S.</span> <button type="button" class="production-secondary-button" data-retry-sector-scan>Consultar novamente</button>';
@@ -526,17 +522,15 @@ function renderEntryFronts(selectedFrontId = null, fallbackItem = null) {
     : '<option value="">Nenhuma frente/serviço cadastrada neste grupo</option>';
 }
 
-function setSelectedStatus(value, root = document) {
-  root.querySelectorAll('[data-production-status-select]').forEach(select => {
-    if ([...select.options].some(option => option.value === value)) select.value = value;
-    select.className = `production-status-select ${statusMeta(select.value).className}`;
-  });
+function setSelectedStatus(value) {
+  const select = document.querySelector('[data-production-status-select]');
+  if (!select?.options) return;
+  if ([...select.options].some(option => option.value === value)) select.value = value;
+  select.className = `production-status-select ${statusMeta(select.value).className}`;
 }
 
-function selectedStatus(root = document) {
-  const select = root.querySelector('[data-production-status-select]');
-  if (select?.value) return select.value;
-  return root.querySelector('[data-production-status]:checked')?.value || '';
+function selectedStatus() {
+  return document.querySelector('[data-production-status-select]')?.value || '';
 }
 
 function defaultStatusCode() {
@@ -568,11 +562,11 @@ function addProductionSector(item = null) {
   const rows = productionSectorRows();
   if (!rows.length || rows.length >= 100) return;
   const row = rows[0].cloneNode(true);
+  row.querySelector('.production-entry-operations-field').replaceWith(row.querySelector('[data-sector-scan]'));
   const suffix = `-${++productionSectorSequence}`;
   row.querySelectorAll('[id]').forEach(element => { element.id += suffix; });
   row.querySelectorAll('label[for]').forEach(label => { label.htmlFor += suffix; });
   clearProductionSectorScan(row);
-  renderStatusOptions(defaultStatusCode(), row.querySelector('.production-status-options'));
   document.querySelector('#production-sector-rows').append(row);
   updateProductionSectorRows();
   if (item) {
@@ -584,7 +578,6 @@ function addProductionSector(item = null) {
   productionSectorField(row, 'sector').value = '';
   productionSectorField(row, 'farm').value = '';
   resetSectorFields(row);
-  renderEntryOperations(row);
   productionSectorField(row, productionEntryUsesSection() ? 'section' : 'sector').focus();
 }
 
@@ -833,10 +826,11 @@ function fillProductionSectorRow(row, item) {
     section.innerHTML = `<option value="${escapeHtml(entry.section || '')}">${escapeHtml(entry.section || 'Sem seção')}</option>`;
     section.value = entry.section || '';
   }
-  setSelectedStatus(entry.status || defaultStatusCode(), row);
-  let operations = splitProductionOperations(entry.operation);
-  if (!operations.length && !item.sector_group_id) operations = productionFrontDefaultOperations(item.service_front_id);
-  renderEntryOperations(row, operations.length ? operations : ['']);
+  if (row.querySelector('[data-sector-operations]')) {
+    let operations = splitProductionOperations(entry.operation);
+    if (!operations.length && !item.sector_group_id) operations = productionFrontDefaultOperations(item.service_front_id);
+    renderEntryOperations(row, operations.length ? operations : ['']);
+  }
   scanProductionSector(row);
 }
 
@@ -858,6 +852,7 @@ function openEditProductionItem(itemId) {
   document.querySelector('#production-changes-input').value = entry.changes || '';
   const [row = document] = productionSectorRows();
   fillProductionSectorRow(row, item);
+  setSelectedStatus(entry.status || defaultStatusCode());
   if (item.sector_group_id) {
     productionItems.filter(other => other.id !== item.id && other.service_front_id === item.service_front_id
       && other.sector_group_id === item.sector_group_id && other.entry).forEach(addProductionSector);
@@ -939,24 +934,25 @@ async function submitProductionEntry(event) {
 }
 
 function collectProductionSectors() {
+  const rows = productionSectorRows();
+  const status = selectedStatus();
+  if (!status) throw new Error('Selecione o status da frente.');
+  const operation = rows.length ? productionEntryOperationValues(rows[0]).map(value => value.trim()).filter(Boolean).join(', ') : '';
   const seen = new Set();
-  return productionSectorRows().map((row, index) => {
+  return rows.map((row, index) => {
     const input = productionSectorField(row, 'sector');
     const sector = input.value.trim();
-    const status = selectedStatus(row);
     if (!sector || seen.has(sector.toLocaleUpperCase('pt-BR'))) {
       input.focus();
       throw new Error(sector ? `O setor ${sector} está repetido nesta frente.` : 'Informe o setor.');
     }
-    if (!status) throw new Error(`Selecione o status do setor ${sector}.`);
     seen.add(sector.toLocaleUpperCase('pt-BR'));
-    const operations = productionEntryOperationValues(row).map(value => value.trim()).filter(Boolean);
     const linkedItemId = row.dataset?.linkedItemId;
     return { sector, section: productionSectorField(row, 'section').value.trim(),
       farm: productionSectorField(row, 'farm').value.trim(), status,
       ...(linkedItemId ? { id: Number(linkedItemId) } : {}),
-      ...(operations.length || linkedItemId || index === 0 && productionEditingItemId
-        ? { operation: operations.join(', ') } : {}) };
+      ...(index === 0 && (operation || productionEditingItemId) ? { operation } : {}),
+      ...(index > 0 && !linkedItemId && operation ? { default_operation: operation } : {}) };
   });
 }
 
@@ -1040,6 +1036,7 @@ document.querySelector('#production-filter-front')?.addEventListener('change', e
 });
 
 document.querySelector('#production-entry-form')?.addEventListener('submit', submitProductionEntry);
+document.querySelector('#production-status-options')?.addEventListener('change', event => setSelectedStatus(event.target.value));
 
 document.querySelector('#production-group-input')?.addEventListener('change', () => renderEntryFronts());
 
@@ -1100,7 +1097,6 @@ document.querySelector('#production-sector-rows')?.addEventListener('change', as
     if (field === 'sector') syncFarmFromSectorChoice(row);
   } else if (field === 'sector') await resolveSectorFromBase(row);
   if ((field === 'sector' || field === 'section') && row.isConnected && event.target.value === value) scanProductionSector(row);
-  if (event.target.matches('[data-production-status-select]')) setSelectedStatus(event.target.value, row);
 });
 
 document.querySelector('#production-entry-form')?.addEventListener('keydown', event => {

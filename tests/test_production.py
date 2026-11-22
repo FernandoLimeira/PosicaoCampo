@@ -543,7 +543,7 @@ class ProductionTests(unittest.TestCase):
                                                                "operation": "101", "observation": "Observação existente"})
         items = production.save_my_items(self.user["id"], {**base, "sectors": [
             {"sector": "3392", "status": "EM ATIVIDADE"},
-            {"sector": "3400", "status": "SOLO ÚMIDO / TESTE", "operation": "205"},
+            {"sector": "3400", "status": "SOLO ÚMIDO / TESTE", "default_operation": "205"},
         ]}, item_id=original["id"])
         self.assertEqual(items[0]["id"], original["id"])
         self.assertEqual(items[0]["entry"]["observation"], "Observação existente")
@@ -573,11 +573,13 @@ class ProductionTests(unittest.TestCase):
         self.assertEqual(next(item for item in separate if item["id"] == items[1]["id"])["entry"]["operation"], "205")
 
         linked_again = production.save_my_items(self.user["id"], {**base, "sectors": [
-            {"sector": "3392", "status": "EM ATIVIDADE"}, {"sector": "3400", "status": "EM ATIVIDADE"},
+            {"sector": "3392", "status": "EM ATIVIDADE"},
+            {"sector": "3400", "status": "EM ATIVIDADE", "default_operation": "101"},
         ]}, item_id=original["id"])
         self.assertEqual([item["id"] for item in linked_again], [item["id"] for item in items])
         self.assertTrue(linked_again[0]["sector_group_id"])
         self.assertEqual(linked_again[0]["sector_group_id"], linked_again[1]["sector_group_id"])
+        self.assertEqual(linked_again[1]["entry"]["operation"], "205")
 
     def test_multiple_sectors_reject_duplicates_and_invalid_batches(self):
         front = self._front()

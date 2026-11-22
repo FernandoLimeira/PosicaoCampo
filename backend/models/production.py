@@ -1192,6 +1192,8 @@ def _save_my_items(
                 raise ValueError("O mesmo lançamento foi informado mais de uma vez.")
             target_id = target_id if item_id is not None else next(iter(matching_ids), None)
             _keep_previous_fields(conn, target_id, entry, source)
+            if target_id is None and "operation" not in source and "default_operation" in source:
+                entry["operation"] = _normalize_operations(source["default_operation"])
             saved_id = _save_my_item(conn, user_id, unit, front_id, front, entry, now, item_id=target_id)
             item_ids.append(saved_id)
             # Personal copies left by older releases must not remain as active positions.

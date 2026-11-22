@@ -89,6 +89,7 @@ context.openEditProductionItem(2);
 assert.equal(vm.runInContext('productionEditingItemId', context), 2);
 assert.equal(element('#production-item-id').value, '2');
 assert.match(fs.readFileSync(path.join(__dirname, '../templates/producao.html'), 'utf8'), /id="production-item-id"\s+type="hidden"/);
+assert.match(fs.readFileSync(path.join(__dirname, '../templates/producao.html'), 'utf8'), /Status da frente\s*<\/span>\s*<div id="production-status-options"[^>]*><\/div>\s*<\/label>\s*<div id="production-sector-rows"/);
 assert.equal(element('#production-modal-kicker').textContent, 'Atualizar frente');
 // O título do popup de edição mostra o nome da frente.
 assert.equal(element('#production-modal-title').textContent, vm.runInContext('findProductionItem(2).service_name', context));
@@ -196,6 +197,7 @@ function sectorRow(sector, status = 'ATIVO', operations = []) {
   const scan = { innerHTML: '', textContent: '' };
   return { fields, scan, querySelectorAll() { return operations.map(value => ({ value })); }, querySelector(selector) {
     if (selector === '[data-sector-scan]') return scan;
+    if (selector === '[data-sector-operations]') return operations.length ? {} : null;
     if (selector === '[data-production-status]:checked') return status ? { value: status } : null;
     const match = selector.match(/^\[data-sector-field="(.+)"\]$/);
     return match ? fields[match[1]] : null;
@@ -208,14 +210,18 @@ function sectorRow(sector, status = 'ATIVO', operations = []) {
 
   context.refreshProductionPage = async () => {};
   element('#production-front-input').value = '7';
-  sectorRows.push(sectorRow('42', 'UMIDO', ['101']), sectorRow('43', 'ATIVO', ['205']));
+  element('[data-production-status-select]').value = 'UMIDO';
+  sectorRows.push(sectorRow('42', 'ATIVO', ['101']), sectorRow('43', 'ATIVO'));
   await context.submitProductionEntry({ preventDefault() {} });
   const update = requests.at(-1);
   assert.equal(update.url, '/api/production/my-items/2');
   assert.equal(update.options.method, 'PUT');
   const updatedSectors = JSON.parse(update.options.body).sectors;
   assert.equal(updatedSectors[0].observation, 'Observação anterior');
-  assert.deepEqual(updatedSectors.map(item => [item.sector, item.operation]), [['42', '101'], ['43', '205']]);
+  assert.deepEqual(updatedSectors.map(item => item.status), ['UMIDO', 'UMIDO']);
+  assert.equal(updatedSectors[0].operation, '101');
+  assert.equal(updatedSectors[1].default_operation, '101');
+  assert.equal(updatedSectors[1].operation, undefined);
   await context.removeProductionItem(2);
   assert.equal(requests.at(-1).url, '/api/production/my-items/2');
   assert.equal(requests.at(-1).options.method, 'DELETE');
@@ -225,7 +231,7 @@ function sectorRow(sector, status = 'ATIVO', operations = []) {
   await context.submitProductionEntry({ preventDefault() {} });
   const batch = requests.at(-1);
   assert.equal(batch.url, '/api/production/my-items/batch');
-  assert.deepEqual(JSON.parse(batch.options.body).sectors.map(item => [item.sector, item.status]), [['42', 'UMIDO'], ['43', 'ATIVO']]);
+  assert.deepEqual(JSON.parse(batch.options.body).sectors.map(item => [item.sector, item.status]), [['42', 'UMIDO'], ['43', 'UMIDO']]);
   sectorRows[1].fields.sector.value = ' 42 ';
   const requestCount = requests.length;
   await context.submitProductionEntry({ preventDefault() {} });
@@ -276,12 +282,13 @@ function sectorRow(sector, status = 'ATIVO', operations = []) {
   const otherScan = context.scanProductionSector(second);
   assert.match(pending[concurrentStart + 1].url, /unit=NRD&sector=201/);
   pending[concurrentStart + 1].resolve({ orders: [{ operation: '101', operation_name: 'Gradagem' }] });
-  pending[concurrentStart + 2].resolve({ orders: [] });
+  pending[concurrentStart + 2].resolve({ orders: [{ operation: '205', operation_name: 'Calagem' }] });
   pending[concurrentStart].resolve({ orders: [{ operation: '205', operation_name: 'Calagem' }] });
   await Promise.all([oldScan, newScan, otherScan]);
   assert.match(first.scan.innerHTML, /Gradagem/);
   assert.doesNotMatch(first.scan.innerHTML, /Calagem/);
-  assert.match(second.scan.innerHTML, /Nenhuma operação/);
+  assert.match(second.scan.textContent, /O\.S\. abertas.*205/);
+  assert.doesNotMatch(second.scan.innerHTML, /data-sector-operation/);
 
   assert.equal(context.productionPlaceLabel({ sector: '201', section: '20', farm: 'Fazenda 201' }, 'NRD'), 'Setor 201 · Fazenda 201');
   assert.equal(context.productionPlaceLabel({ sector: '201', section: '20', farm: 'Fazenda 201' }, 'RBR'), 'Setor 201 / Seção 20 · Fazenda 201');

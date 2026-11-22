@@ -163,10 +163,11 @@
 .production-sector-number { color: #435259; font-size: 11px; }
 .production-sector-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .production-sector-actions .production-secondary-button { min-height: 32px; padding: 0 10px; }
-.production-sector-row .production-status-field { margin-top: 14px; }
+.production-form-section > .production-status-field { margin: 0 0 14px; }
 .production-sector-row [data-sector-field="section"] { min-width: 0; }
 .production-sector-row .field[hidden] { display: none; }
 .production-sector-scan { display: grid; gap: 6px; font-size: 12px; }
+.production-sector-row > .production-sector-scan { margin-top: 6px; }
 .production-sector-scan:empty { display: none; }
 .production-sector-scan-options { display: flex; flex-wrap: wrap; gap: 6px; }
 .production-sector-scan-options button { text-align: left; }

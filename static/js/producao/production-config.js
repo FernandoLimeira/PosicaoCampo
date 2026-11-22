@@ -363,7 +363,7 @@ async function submitProductionStatus(event) {
     if (editor) editor.open = false;
     await loadProductionConfigStatuses();
     await loadProductionStatuses();
-    refreshProductionSectorStatuses();
+    renderStatusOptions();
     renderProductionItems({ permissions: productionAccess?.permissions || {} });
     showToast('Status salvo.');
   } catch (error) {
@@ -385,7 +385,7 @@ async function deleteProductionStatus(statusId, statusName = '') {
     clearStatusConfigForm();
     await loadProductionConfigStatuses();
     await loadProductionStatuses();
-    refreshProductionSectorStatuses();
+    renderStatusOptions();
     renderProductionItems({ permissions: productionAccess?.permissions || {} });
     showToast('Status apagado.');
   } catch (error) {
