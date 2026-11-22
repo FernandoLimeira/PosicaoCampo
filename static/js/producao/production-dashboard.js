@@ -267,7 +267,9 @@ function dashboardFrontTile(sectors, shift) {
       </div>
       <div class="pdash-tile-who">${escapeHtml(productionResponsibleName(front, shift))}</div>
     </header>
-    ${ordered.map(item => dashboardSectorRow(item, editable)).join('')}
+    <div class="pdash-front-sectors">
+      ${ordered.map(item => dashboardSectorRow(item, editable)).join('')}
+    </div>
   </article>`;
 }
 

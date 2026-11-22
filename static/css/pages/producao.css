@@ -1061,7 +1061,10 @@ button.pdash-kpi.is-amber.is-active { box-shadow: 0 0 0 3px rgba(213, 163, 38, .
 .pdash-tile-who { min-width: 0; color: var(--muted); font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
 .pdash-group-header > h3 { margin: 0; color: var(--text); font-size: 17px; }
 .pdash-front-card-header { display: grid; gap: 5px; padding-bottom: 4px; }
-.pdash-sector-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 12px 0; border-top: 1px solid var(--data-border); }
+.pdash-front-sectors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.pdash-sector-row { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 10px; padding: 12px; border: 1px solid var(--data-border); border-radius: 8px; background: var(--data-surface); }
+.pdash-sector-row:only-child { grid-column: 1 / -1; }
+@media (max-width: 900px) { .pdash-front-sectors { grid-template-columns: minmax(0, 1fr); } }
 .pdash-sector-row .pdash-place { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
 .pdash-sector-operation { display: grid; gap: 5px; min-width: 0; }
 .pdash-sector-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; color: var(--muted); }

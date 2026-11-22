@@ -142,7 +142,7 @@ assert.doesNotMatch(cards.innerHTML, /Resumo do turno/);
 assert.match(cards.innerHTML, /data-panel-filter="ok"/);
 vm.runInContext("dashboardPanelFilter.flag = 'ok'", context);
 context.renderProductionDashboard();
-assert.match(cards.innerHTML, /data-panel-front-card="7".*Setor 41.*&lt;teste>.*Setor 42.*class="pdash-status is-wet".*Observação anterior.*Mudança anterior/s);
+assert.match(cards.innerHTML, /data-panel-front-card="7".*class="pdash-front-sectors".*Setor 41.*&lt;teste>.*Setor 42.*class="pdash-status is-wet".*Observação anterior.*Mudança anterior/s);
 assert.match(cards.innerHTML, /data-panel-note="changes" data-item-id="2"/);
 assert.doesNotMatch(cards.innerHTML, /data-panel-front-card="9"/);
 vm.runInContext("productionItems[0].entry.sector = '42'", context);
