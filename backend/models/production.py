@@ -1030,13 +1030,13 @@ def save_my_item(user_id: int, payload: Any, *, item_id: int | None = None) -> d
     return _save_my_items(user_id, payload, [payload], item_id=item_id)[0]
 
 
-def save_my_items(user_id: int, payload: Any) -> list[dict[str, Any]]:
+def save_my_items(user_id: int, payload: Any, *, item_id: int | None = None) -> list[dict[str, Any]]:
     if not isinstance(payload, dict):
         raise ValueError("Dados dos setores inválidos.")
     sectors = payload.get("sectors")
     if not isinstance(sectors, list) or not 1 <= len(sectors) <= 100:
         raise ValueError("Informe entre 1 e 100 setores por lançamento.")
-    return _save_my_items(user_id, payload, sectors)
+    return _save_my_items(user_id, payload, sectors, item_id=item_id)
 
 
 def _save_my_items(user_id: int, payload: Any, sectors: list[Any], *, item_id: int | None = None) -> list[dict[str, Any]]:
@@ -1065,17 +1065,20 @@ def _save_my_items(user_id: int, payload: Any, sectors: list[Any], *, item_id: i
         conn.execute("BEGIN IMMEDIATE")
         _require_access(conn, user_id, permission="fill", unit=unit)
         validate_actor(conn, user_id)
-        front = _catalog_front_for_unit(conn, front_id, unit, allow_inactive=item_id is not None)
+        front = _catalog_front_for_unit(conn, front_id, unit, allow_inactive=item_id is not None and len(entries) == 1)
         existing = _active_front_entries(conn, unit, front_id, entries[0]["work_date"])
         existing_sectors = {}
         for row in existing:
             existing_sectors.setdefault(row["sector"].strip().upper(), []).append(row["id"])
-        for entry, source in zip(entries, sectors):
+        for index, (entry, source) in enumerate(zip(entries, sectors)):
             entry["status"] = _validate_status_code(conn, entry["status"])
             matching_ids = existing_sectors.get(entry["sector"].upper(), [])
-            if item_id is not None and matching_ids and item_id not in matching_ids:
+            edited_id = item_id if index == 0 else None
+            if item_id is not None and index > 0:
+                matching_ids = [candidate for candidate in matching_ids if candidate != item_id]
+            if item_id is not None and matching_ids and edited_id not in matching_ids:
                 raise ValueError(f"O setor {entry['sector']} já está cadastrado nesta frente. Edite o lançamento existente.")
-            target_id = item_id if item_id is not None else next(iter(matching_ids), None)
+            target_id = edited_id if edited_id is not None else next(iter(matching_ids), None)
             _keep_previous_fields(conn, target_id, entry, source)
             saved_id = _save_my_item(conn, user_id, unit, front_id, front, entry, now, item_id=target_id)
             item_ids.append(saved_id)

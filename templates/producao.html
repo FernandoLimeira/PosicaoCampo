@@ -80,7 +80,7 @@
       <div class="production-table-wrap">
         <table class="production-table production-orders-table">
           <thead>
-            <tr><th>O.S.</th><th>Setor</th><th>Seção</th><th>Operação</th><th>C. custo</th><th>Talhões</th><th>Abertura</th><th aria-label="Detalhes"></th></tr>
+            <tr><th>O.S.</th><th>Setor</th><th id="production-orders-section-heading">Seção</th><th>Operação</th><th>C. custo</th><th>Talhões</th><th>Abertura</th><th aria-label="Detalhes"></th></tr>
           </thead>
           <tbody id="production-orders-body"></tbody>
         </table>
@@ -445,9 +445,10 @@
             <span>Status do setor</span>
             <div id="production-status-options" class="production-status-options"></div>
           </label>
-          <div id="production-entry-operations-field" class="field production-entry-operations-field" hidden>
-            <span>Operação em execução <small>(código da O.S.; use + para mais de uma)</small></span>
-            <div id="production-entry-operations" class="production-sheet-operations"></div>
+          <div class="field production-entry-operations-field">
+            <span>Operações em execução</span>
+            <div class="production-sheet-operations" data-sector-operations></div>
+            <div class="production-sector-scan" data-sector-scan aria-live="polite"></div>
           </div>
           </div>
           </div>

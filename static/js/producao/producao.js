@@ -330,22 +330,67 @@ function productionOperationCell(entry, item) {
     : '<span class="production-os-state is-no-operation">Sem operação</span>';
 }
 
-// Campo "Operação em execução" do popup de editar: um código por campo, "+" para mais.
-let productionEntryOperations = [''];
-
-function renderEntryOperations() {
-  const container = document.querySelector('#production-entry-operations');
+function renderEntryOperations(row, operations = ['']) {
+  const container = row?.querySelector('[data-sector-operations]');
   if (!container) return;
-  container.innerHTML = productionEntryOperations.map((value, index) => `<div class="production-sheet-operation">
+  container.innerHTML = operations.map((value, index) => `<div class="production-sheet-operation">
       <input data-entry-op="${index}" value="${escapeHtml(value)}" maxlength="40"
         autocomplete="off" inputmode="numeric" placeholder="Cód." aria-label="Operação ${index + 1}" />
       ${index > 0 ? `<button class="production-sheet-op-remove" type="button" data-entry-op-remove="${index}" aria-label="Remover operação ${index + 1}">×</button>` : ''}
     </div>`).join('') + `<button class="production-sheet-op-add" type="button" data-entry-op-add title="Adicionar outra operação"
-      aria-label="Adicionar operação" ${productionEntryOperations.length >= 10 ? 'disabled' : ''}>+</button>`;
+      aria-label="Adicionar operação" ${operations.length >= 10 ? 'disabled' : ''}>+</button>`;
 }
 
-function productionEntryOperationsValue() {
-  return [...new Set(productionEntryOperations.map(value => value.trim()).filter(Boolean))].join(', ');
+function productionEntryOperationValues(row) {
+  return [...row.querySelectorAll('[data-entry-op]')].map(input => input.value);
+}
+
+function productionPlaceLabel(entry, unit = currentProductionUnit()) {
+  const section = productionUnitUsesSection(unit) && entry.section ? ` / Seção ${entry.section}` : '';
+  return `Setor ${entry.sector || '-'}${section}${entry.farm ? ` · ${entry.farm}` : ''}`;
+}
+
+const productionSectorScans = new WeakMap();
+
+function clearProductionSectorScan(row) {
+  productionSectorScans.delete(row);
+  const target = row?.querySelector('[data-sector-scan]');
+  if (target) target.innerHTML = '';
+}
+
+async function scanProductionSector(row) {
+  const target = row?.querySelector('[data-sector-scan]');
+  if (!target) return;
+  clearProductionSectorScan(row);
+  const unit = document.querySelector('#production-unit-input')?.value || currentProductionUnit();
+  const sector = productionSectorField(row, 'sector').value.trim();
+  const section = productionSectorField(row, 'section').value.trim();
+  if (!sector || (productionUnitUsesSection(unit) && !section)) return;
+  const request = {};
+  productionSectorScans.set(row, request);
+  target.textContent = 'Consultando O.S. abertas…';
+  const query = new URLSearchParams({ unit, sector, section, summary: '1' });
+  try {
+    const data = await apiRequest(`/api/production/service-orders?${query}`);
+    if (productionSectorScans.get(row) !== request) return;
+    const operations = new Map();
+    for (const order of data.orders || []) {
+      const key = productionOperationKey(order.operation);
+      if (key && !operations.has(key)) operations.set(key, order);
+    }
+    const frontId = document.querySelector('#production-front-input')?.value;
+    const defaults = productionFrontDefaultOperations(frontId).map(productionOperationKey);
+    const options = [...operations].sort(([a], [b]) => Number(defaults.includes(b)) - Number(defaults.includes(a)));
+    target.innerHTML = options.length
+      ? `<span>Operações com O.S. aberta neste setor</span><div class="production-sector-scan-options">${options.map(([, order]) =>
+        `<button type="button" class="production-secondary-button" data-sector-operation="${escapeHtml(order.operation)}">${escapeHtml(serviceOrderOperationLabel(order))}</button>`
+      ).join('')}</div>`
+      : '<span>Nenhuma operação com O.S. aberta neste setor.</span>';
+  } catch (error) {
+    if (productionSectorScans.get(row) === request) {
+      target.innerHTML = '<span>Não foi possível consultar as O.S.</span> <button type="button" class="production-secondary-button" data-retry-sector-scan>Consultar novamente</button>';
+    }
+  }
 }
 
 // Coluna O.S.: "OK" quando há O.S. do setor para a operação do lançamento; "Sem O.S." quando não há.
@@ -410,7 +455,7 @@ function renderProductionItems(data) {
     return `<tr class="${current ? '' : 'is-pending'}" title="${escapeHtml(item.group_name || '')}">
       <td><div class="production-item-name"><strong>${escapeHtml(item.service_name || '-')}</strong><small>${escapeHtml(styleLabel)} · ${escapeHtml(responsible)}</small></div></td>
       <td class="production-cell-number">${escapeHtml(entry.sector || '-')}</td>
-      <td class="production-cell-number">${escapeHtml(entry.section || '-')}</td>
+      ${productionUnitUsesSection(currentProductionUnit()) ? `<td class="production-cell-number">${escapeHtml(entry.section || '-')}</td>` : ''}
       <td class="production-cell-farm">${escapeHtml(entry.farm || '-')}</td>
       <td><div class="production-status-cell">${statusBadge(entry.status)}${current ? '' : `<small class="production-pending-note">${escapeHtml(updatedDetail)}</small>`}</div></td>
       <td>${productionOperationCell(entry, item)}</td>
@@ -522,6 +567,8 @@ function addProductionSector() {
   productionSectorField(row, 'sector').value = '';
   productionSectorField(row, 'farm').value = '';
   resetSectorFields(row);
+  renderEntryOperations(row);
+  clearProductionSectorScan(row);
   renderStatusOptions(defaultStatusCode(), row.querySelector('.production-status-options'));
   document.querySelector('#production-sector-rows').append(row);
   updateProductionSectorRows();
@@ -561,12 +608,9 @@ async function resolveSectorFromBase(row = document) {
     section.innerHTML = '<option value="">Sem seção</option>' + sectorOptions.map(item =>
       `<option value="${escapeHtml(item.section)}">${escapeHtml(item.section || 'Sem seção')}${item.farm ? ` — ${escapeHtml(item.farm)}` : ''}</option>`
     ).join('');
-    if (sectorOptions.length === 1) {
-      section.value = sectorOptions[0].section || '';
-      if (farm) farm.value = sectorOptions[0].farm || '';
-    } else if (sectorOptions.length > 1) {
+    if (sectorOptions.length) {
       const first = sectorOptions[0];
-      section.value = first.section || '';
+      if (sectorOptions.length === 1) section.value = first.section || '';
       if (farm) farm.value = first.farm || '';
     }
   } catch (error) {
@@ -574,17 +618,9 @@ async function resolveSectorFromBase(row = document) {
   }
 }
 
-function syncFarmFromSection(row = document) {
-  const sectionValue = productionSectorField(row, 'section')?.value || '';
-  const options = productionSectorOptions.get(row);
-  const selected = Array.isArray(options) ? options.find(item => item.section === sectionValue) : null;
-  const farm = productionSectorField(row, 'farm');
-  if (farm && selected) farm.value = selected.farm || '';
-}
-
 // Polo MS (PST e RBR): vários setores dividem a mesma seção, então a seção é digitada
 // e o setor é escolhido numa lista com os setores cadastrados daquela seção.
-// No Polo SP segue o inverso: setor digitado e seção escolhida pelo setor.
+// No Polo SP são exibidos apenas o setor e a fazenda.
 const PRODUCTION_SECTION_UNITS = new Set(['PST', 'RBR']);
 function productionUnitUsesSection(unit) {
   return PRODUCTION_SECTION_UNITS.has(String(unit || '').toUpperCase());
@@ -655,6 +691,8 @@ function applyProductionLocationMode() {
     const sectorLabel = productionSectorField(row, 'sector')?.closest?.('label');
     const sectionLabel = productionSectorField(row, 'section')?.closest?.('label');
     if (!sectorLabel || !sectionLabel) return;
+    sectionLabel.hidden = !usesSection;
+    row.classList.toggle('shows-section', usesSection);
     // Polo MS: a seção vem primeiro, porque filtra a lista de setores.
     if (usesSection) sectorLabel.before(sectionLabel);
     else sectionLabel.before(sectorLabel);
@@ -719,8 +757,6 @@ function setProductionEntryEditMode(isEditing) {
   if (serviceSection) serviceSection.hidden = Boolean(isEditing);
   const notesSection = document.querySelector('#production-entry-notes');
   if (notesSection) notesSection.hidden = !isEditing;
-  const addSector = document.querySelector('#production-add-sector');
-  if (addSector) addSector.hidden = Boolean(isEditing);
 
   const configButton = document.querySelector('#production-config-toggle');
   if (configButton) configButton.hidden = Boolean(isEditing) || !canConfigureProduction();
@@ -731,10 +767,6 @@ function setProductionEntryEditMode(isEditing) {
   if (kicker) kicker.textContent = isEditing ? 'Editar frente' : 'Produção Agrícola';
   const subtitle = document.querySelector('#production-modal-subtitle');
   if (subtitle) subtitle.hidden = !isEditing;
-  const operationsField = document.querySelector('#production-entry-operations-field');
-  if (operationsField) operationsField.hidden = !isEditing;
-  const sectorTitle = document.querySelector('#production-sector-section-title');
-  if (sectorTitle) sectorTitle.textContent = isEditing ? 'Setor da frente' : 'Setores da frente';
   // Na edição, o formulário fica em duas colunas: setor/status e anotações.
   document.querySelector('#production-entry-form')?.classList?.toggle('is-editing', Boolean(isEditing));
 
@@ -746,8 +778,12 @@ function setProductionEntryEditMode(isEditing) {
 }
 
 function clearEntryForm(defaultUnit = selectedNavbarProductionUnit()) {
-  productionSectorRows().forEach(row => productionSectorOptions.delete(row));
-  productionSectorRows().slice(1).forEach(row => row.remove());
+  const [first, ...additional] = productionSectorRows();
+  productionSectorRows().forEach(row => {
+    productionSectorOptions.delete(row);
+    clearProductionSectorScan(row);
+  });
+  additional.forEach(row => row.remove());
   updateProductionSectorRows();
   const form = document.querySelector('#production-entry-form');
   form?.reset();
@@ -760,7 +796,10 @@ function clearEntryForm(defaultUnit = selectedNavbarProductionUnit()) {
   applyProductionLocationMode();
   renderEntryGroups();
   setSelectedStatus(defaultStatusCode());
-  resetSectorFields();
+  if (first) {
+    resetSectorFields(first);
+    renderEntryOperations(first);
+  }
   setProductionEntryEditMode(false);
 }
 
@@ -787,27 +826,28 @@ function openEditProductionItem(itemId) {
   document.querySelector('#production-observation-input').value = entry.observation || '';
   document.querySelector('#production-changes-input').value = entry.changes || '';
   setSelectedStatus(entry.status || defaultStatusCode());
+  const [row] = productionSectorRows();
   const section = document.querySelector('#production-section-input');
   if (productionEntryUsesSection()) {
     // Polo MS: seção digitada; o setor salvo fica escolhido na lista da seção.
     section.value = entry.section || '';
-    renderProductionSectorChoices(document, { keep: entry.sector || '' });
+    renderProductionSectorChoices(row, { keep: entry.sector || '' });
   } else {
-    resetSectorFields();
+    resetSectorFields(row);
     section.innerHTML = `<option value="${escapeHtml(entry.section || '')}">${escapeHtml(entry.section || 'Sem seção')}</option>`;
     section.value = entry.section || '';
   }
   setProductionEntryEditMode(true);
-  productionEntryOperations = splitProductionOperations(entry.operation);
-  if (!productionEntryOperations.length) productionEntryOperations = productionFrontDefaultOperations(item.service_front_id);
-  if (!productionEntryOperations.length) productionEntryOperations = [''];
-  renderEntryOperations();
+  let operations = splitProductionOperations(entry.operation);
+  if (!operations.length) operations = productionFrontDefaultOperations(item.service_front_id);
+  renderEntryOperations(row, operations.length ? operations : ['']);
+  scanProductionSector(row);
   // O nome da frente em edição fica em destaque no topo do popup.
   document.querySelector('#production-modal-title').textContent = item.service_name || 'Frente';
   const subtitle = document.querySelector('#production-modal-subtitle');
   if (subtitle) {
     subtitle.textContent = [productionUnitLabel(currentProductionUnit()), item.group_name,
-      entry.sector ? `Setor ${entry.sector}${entry.section ? ` / Seção ${entry.section}` : ''}` : '',
+      entry.sector ? productionPlaceLabel(entry) : '',
       item.owner_name ? `Analista: ${item.owner_name}` : ''].filter(Boolean).join(' · ');
   }
   if (!item.is_own) {
@@ -849,12 +889,11 @@ async function submitProductionEntry(event) {
     showToast(error.message, true);
     return;
   }
-  if (itemId) Object.assign(payload, sectors[0], {
+  if (itemId) Object.assign(sectors[0], {
     observation: document.querySelector('#production-observation-input')?.value.trim() || '',
-    changes: document.querySelector('#production-changes-input')?.value.trim() || '',
-    operation: productionEntryOperationsValue()
+    changes: document.querySelector('#production-changes-input')?.value.trim() || ''
   });
-  else payload.sectors = sectors;
+  payload.sectors = sectors;
   try {
     await apiRequest(itemId ? `/api/production/my-items/${itemId}` : '/api/production/my-items/batch', {
       method: itemId ? 'PUT' : 'POST',
@@ -880,7 +919,7 @@ async function submitProductionEntry(event) {
 
 function collectProductionSectors() {
   const seen = new Set();
-  return productionSectorRows().map(row => {
+  return productionSectorRows().map((row, index) => {
     const input = productionSectorField(row, 'sector');
     const sector = input.value.trim();
     const status = selectedStatus(row);
@@ -890,8 +929,11 @@ function collectProductionSectors() {
     }
     if (!status) throw new Error(`Selecione o status do setor ${sector}.`);
     seen.add(sector.toLocaleUpperCase('pt-BR'));
+    const operations = productionEntryOperationValues(row).map(value => value.trim()).filter(Boolean);
     return { sector, section: productionSectorField(row, 'section').value.trim(),
-      farm: productionSectorField(row, 'farm').value.trim(), status };
+      farm: productionSectorField(row, 'farm').value.trim(), status,
+      ...(operations.length || index === 0 && productionEditingItemId
+        ? { operation: operations.join(', ') } : {}) };
   });
 }
 
@@ -981,29 +1023,60 @@ document.querySelector('#production-group-input')?.addEventListener('change', ()
 document.querySelector('#production-add-sector')?.addEventListener('click', addProductionSector);
 
 document.querySelector('#production-sector-rows')?.addEventListener('click', event => {
-  const button = event.target.closest('[data-remove-sector]');
-  if (!button) return;
-  const row = button.closest('[data-production-sector-row]');
-  if (row === productionSectorRows()[0]) return;
-  productionSectorOptions.delete(row);
-  row.remove();
-  updateProductionSectorRows();
-});
-
-document.querySelector('#production-sector-rows')?.addEventListener('change', event => {
   const row = event.target.closest('[data-production-sector-row]');
   if (!row) return;
+  const button = event.target.closest('[data-remove-sector]');
+  if (button && row !== productionSectorRows()[0]) {
+    productionSectorOptions.delete(row);
+    clearProductionSectorScan(row);
+    row.remove();
+    updateProductionSectorRows();
+    return;
+  }
+  if (event.target.closest('[data-retry-sector-scan]')) scanProductionSector(row);
+  const add = event.target.closest('[data-entry-op-add]');
+  const remove = event.target.closest('[data-entry-op-remove]');
+  const suggestion = event.target.closest('[data-sector-operation]');
+  if (!add && !remove && !suggestion) return;
+  const operations = productionEntryOperationValues(row);
+  if (remove) operations.splice(Number(remove.dataset.entryOpRemove), 1);
+  else if (suggestion) {
+    const code = suggestion.dataset.sectorOperation;
+    if (operations.some(value => productionOperationKey(value) === productionOperationKey(code))) return;
+    const blank = operations.findIndex(value => !value.trim());
+    if (blank >= 0) operations[blank] = code;
+    else if (operations.length < 10) operations.push(code);
+    else return;
+  } else if (operations.length < 10) operations.push('');
+  renderEntryOperations(row, operations);
+  if (add) row.querySelector(`[data-entry-op="${operations.length - 1}"]`)?.focus();
+});
+
+document.querySelector('#production-sector-rows')?.addEventListener('input', event => {
+  if (!event.target.matches('input[data-sector-field="sector"], input[data-sector-field="section"]')) return;
+  const row = event.target.closest('[data-production-sector-row]');
+  if (row) {
+    productionSectorOptions.delete(row);
+    clearProductionSectorScan(row);
+  }
+});
+
+document.querySelector('#production-sector-rows')?.addEventListener('change', async event => {
+  const row = event.target.closest('[data-production-sector-row]');
+  if (!row) return;
+  const field = event.target.dataset.sectorField;
+  const value = event.target.value;
+  if (field === 'sector' || field === 'section') clearProductionSectorScan(row);
   if (productionEntryUsesSection()) {
     // Polo MS: a seção digitada refaz a lista de setores; o setor escolhido traz a fazenda.
-    if (event.target.matches('[data-sector-field="section"]')) {
-      renderProductionSectorChoices(row);
+    if (field === 'section') {
+      const choices = renderProductionSectorChoices(row);
       productionSectorField(row, 'sector')?.focus();
+      await choices;
     }
-    if (event.target.matches('[data-sector-field="sector"]')) syncFarmFromSectorChoice(row);
-  } else {
-    if (event.target.matches('[data-sector-field="sector"]')) resolveSectorFromBase(row);
-    if (event.target.matches('[data-sector-field="section"]')) syncFarmFromSection(row);
-  }
+    if (field === 'sector') syncFarmFromSectorChoice(row);
+  } else if (field === 'sector') await resolveSectorFromBase(row);
+  if ((field === 'sector' || field === 'section') && row.isConnected && event.target.value === value) scanProductionSector(row);
   if (event.target.matches('[data-production-status-select]')) setSelectedStatus(event.target.value, row);
 });
 
@@ -1012,23 +1085,8 @@ document.querySelector('#production-entry-form')?.addEventListener('keydown', ev
   if (event.target instanceof HTMLTextAreaElement) return;
   if (event.target.closest('button')) return;
   event.preventDefault();
+  if (event.target.matches('input[data-sector-field]')) event.target.blur();
   event.currentTarget.requestSubmit();
-});
-
-const productionEntryOperationsBox = document.querySelector('#production-entry-operations');
-productionEntryOperationsBox?.addEventListener('input', event => {
-  const index = event.target.dataset?.entryOp;
-  if (index !== undefined) productionEntryOperations[Number(index)] = event.target.value;
-});
-productionEntryOperationsBox?.addEventListener('click', event => {
-  const add = event.target.closest('[data-entry-op-add]');
-  const remove = event.target.closest('[data-entry-op-remove]');
-  if (!add && !remove) return;
-  event.preventDefault();
-  if (add) productionEntryOperations.push('');
-  else productionEntryOperations.splice(Number(remove.dataset.entryOpRemove), 1);
-  renderEntryOperations();
-  if (add) productionEntryOperationsBox.querySelector(`[data-entry-op="${productionEntryOperations.length - 1}"]`)?.focus();
 });
 
 document.querySelector('#production-items-body')?.addEventListener('click', event => {

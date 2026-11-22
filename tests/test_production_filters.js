@@ -24,7 +24,7 @@ const document = {
   addEventListener() {}
 };
 const context = vm.createContext({
-  document, console,
+  document, console, URLSearchParams,
   window: { confirm(message) { confirmations.push(message); return true; } },
   getReportUnit: () => 'NRD',
   escapeHtml: value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;'),
@@ -137,9 +137,11 @@ vm.runInContext("productionFilterFront = '8'", context);
 context.renderProductionItems();
 assert.equal(element('#production-empty').hidden, false);
 
-function sectorRow(sector, status = 'ATIVO') {
+function sectorRow(sector, status = 'ATIVO', operations = []) {
   const fields = { sector: { value: sector, focus() {} }, section: { value: '' }, farm: { value: '' } };
-  return { fields, querySelector(selector) {
+  const scan = { innerHTML: '', textContent: '' };
+  return { fields, scan, querySelectorAll() { return operations.map(value => ({ value })); }, querySelector(selector) {
+    if (selector === '[data-sector-scan]') return scan;
     if (selector === '[data-production-status]:checked') return status ? { value: status } : null;
     const match = selector.match(/^\[data-sector-field="(.+)"\]$/);
     return match ? fields[match[1]] : null;
@@ -152,19 +154,20 @@ function sectorRow(sector, status = 'ATIVO') {
 
   context.refreshProductionPage = async () => {};
   element('#production-front-input').value = '7';
-  sectorRows.push(sectorRow('42', 'UMIDO'));
+  sectorRows.push(sectorRow('42', 'UMIDO', ['101']), sectorRow('43', 'ATIVO', ['205']));
   await context.submitProductionEntry({ preventDefault() {} });
   const update = requests.at(-1);
   assert.equal(update.url, '/api/production/my-items/2');
   assert.equal(update.options.method, 'PUT');
-  assert.equal(JSON.parse(update.options.body).observation, 'Observação anterior');
+  const updatedSectors = JSON.parse(update.options.body).sectors;
+  assert.equal(updatedSectors[0].observation, 'Observação anterior');
+  assert.deepEqual(updatedSectors.map(item => [item.sector, item.operation]), [['42', '101'], ['43', '205']]);
   await context.removeProductionItem(2);
   assert.equal(requests.at(-1).url, '/api/production/my-items/2');
   assert.equal(requests.at(-1).options.method, 'DELETE');
   assert.match(confirmations.at(-1), /setor 42.*NRD/);
 
   vm.runInContext('productionEditingItemId = null', context);
-  sectorRows.push(sectorRow('43'));
   await context.submitProductionEntry({ preventDefault() {} });
   const batch = requests.at(-1);
   assert.equal(batch.url, '/api/production/my-items/batch');
@@ -211,6 +214,29 @@ function sectorRow(sector, status = 'ATIVO') {
   await oldLookup;
   assert.equal(first.fields.farm.value, 'Fazenda 200');
   assert.equal(second.fields.farm.value, 'Fazenda 300');
+
+  const concurrentStart = pending.length;
+  const oldScan = context.scanProductionSector(first);
+  first.fields.sector.value = '201';
+  const newScan = context.scanProductionSector(first);
+  const otherScan = context.scanProductionSector(second);
+  assert.match(pending[concurrentStart + 1].url, /unit=NRD&sector=201/);
+  pending[concurrentStart + 1].resolve({ orders: [{ operation: '101', operation_name: 'Gradagem' }] });
+  pending[concurrentStart + 2].resolve({ orders: [] });
+  pending[concurrentStart].resolve({ orders: [{ operation: '205', operation_name: 'Calagem' }] });
+  await Promise.all([oldScan, newScan, otherScan]);
+  assert.match(first.scan.innerHTML, /Gradagem/);
+  assert.doesNotMatch(first.scan.innerHTML, /Calagem/);
+  assert.match(second.scan.innerHTML, /Nenhuma operação/);
+
+  assert.equal(context.productionPlaceLabel({ sector: '201', section: '20', farm: 'Fazenda 201' }, 'NRD'), 'Setor 201 · Fazenda 201');
+  assert.equal(context.productionPlaceLabel({ sector: '201', section: '20', farm: 'Fazenda 201' }, 'RBR'), 'Setor 201 / Seção 20 · Fazenda 201');
+  const grouped = vm.runInContext(`productionStatuses.push({code: 'PARADA', name: 'Parada', style_key: 'stopped'});
+    dashboardGroupStats([
+      { service_front_id: 7, entry: { sector: '201', status: 'ATIVO' } },
+      { service_front_id: 7, entry: { sector: '202', status: 'PARADA' } }
+    ])`, context);
+  assert.deepEqual([grouped.total, grouped.active, grouped.stopped], [1, 1, 0]);
 
   let finishLookup;
   let savedPayload;

@@ -61,10 +61,13 @@ function renderServiceOrders() {
     if (prev) prev.disabled = serviceOrdersPage <= 1;
     if (next) next.disabled = serviceOrdersPage >= totalPages;
   }
+  const showSection = productionUnitUsesSection(data.unit || currentProductionUnit());
+  const sectionHeading = document.querySelector('#production-orders-section-heading');
+  if (sectionHeading) sectionHeading.hidden = !showSection;
   body.innerHTML = pageOrders.map(order => `<tr>
       <td><strong>${escapeHtml(order.number)}</strong></td>
       <td class="production-cell-number">${escapeHtml(order.sector || '-')}</td>
-      <td class="production-cell-number">${escapeHtml(order.section || '-')}</td>
+      ${showSection ? `<td class="production-cell-number">${escapeHtml(order.section || '-')}</td>` : ''}
       <td>${escapeHtml(serviceOrderOperationLabel(order))}</td>
       <td class="production-cell-number">${escapeHtml(order.cost_center || '-')}</td>
       <td><span class="production-os-plots" title="${escapeHtml((order.plots || []).join(', '))}">${escapeHtml(serviceOrderPlotsLabel(order))}</span></td>
@@ -158,7 +161,7 @@ function serviceOrdersPanelHtml(orders, { check = null } = {}) {
     || compareFrontLabels(a.operation || '', b.operation || '') || compareFrontLabels(a.number || '', b.number || ''));
   const operations = new Set(orders.map(order => order.operation).filter(Boolean));
   const plots = new Set(orders.flatMap(order => (order.plots || []).map(plot => `${order.section}|${plot}`)));
-  const showSection = orders.some(order => order.section);
+  const showSection = productionUnitUsesSection(currentProductionUnit()) && orders.some(order => order.section);
   const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
 
   const status = !check ? ''
@@ -199,12 +202,11 @@ function openProductionItemOrders(itemId) {
   const item = findProductionItem(itemId);
   if (!item) return;
   const entry = item.entry || {};
-  const section = entry.section ? ` / Seção ${entry.section}` : '';
   const codes = splitProductionOperations(entry.operation);
   const operation = codes.length ? ` · ${codes.length > 1 ? 'Operações' : 'Operação'} ${codes.join(', ')}` : '';
   const check = { wanted: codes.length > 0, missing: item.service_order?.missing_operations || [],
     needsSection: Boolean(item.service_order?.needs_section) };
-  showServiceOrdersModal(`${item.service_name} · Setor ${entry.sector || '-'}${section}${operation}`,
+  showServiceOrdersModal(`${item.service_name} · ${productionPlaceLabel(entry)}${operation}`,
     item.service_order?.orders || [], { check });
 }
 

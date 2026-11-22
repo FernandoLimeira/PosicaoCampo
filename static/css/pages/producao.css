@@ -164,6 +164,15 @@
 .production-sector-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .production-sector-actions .production-secondary-button { min-height: 32px; padding: 0 10px; }
 .production-sector-row .production-status-field { margin-top: 14px; }
+.production-sector-row [data-sector-field="section"] { min-width: 0; }
+.production-sector-row .field[hidden] { display: none; }
+.production-sector-scan { display: grid; gap: 6px; font-size: 12px; }
+.production-sector-scan:empty { display: none; }
+.production-sector-scan-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.production-sector-scan-options button { text-align: left; }
+.pdash-front-sectors { display: grid; align-content: start; min-width: 0; gap: 6px; }
+.pdash-front-sectors > header { display: grid; gap: 2px; padding: 4px 4px 2px; }
+.pdash-front-sectors > header small { font-size: 11px; }
 .production-remove-sector { color: #a12d35; }
 .production-remove-sector:hover { color: #81242c; }
 .production-form-grid-full { grid-column: 1 / -1; }
@@ -485,7 +494,6 @@
 .production-modal-subtitle[hidden] { display: none; }
 .production-entry-form.is-editing { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start; }
 .production-entry-form.is-editing .production-form-section { height: 100%; }
-.production-entry-form.is-editing .production-sector-row-heading { display: none; }
 .production-entry-form.is-editing .production-location-grid { grid-template-columns: minmax(0, .8fr) minmax(0, .8fr) minmax(0, 1.4fr); }
 #production-entry-notes { display: grid; gap: 12px; align-content: start; }
 #production-entry-notes[hidden] { display: none; }
@@ -493,6 +501,10 @@
 @media (max-width: 760px) {
   .production-entry-form.is-editing { grid-template-columns: 1fr; }
   .production-entry-form.is-editing .production-location-grid { grid-template-columns: 1fr 1fr; }
+}
+.production-sector-row:not(.shows-section) .production-location-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+@media (max-width: 520px) {
+  .production-sector-row:not(.shows-section) .production-location-grid { grid-template-columns: 1fr; }
 }
 
 /* ===== Página Cadastros ===== */

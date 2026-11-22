@@ -143,13 +143,20 @@ def import_service_orders(user_id: int, unit_code: Any, records: list[dict[str, 
     return {"unit": unit, "imported": len(rows), "removed": removed, "processed_rows": len(records)}
 
 
-def list_service_orders(user_id: int, unit_code: Any, search: Any = None, *, summary: bool = False) -> dict[str, Any]:
+def list_service_orders(user_id: int, unit_code: Any, search: Any = None, *, summary: bool = False,
+                        sector: Any = None, section: Any = None) -> dict[str, Any]:
     """O.S. da base única (todas as unidades). A busca é aplicada antes de ler o detalhe
     de cada O.S.; ``summary`` devolve só o resumo (sem as linhas do arquivo)."""
     unit = _normalize_unit(unit_code)
     with connection() as conn:
         access = _require_access(conn, user_id, unit=unit)
-        rows = conn.execute("SELECT * FROM production_service_orders").fetchall()
+        if sector is None:
+            rows = conn.execute("SELECT * FROM production_service_orders").fetchall()
+        else:
+            location = {"sector": sector, "section": section}
+            rows = [row for row in conn.execute("SELECT * FROM production_service_orders WHERE sector_key=?",
+                                                (sector_key(sector),))
+                    if order_matches_entry(row, location, require_section=unit in SECTION_UNIT_CODES)]
         last = conn.execute(
             """SELECT o.import_file, o.imported_at, COALESCE(u.name, 'Usuário removido') AS imported_by_name
                FROM production_service_orders o LEFT JOIN auth.users u ON u.id=o.imported_by

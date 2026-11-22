@@ -139,6 +139,16 @@ class ServiceOrderTests(unittest.TestCase):
             {"number": "331116", "sector": "1", "section": "90284", "operation": "348", "plots": ["1"]},
         ])
 
+        # A varredura do formulário usa o mesmo setor normalizado e, no MS, exige a seção.
+        def scan(unit, sector, section=None):
+            result = service_orders.list_service_orders(self.admin["id"], unit, summary=True, sector=sector, section=section)
+            return {order["number"] for order in result["orders"]}
+
+        self.assertEqual(scan("PPT", "001"), {"329655", "331116"})
+        self.assertEqual(scan("PST", "001", "67626"), {"329655"})
+        self.assertEqual(scan("PST", "001"), set())
+        self.assertEqual(scan("PPT", "11"), set())
+
         def launch(unit, section, operation):
             for item in production.list_my_items(self.admin["id"], unit, "2026-11-10", scope="all")["items"]:
                 production.save_items_sheet(self.admin["id"], {"unit_code": unit, "work_date": "2026-11-10", "removed": [item["id"]]})

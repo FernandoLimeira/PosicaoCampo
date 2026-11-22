@@ -57,7 +57,8 @@ def handle(req):
             return req.unauthorized()
         return req.guarded(
             lambda: req.json(HTTPStatus.OK, list_service_orders(user["id"], req.param("unit", ""), req.param("search"),
-                                                                summary=req.param("summary") == "1")),
+                                                                summary=req.param("summary") == "1",
+                                                                sector=req.param("sector"), section=req.param("section"))),
             bad_request=ValueError,
         )
 
@@ -334,7 +335,11 @@ def handle(req):
         def my_item():
             item_id = _last_id(path)
             if method == "PUT":
-                item = save_production_my_item(user["id"], req.body(), item_id=item_id)
+                payload = req.body()
+                if isinstance(payload, dict) and "sectors" in payload:
+                    items = save_production_my_items(user["id"], payload, item_id=item_id)
+                    return req.json(HTTPStatus.OK, {"ok": True, "item": items[0], "items": items})
+                item = save_production_my_item(user["id"], payload, item_id=item_id)
                 return req.json(HTTPStatus.OK, {"ok": True, "item": item})
             if method == "DELETE":
                 remove_production_my_item(user["id"], item_id)

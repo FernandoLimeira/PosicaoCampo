@@ -448,6 +448,28 @@ class ProductionTests(unittest.TestCase):
         self.assertEqual(items[0]["id"], original["id"])
         self.assertEqual(items[0]["entry"]["status"], "EM ATIVIDADE")
 
+    def test_editing_a_front_adds_a_sector_with_its_own_operations(self):
+        front = self._front()
+        base = {"unit_code": "NRD", "service_front_id": front["id"], "work_date": "2026-10-19"}
+        original = production.save_my_item(self.admin["id"], {**base, "sector": "3392", "status": "EM ATIVIDADE",
+                                                               "operation": "101", "observation": "Observação existente"})
+        items = production.save_my_items(self.user["id"], {**base, "sectors": [
+            {"sector": "3392", "status": "EM ATIVIDADE"},
+            {"sector": "3400", "status": "SOLO ÚMIDO / TESTE", "operation": "205"},
+        ]}, item_id=original["id"])
+        self.assertEqual(items[0]["id"], original["id"])
+        self.assertEqual(items[0]["entry"]["observation"], "Observação existente")
+        self.assertEqual([item["entry"]["operation"] for item in items], ["101", "205"])
+        self.assertEqual(items[1]["entry"]["status"], "SOLO ÚMIDO / TESTE")
+        with self.assertRaisesRegex(ValueError, "já está cadastrado"):
+            production.save_my_items(self.user["id"], {**base, "sectors": [
+                {"sector": "3392", "status": "SOLO ÚMIDO / TESTE"},
+                {"sector": "3400", "status": "EM ATIVIDADE"},
+            ]}, item_id=original["id"])
+        saved = production.list_my_items(self.user["id"], "NRD", base["work_date"], scope="all")["items"]
+        self.assertEqual({item["entry"]["sector"]: item["entry"]["status"] for item in saved},
+                         {"3392": "EM ATIVIDADE", "3400": "SOLO ÚMIDO / TESTE"})
+
     def test_multiple_sectors_reject_duplicates_and_invalid_batches(self):
         front = self._front()
         base = {"unit_code": "NRD", "service_front_id": front["id"], "work_date": "2026-10-19"}

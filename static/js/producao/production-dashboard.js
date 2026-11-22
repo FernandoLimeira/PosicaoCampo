@@ -12,13 +12,27 @@ function dashboardMatchesFilter(item) {
   if (dashboardPanelFilter.front && String(item.service_front_id) !== dashboardPanelFilter.front) return false;
   const state = dashboardOrderState(item);
   switch (dashboardPanelFilter.flag) {
-    case 'stopped': return dashboardFlags(item).stopped;
     case 'ok': return state === 'ok';
     case 'noOrder': return state === 'missing';
     case 'noOperation': return state === 'no_operation';
     case 'today': return Boolean(item.is_current_day);
     default: return true;
   }
+}
+
+function dashboardFrontGroups(items) {
+  const groups = new Map();
+  for (const item of items) {
+    const key = item.service_front_id ?? item.id;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  return [...groups.values()];
+}
+
+function dashboardFrontStatus(sectors) {
+  return sectors.find(item => statusMeta(item.entry?.status).className === 'is-active')
+    || sectors.find(item => !dashboardFlags(item).stopped) || sectors[0];
 }
 
 function dashboardProblemScore(items) {
@@ -33,13 +47,15 @@ function renderDashboardGroupTabs(groups) {
   if (!nav) return;
   nav.hidden = groups.length === 0;
   nav.innerHTML = groups.map(group => {
-    const red = group.items.filter(item => { const flags = dashboardFlags(item); return flags.stopped || flags.noOrder; }).length;
-    const amber = group.items.filter(item => dashboardFlags(item).noOperation).length;
+    const fronts = dashboardFrontGroups(group.items);
+    const red = fronts.filter(sectors => sectors.every(item => dashboardFlags(item).stopped)
+      || sectors.some(item => dashboardFlags(item).noOrder)).length;
+    const amber = fronts.filter(sectors => sectors.some(item => dashboardFlags(item).noOperation)).length;
     const badge = red ? `<i class="is-red" title="${red} parada(s) ou sem O.S.">${red}</i>`
       : amber ? `<i class="is-amber" title="${amber} sem operação">${amber}</i>` : '';
     const active = String(group.id) === productionPanelGroup;
     return `<button type="button" role="tab" class="pdash-group-tab${active ? ' is-active' : ''}" aria-selected="${active}" data-panel-group="${escapeHtml(group.id)}">
-      <span>${escapeHtml(group.name)}</span><b>${group.items.length}</b>${badge}</button>`;
+      <span>${escapeHtml(group.name)}</span><b>${fronts.length}</b>${badge}</button>`;
   }).join('');
 }
 
@@ -74,8 +90,9 @@ function dashboardIcon(name) {
 }
 
 function dashboardStatusBar(items) {
+  const fronts = dashboardFrontGroups(items).map(dashboardFrontStatus);
   const counts = productionStatuses.map(status => ({
-    status, count: items.filter(item => item.entry?.status === status.code).length
+    status, count: fronts.filter(item => item.entry?.status === status.code).length
   })).filter(entry => entry.count > 0);
   const total = counts.reduce((sum, entry) => sum + entry.count, 0) || 1;
   const bar = counts.map(({ status, count }) => `<span class="pdash-bar-segment ${statusMeta(status.code).className}"
@@ -110,7 +127,7 @@ function openDashboardFrontDetail(itemId) {
   if (context) context.textContent = item.group_name || '';
   const info = [
     ['Setor', entry.sector || '-'],
-    ['Seção', entry.section || '-'],
+    ...(productionUnitUsesSection(currentProductionUnit()) ? [['Seção', entry.section || '-']] : []),
     ['Fazenda', entry.farm || '-'],
     ['Atualização', entry.work_date ? formatIsoDateBr(entry.work_date) : 'Sem registro'],
     ['Responsável no turno', productionResponsibleName(item)]
@@ -140,7 +157,8 @@ function openDashboardFrontDetail(itemId) {
           <span class="pfd-op-badge">O.S. ${escapeHtml(order.number)}</span>
         </header>
         ${(order.plots || []).length ? `<p class="pfd-op-line"><b>${order.plots.length === 1 ? 'Talhão' : `Talhões (${order.plots.length})`}</b>${escapeHtml(order.plots.join(', '))}</p>` : ''}
-        <p class="pfd-op-line"><b>Seção</b>${escapeHtml(order.section || '-')}${order.opened_on ? ` · aberta em ${escapeHtml(serviceOrderDate(order.opened_on))}` : ''}</p>
+        ${productionUnitUsesSection(currentProductionUnit()) ? `<p class="pfd-op-line"><b>Seção</b>${escapeHtml(order.section || '-')}${order.opened_on ? ` · aberta em ${escapeHtml(serviceOrderDate(order.opened_on))}` : ''}</p>`
+          : order.opened_on ? `<p class="pfd-op-line"><b>Abertura</b>${escapeHtml(serviceOrderDate(order.opened_on))}</p>` : ''}
       </article>`).join('');
   const check = codes.length
     ? `<span class="pfd-hero-check ${okCount === codes.length ? 'is-order-ok' : 'is-order-missing'}">${okCount}/${codes.length} ${codes.length === 1 ? 'operação' : 'operações'} com O.S.</span>`
@@ -212,7 +230,7 @@ function dashboardSortTiles(items) {
     .map(({ item }) => item);
 }
 
-function dashboardFrontTile(item, shift) {
+function dashboardFrontTile(item, shift, { grouped = false } = {}) {
   const entry = item.entry || {};
   const meta = statusMeta(entry.status);
   const codes = splitProductionOperations(entry.operation);
@@ -233,33 +251,36 @@ function dashboardFrontTile(item, shift) {
   // Cartão clicável (abre o detalhe, também por Enter/Espaço); editar fica só dentro do detalhe.
   const updated = dashboardUpdatedLabel(item, shift);
   return `<article tabindex="0" role="button" data-panel-detail="${item.id}" class="pdash-tile ${meta.className}${item.is_current_day ? '' : ' is-stale'}" title="${escapeHtml(`${item.service_name} · ${meta.name} · ver detalhes`)}">
-      <span class="pdash-tile-name">
+      ${grouped ? '' : `<span class="pdash-tile-name">
         <i class="pdash-status-icon ${meta.className}">${dashboardSvg(DASHBOARD_STATUS_ICONS[meta.className] || DASHBOARD_STATUS_ICONS['is-waiting'], meta.className !== 'is-waiting')}</i>
         <strong>${escapeHtml(item.service_name || '-')}</strong>
-      </span>
+      </span>`}
       <span class="pdash-tile-meta">
         <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
         ${stale}
       </span>
-      <span class="pdash-place">${dashboardIcon('pin')}<span>Setor ${escapeHtml(entry.sector || '-')}${entry.section ? ` / ${escapeHtml(entry.section)}` : ''}${entry.farm ? ` · ${escapeHtml(entry.farm)}` : ''}</span></span>
+      <span class="pdash-place">${dashboardIcon('pin')}<span>${escapeHtml(productionPlaceLabel(entry))}</span></span>
       <span class="pdash-tile-ops">${operations}</span>
-      <span class="pdash-tile-foot"><span class="pdash-tile-who" title="${escapeHtml(updated)}">${escapeHtml(updated)}</span>${section}</span>
+      ${!grouped || section ? `<span class="pdash-tile-foot">${grouped ? '' : `<span class="pdash-tile-who" title="${escapeHtml(updated)}">${escapeHtml(updated)}</span>`}${section}</span>` : ''}
     </article>`;
 }
 
 // Resumo analítico (topo do painel): indicadores por grupo da unidade.
 function dashboardGroupStats(items) {
-  const stats = { total: items.length, active: 0, stopped: 0, ok: 0, missing: 0, noOperation: 0, today: 0 };
-  items.forEach(item => {
+  const fronts = dashboardFrontGroups(items);
+  const stats = { total: fronts.length, active: 0, stopped: 0, ok: 0, missing: 0, noOperation: 0, today: 0 };
+  fronts.map(dashboardFrontStatus).forEach(item => {
     const className = statusMeta(item.entry?.status).className;
     if (className === 'is-active') stats.active += 1;
     if (className === 'is-stopped') stats.stopped += 1;
+  });
+  items.forEach(item => {
     const state = dashboardOrderState(item);
     if (state === 'ok') stats.ok += 1;
     if (state === 'missing') stats.missing += 1;
     if (state === 'no_operation') stats.noOperation += 1;
-    if (item.is_current_day) stats.today += 1;
   });
+  stats.today = fronts.filter(sectors => sectors.some(item => item.is_current_day)).length;
   return stats;
 }
 
@@ -362,7 +383,8 @@ function renderDashboardSectorCard() {
 // informação certeira do momento (o que não foi atualizado no turno não entra na conta).
 function dashboardShiftStats(items, shift) {
   const updated = items.filter(item => dashboardUpdatedInShift(item, shift));
-  return { ...dashboardGroupStats(updated), shiftUpdated: updated.length, unitTotal: items.length };
+  const stats = dashboardGroupStats(updated);
+  return { ...stats, shiftUpdated: stats.total, unitTotal: dashboardFrontGroups(items).length };
 }
 
 function renderDashboardOverview(groups, allItems) {
@@ -372,7 +394,7 @@ function renderDashboardOverview(groups, allItems) {
   const shift = dashboardCurrentShift();
   const totals = dashboardShiftStats(allItems, shift);
   const groupsCard = allItems.length
-    ? `<header><h3>Resumo do turno ${shift.name} <small>${shift.label}</small></h3><span>${totals.shiftUpdated} de ${allItems.length} ${allItems.length === 1 ? 'frente atualizada' : 'frentes atualizadas'} no turno</span></header>
+    ? `<header><h3>Resumo do turno ${shift.name} <small>${shift.label}</small></h3><span>${totals.shiftUpdated} de ${totals.unitTotal} ${totals.unitTotal === 1 ? 'frente atualizada' : 'frentes atualizadas'} no turno</span></header>
       <div class="pdash-overview-scroll"><table class="pdash-overview-table">
         <thead><tr><th scope="col">Grupo</th><th scope="col">Frentes</th><th scope="col">Em atividade</th><th scope="col">Paradas</th>
           <th scope="col">O.S. OK</th><th scope="col">Sem O.S.</th><th scope="col">Atualizadas no turno</th></tr></thead>
@@ -417,13 +439,14 @@ function renderProductionDashboard() {
   const selected = ordered.filter(group => String(group.id) === productionPanelGroup);
 
   cards.innerHTML = selected.map(group => {
-    const total = group.items.length;
+    const sectorsByFront = dashboardFrontGroups(dashboardSortTiles(group.items));
+    const total = sectorsByFront.length;
     const withOperation = group.items.filter(item => dashboardOrderState(item) !== 'no_operation' && item.entry?.sector).length;
     const ok = group.items.filter(item => dashboardOrderState(item) === 'ok').length;
     const noOrder = group.items.filter(item => dashboardOrderState(item) === 'missing').length;
     const noOperation = group.items.filter(item => dashboardOrderState(item) === 'no_operation').length;
-    const today = group.items.filter(item => item.is_current_day).length;
-    const stopped = group.items.filter(item => dashboardFlags(item).stopped).length;
+    const today = sectorsByFront.filter(sectors => sectors.some(item => item.is_current_day)).length;
+    const stopped = sectorsByFront.filter(sectors => sectors.every(item => dashboardFlags(item).stopped)).length;
     // Indicadores do grupo são filtros: clicar mostra só essas frentes; clicar de novo desfaz.
     // Cada filtro só aparece quando alguma frente do grupo está naquela condição.
     const counts = { stopped, ok, noOrder, noOperation, today };
@@ -437,7 +460,8 @@ function renderProductionDashboard() {
     const fronts = [...new Map(group.items.map(item => [String(item.service_front_id), item.service_name])).entries()]
       .sort((a, b) => compareFrontLabels(a[1] || '', b[1] || ''));
     if (dashboardPanelFilter.front && !fronts.some(([id]) => id === dashboardPanelFilter.front)) dashboardPanelFilter.front = '';
-    const visible = dashboardSortTiles(group.items.filter(item => dashboardMatchesFilter(item)));
+    const visible = sectorsByFront.filter(sectors => sectors.some(dashboardMatchesFilter)
+      && (dashboardPanelFilter.flag !== 'stopped' || sectors.every(item => dashboardFlags(item).stopped)));
     const filtering = Boolean(dashboardPanelFilter.flag || dashboardPanelFilter.front);
     return `<article class="pdash-group${stopped ? ' has-stopped' : ''}">
       <header class="pdash-group-header">
@@ -466,7 +490,12 @@ function renderProductionDashboard() {
       </div>
       <div class="pdash-group-status">${dashboardStatusBar(group.items)}</div>
       ${visible.length
-        ? `<div class="pdash-tiles">${visible.map(item => dashboardFrontTile(item, shift)).join('')}</div>`
+        ? `<div class="pdash-tiles">${visible.map(sectors => {
+          const [front] = sectors;
+          if (sectors.length === 1) return dashboardFrontTile(front, shift);
+          return `<section class="pdash-front-sectors"><header><strong>${escapeHtml(front.service_name)}</strong><small>${escapeHtml(productionResponsibleName(front, shift))}</small></header>
+            ${sectors.map(item => dashboardFrontTile(item, shift, { grouped: true })).join('')}</section>`;
+        }).join('')}</div>`
         : '<p class="production-empty pdash-filter-empty">Nenhuma frente neste filtro.</p>'}
     </article>`;
   }).join('');
