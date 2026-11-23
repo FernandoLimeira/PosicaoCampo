@@ -104,8 +104,8 @@ assert.doesNotMatch(productionTemplate, /production-sector-number/);
 assert.equal(element('#production-modal-kicker').textContent, 'Atualizar frente');
 // O título do popup de edição mostra o nome da frente.
 assert.equal(element('#production-modal-title').textContent, vm.runInContext('findProductionItem(2).service_name', context));
-assert.equal(element('#production-observation-input').value, 'Observação anterior');
-assert.equal(element('#production-changes-input').value, 'Mudança anterior');
+// Observação e previsão de mudança saíram do Editar frente (ficam no Detalhe da frente).
+assert.doesNotMatch(productionTemplate, /production-entry-notes|production-observation-input|production-changes-input/);
 
 // Painel: o detalhe da frente mostra as outras O.S. abertas no setor (as que não conferem
 // com as operações do lançamento), com a operação de cada uma.
@@ -222,8 +222,11 @@ assert.match(consolidated, /data-pfd-tab="others">Outras O\.S\. nos setores <sma
 assert.match(consolidated, /<b>Setor 4<\/b>O\.S\. 5002/);
 assert.match(consolidated, /<b>Setor 6<\/b>O\.S\. 6001 · Talhão 9/);
 assert.match(consolidated, /data-panel-remove="1"[^>]*>Remover setor.*data-panel-remove="2"[^>]*>Remover setor/s);
-// Observações na lateral do detalhe, com o campo para digitar de cada setor.
-assert.match(consolidated, /<aside class="pfd-aside"[^>]*>.*<h4>Setor 4<\/h4>.*data-note-item="1" data-note-field="observation">&lt;teste><\/textarea>.*<h4>Setor 6<\/h4>.*data-note-item="2" data-note-field="changes">Mudança anterior<\/textarea>.*Salvar observações/s);
+// Observações na lateral: um campo de observação e um de previsão para a frente inteira
+// (os textos diferentes dos setores juntos, um por linha), valendo para os 2 setores.
+assert.match(consolidated, /<aside class="pfd-aside"[^>]*>.*data-note-field="observation">&lt;teste>\nObservação anterior<\/textarea>.*data-note-field="changes">Mudança anterior<\/textarea>.*Vale para os 2 setores da frente.*Salvar observações/s);
+assert.equal(consolidated.match(/data-note-field=/g).length, 2);
+assert.doesNotMatch(consolidated, /<h4>Setor/);
 assert.doesNotMatch(consolidated.split('<aside')[0], /&lt;teste>|Mudança anterior/);
 assert.match(consolidated, /data-panel-edit="\d+"[^>]*>Editar frente/);
 vm.runInContext(`productionItems[1].entry.operation = ''; delete productionItems[1].service_order;`, context);
@@ -239,7 +242,8 @@ vm.runInContext(`delete productionItems[0].sector_group_id;
 context.openDashboardFrontDetail(1);
 assert.match(element('#production-front-detail-body').innerHTML, /&lt;teste>/);
 context.openDashboardFrontDetail(2);
-assert.match(element('#production-front-detail-body').innerHTML, /data-note-item="2" data-note-field="changes">Mudança anterior<\/textarea>/);
+assert.match(element('#production-front-detail-body').innerHTML, /data-note-field="changes">Mudança anterior<\/textarea>/);
+assert.doesNotMatch(element('#production-front-detail-body').innerHTML, /Vale para os/);
 assert.doesNotMatch(element('#production-front-detail-body').innerHTML, /<h4>Setor/);
 vm.runInContext(`Object.assign(productionItems[0].entry, { sector: '42', farm: '' });
   Object.assign(productionItems[1].entry, { sector: '42', farm: '' });`, context);
@@ -285,7 +289,8 @@ function sectorRow(sector) {
   assert.equal(update.url, '/api/production/my-items/2');
   assert.equal(update.options.method, 'PUT');
   const updatedSectors = JSON.parse(update.options.body).sectors;
-  assert.equal(updatedSectors[0].observation, 'Observação anterior');
+  // A edição não envia as anotações: o servidor mantém a observação e a previsão já salvas.
+  assert.ok(!('observation' in updatedSectors[0]) && !('changes' in updatedSectors[0]));
   assert.deepEqual(updatedSectors.map(item => item.status), ['UMIDO', 'UMIDO']);
   assert.deepEqual(updatedSectors.map(item => item.operation), ['101', '101']);
   assert.equal(updatedSectors[1].id, 8);
@@ -466,8 +471,8 @@ function sectorRow(sector) {
   const notesButton = { disabled: false };
   const notesStatus = { hidden: true, textContent: '', classList: { toggle() {} } };
   const noteInputs = [
-    { dataset: { noteItem: '2', noteField: 'observation' }, value: 'Observação anterior' },
-    { dataset: { noteItem: '2', noteField: 'changes' }, value: 'Ir ao novo setor após 16h' }];
+    { dataset: { noteField: 'observation' }, value: 'Observação anterior' },
+    { dataset: { noteField: 'changes' }, value: 'Ir ao novo setor após 16h' }];
   const requestsBefore = requests.length;
   await context.saveDashboardNotes({ querySelectorAll: () => noteInputs,
     querySelector: selector => (selector.includes('button') ? notesButton : notesStatus) });
@@ -478,6 +483,23 @@ function sectorRow(sector) {
   assert.deepEqual(JSON.parse(noteUpdate.options.body), { unit_code: 'NRD', work_date: context.saoPauloIsoDate(),
     field: 'changes', expected: 'Mudança anterior', value: 'Ir ao novo setor após 16h' });
   assert.equal(notesStatus.hidden, true);
+
+  // Frente com 2 setores: a observação digitada uma vez vai para os dois lançamentos, cada um
+  // conferindo o seu texto anterior; a previsão sem alteração não grava nada.
+  vm.runInContext(`Object.assign(productionItems[0].entry, { sector: '4', observation: '<teste>' });
+    Object.assign(productionItems[1].entry, { sector: '6', observation: 'Observação anterior', changes: '' });
+    productionItems[0].sector_group_id = productionItems[1].sector_group_id = 'saved-group';`, context);
+  context.openDashboardFrontDetail(1);
+  const groupedBefore = requests.length;
+  await context.saveDashboardNotes({ querySelectorAll: () => [
+    { dataset: { noteField: 'observation' }, value: 'Aguardando prancha' },
+    { dataset: { noteField: 'changes' }, value: '' }],
+  querySelector: selector => (selector.includes('button') ? { disabled: false } : notesStatus) });
+  const grouped = requests.slice(groupedBefore).map(request => [request.url, JSON.parse(request.options.body)]);
+  assert.deepEqual(grouped.map(([url, body]) => [url, body.field, body.expected, body.value]), [
+    ['/api/production/my-items/1', 'observation', '<teste>', 'Aguardando prancha'],
+    ['/api/production/my-items/2', 'observation', 'Observação anterior', 'Aguardando prancha']]);
+  vm.runInContext(`delete productionItems[0].sector_group_id; delete productionItems[1].sector_group_id;`, context);
 
   const responsibilityForm = element('#production-responsibility-form');
   responsibilityForm.dataset = {};

@@ -397,10 +397,15 @@ function dashboardFrontTile(sectors, shift) {
   const ordered = [...sectors].sort((a, b) => compareFrontLabels(a.entry?.sector || '', b.entry?.sector || '')
     || compareFrontLabels(a.entry?.section || '', b.entry?.section || ''));
   // Observações por último, depois de todos os setores (com o setor quando há mais de um).
+  // O mesmo texto em todos os setores (observação da frente) aparece uma vez, sem o setor.
   const observations = ordered.map(item => ({ item, text: String(item.entry?.observation || '').trim() }))
     .filter(note => note.text);
-  const notes = observations.length ? `<dl class="pdash-sector-notes pdash-front-notes"><div><dt>Observação</dt>${observations.map(({ item, text }) =>
-    `<dd>${ordered.length > 1 ? `<b>${escapeHtml(productionPlaceLabel({ ...item.entry, farm: '' }))}</b> ` : ''}<span class="pdash-note">${escapeHtml(text)}</span></dd>`).join('')}</div></dl>` : '';
+  const distinct = [...new Set(observations.map(note => note.text))];
+  const shared = distinct.length === 1 && observations.length === ordered.length;
+  const notes = observations.length ? `<dl class="pdash-sector-notes pdash-front-notes"><div><dt>Observação</dt>${shared
+    ? `<dd><span class="pdash-note">${escapeHtml(distinct[0])}</span></dd>`
+    : observations.map(({ item, text }) =>
+      `<dd>${ordered.length > 1 ? `<b>${escapeHtml(productionPlaceLabel({ ...item.entry, farm: '' }))}</b> ` : ''}<span class="pdash-note">${escapeHtml(text)}</span></dd>`).join('')}</div></dl>` : '';
   // O cartão inteiro abre o detalhe (clique, Enter ou Espaço); o botão Editar abre a edição.
   const label = `Ver detalhes · ${front.service_name || 'frente'}${ordered.length > 1 ? ` · ${ordered.length} setores` : ''}`;
   return `<article class="pdash-tile is-clickable ${meta.className}" data-panel-front-card="${front.service_front_id ?? front.id}"
@@ -582,32 +587,36 @@ function renderProductionDashboard() {
   cards.querySelectorAll?.('[data-weight]').forEach(segment => { segment.style.flexGrow = segment.dataset.weight; });
 }
 
-// Observações na lateral do "Detalhe da frente": observação e previsão de mudança de cada
-// setor, digitadas ali mesmo. Grava só o que mudou, conferindo o texto que estava na tela
-// (outro analista pode ter alterado: a gravação para e mostra o aviso).
+// Observações na lateral do "Detalhe da frente": um campo de observação e um de previsão de
+// mudança para a frente inteira, com qualquer número de setores. Cada setor guarda o texto no
+// seu lançamento; ao salvar, o mesmo texto vai para todos os setores da frente, conferindo o
+// texto que estava na tela (outro analista pode ter alterado: a gravação para e avisa).
 let dashboardNotesDraft = null;
 
+// Texto da frente: os textos diferentes dos setores (na ordem dos setores), um por linha.
+function dashboardFrontNote(sectors, field) {
+  return [...new Set(sectors.map(item => String(item.entry?.[field] || '').trim()).filter(Boolean))].join('\n');
+}
+
 function dashboardNotesAsideHtml(sectors, editable) {
-  const many = sectors.length > 1;
-  const blocks = sectors.filter(item => item.entry).map(item => {
-    const fields = Object.entries(DASHBOARD_NOTE_FIELDS).map(([field, [label, addLabel]]) => {
-      const value = String(item.entry[field] || '');
-      const id = `pfd-note-${item.id}-${field}`;
-      return `<label class="pfd-note-field" for="${id}"><span>${label}</span>${editable
-        ? `<textarea id="${id}" rows="${field === 'observation' ? 4 : 3}" maxlength="2000" placeholder="${escapeHtml(addLabel)}"
-            data-note-item="${item.id}" data-note-field="${field}">${escapeHtml(value)}</textarea>`
-        : `<p class="pfd-note-text${value.trim() ? '' : ' is-empty'}">${escapeHtml(value.trim() || 'Sem registro')}</p>`}</label>`;
-    }).join('');
-    return `<div class="pfd-note-block">${many ? `<h4>${escapeHtml(productionPlaceLabel({ ...item.entry, farm: '' }))}</h4>` : ''}${fields}</div>`;
+  const withEntry = sectors.filter(item => item.entry);
+  if (!withEntry.length) return '';
+  const fields = Object.entries(DASHBOARD_NOTE_FIELDS).map(([field, [label, addLabel]]) => {
+    const value = dashboardFrontNote(withEntry, field);
+    const id = `pfd-note-${field}`;
+    return `<label class="pfd-note-field" for="${id}"><span>${label}</span>${editable
+      ? `<textarea id="${id}" rows="${field === 'observation' ? 5 : 4}" maxlength="2000" placeholder="${escapeHtml(addLabel)}"
+          data-note-field="${field}">${escapeHtml(value)}</textarea>`
+      : `<p class="pfd-note-text${value ? '' : ' is-empty'}">${escapeHtml(value || 'Sem registro')}</p>`}</label>`;
   }).join('');
-  if (!blocks) return '';
+  const scope = withEntry.length > 1 ? `<p class="pfd-notes-scope">Vale para os ${withEntry.length} setores da frente.</p>` : '';
   return `<aside class="pfd-aside" aria-label="Observações">
       <h3>Observações</h3>
       ${editable ? `<form class="pfd-notes-form" data-pfd-notes>
-        ${blocks}
+        ${fields}${scope}
         <p class="pfd-notes-status" role="status" hidden></p>
         <button class="modal-button save" type="submit">Salvar observações</button>
-      </form>` : blocks}
+      </form>` : fields + scope}
     </aside>`;
 }
 
@@ -615,9 +624,12 @@ function dashboardNotesAsideHtml(sectors, editable) {
 function renderDashboardDetail(body, main, sectors, editable) {
   const aside = dashboardNotesAsideHtml(sectors, editable);
   body.innerHTML = `<div class="pfd-layout${aside ? ' has-aside' : ''}"><div class="pfd-main">${main}</div>${aside}</div>`;
+  const withEntry = sectors.filter(item => item.entry);
   dashboardNotesDraft = editable ? {
     unit: currentProductionUnit(), date: saoPauloIsoDate(), itemId: sectors[0]?.id,
-    expected: Object.fromEntries(sectors.filter(item => item.entry).flatMap(item => Object.keys(DASHBOARD_NOTE_FIELDS)
+    itemIds: withEntry.map(item => item.id),
+    initial: Object.fromEntries(Object.keys(DASHBOARD_NOTE_FIELDS).map(field => [field, dashboardFrontNote(withEntry, field)])),
+    expected: Object.fromEntries(withEntry.flatMap(item => Object.keys(DASHBOARD_NOTE_FIELDS)
       .map(field => [`${item.id}:${field}`, String(item.entry[field] || '')])))
   } : null;
 }
@@ -637,10 +649,13 @@ async function saveDashboardNotes(form) {
     showDashboardNotesStatus(form, 'A data operacional mudou. Feche e abra o detalhe para salvar no dia atual.');
     return;
   }
-  const changes = [...form.querySelectorAll('[data-note-item]')].map(input => ({
-    itemId: Number(input.dataset.noteItem), field: input.dataset.noteField, value: input.value.trim(),
-    expected: draft.expected[`${input.dataset.noteItem}:${input.dataset.noteField}`] ?? ''
-  })).filter(change => change.value !== change.expected.trim());
+  // Só os campos alterados na tela; cada um vai para os setores que ainda não têm esse texto.
+  const changes = [...form.querySelectorAll('[data-note-field]')]
+    .map(input => ({ field: input.dataset.noteField, value: input.value.trim() }))
+    .filter(change => change.value !== (draft.initial[change.field] ?? ''))
+    .flatMap(change => draft.itemIds.map(itemId => ({ ...change, itemId,
+      expected: draft.expected[`${itemId}:${change.field}`] ?? '' })))
+    .filter(change => change.value !== change.expected.trim());
   if (!changes.length) {
     showDashboardNotesStatus(form, 'Nenhuma alteração para salvar.', false);
     return;
@@ -649,24 +664,22 @@ async function saveDashboardNotes(form) {
   if (button.disabled) return;
   button.disabled = true;
   showDashboardNotesStatus(form);
-  let saved = 0;
   try {
     for (const change of changes) {
       await apiRequest(`/api/production/my-items/${change.itemId}`, { method: 'PATCH', body: JSON.stringify({
         unit_code: draft.unit, work_date: draft.date, field: change.field, expected: change.expected, value: change.value
       }) });
       draft.expected[`${change.itemId}:${change.field}`] = change.value;
-      saved += 1;
     }
   } catch (error) {
     if (dashboardNotesDraft === draft) {
       button.disabled = false;
-      showDashboardNotesStatus(form, `${saved ? `${saved} de ${changes.length} salvas. ` : ''}${error.message || 'Não foi possível salvar as observações.'}`);
+      showDashboardNotesStatus(form, error.message || 'Não foi possível salvar as observações.');
     }
     if (error.status === 409 && draft.unit === currentProductionUnit()) await loadProductionItems(draft.unit).catch(console.error);
     return;
   }
-  showToast(changes.length === 1 ? 'Observação salva.' : 'Observações salvas.');
+  showToast('Observações salvas.');
   if (draft.unit !== currentProductionUnit()) return;
   try {
     await loadProductionItems(draft.unit);

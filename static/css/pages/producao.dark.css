@@ -312,5 +312,6 @@ button.pdash-kpi.is-active { color: #e0e0e0; }
 .pfd-note-text.is-empty { color: #999999; }
 .pfd-notes-status { color: #adadad; }
 .pfd-notes-status.is-error { color: #d4626b; }
+.pfd-notes-scope { color: #999999; }
 .production-primary-button.pdash-action { background: linear-gradient(135deg, #3f6f7a 0%, #1b3a41 100%); }
 .production-primary-button.pdash-action:hover:not(:disabled) { background: linear-gradient(135deg, #4a7c87 0%, #22474e 100%); }

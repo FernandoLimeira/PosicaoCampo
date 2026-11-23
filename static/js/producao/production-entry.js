@@ -358,8 +358,6 @@ function showEntryPane() {
 function setProductionEntryEditMode(isEditing) {
   const serviceSection = document.querySelector('#production-service-section');
   if (serviceSection) serviceSection.hidden = Boolean(isEditing);
-  const notesSection = document.querySelector('#production-entry-notes');
-  if (notesSection) notesSection.hidden = !isEditing;
 
   const configButton = document.querySelector('#production-config-toggle');
   if (configButton) configButton.hidden = Boolean(isEditing) || !canConfigureProduction();
@@ -370,8 +368,10 @@ function setProductionEntryEditMode(isEditing) {
   if (kicker) kicker.textContent = isEditing ? 'Editar frente' : 'Produção Agrícola';
   const subtitle = document.querySelector('#production-modal-subtitle');
   if (subtitle) subtitle.hidden = !isEditing;
-  // Na edição, o formulário fica em duas colunas: setor/status e anotações.
+  // Na edição, só setores, status e operações: o popup fica mais estreito. Observação e
+  // previsão de mudança ficam no Detalhe da frente (lateral).
   document.querySelector('#production-entry-form')?.classList?.toggle('is-editing', Boolean(isEditing));
+  document.querySelector('#production-entry-modal .production-editor-modal')?.classList?.toggle('is-editing', Boolean(isEditing));
 
   const submit = document.querySelector('#production-entry-submit');
   if (submit) submit.textContent = isEditing ? 'Atualizar' : 'Adicionar';
@@ -434,8 +434,6 @@ function openEditProductionItem(itemId) {
   setProductionEntryUnit(currentProductionUnit());
   applyProductionLocationMode();
   renderEntryGroups(item.group_id, item.service_front_id, item);
-  document.querySelector('#production-observation-input').value = entry.observation || '';
-  document.querySelector('#production-changes-input').value = entry.changes || '';
   let operations = splitProductionOperations(entry.operation);
   if (!operations.length && !item.sector_group_id) operations = productionFrontDefaultOperations(item.service_front_id);
   renderEntryOperations(operations.length ? operations : ['']);
@@ -494,10 +492,6 @@ async function submitProductionEntry(event) {
     showToast(error.message, true);
     return;
   }
-  if (itemId) Object.assign(sectors[0], {
-    observation: document.querySelector('#production-observation-input')?.value.trim() || '',
-    changes: document.querySelector('#production-changes-input')?.value.trim() || ''
-  });
   payload.sectors = sectors;
   try {
     await apiRequest(itemId ? `/api/production/my-items/${itemId}` : '/api/production/my-items/batch', {

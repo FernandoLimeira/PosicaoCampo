@@ -486,19 +486,14 @@
 .production-os-view.is-icon svg { width: 16px; height: 16px; }
 
 
-/* ===== Popup de editar frente (mais simples, em duas colunas) ===== */
+/* ===== Popup de editar frente (só setores, status e operações; mais estreito) ===== */
 .production-modal-heading { min-width: 0; }
 .production-modal-heading h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .production-modal-subtitle { margin: 5px 0 0; color: #5d6a71; font-size: 12px; }
 .production-modal-subtitle[hidden] { display: none; }
-.production-entry-form.is-editing { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start; }
-.production-entry-form.is-editing .production-form-section { height: 100%; }
+.production-editor-modal.is-editing { width: min(640px, calc(100vw - 30px)); }
 .production-entry-form.is-editing .production-location-grid { grid-template-columns: minmax(0, .8fr) minmax(0, .8fr) minmax(0, 1.4fr); }
-#production-entry-notes { display: grid; gap: 12px; align-content: start; }
-#production-entry-notes[hidden] { display: none; }
-#production-entry-notes textarea { min-height: 96px; resize: vertical; }
 @media (max-width: 760px) {
-  .production-entry-form.is-editing { grid-template-columns: 1fr; }
   .production-entry-form.is-editing .production-location-grid { grid-template-columns: 1fr 1fr; }
 }
 .production-sector-row:not(.shows-section) .production-location-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
@@ -1162,3 +1157,5 @@ button.pdash-note { padding: 2px 0; border: 0; background: transparent; color: v
   .pfd-layout.has-aside { grid-template-columns: minmax(0, 1fr); }
   .pfd-aside { position: static; }
 }
+.pfd-notes-scope { margin: 0; color: #7a8489; font-size: 12px; }
+.pfd-note-text { white-space: pre-wrap; }
