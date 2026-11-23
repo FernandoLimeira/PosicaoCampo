@@ -129,7 +129,7 @@ assert.match(element('#production-front-detail-body').innerHTML, /Nenhuma outra 
 assert.match(element('#production-front-detail-body').innerHTML, /Equipe do turno.*Ana/s);
 const scheduledTile = vm.runInContext("dashboardFrontTile([{ ...findProductionItem(2), responsibles: { A: 'Ana', B: 'João' } }], 'B')", context);
 assert.match(scheduledTile, /João/);
-assert.match(scheduledTile, /Atualização/);
+assert.doesNotMatch(scheduledTile, /Atualização hoje|pdash-sector-footer/);
 assert.doesNotMatch(scheduledTile, /Folguista|Ana/);
 const teamTile = vm.runInContext(`dashboardFrontTile([{ ...findProductionItem(2), responsibility_team: { B: [
   {role_name: 'Encarregado', role_type: 'lead', name: 'Ana', day_off: true},

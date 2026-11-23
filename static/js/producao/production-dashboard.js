@@ -395,7 +395,6 @@ function dashboardSectorRow(item, frontStatus = null) {
     ? '<span class="pdash-os is-missing" title="No Polo MS a O.S. confere por setor e seção">Informe a seção</span>' : '';
   const stale = item.is_current_day ? ''
     : `<span class="pdash-stale">${dashboardIcon('clock')}${entry.work_date ? `Último registro ${escapeHtml(formatIsoDateBr(entry.work_date))}` : 'Sem registro'}</span>`;
-  const updated = dashboardUpdateText(item);
   const place = productionPlaceLabel(entry);
   return `<section class="pdash-sector-row" aria-label="${escapeHtml(place)}">
     <div class="pdash-tile-meta">
@@ -404,9 +403,7 @@ function dashboardSectorRow(item, frontStatus = null) {
       ${stale}
     </div>
     <div class="pdash-tile-ops">${operations}</div>
-    <div class="pdash-sector-footer">
-      ${updated ? `<small>${escapeHtml(updated)}</small>` : ''}${section}
-    </div>
+    ${section ? `<div class="pdash-sector-footer">${section}</div>` : ''}
   </section>`;
 }
 
