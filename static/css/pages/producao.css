@@ -429,7 +429,10 @@
 .production-sheet-table td:nth-child(2), .production-sheet-table td:nth-child(3) { width: 9%; }
 .production-sheet-table td:nth-child(4) { width: 16%; }
 .production-sheet-table td:nth-child(5) { width: 19%; }
-.production-sheet-table td:last-child { width: 82px; text-align: center; }
+.production-sheet-table td:last-child { width: 114px; text-align: center; }
+.production-sheet-row-actions { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.production-sheet-update { min-height: 30px; padding: 0 9px; font-size: 12px; white-space: nowrap; }
+.production-sheet-update:disabled { opacity: .65; cursor: default; }
 
 /* Barra colorida à esquerda conforme o status (como no modelo). */
 .production-sheet-front { position: relative; padding-left: 9px; }

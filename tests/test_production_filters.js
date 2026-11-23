@@ -12,6 +12,7 @@ const operationInputs = [];
 const toasts = [];
 const confirmations = [];
 const groupEvents = {};
+const sheetEvents = {};
 const detailClicks = [];
 let dashboardGroupClick;
 function element(selector) {
@@ -19,6 +20,7 @@ function element(selector) {
     innerHTML: '', textContent: '', value: '', hidden: false,
     addEventListener(type, listener) {
       if (selector === '#production-groups-list') groupEvents[type] = listener;
+      if (selector === '#production-sheet-rows') sheetEvents[type] = listener;
       if (selector === '#production-front-detail-body' && type === 'click') detailClicks.push(listener);
       if (selector === '#production-group-tabs' && type === 'click') dashboardGroupClick = listener;
     },
@@ -467,5 +469,64 @@ function sectorRow(sector) {
   const schedulePayload = JSON.parse(schedule.options.body);
   assert.deepEqual([schedulePayload.unit_code, schedulePayload.service_front_id], ['PPT', '31']);
   assert.equal(context.currentProductionUnit(), 'NRD');
+
+  const [targetRow, draftRow, removedRow] = vm.runInContext(`productionSheetUnit = 'NRD';
+    productionSheetRows = productionItems.map(sheetRowFromItem);`, context);
+  draftRow.observation = 'Observação ainda em edição';
+  removedRow.removed = true;
+  assert.match(context.sheetRowHtml(targetRow), /data-sheet-action="update"[^>]*>Atualizar/);
+  assert.doesNotMatch(context.sheetRowHtml(removedRow), /data-sheet-action="update"/);
+  const sheetUpdate = { dataset: { sheetAction: 'update' } };
+  const targetTr = { dataset: { sheetRow: targetRow.key }, classList: { toggle() {} }, querySelector() {} };
+  const clickRowUpdate = () => sheetEvents.click({ target: { closest: selector =>
+    selector === '[data-sheet-action]' ? sheetUpdate : selector === '[data-sheet-row]' ? targetTr : null } });
+  sheetEvents.change({ target: { value: '44', dataset: { sheetField: 'sector' }, closest: () => targetTr } });
+  assert.equal(targetTr.outerHTML, undefined, 'Editing the sector leaves the update button in place');
+
+  let finishSheetSave;
+  const sheetRefreshes = [];
+  context.loadProductionItems = async unit => { sheetRefreshes.push(unit); };
+  context.apiRequest = (url, options) => {
+    requests.push({ url, options });
+    return new Promise(resolve => { finishSheetSave = resolve; });
+  };
+  const previousModalEvents = modalEvents.length;
+  const sheetSave = clickRowUpdate();
+  const sheetRequest = requests.at(-1);
+  assert.equal(sheetRequest.url, '/api/production/my-items/sheet');
+  const sheetPayload = JSON.parse(sheetRequest.options.body);
+  assert.equal(sheetPayload.unit_code, 'NRD');
+  assert.deepEqual(sheetPayload.removed, []);
+  assert.deepEqual(sheetPayload.rows.map(row => [row.id, row.sector]), [[targetRow.id, '44']]);
+  assert.equal(element('#production-sheet-save').disabled, true);
+  await clickRowUpdate();
+  assert.equal(requests.at(-1), sheetRequest);
+  finishSheetSave({ saved: 1, removed: 0, item_ids: [targetRow.id] });
+  await sheetSave;
+  assert.equal(element('#production-sheet-save').disabled, false);
+  assert.deepEqual(sheetRefreshes, ['NRD']);
+  assert.equal(modalEvents.length, previousModalEvents);
+  assert.equal(context.sheetRowChanged(targetRow), false);
+  assert.equal(context.sheetRowChanged(draftRow), true);
+  assert.equal(removedRow.removed, true);
+  assert.equal(element('#production-sheet-status').textContent, '2 alterações para salvar.');
+
+  const newSheetRow = vm.runInContext(`addProductionSheetRow({ render: false }); productionSheetRows[0]`, context);
+  assert.equal(newSheetRow.id, null);
+  newSheetRow.sector = '45';
+  const newSheetSave = context.saveProductionSheet(newSheetRow);
+  assert.equal(JSON.parse(requests.at(-1).options.body).rows[0].id, null);
+  finishSheetSave({ saved: 1, removed: 0, item_ids: [45] });
+  await newSheetSave;
+  assert.equal(newSheetRow.id, 45);
+  assert.equal(context.sheetRowChanged(newSheetRow), false);
+  const batchSheetSave = context.saveProductionSheet();
+  await new Promise(resolve => setImmediate(resolve));
+  const remainingSheetPayload = JSON.parse(requests.at(-1).options.body);
+  assert.deepEqual(remainingSheetPayload.rows.map(row => row.id), [draftRow.id]);
+  assert.deepEqual(remainingSheetPayload.removed, [removedRow.id]);
+  finishSheetSave({ saved: 1, removed: 1, item_ids: [draftRow.id] });
+  await batchSheetSave;
+  assert.equal(modalEvents.at(-1), 'close:production-sheet-modal');
   console.log('OK: frentes dentro dos grupos, inclusão com grupo selecionado, busca e consulta sem edição.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

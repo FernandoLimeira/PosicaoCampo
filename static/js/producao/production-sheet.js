@@ -6,6 +6,7 @@
 let productionSheetRows = [];
 let productionSheetSequence = 0;
 let productionSheetUnit = '';
+let productionSheetSaving = '';
 let productionSheetSectorBase = []; // setores cadastrados: { sector, section, farm }
 
 // Polo SP (PPT e NRD) trabalha só com setor; no Polo MS (PST e RBR) vários setores
@@ -137,30 +138,35 @@ function sheetRowVisible(row) {
 
 function sheetRowHtml(row) {
   const style = statusMeta(row.status).className;
+  const saving = productionSheetSaving === row.key;
+  const disabled = row.removed || saving ? 'disabled' : '';
   return `<tr data-sheet-row="${row.key}" class="${row.removed ? 'is-removed' : ''} ${sheetRowChanged(row) && !row.removed ? 'is-changed' : ''}">
     <td><div class="production-sheet-front ${style}">
-      <select data-sheet-field="frontId" aria-label="Frente" ${row.removed ? 'disabled' : ''}>${sheetFrontOptions(row)}</select></div></td>
+      <select data-sheet-field="frontId" aria-label="Frente" ${disabled}>${sheetFrontOptions(row)}</select></div></td>
     <td class="production-sheet-section-cell"><input data-sheet-field="section" value="${escapeHtml(row.section)}" maxlength="32"
-      autocomplete="off" placeholder="Seção" aria-label="Seção" ${row.removed ? 'disabled' : ''} /></td>
+      autocomplete="off" placeholder="Seção" aria-label="Seção" ${disabled} /></td>
     <td>${sheetShowsSection()
-      ? `<select data-sheet-field="sector" aria-label="Setor" ${row.removed ? 'disabled' : ''}>${sheetSectorSelectOptions(row)}</select>`
+      ? `<select data-sheet-field="sector" aria-label="Setor" ${disabled}>${sheetSectorSelectOptions(row)}</select>`
       : `<input data-sheet-field="sector" value="${escapeHtml(row.sector)}" maxlength="32" list="${sheetSectorListId(row)}" autocomplete="off"
-        placeholder="Setor" aria-label="Setor" ${row.removed ? 'disabled' : ''} />`}</td>
-    <td><select data-sheet-field="status" aria-label="Status" ${row.removed ? 'disabled' : ''}>${productionStatuses.map(status =>
+        placeholder="Setor" aria-label="Setor" ${disabled} />`}</td>
+    <td><select data-sheet-field="status" aria-label="Status" ${disabled}>${productionStatuses.map(status =>
       `<option value="${escapeHtml(status.code)}" ${status.code === row.status ? 'selected' : ''}>${escapeHtml(status.name)}</option>`).join('')}</select></td>
     <td><div class="production-sheet-operations">
       ${row.operations.map((value, index) => `<div class="production-sheet-operation">
         <input data-sheet-op="${index}" value="${escapeHtml(value)}" maxlength="40" autocomplete="off"
-          inputmode="numeric" placeholder="Cód." title="Código da operação" aria-label="Operação ${index + 1}" ${row.removed ? 'disabled' : ''} />
-        ${index > 0 && !row.removed ? `<button class="production-sheet-op-remove" type="button" data-sheet-action="remove-op" data-op-index="${index}" aria-label="Remover operação ${index + 1}">×</button>` : ''}
+          inputmode="numeric" placeholder="Cód." title="Código da operação" aria-label="Operação ${index + 1}" ${disabled} />
+        ${index > 0 && !row.removed ? `<button class="production-sheet-op-remove" type="button" data-sheet-action="remove-op" data-op-index="${index}" aria-label="Remover operação ${index + 1}" ${disabled}>×</button>` : ''}
       </div>`).join('')}
       ${row.removed ? '' : `<button class="production-sheet-op-add" type="button" data-sheet-action="add-op"
-        title="Adicionar outra operação neste setor" aria-label="Adicionar operação" ${row.operations.length >= 10 ? 'disabled' : ''}>+</button>`}
+        title="Adicionar outra operação neste setor" aria-label="Adicionar operação" ${saving || row.operations.length >= 10 ? 'disabled' : ''}>+</button>`}
     </div></td>
-    <td><input data-sheet-field="observation" value="${escapeHtml(row.observation)}" maxlength="2000" aria-label="Observação" ${row.removed ? 'disabled' : ''} /></td>
+    <td><input data-sheet-field="observation" value="${escapeHtml(row.observation)}" maxlength="2000" aria-label="Observação" ${disabled} /></td>
     <td>${row.removed
       ? '<button class="production-sheet-undo" type="button" data-sheet-action="undo">Desfazer</button>'
-      : `<button class="production-sheet-remove icon-delete-button" type="button" data-sheet-action="remove" title="Excluir" aria-label="Excluir linha">${TRASH_ICON}</button>`}</td>
+      : `<div class="production-sheet-row-actions">
+          <button class="production-secondary-button production-sheet-update" type="button" data-sheet-action="update" ${productionSheetSaving ? 'disabled' : ''}>${saving ? 'Salvando…' : 'Atualizar'}</button>
+          <button class="production-sheet-remove icon-delete-button" type="button" data-sheet-action="remove" title="Excluir" aria-label="Excluir linha" ${disabled}>${TRASH_ICON}</button>
+        </div>`}</td>
   </tr>`;
 }
 
@@ -177,7 +183,18 @@ function renderProductionSheet() {
 
 function updateProductionSheetStatus() {
   const status = document.querySelector('#production-sheet-status');
+  const save = document.querySelector('#production-sheet-save');
+  if (save) save.disabled = Boolean(productionSheetSaving);
+  const add = document.querySelector('#production-sheet-add');
+  if (add) add.disabled = productionSheetSaving === 'all';
+  const body = document.querySelector('#production-sheet-rows');
+  if (body) body.inert = productionSheetSaving === 'all';
+  body?.querySelectorAll?.('[data-sheet-action="update"]').forEach(button => { button.disabled = Boolean(productionSheetSaving); });
   if (!status) return;
+  if (productionSheetSaving) {
+    status.textContent = productionSheetSaving === 'all' ? 'Salvando alterações…' : 'Salvando lançamento…';
+    return;
+  }
   const changed = productionSheetRows.filter(row => (row.id ? sheetRowChanged(row) : true)).length;
   status.textContent = changed ? `${changed} ${changed === 1 ? 'alteração' : 'alterações'} para salvar.` : 'Revise antes de salvar.';
 }
@@ -248,18 +265,31 @@ function findSheetRow(element) {
   return productionSheetRows.find(row => row.key === key);
 }
 
-async function saveProductionSheet() {
-  const button = document.querySelector('#production-sheet-save');
+function markProductionSheetRowSaved(row, id) {
+  const existing = productionSheetRows.find(item => item !== row && item.id === id);
+  // Uma linha nova pode atualizar um lançamento que já está na planilha.
+  const saved = existing && sheetRowChanged(existing) ? existing : row;
+  saved.id = id;
+  saved.original = sheetSnapshot(row);
+  const duplicate = saved === row ? existing : row;
+  if (duplicate) {
+    productionSheetRows = productionSheetRows.filter(item => item !== duplicate);
+    document.querySelector(`[data-sheet-row="${duplicate.key}"]`)?.remove();
+  }
+}
+
+async function saveProductionSheet(row = null) {
+  if (productionSheetSaving || row?.removed || !canFillProduction()) return;
   const unit = productionSheetUnit;
-  const pending = productionSheetRows.filter(row => !row.removed && sheetRowChanged(row));
-  const removed = productionSheetRows.filter(row => row.removed && row.id).map(row => row.id);
+  const pending = row ? [row] : productionSheetRows.filter(item => !item.removed && sheetRowChanged(item));
+  const removed = row ? [] : productionSheetRows.filter(item => item.removed && item.id).map(item => item.id);
   if (!pending.length && !removed.length) {
     showToast('Nenhuma alteração para salvar.');
     return;
   }
   const invalid = pending.find(row => !row.frontId || !row.sector.trim());
   if (invalid) {
-    showToast('Preencha a frente e o setor de todas as linhas novas ou alteradas.', true);
+    showToast(row ? 'Preencha a frente e o setor desta linha.' : 'Preencha a frente e o setor de todas as linhas novas ou alteradas.', true);
     document.querySelector(`[data-sheet-row="${invalid.key}"] [data-sheet-field="${invalid.frontId ? 'sector' : 'frontId'}"]`)?.focus();
     return;
   }
@@ -269,30 +299,42 @@ async function saveProductionSheet() {
     message: 'As frentes marcadas saem da unidade. O histórico é preservado.',
     confirmLabel: 'Salvar e excluir'
   })) return;
-  if (button) button.disabled = true;
+  productionSheetSaving = row?.key || 'all';
+  const rowSelector = row ? `[data-sheet-row="${row.key}"]` : '';
+  const originalRow = row && document.querySelector(rowSelector);
+  if (originalRow) originalRow.outerHTML = sheetRowHtml(row);
+  updateProductionSheetStatus();
   try {
     const original = new Map(productionItems.map(item => [item.id, item.entry || {}]));
     const result = await apiRequest('/api/production/my-items/sheet', {
       method: 'POST',
       body: JSON.stringify({
         unit_code: unit, work_date: saoPauloIsoDate(), removed,
-        rows: pending.map(row => {
-          const entry = original.get(row.id) || {};
-          const sameLocation = row.id && entry.sector === row.sector.trim() && (entry.section || '') === row.section.trim();
+        rows: pending.map(item => {
+          const entry = original.get(item.id) || {};
+          const sameLocation = item.id && entry.sector === item.sector.trim() && (entry.section || '') === item.section.trim();
           return {
-            id: row.id, service_front_id: Number(row.frontId), sector: row.sector.trim(), section: row.section.trim(),
-            status: row.status, operation: sheetOperationsValue(row), observation: row.observation.trim(),
+            id: item.id, service_front_id: Number(item.frontId), sector: item.sector.trim(), section: item.section.trim(),
+            status: item.status, operation: sheetOperationsValue(item), observation: item.observation.trim(),
             // Setor/seção alterados: o servidor busca a fazenda na base de setores.
             farm: sameLocation ? (entry.farm || '') : ''
           };
         })
       })
     });
-    productionSheetRows = [];
-    closeModal('production-sheet-modal');
-    showToast(`${result.saved} ${result.saved === 1 ? 'frente salva' : 'frentes salvas'}${result.removed ? ` · ${result.removed} excluída(s)` : ''}.`);
+    if (row) {
+      markProductionSheetRowSaved(row, result.item_ids[0]);
+      showToast('Lançamento atualizado.');
+    } else {
+      productionSheetRows = [];
+      closeModal('production-sheet-modal');
+      showToast(`${result.saved} ${result.saved === 1 ? 'frente salva' : 'frentes salvas'}${result.removed ? ` · ${result.removed} excluída(s)` : ''}.`);
+    }
     try {
-      await refreshProductionPage(unit, { keepFilters: true });
+      if (unit === currentProductionUnit()) {
+        if (row) await loadProductionItems(unit);
+        else await refreshProductionPage(unit, { keepFilters: true });
+      }
     } catch (error) {
       console.error(error);
       showToast(PRODUCTION_REFRESH_WARNING, true);
@@ -301,7 +343,10 @@ async function saveProductionSheet() {
     console.error(error);
     showToast(error.message || 'Não foi possível salvar a atualização.', true);
   } finally {
-    if (button) button.disabled = false;
+    productionSheetSaving = '';
+    const savedRow = row && document.querySelector(rowSelector);
+    if (savedRow) savedRow.outerHTML = sheetRowHtml(row);
+    updateProductionSheetStatus();
   }
 }
 
@@ -324,7 +369,7 @@ async function confirmDiscardProductionSheet(event) {
 
 document.querySelector('#production-add-button')?.addEventListener('click', openProductionSheet);
 document.querySelector('#production-sheet-add')?.addEventListener('click', () => addProductionSheetRow());
-document.querySelector('#production-sheet-save')?.addEventListener('click', saveProductionSheet);
+document.querySelector('#production-sheet-save')?.addEventListener('click', () => saveProductionSheet());
 document.querySelector('#production-sheet-group')?.addEventListener('change', () => { renderSheetFilters(); renderProductionSheet(); });
 document.querySelector('#production-sheet-front')?.addEventListener('change', renderProductionSheet);
 
@@ -351,29 +396,34 @@ productionSheetBody?.addEventListener('change', event => {
   const row = field && findSheetRow(event.target);
   if (!row) return;
   row[field] = event.target.value;
+  const tr = event.target.closest('tr');
   if (field === 'frontId') {
     row.frontName = event.target.selectedOptions?.[0]?.textContent || '';
     // Linha sem operação recebe as operações padrão da frente escolhida (ex.: Fert convencional).
     if (!row.operations.some(value => value.trim())) row.operations = sheetDefaultOperations(row.frontId);
-  }
-  // Polo MS: trocar a seção limpa o setor que não pertence a ela.
-  if (field === 'section' && sheetShowsSection() && row.sector.trim()
-    && !sheetSectionSectors(row.section).some(item => item.sector === row.sector.trim())) row.sector = '';
-  // Setor e status mudam as opções de operação, o aviso de O.S. e a cor da linha.
-  if (['sector', 'section', 'status', 'frontId'].includes(field)) {
-    const tr = event.target.closest('tr');
-    if (tr) {
-      tr.outerHTML = sheetRowHtml(row);
-      if (field === 'section' && sheetShowsSection()) document.querySelector(`[data-sheet-row="${row.key}"] [data-sheet-field="sector"]`)?.focus();
-      if (field === 'sector') document.querySelector(`[data-sheet-row="${row.key}"] [data-sheet-field="status"]`)?.focus();
+    if (tr) tr.outerHTML = sheetRowHtml(row);
+  } else if (field === 'section' && sheetShowsSection()) {
+    // Polo MS: trocar a seção limpa o setor que não pertence a ela.
+    if (row.sector.trim() && !sheetSectionSectors(row.section).some(item => item.sector === row.sector.trim())) row.sector = '';
+    const sector = tr?.querySelector('[data-sheet-field="sector"]');
+    if (sector) {
+      sector.innerHTML = sheetSectorSelectOptions(row);
+      sector.focus();
     }
+  } else if (field === 'status') {
+    const front = tr?.querySelector('.production-sheet-front');
+    if (front) front.className = `production-sheet-front ${statusMeta(row.status).className}`;
+  } else if (field === 'sector') {
+    tr?.querySelector('[data-sheet-field="status"]')?.focus();
   }
+  if (field !== 'frontId') tr?.classList.toggle('is-changed', sheetRowChanged(row));
   updateProductionSheetStatus();
 });
 productionSheetBody?.addEventListener('click', event => {
   const action = event.target.closest('[data-sheet-action]')?.dataset.sheetAction;
   const row = action && findSheetRow(event.target);
   if (!row) return;
+  if (action === 'update') return saveProductionSheet(row);
   if (action === 'add-op' || action === 'remove-op') {
     if (action === 'add-op') row.operations.push('');
     else row.operations.splice(Number(event.target.closest('[data-op-index]').dataset.opIndex), 1);
@@ -393,11 +443,16 @@ productionSheetBody?.addEventListener('click', event => {
 // Fechar com alterações pendentes pede confirmação (botões de fechar e Esc).
 document.addEventListener('click', event => {
   const close = event.target.closest('[data-close-modal="production-sheet-modal"]');
-  if (!close || document.querySelector('#production-sheet-modal')?.hidden || !productionSheetDirty()) return;
-  confirmDiscardProductionSheet(event);
+  if (!close || document.querySelector('#production-sheet-modal')?.hidden) return;
+  if (productionSheetSaving) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  } else if (productionSheetDirty()) confirmDiscardProductionSheet(event);
 }, true);
 document.addEventListener('keydown', event => {
-  if (event.key !== 'Escape' || isConfirmationOpen() || document.querySelector('#production-sheet-modal')?.hidden
-    || !productionSheetDirty()) return;
-  confirmDiscardProductionSheet(event);
+  if (event.key !== 'Escape' || isConfirmationOpen() || document.querySelector('#production-sheet-modal')?.hidden) return;
+  if (productionSheetSaving) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  } else if (productionSheetDirty()) confirmDiscardProductionSheet(event);
 }, true);
