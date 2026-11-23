@@ -199,11 +199,12 @@ function updateProductionSheetStatus() {
   status.textContent = changed ? `${changed} ${changed === 1 ? 'alteração' : 'alterações'} para salvar.` : 'Revise antes de salvar.';
 }
 
-function renderSheetFilters() {
+// preferred: { group, front } escolhidos no painel; sem eles, mantém o que estava no popup.
+function renderSheetFilters(preferred = {}) {
   const groupSelect = document.querySelector('#production-sheet-group');
   const frontSelect = document.querySelector('#production-sheet-front');
   if (!groupSelect || !frontSelect) return;
-  const groupValue = groupSelect.value;
+  const groupValue = preferred.group || groupSelect.value;
   const groups = groupsForEntry();
   groupSelect.innerHTML = groups.map(group => `<option value="${group.id}">${escapeHtml(group.name)}</option>`).join('');
   // Sem "Todos": mantém o grupo escolhido ou abre no primeiro grupo que tem frentes lançadas.
@@ -212,7 +213,7 @@ function renderSheetFilters() {
   const withRows = groups.find(group => productionSheetRows.some(row => groupOf(row) === String(group.id)));
   groupSelect.value = groups.some(group => String(group.id) === groupValue)
     ? groupValue : String((withRows || groups[0])?.id ?? '');
-  const frontValue = frontSelect.value;
+  const frontValue = preferred.group ? preferred.front || '' : frontSelect.value;
   const fronts = sheetFronts().filter(front => !groupSelect.value || String(front.group_id) === groupSelect.value);
   frontSelect.innerHTML = '<option value="">Todas as frentes</option>' + fronts.map(front =>
     `<option value="${front.id}">${escapeHtml(front.name)}</option>`).join('');
@@ -231,6 +232,15 @@ async function loadProductionSheetSectorBase(unit) {
   }
 }
 
+// Grupo e frente escolhidos no painel da Produção (a frente define o grupo quando só ela vem).
+function productionSheetPanelFilter() {
+  if (typeof dashboardPanelFilter !== 'object' || !dashboardPanelFilter) return {};
+  const front = String(dashboardPanelFilter.front || '');
+  const frontGroup = front ? sheetFronts().find(item => String(item.id) === front)?.group_id : null;
+  const group = String(frontGroup ?? dashboardPanelFilter.group ?? '');
+  return group ? { group, front } : {};
+}
+
 async function openProductionSheet() {
   if (!canFillProduction()) return;
   const unit = currentProductionUnit();
@@ -238,8 +248,10 @@ async function openProductionSheet() {
   const label = document.querySelector('#production-sheet-unit');
   if (label) label.textContent = productionUnitLabel(unit).toLocaleUpperCase('pt-BR');
   productionSheetRows = visibleProductionItems().map(sheetRowFromItem);
-  if (!productionSheetRows.length) addProductionSheetRow({ render: false });
-  renderSheetFilters();
+  // Abre no grupo e na frente filtrados no painel (Frentes e serviços); sem linha nesse
+  // filtro, já começa com uma linha nova daquela frente.
+  renderSheetFilters(productionSheetPanelFilter());
+  if (!productionSheetRows.some(sheetRowVisible)) addProductionSheetRow({ render: false });
   renderProductionSheet();
   openModal('production-sheet-modal');
   await loadProductionSheetSectorBase(unit);

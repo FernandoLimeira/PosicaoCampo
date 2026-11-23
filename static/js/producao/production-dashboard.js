@@ -374,9 +374,12 @@ function dashboardSectorNotes(item, editable, fields = Object.keys(DASHBOARD_NOT
   return notes ? `<dl class="pdash-sector-notes">${notes}</dl>` : '';
 }
 
-function dashboardSectorRow(item) {
+// frontStatus: o status já mostrado no cabeçalho do cartão; o setor só repete o status
+// quando é diferente (ex.: um setor em atividade e outro com solo úmido).
+function dashboardSectorRow(item, frontStatus = null) {
   const entry = item.entry || {};
   const meta = statusMeta(entry.status);
+  const showStatus = !frontStatus || entry.status !== frontStatus;
   const codes = splitProductionOperations(entry.operation);
   // Cada operação numa linha: ✓/✕, código colorido e o nome (menor).
   const operations = codes.length
@@ -397,14 +400,13 @@ function dashboardSectorRow(item) {
   return `<section class="pdash-sector-row" aria-label="${escapeHtml(place)}">
     <div class="pdash-tile-meta">
       <h5 class="pdash-place">${dashboardIcon('pin')}<span>${escapeHtml(place)}</span></h5>
-      <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
+      ${showStatus ? `<span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>` : ''}
       ${stale}
     </div>
     <div class="pdash-tile-ops">${operations}</div>
     <div class="pdash-sector-footer">
       ${updated ? `<small>${escapeHtml(updated)}</small>` : ''}${section}
     </div>
-    ${item.entry ? dashboardSectorNotes(item, false, ['observation']) : ''}
   </section>`;
 }
 
@@ -413,6 +415,11 @@ function dashboardFrontTile(sectors, shift) {
   const meta = statusMeta(front.entry?.status);
   const ordered = [...sectors].sort((a, b) => compareFrontLabels(a.entry?.sector || '', b.entry?.sector || '')
     || compareFrontLabels(a.entry?.section || '', b.entry?.section || ''));
+  // Observações por último, depois de todos os setores (com o setor quando há mais de um).
+  const observations = ordered.map(item => ({ item, text: String(item.entry?.observation || '').trim() }))
+    .filter(note => note.text);
+  const notes = observations.length ? `<dl class="pdash-sector-notes pdash-front-notes"><div><dt>Observação</dt>${observations.map(({ item, text }) =>
+    `<dd>${ordered.length > 1 ? `<b>${escapeHtml(productionPlaceLabel({ ...item.entry, farm: '' }))}</b> ` : ''}<span class="pdash-note">${escapeHtml(text)}</span></dd>`).join('')}</div></dl>` : '';
   return `<article class="pdash-tile ${meta.className}" data-panel-front-card="${front.service_front_id ?? front.id}">
     <header class="pdash-front-card-header">
       <div class="pdash-tile-name">
@@ -420,8 +427,10 @@ function dashboardFrontTile(sectors, shift) {
         <h4>${escapeHtml(front.service_name || '-')}</h4>
       </div>
       <div class="pdash-tile-who">${escapeHtml(productionResponsibleName(front, shift))}</div>
+      <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
     </header>
-    ${ordered.map(dashboardSectorRow).join('')}
+    ${ordered.map(item => dashboardSectorRow(item, front.entry?.status)).join('')}
+    ${notes}
     <footer class="pdash-front-card-footer">
       <button type="button" class="pdash-sector-detail" data-panel-detail="${ordered[0].id}"
         aria-label="Ver detalhes · ${escapeHtml(front.service_name || 'frente')}">Ver detalhes${ordered.length > 1 ? ` dos ${ordered.length} setores` : ''}</button>

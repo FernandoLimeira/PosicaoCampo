@@ -1130,3 +1130,9 @@ button.pdash-note { padding: 2px 0; border: 0; background: transparent; color: v
 .pfd-sector-actions .modal-button { min-height: 32px; padding: 0 12px; font-size: 12px; }
 .pfd-actions-note { color: #7a8489; font-size: 12px; }
 .pdash-front-card-footer { display: flex; justify-content: flex-end; padding-top: 6px; border-top: 1px solid var(--data-border); }
+
+/* Cartão da frente: status uma vez no cabeçalho e as observações no fim. */
+.pdash-front-card-header > .pdash-status { justify-self: start; }
+.pdash-front-notes { margin-top: 4px; padding-top: 10px; }
+.pdash-front-notes dd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
+.pdash-front-notes dd b { color: var(--muted); font-size: 12px; font-weight: 800; }

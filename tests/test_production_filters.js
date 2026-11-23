@@ -191,10 +191,15 @@ context.renderProductionDashboard();
 const frontCard = cards.innerHTML.match(/<article[^>]*data-panel-front-card="7">.*?<\/article>/s)?.[0];
 assert.ok(frontCard);
 assert.match(frontCard, /aria-label="Setor 4 · IZAURA".*aria-label="Setor 6 · IZAURA".*class="pdash-status is-wet"/s);
-const sectorsWithNotes = frontCard.match(/<section class="pdash-sector-row".*?<\/section>/gs);
-assert.equal(sectorsWithNotes.length, 2);
-assert.match(sectorsWithNotes[0], /Setor 4 · IZAURA.*<dt>Observação<\/dt>.*&lt;teste>/s);
-assert.match(sectorsWithNotes[1], /Setor 6 · IZAURA.*<dt>Observação<\/dt>.*Observação anterior/s);
+const frontSectorRows = frontCard.match(/<section class="pdash-sector-row".*?<\/section>/gs);
+assert.equal(frontSectorRows.length, 2);
+// Status uma vez no cabeçalho (Em atividade); o setor só repete quando é diferente (solo úmido).
+assert.equal(frontCard.match(/class="pdash-status is-active"/g).length, 1);
+assert.doesNotMatch(frontSectorRows[0], /pdash-status/);
+assert.match(frontSectorRows[1], /class="pdash-status is-wet"/);
+// Observações por último, depois de todos os setores, cada uma com o seu setor.
+assert.doesNotMatch(frontSectorRows.join(''), /Observação/);
+assert.match(frontCard, /<\/section>\s*<dl class="pdash-sector-notes pdash-front-notes"><div><dt>Observação<\/dt><dd><b>Setor 4<\/b> <span class="pdash-note">&lt;teste><\/span><\/dd><dd><b>Setor 6<\/b> <span class="pdash-note">Observação anterior/);
 assert.doesNotMatch(frontCard, /data-panel-note|Mudança anterior/);
 // Um "Ver detalhes" por frente (no rodapé do cartão), não um por setor.
 assert.equal(frontCard.match(/data-panel-detail=/g).length, 1);
@@ -555,5 +560,21 @@ function sectorRow(sector) {
   finishSheetSave({ saved: 1, removed: 1, item_ids: [draftRow.id] });
   await batchSheetSave;
   assert.equal(modalEvents.at(-1), 'close:production-sheet-modal');
+
+  // "Adicionar frente" abre no filtro do painel: grupo Plantio e frente Sulcação (sem
+  // lançamento nela, a planilha já começa com uma linha nova da Sulcação).
+  context.apiRequest = async () => ({ items: [] });
+  element('#production-sheet-rows').closest = () => null;
+  vm.runInContext(`productionAccess.permissions.fill = true;
+    Object.assign(dashboardPanelFilter, { group: '2', front: '8', flag: '' });`, context);
+  await context.openProductionSheet();
+  assert.equal(element('#production-sheet-group').value, '1');
+  assert.equal(element('#production-sheet-front').value, '8');
+  assert.equal(vm.runInContext('productionSheetRows[0].frontId', context), '8');
+  // Só o grupo filtrado no painel: abre nele, com todas as frentes do grupo.
+  vm.runInContext("Object.assign(dashboardPanelFilter, { group: '2', front: '' })", context);
+  await context.openProductionSheet();
+  assert.equal(element('#production-sheet-group').value, '2');
+  assert.equal(element('#production-sheet-front').value, '');
   console.log('OK: frentes dentro dos grupos, inclusão com grupo selecionado, busca e consulta sem edição.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
