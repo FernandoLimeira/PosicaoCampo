@@ -303,5 +303,14 @@ button.pdash-kpi.is-active { color: #e0e0e0; }
 .pfd-sector.is-stopped { border-left-color: #c6783c; }
 .pfd-sector header strong { color: #e0e0e0; }
 .pfd-actions-note { color: #999999; }
+.pfd-aside h3 { color: #adadad; }
+.pfd-note-block h4 { color: #e0e0e0; }
+.pfd-note-field span { color: #999999; }
+.pfd-note-field textarea { background: #2a2a2a; color: #e0e0e0; }
+.pfd-note-field textarea:focus { border-color: #35a167; }
+.pfd-note-text { color: #e0e0e0; }
+.pfd-note-text.is-empty { color: #999999; }
+.pfd-notes-status { color: #adadad; }
+.pfd-notes-status.is-error { color: #d4626b; }
 .production-primary-button.pdash-action { background: linear-gradient(135deg, #3f6f7a 0%, #1b3a41 100%); }
 .production-primary-button.pdash-action:hover:not(:disabled) { background: linear-gradient(135deg, #4a7c87 0%, #22474e 100%); }

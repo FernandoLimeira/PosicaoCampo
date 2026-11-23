@@ -545,7 +545,9 @@ class PageTests(unittest.TestCase):
         self.assertNotIn('id="production-items-body"', page["body"])
         self.assertNotIn('data-production-view', page["body"])
         self.assertNotIn('id="production-overview"', page["body"])
-        self.assertIn('id="production-note-form"', page["body"])
+        # Observações ficam na lateral do Detalhe da frente (sem o popup separado de anotação).
+        self.assertNotIn('id="production-note-form"', page["body"])
+        self.assertIn('id="production-front-detail-body"', page["body"])
         self.assertNotIn('Configurar status', page["body"])  # status ficam só na página Cadastros
         self.assertNotIn('Configurar nova frente', page["body"])  # frentes também
         self.assertIn('href="/producao"', page["body"])

@@ -192,7 +192,6 @@ function dashboardConsolidatedDetailHtml(sectors, editable) {
         <p class="pfd-op-line"><b>Fazenda</b>${escapeHtml(entry.farm || '-')}</p>
         <p class="pfd-op-line"><b>Operações</b>${escapeHtml(codes.join(', ') || 'Sem operação')}</p>
         ${updated ? `<p class="pfd-op-line"><b>Atualização</b>${escapeHtml(updated.replace(/^Atualização /, ''))}</p>` : ''}
-        ${item.entry ? dashboardSectorNotes(item, editable) : ''}
         ${editable ? `<div class="pfd-sector-actions"><button class="modal-button danger" type="button" data-panel-remove="${item.id}">Remover setor</button></div>` : ''}
       </article>`;
   }).join('');
@@ -245,7 +244,7 @@ function openDashboardFrontDetail(itemId) {
     if (title) title.textContent = item.service_name || 'Frente';
     const context = document.querySelector('#production-front-detail-context');
     if (context) context.textContent = productionUnitLabel(currentProductionUnit());
-    body.innerHTML = dashboardConsolidatedDetailHtml(sectors, editable);
+    renderDashboardDetail(body, dashboardConsolidatedDetailHtml(sectors, editable), sectors, editable);
     openModal('production-front-detail-modal');
     return;
   }
@@ -293,7 +292,7 @@ function openDashboardFrontDetail(itemId) {
   const check = codes.length
     ? `<span class="pfd-hero-check ${okCount === codes.length ? 'is-order-ok' : 'is-order-missing'}">${okCount}/${codes.length} ${codes.length === 1 ? 'operação' : 'operações'} com O.S.</span>`
     : '<span class="pfd-hero-check">Sem operação informada</span>';
-  body.innerHTML = `<div class="pfd-hero ${meta.className}">
+  renderDashboardDetail(body, `<div class="pfd-hero ${meta.className}">
       <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
       ${check}
       ${item.is_current_day ? '' : `<span class="pdash-stale">${dashboardIcon('clock')}Não atualizada hoje</span>`}
@@ -310,11 +309,10 @@ function openDashboardFrontDetail(itemId) {
     ${entry.sector ? `<section class="pfd-section" data-pfd-panel="others" hidden>
       ${otherOrders || `<p class="production-empty">Nenhuma outra O.S. aberta no setor ${escapeHtml(entry.sector)}.</p>`}
     </section>` : ''}
-    ${item.entry ? dashboardSectorNotes(item, editable) : ''}
     ${editable ? `<div class="pdash-detail-actions">
       <button class="modal-button danger" type="button" data-panel-remove="${item.id}">Remover</button>
       <button class="modal-button save" type="button" data-panel-edit="${item.id}">Editar frente</button>
-    </div>` : ''}`;
+    </div>` : ''}`, [item], editable);
   openModal('production-front-detail-modal');
 }
 
@@ -360,20 +358,6 @@ function dashboardSortTiles(items) {
 
 const DASHBOARD_NOTE_FIELDS = { observation: ['Observação', 'Adicionar observação'], changes: ['Previsão de mudança', 'Adicionar previsão'] };
 
-function dashboardSectorNotes(item, editable, fields = Object.keys(DASHBOARD_NOTE_FIELDS)) {
-  const notes = fields.map(field => {
-    const [label, addLabel] = DASHBOARD_NOTE_FIELDS[field];
-    const value = String(item.entry[field] || '').trim();
-    if (!editable && !value) return '';
-    const text = escapeHtml(value || addLabel);
-    const action = value ? `Editar ${label.toLocaleLowerCase('pt-BR')}` : addLabel;
-    return `<div><dt>${label}</dt><dd>${editable
-      ? `<button type="button" class="pdash-note${value ? '' : ' is-empty'}" data-panel-note="${field}" data-item-id="${item.id}" title="${action}">${text}</button>`
-      : `<span class="pdash-note">${text}</span>`}</dd></div>`;
-  }).join('');
-  return notes ? `<dl class="pdash-sector-notes">${notes}</dl>` : '';
-}
-
 // frontStatus: o status já mostrado no cabeçalho do cartão; o setor só repete o status
 // quando é diferente (ex.: um setor em atividade e outro com solo úmido).
 function dashboardSectorRow(item, frontStatus = null) {
@@ -417,7 +401,10 @@ function dashboardFrontTile(sectors, shift) {
     .filter(note => note.text);
   const notes = observations.length ? `<dl class="pdash-sector-notes pdash-front-notes"><div><dt>Observação</dt>${observations.map(({ item, text }) =>
     `<dd>${ordered.length > 1 ? `<b>${escapeHtml(productionPlaceLabel({ ...item.entry, farm: '' }))}</b> ` : ''}<span class="pdash-note">${escapeHtml(text)}</span></dd>`).join('')}</div></dl>` : '';
-  return `<article class="pdash-tile ${meta.className}" data-panel-front-card="${front.service_front_id ?? front.id}">
+  // O cartão inteiro abre o detalhe (clique, Enter ou Espaço); o botão Editar abre a edição.
+  const label = `Ver detalhes · ${front.service_name || 'frente'}${ordered.length > 1 ? ` · ${ordered.length} setores` : ''}`;
+  return `<article class="pdash-tile is-clickable ${meta.className}" data-panel-front-card="${front.service_front_id ?? front.id}"
+    data-panel-detail="${ordered[0].id}" tabindex="0" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">
     <header class="pdash-front-card-header">
       <div class="pdash-tile-name">
         <i class="pdash-status-icon ${meta.className}">${dashboardSvg(DASHBOARD_STATUS_ICONS[meta.className] || DASHBOARD_STATUS_ICONS['is-waiting'], meta.className !== 'is-waiting')}</i>
@@ -428,10 +415,10 @@ function dashboardFrontTile(sectors, shift) {
     </header>
     ${ordered.map(item => dashboardSectorRow(item, front.entry?.status)).join('')}
     ${notes}
-    <footer class="pdash-front-card-footer">
-      <button type="button" class="pdash-sector-detail" data-panel-detail="${ordered[0].id}"
-        aria-label="Ver detalhes · ${escapeHtml(front.service_name || 'frente')}">Ver detalhes${ordered.length > 1 ? ` dos ${ordered.length} setores` : ''}</button>
-    </footer>
+    ${canFillProduction() ? `<footer class="pdash-front-card-footer">
+      <button type="button" class="pdash-sector-detail" data-panel-card-edit="${ordered[0].id}"
+        aria-label="Editar ${escapeHtml(front.service_name || 'frente')}">Editar</button>
+    </footer>` : ''}
   </article>`;
 }
 
@@ -595,76 +582,110 @@ function renderProductionDashboard() {
   cards.querySelectorAll?.('[data-weight]').forEach(segment => { segment.style.flexGrow = segment.dataset.weight; });
 }
 
-let dashboardNoteDraft = null;
+// Observações na lateral do "Detalhe da frente": observação e previsão de mudança de cada
+// setor, digitadas ali mesmo. Grava só o que mudou, conferindo o texto que estava na tela
+// (outro analista pode ter alterado: a gravação para e mostra o aviso).
+let dashboardNotesDraft = null;
 
-function showDashboardNoteError(message = '') {
-  const error = document.querySelector('#production-note-error');
-  error.textContent = message;
-  error.hidden = !message;
+function dashboardNotesAsideHtml(sectors, editable) {
+  const many = sectors.length > 1;
+  const blocks = sectors.filter(item => item.entry).map(item => {
+    const fields = Object.entries(DASHBOARD_NOTE_FIELDS).map(([field, [label, addLabel]]) => {
+      const value = String(item.entry[field] || '');
+      const id = `pfd-note-${item.id}-${field}`;
+      return `<label class="pfd-note-field" for="${id}"><span>${label}</span>${editable
+        ? `<textarea id="${id}" rows="${field === 'observation' ? 4 : 3}" maxlength="2000" placeholder="${escapeHtml(addLabel)}"
+            data-note-item="${item.id}" data-note-field="${field}">${escapeHtml(value)}</textarea>`
+        : `<p class="pfd-note-text${value.trim() ? '' : ' is-empty'}">${escapeHtml(value.trim() || 'Sem registro')}</p>`}</label>`;
+    }).join('');
+    return `<div class="pfd-note-block">${many ? `<h4>${escapeHtml(productionPlaceLabel({ ...item.entry, farm: '' }))}</h4>` : ''}${fields}</div>`;
+  }).join('');
+  if (!blocks) return '';
+  return `<aside class="pfd-aside" aria-label="Observações">
+      <h3>Observações</h3>
+      ${editable ? `<form class="pfd-notes-form" data-pfd-notes>
+        ${blocks}
+        <p class="pfd-notes-status" role="status" hidden></p>
+        <button class="modal-button save" type="submit">Salvar observações</button>
+      </form>` : blocks}
+    </aside>`;
 }
 
-function openDashboardNote(itemId, field) {
-  if (!canFillProduction() || !Object.hasOwn(DASHBOARD_NOTE_FIELDS, field)) return;
-  const item = findProductionItem(itemId);
-  if (!item?.entry) return;
-  const expected = item.entry[field] || '';
-  dashboardNoteDraft = { unit: currentProductionUnit(), date: saoPauloIsoDate(), itemId, field, expected };
-  document.querySelector('#production-note-title').textContent = DASHBOARD_NOTE_FIELDS[field][0];
-  document.querySelector('#production-note-context').textContent = `${item.service_name} · ${productionPlaceLabel(item.entry)}`;
-  const input = document.querySelector('#production-note-input');
-  input.value = expected;
-  document.querySelector('#production-note-form button[type="submit"]').disabled = false;
-  showDashboardNoteError();
-  closeModal('production-front-detail-modal');
-  openModal('production-note-modal');
-  input.focus();
-  input.setSelectionRange(input.value.length, input.value.length);
+// Monta o popup: conteúdo à esquerda e observações na lateral.
+function renderDashboardDetail(body, main, sectors, editable) {
+  const aside = dashboardNotesAsideHtml(sectors, editable);
+  body.innerHTML = `<div class="pfd-layout${aside ? ' has-aside' : ''}"><div class="pfd-main">${main}</div>${aside}</div>`;
+  dashboardNotesDraft = editable ? {
+    unit: currentProductionUnit(), date: saoPauloIsoDate(), itemId: sectors[0]?.id,
+    expected: Object.fromEntries(sectors.filter(item => item.entry).flatMap(item => Object.keys(DASHBOARD_NOTE_FIELDS)
+      .map(field => [`${item.id}:${field}`, String(item.entry[field] || '')])))
+  } : null;
 }
 
-async function submitDashboardNote(event) {
-  event.preventDefault();
-  const draft = dashboardNoteDraft;
+function showDashboardNotesStatus(form, message = '', isError = true) {
+  const status = form.querySelector('.pfd-notes-status');
+  if (!status) return;
+  status.textContent = message;
+  status.hidden = !message;
+  status.classList.toggle('is-error', isError);
+}
+
+async function saveDashboardNotes(form) {
+  const draft = dashboardNotesDraft;
   if (!draft || !canFillProduction() || draft.unit !== currentProductionUnit()) return;
   if (draft.date !== saoPauloIsoDate()) {
-    showDashboardNoteError('A data operacional mudou. Reabra a anotação para salvar no dia atual.');
+    showDashboardNotesStatus(form, 'A data operacional mudou. Feche e abra o detalhe para salvar no dia atual.');
     return;
   }
-  const button = event.currentTarget.querySelector('button[type="submit"]');
+  const changes = [...form.querySelectorAll('[data-note-item]')].map(input => ({
+    itemId: Number(input.dataset.noteItem), field: input.dataset.noteField, value: input.value.trim(),
+    expected: draft.expected[`${input.dataset.noteItem}:${input.dataset.noteField}`] ?? ''
+  })).filter(change => change.value !== change.expected.trim());
+  if (!changes.length) {
+    showDashboardNotesStatus(form, 'Nenhuma alteração para salvar.', false);
+    return;
+  }
+  const button = form.querySelector('button[type="submit"]');
   if (button.disabled) return;
   button.disabled = true;
-  showDashboardNoteError();
-  const value = document.querySelector('#production-note-input').value;
+  showDashboardNotesStatus(form);
+  let saved = 0;
   try {
-    await apiRequest(`/api/production/my-items/${draft.itemId}`, { method: 'PATCH', body: JSON.stringify({
-      unit_code: draft.unit, work_date: draft.date, field: draft.field, expected: draft.expected, value
-    }) });
+    for (const change of changes) {
+      await apiRequest(`/api/production/my-items/${change.itemId}`, { method: 'PATCH', body: JSON.stringify({
+        unit_code: draft.unit, work_date: draft.date, field: change.field, expected: change.expected, value: change.value
+      }) });
+      draft.expected[`${change.itemId}:${change.field}`] = change.value;
+      saved += 1;
+    }
   } catch (error) {
-    if (dashboardNoteDraft === draft) {
-      showDashboardNoteError(error.message || 'Não foi possível salvar a anotação.');
+    if (dashboardNotesDraft === draft) {
       button.disabled = false;
+      showDashboardNotesStatus(form, `${saved ? `${saved} de ${changes.length} salvas. ` : ''}${error.message || 'Não foi possível salvar as observações.'}`);
     }
-    if (error.status === 409 && draft.unit === currentProductionUnit()) {
-      await loadProductionItems(draft.unit).catch(console.error);
-    }
+    if (error.status === 409 && draft.unit === currentProductionUnit()) await loadProductionItems(draft.unit).catch(console.error);
     return;
   }
-  if (dashboardNoteDraft === draft) {
-    button.disabled = false;
-    dashboardNoteDraft = null;
-    closeModal('production-note-modal');
+  showToast(changes.length === 1 ? 'Observação salva.' : 'Observações salvas.');
+  if (draft.unit !== currentProductionUnit()) return;
+  try {
+    await loadProductionItems(draft.unit);
+  } catch (error) {
+    console.error(error);
+    showToast(PRODUCTION_REFRESH_WARNING, true);
   }
-  showToast('Anotação salva.');
-  if (draft.unit === currentProductionUnit()) {
-    try {
-      await loadProductionItems(draft.unit);
-    } catch (error) {
-      console.error(error);
-      showToast(PRODUCTION_REFRESH_WARNING, true);
-    }
+  // Continua no detalhe, já com o texto salvo.
+  if (dashboardNotesDraft === draft && !document.querySelector('#production-front-detail-modal')?.hidden) {
+    openDashboardFrontDetail(draft.itemId);
   }
 }
 
-document.querySelector('#production-note-form')?.addEventListener('submit', submitDashboardNote);
+document.querySelector('#production-front-detail-body')?.addEventListener('submit', event => {
+  const form = event.target.closest?.('[data-pfd-notes]');
+  if (!form) return;
+  event.preventDefault();
+  saveDashboardNotes(form);
+});
 document.querySelector('#production-group-tabs')?.addEventListener('click', event => {
   const tab = event.target.closest('[data-panel-group]');
   if (!tab || tab.dataset.panelGroup === dashboardPanelFilter.group) return;
@@ -688,8 +709,19 @@ document.querySelector('#production-front-cards')?.addEventListener('click', eve
     renderProductionDashboard();
     return;
   }
+  const edit = event.target.closest('[data-panel-card-edit]');
+  if (edit) {
+    openEditProductionItem(Number(edit.dataset.panelCardEdit));
+    return;
+  }
   const detail = event.target.closest('[data-panel-detail]');
   if (detail) openDashboardFrontDetail(Number(detail.dataset.panelDetail));
+});
+// Teclado: Enter ou Espaço no cartão (não no botão Editar) abre o detalhe.
+document.querySelector('#production-front-cards')?.addEventListener('keydown', event => {
+  if (!['Enter', ' '].includes(event.key) || !event.target.matches?.('[data-panel-front-card][data-panel-detail]')) return;
+  event.preventDefault();
+  openDashboardFrontDetail(Number(event.target.dataset.panelDetail));
 });
 
 const dashboardSectorInput = document.querySelector('#production-sector-search');
@@ -730,11 +762,6 @@ document.querySelector('#production-front-cards')?.addEventListener('change', ev
   renderProductionDashboard();
 });
 document.querySelector('#production-front-detail-body')?.addEventListener('click', event => {
-  const note = event.target.closest('[data-panel-note]');
-  if (note) {
-    openDashboardNote(Number(note.dataset.itemId), note.dataset.panelNote);
-    return;
-  }
   const edit = event.target.closest('[data-panel-edit]');
   const remove = event.target.closest('[data-panel-remove]');
   if (!edit && !remove) return;

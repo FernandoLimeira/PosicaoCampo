@@ -153,7 +153,7 @@ context.renderProductionSummary();
 assert.match(element('#production-summary').innerHTML, /title="Em atividade: 1"/);
 assert.match(element('#production-summary').innerHTML, /title="Solo úmido: 0"/);
 const cards = element('#production-front-cards');
-const separateCards = cards.innerHTML.match(/<article[^>]*data-panel-front-card="7">.*?<\/article>/gs) || [];
+const separateCards = cards.innerHTML.match(/<article[^>]*data-panel-front-card="7"[^>]*>.*?<\/article>/gs) || [];
 assert.equal(separateCards.length, 2);
 assert.equal(separateCards.filter(card => /Setor 4 · IZAURA/.test(card)).length, 1);
 assert.equal(separateCards.filter(card => /Setor 6 · IZAURA/.test(card)).length, 1);
@@ -188,7 +188,7 @@ assert.doesNotMatch(cards.innerHTML, /data-panel-front-card="9"/);
 vm.runInContext(`productionItems[0].sector_group_id = productionItems[1].sector_group_id = 'saved-group';
   dashboardPanelFilter.flag = 'ok';`, context);
 context.renderProductionDashboard();
-const frontCard = cards.innerHTML.match(/<article[^>]*data-panel-front-card="7">.*?<\/article>/s)?.[0];
+const frontCard = cards.innerHTML.match(/<article[^>]*data-panel-front-card="7"[^>]*>.*?<\/article>/s)?.[0];
 assert.ok(frontCard);
 assert.match(frontCard, /aria-label="Setor 4 · IZAURA".*aria-label="Setor 6 · IZAURA".*class="pdash-status is-wet"/s);
 const frontSectorRows = frontCard.match(/<section class="pdash-sector-row".*?<\/section>/gs);
@@ -201,9 +201,11 @@ assert.match(frontSectorRows[1], /class="pdash-status is-wet"/);
 assert.doesNotMatch(frontSectorRows.join(''), /Observação/);
 assert.match(frontCard, /<\/section>\s*<dl class="pdash-sector-notes pdash-front-notes"><div><dt>Observação<\/dt><dd><b>Setor 4<\/b> <span class="pdash-note">&lt;teste><\/span><\/dd><dd><b>Setor 6<\/b> <span class="pdash-note">Observação anterior/);
 assert.doesNotMatch(frontCard, /data-panel-note|Mudança anterior/);
-// Um "Ver detalhes" por frente (no rodapé do cartão), não um por setor.
+// O cartão inteiro abre o detalhe (um só por frente); o rodapé tem o botão Editar.
 assert.equal(frontCard.match(/data-panel-detail=/g).length, 1);
-assert.match(frontCard, /Ver detalhes dos 2 setores<\/button>/);
+assert.match(frontCard, /<article class="pdash-tile is-clickable[^"]*"[^>]*data-panel-detail="\d+" tabindex="0"[^>]*aria-label="Ver detalhes · Preparo · 2 setores"/);
+assert.match(frontCard, /data-panel-card-edit="\d+"[^>]*>Editar<\/button>/);
+assert.doesNotMatch(frontCard, /Ver detalhes<\/button>/);
 // Detalhe consolidado: operações agrupadas pela operação (uma linha por setor), outras O.S.
 // dos setores e a aba Setores com as anotações e o "Remover setor" de cada um.
 vm.runInContext(`productionItems[1].entry.operation = '101, 205';
@@ -220,7 +222,9 @@ assert.match(consolidated, /data-pfd-tab="others">Outras O\.S\. nos setores <sma
 assert.match(consolidated, /<b>Setor 4<\/b>O\.S\. 5002/);
 assert.match(consolidated, /<b>Setor 6<\/b>O\.S\. 6001 · Talhão 9/);
 assert.match(consolidated, /data-panel-remove="1"[^>]*>Remover setor.*data-panel-remove="2"[^>]*>Remover setor/s);
-assert.match(consolidated, /data-panel-note="changes" data-item-id="2"/);
+// Observações na lateral do detalhe, com o campo para digitar de cada setor.
+assert.match(consolidated, /<aside class="pfd-aside"[^>]*>.*<h4>Setor 4<\/h4>.*data-note-item="1" data-note-field="observation">&lt;teste><\/textarea>.*<h4>Setor 6<\/h4>.*data-note-item="2" data-note-field="changes">Mudança anterior<\/textarea>.*Salvar observações/s);
+assert.doesNotMatch(consolidated.split('<aside')[0], /&lt;teste>|Mudança anterior/);
 assert.match(consolidated, /data-panel-edit="\d+"[^>]*>Editar frente/);
 vm.runInContext(`productionItems[1].entry.operation = ''; delete productionItems[1].service_order;`, context);
 assert.doesNotMatch(cards.innerHTML, /data-panel-front-card="9"/);
@@ -235,7 +239,8 @@ vm.runInContext(`delete productionItems[0].sector_group_id;
 context.openDashboardFrontDetail(1);
 assert.match(element('#production-front-detail-body').innerHTML, /&lt;teste>/);
 context.openDashboardFrontDetail(2);
-assert.match(element('#production-front-detail-body').innerHTML, /data-panel-note="changes" data-item-id="2"[^>]*>Mudança anterior/);
+assert.match(element('#production-front-detail-body').innerHTML, /data-note-item="2" data-note-field="changes">Mudança anterior<\/textarea>/);
+assert.doesNotMatch(element('#production-front-detail-body').innerHTML, /<h4>Setor/);
 vm.runInContext(`Object.assign(productionItems[0].entry, { sector: '42', farm: '' });
   Object.assign(productionItems[1].entry, { sector: '42', farm: '' });`, context);
 // Filtro ligado cuja condição deixou de existir volta para "todas as frentes".
@@ -456,18 +461,23 @@ function sectorRow(sector) {
 
   context.loadProductionItems = async () => true;
   context.apiRequest = async (url, options) => { requests.push({ url, options }); return { ok: true }; };
-  const noteClick = { dataset: { itemId: '2', panelNote: 'changes' } };
-  detailClicks.forEach(listener => listener({ target: { closest: selector => selector === '[data-panel-note]' ? noteClick : null } }));
-  assert.deepEqual(modalEvents.slice(-2), ['close:production-front-detail-modal', 'open:production-note-modal']);
-  assert.equal(element('#production-note-input').value, 'Mudança anterior');
-  element('#production-note-input').value = 'Ir ao novo setor após 16h';
-  await context.submitDashboardNote({ currentTarget: element('#production-note-form'), preventDefault() {} });
+  // Salvar observações da lateral: grava só o campo alterado, conferindo o texto anterior.
+  context.openDashboardFrontDetail(2);
+  const notesButton = { disabled: false };
+  const notesStatus = { hidden: true, textContent: '', classList: { toggle() {} } };
+  const noteInputs = [
+    { dataset: { noteItem: '2', noteField: 'observation' }, value: 'Observação anterior' },
+    { dataset: { noteItem: '2', noteField: 'changes' }, value: 'Ir ao novo setor após 16h' }];
+  const requestsBefore = requests.length;
+  await context.saveDashboardNotes({ querySelectorAll: () => noteInputs,
+    querySelector: selector => (selector.includes('button') ? notesButton : notesStatus) });
+  assert.equal(requests.length, requestsBefore + 1);
   const noteUpdate = requests.at(-1);
   assert.equal(noteUpdate.url, '/api/production/my-items/2');
   assert.equal(noteUpdate.options.method, 'PATCH');
   assert.deepEqual(JSON.parse(noteUpdate.options.body), { unit_code: 'NRD', work_date: context.saoPauloIsoDate(),
     field: 'changes', expected: 'Mudança anterior', value: 'Ir ao novo setor após 16h' });
-  assert.equal(modalEvents.at(-1), 'close:production-note-modal');
+  assert.equal(notesStatus.hidden, true);
 
   const responsibilityForm = element('#production-responsibility-form');
   responsibilityForm.dataset = {};

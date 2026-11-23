@@ -1082,11 +1082,6 @@ button.pdash-kpi.is-amber.is-active { box-shadow: 0 0 0 3px rgba(213, 163, 38, .
 .pdash-note { display: block; max-width: 100%; color: var(--text); font: inherit; font-size: 13px; line-height: 1.4; text-align: start; white-space: pre-wrap; overflow-wrap: anywhere; }
 button.pdash-note { padding: 2px 0; border: 0; background: transparent; color: var(--control-text); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .pdash-note.is-empty { font-weight: 700; }
-.production-note-modal { width: min(620px, 100%); }
-.production-note-body { display: grid; gap: 8px; padding: 16px 20px; }
-.production-note-body textarea { width: 100%; padding: 10px; border: 1px solid var(--data-border); border-radius: 8px; background: var(--data-surface); color: var(--text); font: inherit; resize: vertical; }
-.production-note-body p { margin: 0; color: var(--status-stop-text); font-size: 13px; }
-.production-note-modal .modal-footer { justify-content: flex-end; }
 
 /* Consulta de O.S. disponível durante a rolagem, com o resultado junto ao campo. */
 .pdash-sector-bar { position: sticky; top: 8px; z-index: 8; }
@@ -1136,3 +1131,34 @@ button.pdash-note { padding: 2px 0; border: 0; background: transparent; color: v
 .pdash-front-notes { margin-top: 4px; padding-top: 10px; }
 .pdash-front-notes dd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
 .pdash-front-notes dd b { color: var(--muted); font-size: 12px; font-weight: 800; }
+
+/* Cartão da frente clicável: abre o detalhe; o botão Editar fica no rodapé. */
+.pdash-tile.is-clickable { cursor: pointer; transition: box-shadow .15s ease, transform .15s ease; }
+.pdash-tile.is-clickable:hover { box-shadow: 0 6px 16px rgba(14, 29, 33, .12); transform: translateY(-1px); }
+.pdash-tile.is-clickable:focus-visible { outline: 3px solid var(--status-ok); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .pdash-tile.is-clickable, .pdash-tile.is-clickable:hover { transition: none; transform: none; } }
+
+/* Detalhe da frente: observações numa coluna lateral, com o campo para digitar. */
+#production-front-detail-modal .production-order-modal { width: min(1040px, 100%) !important; }
+.pfd-layout { display: grid; gap: 18px; }
+.pfd-layout.has-aside { grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); align-items: start; }
+.pfd-main { display: grid; gap: 12px; min-width: 0; }
+.pfd-aside { position: sticky; top: 0; display: grid; gap: 10px; padding: 14px; border: 1px solid var(--data-border); border-radius: 10px; background: var(--data-alternate); }
+.pfd-aside h3 { margin: 0; color: #4d5a61; font-size: 11px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; }
+.pfd-notes-form { display: grid; gap: 12px; }
+.pfd-note-block { display: grid; gap: 8px; }
+.pfd-note-block + .pfd-note-block { padding-top: 10px; border-top: 1px solid var(--data-border); }
+.pfd-note-block h4 { margin: 0; color: #1f262a; font-size: 13px; font-weight: 800; }
+.pfd-note-field { display: grid; gap: 4px; }
+.pfd-note-field span { color: #7a8489; font-size: 11px; font-weight: 800; }
+.pfd-note-field textarea { width: 100%; min-height: 64px; padding: 8px 10px; border: 1px solid var(--data-border); border-radius: 8px; background: #fff; color: #1f262a; font: inherit; font-size: 13px; line-height: 1.45; resize: vertical; }
+.pfd-note-field textarea:focus { border-color: #2f8f5b; outline: 0; box-shadow: 0 0 0 3px rgba(47, 143, 91, .15); }
+.pfd-note-text { margin: 0; color: #1f262a; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; }
+.pfd-note-text.is-empty { color: #7a8489; }
+.pfd-notes-status { margin: 0; color: #4d5a61; font-size: 12px; }
+.pfd-notes-status.is-error { color: #a52d36; }
+.pfd-notes-form .modal-button { justify-self: stretch; }
+@media (max-width: 820px) {
+  .pfd-layout.has-aside { grid-template-columns: minmax(0, 1fr); }
+  .pfd-aside { position: static; }
+}
