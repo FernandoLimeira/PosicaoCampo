@@ -184,6 +184,18 @@ assert.equal(vm.runInContext('dashboardPanelFilter.front || dashboardPanelFilter
 selectDashboardGroup('1');
 assert.match(cards.innerHTML, /data-panel-front-card="7"/);
 assert.doesNotMatch(cards.innerHTML, /data-panel-front-card="9"/);
+// Depois de salvar, a página recarrega com a lista vazia por um instante: o grupo, a frente e o
+// indicador escolhidos continuam os mesmos quando os lançamentos voltam.
+vm.runInContext(`Object.assign(dashboardPanelFilter, { group: '2', front: '9', flag: 'today' });
+  savedItemsForReload = productionItems; productionItems = [];`, context);
+context.renderProductionDashboard();
+assert.deepEqual({ ...vm.runInContext('dashboardPanelFilter', context) }, { group: '2', front: '9', flag: 'today' });
+vm.runInContext('productionItems = savedItemsForReload;', context);
+context.renderProductionDashboard();
+assert.equal(vm.runInContext('dashboardPanelFilter.group + "|" + dashboardPanelFilter.front', context), '2|9');
+assert.match(cards.innerHTML, /data-panel-front-card="9"/);
+vm.runInContext("Object.assign(dashboardPanelFilter, { group: '1', front: '', flag: '' })", context);
+context.renderProductionDashboard();
 // Um filtro por O.S. mantém juntos os setores vinculados no formulário.
 vm.runInContext(`productionItems[0].sector_group_id = productionItems[1].sector_group_id = 'saved-group';
   dashboardPanelFilter.flag = 'ok';`, context);

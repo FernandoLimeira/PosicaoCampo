@@ -27,6 +27,9 @@ Cálculo hora a hora da planilha "Controle de entrega x Moagem":
 - Frente de outra unidade (troca de cana): a frente é procurada nas frentes da Posição de
   Campo de cada unidade; se pertence a outra, conta como ATR recebido nesta e apoio daquela.
   O ATR dessa cana entra na média da unidade que recebeu (onde foi pesada), nunca na da dona.
+- ATR: nem toda carga traz ATR. O ATR da frente é a média ponderada (peso líquido) das cargas
+  com ATR; o da unidade pondera o ATR de cada frente pelo total processado da frente (com as
+  cargas sem ATR). Frente sem nenhuma carga com ATR fica fora da média.
 """
 from __future__ import annotations
 
@@ -183,6 +186,22 @@ def _atr_sample(rows) -> tuple[float, float]:
 def _weighted_atr(rows) -> float | None:
     tons, atr_kg = _atr_sample(rows)
     return round(atr_kg / tons, 2) if tons else None
+
+
+def _fronts_atr_sample(fronts: dict[str, list]) -> tuple[float, float]:
+    """ATR da unidade pela frente de colheita: nem toda carga traz ATR, então o ATR de cada
+    frente (média ponderada das cargas que têm ATR) vale para toda a cana que ela entregou e
+    é ponderado pelo total processado da frente, com as cargas sem ATR. Frente sem nenhuma
+    carga com ATR fica fora. Devolve (toneladas ponderadas, soma de ATR × toneladas)."""
+    weight_t = sample = 0.0
+    for front_rows in fronts.values():
+        atr_tons, atr_kg = _atr_sample(front_rows)
+        if not atr_tons:
+            continue
+        total_t = _tons(front_rows)
+        weight_t += total_t
+        sample += atr_kg / atr_tons * total_t
+    return weight_t, sample
 
 
 def _round(value: float | None, digits: int = 1) -> float | None:
@@ -458,7 +477,8 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
             if entry["external"]:
                 support.append({"front": front, "from_unit": owner, "to_unit": code,
                                 "loads": entry["loads"], "tons": entry["tons"], "atr": entry["atr"]})
-        atr_weight_t, atr_sample_kg = _atr_sample(rows)
+        # ATR da unidade: ATR de cada frente × total processado da frente (cargas sem ATR também).
+        atr_weight_t, atr_sample_kg = _fronts_atr_sample(fronts)
         units.append({
             "code": code,
             "work_date": day,

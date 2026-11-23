@@ -519,7 +519,9 @@ function renderDashboardGroupSelector(items) {
   for (const item of items) {
     if (item.group_id != null) groups.set(String(item.group_id), item.group_name || 'Sem grupo');
   }
-  if (!groups.has(dashboardPanelFilter.group)) {
+  // Lista vazia (a página está recarregando depois de salvar): mantém o grupo, a frente e o
+  // indicador escolhidos, para o painel voltar igual quando os lançamentos chegarem.
+  if (groups.size && !groups.has(dashboardPanelFilter.group)) {
     const group = groups.keys().next().value ?? '';
     if (group !== dashboardPanelFilter.group) Object.assign(dashboardPanelFilter, { group, front: '', flag: '' });
   }

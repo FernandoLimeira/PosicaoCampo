@@ -117,6 +117,7 @@ Excel do SELECT ──► services/weighing_import ──► models/weighings.im
   com horas fechadas × 24 e inclui no estoque as cargas em aberto dos dias anteriores
   presentes no arquivo. Com `DT_EXTRACAO`, o corte é a última hora cheia da extração.
   Na troca de cana, o ATR entra na média da unidade que recebeu a cana.
+  ATR da unidade: ATR de cada frente (cargas com ATR) ponderado pelo total processado da frente.
 
 ## Compatibilidade mantida
 
