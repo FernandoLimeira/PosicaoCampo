@@ -87,9 +87,9 @@ class ProductionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             production.save_responsibility_rule(self.admin["id"], {**rule, "unit_code": "RBR"})
         rule_id = production.save_responsibility_rule(self.admin["id"], rule)
-        self.assertEqual(production.list_responsibility_rules(self.viewer["id"], "NRD")[0]["id"], rule_id)
+        self.assertEqual(production.get_responsibility_catalog(self.viewer["id"], "NRD")["rules"][0]["id"], rule_id)
         with self.assertRaises(PermissionError):
-            production.list_responsibility_rules(self.viewer["id"], "PPT")
+            production.get_responsibility_catalog(self.viewer["id"], "PPT")["rules"]
         for unit in ("NRD", "PPT"):
             production.save_my_item(self.user["id"], {
                 "unit_code": unit, "service_front_id": front["id"], "work_date": "2026-11-20",
@@ -158,7 +158,7 @@ class ProductionTests(unittest.TestCase):
             conn.execute("UPDATE schema_info SET value='6' WHERE key='production_schema_version'")
         for _ in range(2):
             db.init_db()
-            rule, = production.list_responsibility_rules(self.viewer["id"], "NRD")
+            rule, = production.get_responsibility_catalog(self.viewer["id"], "NRD")["rules"]
             self.assertEqual((rule["id"], rule["role_name"], rule["responsible_name"], rule["relief_name"]),
                              (31, "Encarregado", "Titular", "Folguista"))
         focal = production.save_responsibility_rule(self.admin["id"], {
@@ -199,7 +199,7 @@ class ProductionTests(unittest.TestCase):
         self.assertEqual(team("2026-11-23"), ({"B": "Ana"}, [("Encarregado", "Ana", False), ("Focal de campo", "José", True)]))
         self.assertEqual(team("2026-11-24"), ({"B": ""}, [("Encarregado", "", True), ("Focal de campo", "Maria", False)]))
         self.assertEqual(team("2026-11-25"), ({"B": "Bia"}, [("Encarregado", "Bia", True), ("Focal de campo", "Maria", False)]))
-        self.assertEqual(production.list_responsibility_rules(admin, "PPT"), [])
+        self.assertEqual(production.get_responsibility_catalog(admin, "PPT")["rules"], [])
 
     def test_daily_summary_is_scoped_to_unit_date_and_shared_with_analysts(self):
         empty = production.get_daily_summary(self.user["id"], "NRD", "2026-10-16")

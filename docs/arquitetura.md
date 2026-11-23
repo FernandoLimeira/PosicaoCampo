@@ -64,8 +64,8 @@ exatamente quais exceções trata, mantendo os códigos de status anteriores.
 | `security.py` | hash de senha e tokens de sessão |
 | `users.py` | usuários, credenciais, sessões e administração de contas |
 | `module_access.py` | catálogo de módulos e permissões |
-| `production.py` | Produção Agrícola |
-| `service_orders.py` | Ordens de Serviço da Produção (importação por unidade e situação OK / Sem O.S. dos lançamentos) e cadastro de operações |
+| `production/` | Produção Agrícola, em módulos: `common.py` (normalização), `access.py` (permissões por unidade), `catalog.py` (status, grupos, frentes e base de setores), `responsibilities.py` (escala da equipe) e `entries.py` (lançamentos, chuva e resumo do dia). `production/__init__.py` reexporta os nomes |
+| `service_orders.py` | Ordens de Serviço da Produção (base única para as 4 unidades, situação OK / Sem O.S. dos lançamentos) e cadastro de operações. A conferência lê só as O.S. dos setores lançados, sem o detalhe do arquivo |
 | `units.py` | posição por unidade, versão, histórico e espelhamento na Sacarose |
 | `sectors.py` | base de setores |
 | `sacarose.py` | posições da Sacarose |

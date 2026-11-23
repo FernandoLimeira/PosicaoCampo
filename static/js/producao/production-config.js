@@ -393,3 +393,74 @@ async function deleteProductionStatus(statusId, statusName = '') {
     showToast(error.message || 'Não foi possível apagar o status.', true);
   }
 }
+
+// Eventos dos cadastros (status, grupos e frentes/serviços) da página Cadastros.
+document.querySelector('#production-status-form')?.addEventListener('submit', submitProductionStatus);
+
+document.querySelector('#production-status-clear')?.addEventListener('click', () => {
+  clearStatusConfigForm();
+  const editor = document.querySelector('#production-status-editor');
+  if (editor) editor.open = false;
+});
+
+document.querySelector('#production-status-editor')?.addEventListener('toggle', event => {
+  if (!event.currentTarget.open) return;
+  const statusId = document.querySelector('#production-status-id')?.value || '';
+  if (!statusId) {
+    const position = document.querySelector('#production-status-position');
+    if (position && !position.value) position.value = nextStatusPosition();
+  }
+  requestAnimationFrame(() => document.querySelector('#production-status-name')?.focus());
+});
+
+document.querySelector('#production-status-list')?.addEventListener('click', event => {
+  const button = event.target.closest('[data-status-action]');
+  if (!button) return;
+  if (button.dataset.statusAction === 'edit') editProductionStatus(Number(button.dataset.statusId));
+  if (button.dataset.statusAction === 'delete') deleteProductionStatus(Number(button.dataset.statusId), button.dataset.statusName || '');
+});
+
+document.querySelector('#production-group-form')?.addEventListener('submit', submitConfigGroup);
+
+document.querySelector('#production-front-form')?.addEventListener('submit', submitConfigFront);
+
+document.querySelector('#production-group-clear')?.addEventListener('click', () => {
+  clearGroupConfigForm();
+  const editor = document.querySelector('#production-group-editor');
+  if (editor) editor.open = false;
+});
+
+document.querySelector('#production-group-editor')?.addEventListener('toggle', event => {
+  if (!event.currentTarget.open) return;
+  const groupId = document.querySelector('#production-group-id')?.value || '';
+  if (!groupId) {
+    const position = document.querySelector('#production-group-position');
+    if (position && !position.value) position.value = nextGroupPosition();
+  }
+  requestAnimationFrame(() => document.querySelector('#production-group-name')?.focus());
+});
+
+document.querySelector('#production-front-clear')?.addEventListener('click', () => {
+  clearFrontConfigForm({ keepOpen: true });
+  document.querySelector('#production-config-front-name')?.focus();
+});
+
+const productionConfigGroupsList = document.querySelector('#production-groups-list');
+productionConfigGroupsList?.addEventListener('click', event => {
+  const button = event.target.closest('[data-config-action]');
+  if (!button || !canConfigureProduction()) return;
+  if (button.dataset.configAction === 'add-front') {
+    clearFrontConfigForm({ keepOpen: true, groupId: Number(button.dataset.groupId) });
+    document.querySelector('#production-config-front-name')?.focus();
+  }
+  if (button.dataset.configAction === 'edit-group') editConfigGroup(Number(button.dataset.groupId));
+  if (button.dataset.configAction === 'delete-group') deleteConfigGroup(Number(button.dataset.groupId), button.dataset.groupName || '');
+  if (button.dataset.configAction === 'edit-front') editConfigFront(Number(button.dataset.frontId));
+  if (button.dataset.configAction === 'delete-front') deleteConfigFront(Number(button.dataset.frontId), button.dataset.frontName || '');
+});
+productionConfigGroupsList?.addEventListener('toggle', event => {
+  const id = event.target.dataset?.catalogGroupId;
+  if (!id || !openProductionConfigGroups || productionConfigGroupSearch()) return;
+  if (event.target.open) openProductionConfigGroups.add(id);
+  else openProductionConfigGroups.delete(id);
+}, true);

@@ -62,20 +62,32 @@ def _text(value: Any, limit: int = MAX_TEXT) -> str:
     return str(value or "").strip()[:limit]
 
 
+# Colunas do resumo da O.S. (sem details_json, que guarda todas as linhas do arquivo).
+SUMMARY_COLUMNS = ("id,order_number,sector,sector_key,section,operation,operation_key,operation_name,"
+                   "cost_center,plots,opened_on")
+
+
 def _order_payload(row: sqlite3.Row, *, full: bool = True) -> dict[str, Any]:
-    """Dados da O.S. ``full`` inclui todas as colunas do arquivo (uma linha por talhão);
-    o resumo (sem ``rows``/``columns``) basta para tabelas, conferência e sugestões."""
-    details = json.loads(row["details_json"] or "{}")
+    """Dados da O.S. ``full`` inclui a chave e todas as colunas do arquivo (uma linha por
+    talhão); o resumo basta para tabelas, conferência e sugestões e não lê o detalhe."""
     payload = {
-        "id": int(row["id"]), "key": details.get("key", ""), "number": row["order_number"], "sector": row["sector"],
+        "id": int(row["id"]), "number": row["order_number"], "sector": row["sector"],
         "section": row["section"], "operation": row["operation"], "operation_name": row["operation_name"],
         "cost_center": row["cost_center"], "plots": [plot for plot in (row["plots"] or "").split(",") if plot],
         "opened_on": row["opened_on"],
     }
     if full:
+        details = json.loads(row["details_json"] or "{}")
+        payload["key"] = details.get("key", "")
         payload["columns"] = details.get("columns", [])
         payload["rows"] = details.get("rows", [])
     return payload
+
+
+def _in_chunks(values: list[str], size: int = 500):
+    """Listas grandes em blocos (limite de parâmetros do SQLite)."""
+    for start in range(0, len(values), size):
+        yield values[start:start + size]
 
 
 def import_service_orders(user_id: int, unit_code: Any, records: list[dict[str, Any]], *, filename: str = "") -> dict[str, Any]:
@@ -147,13 +159,15 @@ def list_service_orders(user_id: int, unit_code: Any, search: Any = None, *, sum
     """O.S. da base única (todas as unidades). A busca é aplicada antes de ler o detalhe
     de cada O.S.; ``summary`` devolve só o resumo (sem as linhas do arquivo)."""
     unit = _normalize_unit(unit_code)
+    columns = "*" if not summary else SUMMARY_COLUMNS
     with connection() as conn:
         access = _require_access(conn, user_id, unit=unit)
+        total = conn.execute("SELECT COUNT(*) FROM production_service_orders").fetchone()[0]
         if sector is None:
-            rows = conn.execute("SELECT * FROM production_service_orders").fetchall()
+            rows = conn.execute(f"SELECT {columns} FROM production_service_orders").fetchall()
         else:
             location = {"sector": sector, "section": section}
-            rows = [row for row in conn.execute("SELECT * FROM production_service_orders WHERE sector_key=?",
+            rows = [row for row in conn.execute(f"SELECT {columns} FROM production_service_orders WHERE sector_key=?",
                                                 (sector_key(sector),))
                     if order_matches_entry(row, location, require_section=unit in SECTION_UNIT_CODES)]
         last = conn.execute(
@@ -168,7 +182,7 @@ def list_service_orders(user_id: int, unit_code: Any, search: Any = None, *, sum
     orders.sort(key=lambda order: (natural_key(order["sector"]), natural_key(order["section"]),
                                    natural_key(order["operation"]), natural_key(order["number"])))
     return {
-        "unit": unit, "orders": orders, "total": len(rows),
+        "unit": unit, "orders": orders, "total": int(total),
         "last_import": {
             "file": last["import_file"], "imported_at": int(last["imported_at"]),
             "imported_by": last["imported_by_name"],
@@ -199,16 +213,31 @@ def attach_service_order_status(conn: sqlite3.Connection, unit: str, items: list
     A base de O.S. é a mesma para todas as unidades; ``unit`` decide se a seção é
     obrigatória na conferência (Polo MS)."""
     require_section = str(unit or "").upper() in SECTION_UNIT_CODES
+    # Lê só as O.S. dos setores lançados (sem o detalhe do arquivo) e só os nomes das operações
+    # usadas: a lista da Produção não percorre a base inteira de O.S. a cada atualização.
+    sectors = sorted({sector_key(item["entry"]["sector"]) for item in items
+                      if (item.get("entry") or {}).get("sector")})
+    wanted_keys = sorted({key for item in items for key in operation_keys((item.get("entry") or {}).get("operation"))})
     by_sector: dict[str, list[sqlite3.Row]] = {}
+    for chunk in _in_chunks(sectors):
+        for row in conn.execute(
+            f"SELECT {SUMMARY_COLUMNS} FROM production_service_orders WHERE sector_key IN ({','.join('?' * len(chunk))}) "
+            "ORDER BY id", chunk,
+        ):
+            by_sector.setdefault(row["sector_key"], []).append(row)
     # Nome de cada operação: o da Ordem de serviço (DESCRICAO_OPERACAO, ex.: "509 — FERTIRRIGACAO
     # LOCALIZADA"); sem ele, o do cadastro de operações.
     names: dict[str, str] = {}
-    for row in conn.execute("SELECT code_key, name FROM production_operations WHERE name<>''"):
-        names[row["code_key"]] = row["name"]
     file_names: dict[str, str] = {}
-    for row in conn.execute("SELECT * FROM production_service_orders"):
-        by_sector.setdefault(row["sector_key"], []).append(row)
-        if row["operation_name"]:
+    for chunk in _in_chunks(wanted_keys):
+        marks = ",".join("?" * len(chunk))
+        for row in conn.execute(f"SELECT code_key, name FROM production_operations WHERE name<>'' AND code_key IN ({marks})",
+                                chunk):
+            names[row["code_key"]] = row["name"]
+        for row in conn.execute(
+            f"""SELECT operation_key, operation_name FROM production_service_orders
+                WHERE operation_name<>'' AND operation_key IN ({marks}) ORDER BY id""", chunk,
+        ):
             file_names.setdefault(row["operation_key"], row["operation_name"])
     names.update(file_names)
     # Cada O.S. é lida uma vez; o lançamento leva só o resumo (o detalhe vem no "Ver").

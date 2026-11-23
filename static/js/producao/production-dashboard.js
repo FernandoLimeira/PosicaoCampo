@@ -335,7 +335,7 @@ async function searchDashboardSector(value, { delay = 0 } = {}) {
 
 async function loadDashboardSectorOrders(term, seq) {
   try {
-    const params = new URLSearchParams({ unit: currentProductionUnit(), search: dashboardSectorKey(term) });
+    const params = new URLSearchParams({ unit: currentProductionUnit(), search: dashboardSectorKey(term), summary: '1' });
     const data = await apiRequest(`/api/production/service-orders?${params}`);
     if (seq !== dashboardSectorSearchSeq) return;
     // A busca do servidor procura em vários campos; aqui fica só o setor igual ao digitado.

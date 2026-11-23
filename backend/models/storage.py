@@ -533,6 +533,9 @@ def _create_production_tables(conn):
         )
         """,
         "CREATE INDEX IF NOT EXISTS main.idx_production_service_orders_unit_sector ON production_service_orders(unit_code, sector_key)",
+        # A base de O.S. é única: a conferência busca por setor e o nome por operação, sem unidade.
+        "CREATE INDEX IF NOT EXISTS main.idx_production_service_orders_sector ON production_service_orders(sector_key)",
+        "CREATE INDEX IF NOT EXISTS main.idx_production_service_orders_operation ON production_service_orders(operation_key)",
         """
         CREATE TABLE IF NOT EXISTS main.production_sql_queries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -563,6 +566,8 @@ def _create_production_tables(conn):
         """,
         "CREATE INDEX IF NOT EXISTS main.idx_production_front_units_unit ON production_service_front_units(unit_code, service_front_id)",
         "CREATE INDEX IF NOT EXISTS main.idx_production_user_items_owner_unit ON production_user_items(owner_user_id, unit_code, is_active, position, id)",
+        # Lista da unidade (todas as frentes) e lançamentos ativos de uma frente.
+        "CREATE INDEX IF NOT EXISTS main.idx_production_user_items_unit_front ON production_user_items(unit_code, service_front_id, is_active)",
         "CREATE INDEX IF NOT EXISTS main.idx_production_daily_unit_date ON production_daily_entries(unit_code, work_date)",
         "CREATE INDEX IF NOT EXISTS main.idx_production_daily_owner_date ON production_daily_entries(owner_user_id, work_date)",
         # Último lançamento por item (lista, edição, preservação de campos e exclusão).

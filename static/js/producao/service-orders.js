@@ -96,7 +96,8 @@ async function loadServiceOrders({ force = false } = {}) {
     return;
   }
   try {
-    const params = new URLSearchParams({ unit });
+    // Só o resumo: a tabela e o "Ver" não usam as linhas do arquivo de cada O.S.
+    const params = new URLSearchParams({ unit, summary: '1' });
     if (search) params.set('search', search);
     serviceOrdersData = await apiRequest(`/api/production/service-orders?${params}`);
     serviceOrdersPage = 1;

@@ -319,9 +319,6 @@ def handle(req):
                     list_production_my_items(user["id"], req.param("unit", ""), req.param("date", ""),
                                              scope=req.param("scope", "mine")),
                 )
-            if method == "POST":
-                item = save_production_my_item(user["id"], req.body())
-                return req.json(HTTPStatus.CREATED, {"ok": True, "item": item})
             return None
 
         response = req.guarded(my_items)
