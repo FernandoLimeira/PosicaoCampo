@@ -79,6 +79,38 @@ class ServiceOrderTests(unittest.TestCase):
         order = service_orders.list_service_orders(self.admin["id"], "PPT")["orders"][0]
         self.assertEqual((order["operation_name"], order["plots"]), ("TRATOS", ["1", "2"]))
 
+    def test_upgrade_recovers_operation_description_and_discards_legacy_cost_center_names(self):
+        admin = self.admin["id"]
+        parsed = parse_service_order_file(xlsx([
+            ["NO_OS", "SETOR", "OPERACAO", "CCUSTO", "CCUSTO_TRATOS", "DESCRICAO_OPERACAO"],
+            ["1", "3001", "457", "305116", "PLANTIO MEIOSI", ""],
+            ["2", "3002", "457", "305116", "PLANTIO MEIOSI", "TRATOS PLANTIO"],
+            ["3", "3003", "458", "305116", "PLANTIO MEIOSI", ""],
+            ["4", "3004", "459", "305116", "PLANTIO MEIOSI", ""],
+        ]), "ordens.xlsx")
+        service_orders.import_service_orders(admin, "PPT", parsed["records"])
+        with storage.connection() as conn:
+            conn.execute("DELETE FROM schema_info WHERE key='production_service_order_description_sources_v1'")
+            conn.execute("UPDATE production_service_orders SET operation_name='Plantio Meiosi'")
+            conn.execute("UPDATE production_operations SET name='Plantio Meiosi' WHERE code_key IN ('457', '458')")
+            conn.execute("UPDATE production_operations SET name='Operação do cadastro' WHERE code_key='459'")
+        db.init_db()
+        db.init_db()
+
+        orders = {order["number"]: order for order in service_orders.list_service_orders(admin, "PPT")["orders"]}
+        self.assertEqual([orders[key]["operation_name"] for key in ("1", "2", "3", "4")],
+                         ["", "TRATOS PLANTIO", "", ""])
+        self.assertEqual(orders["1"]["cost_center"], "305116")
+        self.assertEqual(orders["1"]["rows"][0]["CCUSTO_TRATOS"], "PLANTIO MEIOSI")
+        names = {item["code"]: item["name"] for item in service_orders.list_operations(admin)["operations"]}
+        self.assertEqual([names[key] for key in ("457", "458", "459")], ["TRATOS PLANTIO", "", "Operação do cadastro"])
+
+        production.save_my_item(admin, {"unit_code": "PPT", "service_front_id": self.front["id"],
+            "work_date": "2026-11-10", "sector": "3001", "status": self.status, "operation": "457"})
+        item = production.list_my_items(admin, "PPT", "2026-11-10")["items"][0]
+        self.assertEqual(item["service_order"]["operation_names"], {"457": "TRATOS PLANTIO"})
+        self.assertEqual(item["service_order"]["status"], "ok")
+
     def test_rain_overview_averages_the_four_units(self):
         production.save_daily_summary(self.admin["id"], {"unit_code": "PPT", "work_date": "2026-11-10",
                                                          "rain_turn_mm": "2", "rain_accumulated_mm": "10"})
@@ -194,7 +226,7 @@ class ServiceOrderTests(unittest.TestCase):
         self.assertEqual(second["operation_name"], "ARACAO S/ INSUMO")
         # Cadastro preenchido por versões antigas com o centro de custo: a importação troca
         # pela descrição da operação; nome digitado no cadastro continua.
-        service_orders.save_operation(self.admin["id"], {"code": "342", "name": "TRATOS SOQUEIRA"})
+        service_orders.save_operation(self.admin["id"], {"code": "342", "name": "Tratos Soqueira"})
         service_orders.save_operation(self.admin["id"], {"code": "348", "name": "ARAÇÃO (CADASTRO)"})
         service_orders.import_service_orders(self.admin["id"], "PST", parsed["records"])
         names = {item["code"]: item["name"] for item in service_orders.list_operations(self.admin["id"])["operations"]}

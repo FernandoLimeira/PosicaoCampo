@@ -100,8 +100,9 @@ def import_service_orders(user_id: int, unit_code: Any, records: list[dict[str, 
             for item in (record.get("rows") or [])[:2000] if isinstance(item, dict)
         ]
         key = (number.casefold(), sector_key(sector), sector_key(section), operation_key(operation))
-        if _text(record.get("cost_center_name"), 160):
-            cost_center_names.setdefault(operation_key(operation), set()).add(_text(record.get("cost_center_name"), 160))
+        cost_center_name = normalize_label(_text(record.get("cost_center_name"), 160))
+        if cost_center_name:
+            cost_center_names.setdefault(operation_key(operation), set()).add(cost_center_name)
         rows[key] = (
             unit, number, sector, sector_key(sector), section, operation, operation_key(operation),
             _text(record.get("operation_name"), 160), _text(record.get("cost_center"), 60),
@@ -118,11 +119,9 @@ def import_service_orders(user_id: int, unit_code: Any, records: list[dict[str, 
         # Operações novas do arquivo entram no cadastro com a descrição da operação
         # (DESCRICAO_OPERACAO), nunca com a do centro de custo.
         for key, names in cost_center_names.items():
-            conn.execute(
-                f"""UPDATE production_operations SET name='', updated_at=?
-                    WHERE code_key=? AND name IN ({','.join('?' * len(names))})""",
-                (now, key, *sorted(names)),
-            )
+            existing = conn.execute("SELECT name FROM production_operations WHERE code_key=?", (key,)).fetchone()
+            if existing and normalize_label(existing["name"]) in names:
+                conn.execute("UPDATE production_operations SET name='', updated_at=? WHERE code_key=?", (now, key))
         for row in rows.values():
             code, key, name = row[5], row[6], row[7]
             conn.execute(

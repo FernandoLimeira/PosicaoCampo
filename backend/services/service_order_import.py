@@ -4,9 +4,8 @@ Modelo do arquivo (uma linha por talhão; a ordem das colunas não importa):
 ``SECAO | SETOR | TALHAO | NO_OS | OPERACAO | DESCRICAO_OPERACAO | CCUSTO | CCUSTO_TRATOS | DT_ABERTURA_OS``
 
 ``OPERACAO`` é o código da operação (ex.: 342) e ``DESCRICAO_OPERACAO`` o nome dela
-(ex.: FERT ASPERSAO 1 LAMINA). ``CCUSTO_TRATOS`` é a descrição do centro de custo
-(ex.: TRATOS SOQUEIRA) e só vira o nome da operação em arquivos antigos, sem
-``DESCRICAO_OPERACAO``. A coluna ``CHAVE`` é opcional. As linhas da mesma O.S.
+(ex.: FERT ASPERSAO 1 LAMINA). ``CCUSTO_TRATOS`` guarda a descrição do centro de custo
+(ex.: TRATOS SOQUEIRA). A coluna ``CHAVE`` é opcional. As linhas da mesma O.S.
 (NO_OS + SETOR + SECAO + OPERACAO) viram uma única O.S. com a lista de talhões. Todas as colunas do
 arquivo são mantidas linha a linha (``rows``) para o detalhe da O.S.; linhas
 vazias são ignoradas.
@@ -46,11 +45,33 @@ HEADER_ALIASES = {
     "operation_name": {"descricao operacao", "descricao da operacao", "nome operacao", "nome da operacao"},
     # Descrição do centro de custo (CCUSTO_TRATOS): nunca é o nome da operação. Serve só para
     # limpar do cadastro os nomes que versões antigas preencheram com ela.
-    "cost_center_name": {"ccusto tratos"},
+    "cost_center_name": {"ccusto tratos", "descricao centro custo", "descricao centro de custo",
+                         "descricao do centro de custo", "nome centro de custo", "nome do centro de custo"},
     "opened_on": {"dt abertura os", "data abertura os", "data abertura", "dt abertura"},
 }
 REQUIRED_FIELDS = ("number", "sector", "operation")
 FIELD_LABELS = {"number": "NO_OS", "sector": "SETOR", "operation": "OPERACAO"}
+
+
+def service_order_name_sources(rows: object) -> tuple[str, set[str]]:
+    """Separa a descrição de operação e os centros de custo nos detalhes já importados."""
+    name = ""
+    centers: set[str] = set()
+    if not isinstance(rows, list):
+        return name, centers
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for label, value in row.items():
+            value = str(value or "").strip()[:160]
+            if not value:
+                continue
+            header = normalize_label(label)
+            if not name and header in HEADER_ALIASES["operation_name"]:
+                name = value
+            elif header in HEADER_ALIASES["cost_center_name"]:
+                centers.add(normalize_label(value))
+    return name, centers
 
 
 def _find_header(rows):

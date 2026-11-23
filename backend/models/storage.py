@@ -4,6 +4,7 @@ O banco legado é lido, nunca atualizado ou removido. Os dois bancos novos
 usam journal DELETE: transações de arquivos anexados não são atômicas em WAL.
 """
 
+import json
 import sqlite3
 import threading
 import uuid
@@ -656,6 +657,7 @@ def _upgrade_operational_schema(conn):
     for column in ("operation_name", "cost_center", "plots"):
         if column not in order_columns:
             conn.execute(f"ALTER TABLE main.production_service_orders ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+    _repair_legacy_service_order_names(conn)
     _upgrade_front_default_operations(conn)
     columns = {row[1]: row for row in conn.execute("PRAGMA main.table_info(return_analysis_soil_wet)")}
     sector_column = columns.get("sector")
@@ -692,6 +694,45 @@ def _upgrade_operational_schema(conn):
     conn.execute(
         "INSERT OR REPLACE INTO main.schema_info(key,value) VALUES ('return_soil_wet_schema_version','2')"
     )
+
+
+def _repair_legacy_service_order_names(conn):
+    from ..services.front_identifiers import normalize_label
+    from ..services.service_order_import import service_order_name_sources
+
+    upgrade = "production_service_order_description_sources_v1"
+    if conn.execute("SELECT 1 FROM main.schema_info WHERE key=?", (upgrade,)).fetchone():
+        return
+    centers_by_code = {}
+    names_by_code = {}
+    for order_id, code, current_name, raw_details in conn.execute(
+        "SELECT id,operation_key,operation_name,details_json FROM main.production_service_orders"
+    ):
+        try:
+            details = json.loads(raw_details or "{}")
+        except ValueError:
+            continue
+        if not isinstance(details, dict):
+            continue
+        name, centers = service_order_name_sources(details.get("rows"))
+        if centers:
+            centers_by_code.setdefault(code, set()).update(centers)
+        if name:
+            names_by_code.setdefault(code, {}).setdefault(normalize_label(name), name)
+        corrected = name or ("" if normalize_label(current_name) in centers else current_name)
+        if corrected != current_name:
+            conn.execute("UPDATE main.production_service_orders SET operation_name=? WHERE id=?", (corrected, order_id))
+
+    for operation_id, code, current_name in conn.execute("SELECT id,code_key,name FROM main.production_operations WHERE name<>''"):
+        normalized = normalize_label(current_name)
+        if normalized not in centers_by_code.get(code, ()):
+            continue
+        names = names_by_code.get(code, {})
+        if normalized in names:
+            continue
+        corrected = next(iter(names.values())) if len(names) == 1 else ""
+        conn.execute("UPDATE main.production_operations SET name=? WHERE id=?", (corrected, operation_id))
+    conn.execute("INSERT INTO main.schema_info(key,value) VALUES (?, '1')", (upgrade,))
 
 
 def _upgrade_user_profile(conn):
