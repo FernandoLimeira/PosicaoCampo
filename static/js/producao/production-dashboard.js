@@ -204,8 +204,9 @@ function dashboardSortTiles(items) {
 
 const DASHBOARD_NOTE_FIELDS = { observation: ['Observação', 'Adicionar observação'], changes: ['Previsão de mudança', 'Adicionar previsão'] };
 
-function dashboardSectorNotes(item, editable) {
-  const fields = Object.entries(DASHBOARD_NOTE_FIELDS).map(([field, [label, addLabel]]) => {
+function dashboardSectorNotes(item, editable, fields = Object.keys(DASHBOARD_NOTE_FIELDS)) {
+  const notes = fields.map(field => {
+    const [label, addLabel] = DASHBOARD_NOTE_FIELDS[field];
     const value = String(item.entry[field] || '').trim();
     if (!editable && !value) return '';
     const text = escapeHtml(value || addLabel);
@@ -214,7 +215,7 @@ function dashboardSectorNotes(item, editable) {
       ? `<button type="button" class="pdash-note${value ? '' : ' is-empty'}" data-panel-note="${field}" data-item-id="${item.id}" title="${action}">${text}</button>`
       : `<span class="pdash-note">${text}</span>`}</dd></div>`;
   }).join('');
-  return fields ? `<dl class="pdash-sector-notes">${fields}</dl>` : '';
+  return notes ? `<dl class="pdash-sector-notes">${notes}</dl>` : '';
 }
 
 function dashboardSectorRow(item) {
@@ -248,6 +249,7 @@ function dashboardSectorRow(item) {
       ${updated ? `<small>${escapeHtml(updated)}</small>` : ''}${section}
       <button type="button" class="pdash-sector-detail" data-panel-detail="${item.id}" aria-label="Ver detalhes · ${escapeHtml(place)}">Ver detalhes</button>
     </div>
+    ${item.entry ? dashboardSectorNotes(item, false, ['observation']) : ''}
   </section>`;
 }
 

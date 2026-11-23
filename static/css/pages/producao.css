@@ -914,9 +914,9 @@
 
 /* Cartão da frente: nome inteiro numa linha; cada operação com código e nome. */
 .pdash-tile-ops { display: grid; gap: 5px; margin-top: 2px; padding-top: 8px; border-top: 1px dashed #e3e8eb; }
-.pdash-tile-op { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.pdash-tile-op .pdash-op { flex: 0 0 auto; }
-.pdash-tile-op-name { min-width: 0; overflow: hidden; color: #303c42; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.pdash-tile-op { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.pdash-tile-op .pdash-op { flex: 0 0 auto; max-width: 45%; overflow-wrap: anywhere; }
+.pdash-tile-op-name { min-width: 0; color: #303c42; font-size: 12px; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
 
 /* Popup "Detalhe da frente" (repaginado). */
 #production-front-detail-modal .production-order-modal { width: min(680px, 100%) !important; }
@@ -1070,6 +1070,7 @@ button.pdash-kpi.is-amber.is-active { box-shadow: 0 0 0 3px rgba(213, 163, 38, .
 .pdash-front-card-header { display: grid; gap: 5px; padding-bottom: 4px; }
 .pdash-sector-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; padding-top: 10px; border-top: 1px solid var(--data-border); }
 .pdash-sector-row .pdash-place { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.pdash-sector-row .pdash-status { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .pdash-sector-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; color: var(--muted); }
 .pdash-sector-detail { min-height: 30px; padding: 0; border: 0; background: transparent; color: var(--control-text); font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; }
 .pdash-sector-detail:hover { text-decoration: underline; }
@@ -1077,6 +1078,7 @@ button.pdash-kpi.is-amber.is-active { box-shadow: 0 0 0 3px rgba(213, 163, 38, .
 .pdash-sector-notes > div { display: grid; min-width: 0; gap: 4px; }
 .pdash-sector-notes dt { color: var(--muted); font-size: 11px; font-weight: 800; }
 .pdash-sector-notes dd { min-width: 0; margin: 0; }
+.pdash-sector-row .pdash-sector-notes { margin-top: 2px; padding-top: 8px; }
 .pdash-note { display: block; max-width: 100%; color: var(--text); font: inherit; font-size: 13px; line-height: 1.4; text-align: start; white-space: pre-wrap; overflow-wrap: anywhere; }
 button.pdash-note { padding: 2px 0; border: 0; background: transparent; color: var(--control-text); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .pdash-note.is-empty { font-weight: 700; }
