@@ -193,9 +193,31 @@ assert.ok(frontCard);
 assert.match(frontCard, /aria-label="Setor 4 · IZAURA".*aria-label="Setor 6 · IZAURA".*class="pdash-status is-wet"/s);
 const sectorsWithNotes = frontCard.match(/<section class="pdash-sector-row".*?<\/section>/gs);
 assert.equal(sectorsWithNotes.length, 2);
-assert.match(sectorsWithNotes[0], /Setor 4 · IZAURA.*Ver detalhes<\/button>.*<dt>Observação<\/dt>.*&lt;teste>/s);
-assert.match(sectorsWithNotes[1], /Setor 6 · IZAURA.*Ver detalhes<\/button>.*<dt>Observação<\/dt>.*Observação anterior/s);
+assert.match(sectorsWithNotes[0], /Setor 4 · IZAURA.*<dt>Observação<\/dt>.*&lt;teste>/s);
+assert.match(sectorsWithNotes[1], /Setor 6 · IZAURA.*<dt>Observação<\/dt>.*Observação anterior/s);
 assert.doesNotMatch(frontCard, /data-panel-note|Mudança anterior/);
+// Um "Ver detalhes" por frente (no rodapé do cartão), não um por setor.
+assert.equal(frontCard.match(/data-panel-detail=/g).length, 1);
+assert.match(frontCard, /Ver detalhes dos 2 setores<\/button>/);
+// Detalhe consolidado: operações agrupadas pela operação (uma linha por setor), outras O.S.
+// dos setores e a aba Setores com as anotações e o "Remover setor" de cada um.
+vm.runInContext(`productionItems[1].entry.operation = '101, 205';
+  productionItems[1].service_order = { status: 'missing', missing_operations: ['101', '205'], orders: [
+    { number: '6001', sector: '6', operation: '310', operation_name: 'Herbicida', section: '', plots: ['9'], matches: false }] };`, context);
+context.openDashboardFrontDetail(2);
+const consolidated = element('#production-front-detail-body').innerHTML;
+assert.match(consolidated, /2 setores/);
+assert.match(consolidated, /101<\/span>\s*<span class="pfd-op-name">Gradagem<\/span>\s*<span class="pfd-op-badge is-order-missing">1\/2 setores com O\.S\./);
+assert.match(consolidated, /<b>Setor 4<\/b>O\.S\. 5001.*<b>Setor 6<\/b>Sem O\.S\./s);
+assert.match(consolidated, /205<\/span>\s*<span class="pfd-op-name">Operação sem nome no cadastro/);
+// Setor 4 já tem a O.S. 5002 (Calagem) e o setor 6 a 6001 (Herbicida): 2 outras O.S.
+assert.match(consolidated, /data-pfd-tab="others">Outras O\.S\. nos setores <small>2<\/small>/);
+assert.match(consolidated, /<b>Setor 4<\/b>O\.S\. 5002/);
+assert.match(consolidated, /<b>Setor 6<\/b>O\.S\. 6001 · Talhão 9/);
+assert.match(consolidated, /data-panel-remove="1"[^>]*>Remover setor.*data-panel-remove="2"[^>]*>Remover setor/s);
+assert.match(consolidated, /data-panel-note="changes" data-item-id="2"/);
+assert.match(consolidated, /data-panel-edit="\d+"[^>]*>Editar frente/);
+vm.runInContext(`productionItems[1].entry.operation = ''; delete productionItems[1].service_order;`, context);
 assert.doesNotMatch(cards.innerHTML, /data-panel-front-card="9"/);
 const addProductionSector = context.addProductionSector;
 const editCompanions = [];

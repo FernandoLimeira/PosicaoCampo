@@ -1117,3 +1117,16 @@ button.pdash-note { padding: 2px 0; border: 0; background: transparent; color: v
 .pfd-tab.is-active { border-bottom-color: #2f8f5b; color: #1f262a; }
 .pfd-tab small { padding: 1px 7px; border-radius: 999px; background: #eef3f1; color: #4d5a61; font-size: 11px; }
 .pfd-section[hidden] { display: none; }
+
+/* Detalhe consolidado (frente com vários setores): bloco por setor e rodapé do cartão. */
+.pfd-op-line.is-order-missing { color: #a52d36; }
+.pfd-sector { display: grid; gap: 6px; padding: 10px 14px; border: 1px solid var(--data-border); border-left: 4px solid #b9c1c5; border-radius: 8px; background: #fff; }
+.pfd-sector.is-active { border-left-color: var(--status-ok); }
+.pfd-sector.is-wet { border-left-color: #d5a326; }
+.pfd-sector.is-stopped { border-left-color: #e8731a; }
+.pfd-sector header { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pfd-sector header strong { color: #1f262a; font-size: 14px; font-weight: 800; }
+.pfd-sector-actions { display: flex; justify-content: flex-end; }
+.pfd-sector-actions .modal-button { min-height: 32px; padding: 0 12px; font-size: 12px; }
+.pfd-actions-note { color: #7a8489; font-size: 12px; }
+.pdash-front-card-footer { display: flex; justify-content: flex-end; padding-top: 6px; border-top: 1px solid var(--data-border); }

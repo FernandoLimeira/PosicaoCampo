@@ -86,13 +86,169 @@ function dashboardOperationInfo(item, code) {
   return { tone, orders, plots, label, name: productionOperationName(item, code) };
 }
 
+// Setores lançados juntos na mesma frente (o mesmo cartão do painel).
+function dashboardCardKey(item) {
+  return item.sector_group_id ? `${item.service_front_id}:${item.sector_group_id}` : item.id;
+}
+
+function dashboardFrontSectors(item) {
+  const key = dashboardCardKey(item);
+  return dashboardItems().filter(other => dashboardCardKey(other) === key)
+    .sort((a, b) => compareFrontLabels(a.entry?.sector || '', b.entry?.sector || '')
+      || compareFrontLabels(a.entry?.section || '', b.entry?.section || ''));
+}
+
+function dashboardPlotsText(plots) {
+  return plots.length ? `${plots.length === 1 ? 'Talhão' : 'Talhões'} ${plots.join(', ')}` : '';
+}
+
+// Detalhe consolidado de uma frente com vários setores: as operações agrupadas pela
+// operação (uma linha por setor), as outras O.S. dos setores e um bloco por setor.
+function dashboardConsolidatedDetailHtml(sectors, editable) {
+  const front = dashboardFrontStatus(sectors);
+  const meta = statusMeta(front.entry?.status);
+  const sectionUnit = productionUnitUsesSection(currentProductionUnit());
+  const place = item => {
+    const entry = item.entry || {};
+    return `Setor ${entry.sector || '-'}${sectionUnit && entry.section ? ` / Seção ${entry.section}` : ''}`;
+  };
+  // Operações: código -> setores em que foi lançada.
+  const operations = new Map();
+  let checked = 0;
+  let withOrder = 0;
+  for (const item of sectors) {
+    for (const code of splitProductionOperations(item.entry?.operation)) {
+      const key = productionOperationKey(code);
+      if (!operations.has(key)) operations.set(key, { code, name: '', rows: [] });
+      const group = operations.get(key);
+      const info = dashboardOperationInfo(item, code);
+      group.name ||= info.name;
+      group.rows.push({ item, info });
+      if (info.tone) checked += 1;
+      if (info.tone === 'is-order-ok') withOrder += 1;
+    }
+  }
+  const operationsHtml = [...operations.values()]
+    .sort((a, b) => compareFrontLabels(a.code, b.code))
+    .map(group => {
+      const ok = group.rows.filter(row => row.info.tone === 'is-order-ok').length;
+      const tone = group.rows.some(row => row.info.tone) ? (ok === group.rows.length ? 'is-order-ok' : 'is-order-missing') : '';
+      const lines = group.rows.map(({ item, info }) => {
+        const opened = [...new Set(info.orders.map(order => order.opened_on).filter(Boolean).map(date => serviceOrderDate(date)))];
+        const details = [info.label, dashboardPlotsText(info.plots), opened.length ? `Abertura ${opened.join(', ')}` : '']
+          .filter(Boolean).join(' · ');
+        return `<p class="pfd-op-line ${info.tone}"><b>${escapeHtml(place(item))}</b>${escapeHtml(details)}</p>`;
+      }).join('');
+      return `<article class="pfd-op ${tone}">
+        <header>
+          <span class="pfd-op-code">${escapeHtml(group.code)}</span>
+          <span class="pfd-op-name">${escapeHtml(group.name || 'Operação sem nome no cadastro')}</span>
+          <span class="pfd-op-badge ${tone}">${ok}/${group.rows.length} ${group.rows.length === 1 ? 'setor' : 'setores'} com O.S.</span>
+        </header>
+        ${lines}
+      </article>`;
+    }).join('');
+
+  // Outras O.S. abertas nos setores (que não conferem com o lançado), agrupadas pela operação.
+  const others = new Map();
+  for (const item of sectors) {
+    for (const order of (item.service_order?.orders || []).filter(order => !order.matches)) {
+      const key = productionOperationKey(order.operation);
+      if (!others.has(key)) others.set(key, { code: order.operation || '-', name: order.operation_name || '', rows: [] });
+      const group = others.get(key);
+      group.name ||= order.operation_name || '';
+      group.rows.push({ item, order });
+    }
+  }
+  const otherCount = [...others.values()].reduce((sum, group) => sum + group.rows.length, 0);
+  const othersHtml = [...others.values()]
+    .sort((a, b) => compareFrontLabels(a.code, b.code))
+    .map(group => `<article class="pfd-op is-other">
+        <header>
+          <span class="pfd-op-code">${escapeHtml(group.code)}</span>
+          <span class="pfd-op-name">${escapeHtml(group.name || 'Operação sem nome no cadastro')}</span>
+          <span class="pfd-op-badge">${group.rows.length} O.S.</span>
+        </header>
+        ${group.rows.map(({ item, order }) => {
+          const details = [`O.S. ${order.number}`, dashboardPlotsText(order.plots || []),
+            sectionUnit && order.section ? `Seção ${order.section}` : '',
+            order.opened_on ? `Abertura ${serviceOrderDate(order.opened_on)}` : ''].filter(Boolean).join(' · ');
+          return `<p class="pfd-op-line"><b>${escapeHtml(place(item))}</b>${escapeHtml(details)}</p>`;
+        }).join('')}
+      </article>`).join('');
+
+  // Um bloco por setor: situação, fazenda, atualização, operações e anotações.
+  const sectorsHtml = sectors.map(item => {
+    const entry = item.entry || {};
+    const sectorMeta = statusMeta(entry.status);
+    const codes = splitProductionOperations(entry.operation);
+    const updated = dashboardUpdateText(item);
+    return `<article class="pfd-sector ${sectorMeta.className}">
+        <header>
+          <strong>${escapeHtml(place(item))}</strong>
+          <span class="pdash-status ${sectorMeta.className}">${escapeHtml(sectorMeta.name)}</span>
+          ${item.is_current_day ? '' : `<span class="pdash-stale">${dashboardIcon('clock')}Não atualizado hoje</span>`}
+        </header>
+        <p class="pfd-op-line"><b>Fazenda</b>${escapeHtml(entry.farm || '-')}</p>
+        <p class="pfd-op-line"><b>Operações</b>${escapeHtml(codes.join(', ') || 'Sem operação')}</p>
+        ${updated ? `<p class="pfd-op-line"><b>Atualização</b>${escapeHtml(updated.replace(/^Atualização /, ''))}</p>` : ''}
+        ${item.entry ? dashboardSectorNotes(item, editable) : ''}
+        ${editable ? `<div class="pfd-sector-actions"><button class="modal-button danger" type="button" data-panel-remove="${item.id}">Remover setor</button></div>` : ''}
+      </article>`;
+  }).join('');
+
+  const stale = sectors.filter(item => !item.is_current_day).length;
+  const check = checked
+    ? `<span class="pfd-hero-check ${withOrder === checked ? 'is-order-ok' : 'is-order-missing'}">${withOrder}/${checked} operações com O.S.</span>`
+    : '<span class="pfd-hero-check">Sem operação informada</span>';
+  const tab = (key, label, count, active = false) => `<button type="button" role="tab" class="pfd-tab${active ? ' is-active' : ''}"
+      aria-selected="${active}" data-pfd-tab="${key}">${label}${count ? ` <small>${count}</small>` : ''}</button>`;
+  return `<div class="pfd-hero ${meta.className}">
+      <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
+      <span class="pfd-hero-check">${sectors.length} setores</span>
+      ${check}
+      ${stale ? `<span class="pdash-stale">${dashboardIcon('clock')}${stale === 1 ? '1 setor não atualizado hoje' : `${stale} setores não atualizados hoje`}</span>` : ''}
+    </div>
+    <dl class="pfd-info">
+      <div><dt>Setores</dt><dd>${escapeHtml(sectors.map(item => item.entry?.sector || '-').join(', '))}</dd></div>
+      <div><dt>Equipe do turno</dt><dd>${escapeHtml(productionResponsibleName(front))}</dd></div>
+    </dl>
+    <div class="pfd-tabs" role="tablist" aria-label="Detalhe da frente">
+      ${tab('operations', 'Operações', operations.size, true)}
+      ${tab('others', 'Outras O.S. nos setores', otherCount)}
+      ${tab('sectors', 'Setores', sectors.length)}
+    </div>
+    <section class="pfd-section" data-pfd-panel="operations">
+      ${operationsHtml || '<p class="production-empty">Nenhuma operação informada nos setores desta frente.</p>'}
+    </section>
+    <section class="pfd-section" data-pfd-panel="others" hidden>
+      ${othersHtml || '<p class="production-empty">Nenhuma outra O.S. aberta nos setores desta frente.</p>'}
+    </section>
+    <section class="pfd-section" data-pfd-panel="sectors" hidden>${sectorsHtml}</section>
+    ${editable ? `<div class="pdash-detail-actions">
+      <span class="pfd-actions-note">Remover um setor fica na aba Setores.</span>
+      <button class="modal-button save" type="button" data-panel-edit="${front.id}">Editar frente</button>
+    </div>` : ''}`;
+}
+
 // Popup "Detalhe da frente": situação, dados do local e cada operação com a O.S. e os talhões.
+// Frente com vários setores lançados juntos: um detalhe só, consolidado.
 function openDashboardFrontDetail(itemId) {
   const item = findProductionItem(itemId);
   const body = document.querySelector('#production-front-detail-body');
   if (!item || !body) return;
   const entry = item.entry || {};
   const editable = canFillProduction();
+  const sectors = dashboardFrontSectors(item);
+  if (sectors.length > 1) {
+    const title = document.querySelector('#production-front-detail-title');
+    if (title) title.textContent = item.service_name || 'Frente';
+    const context = document.querySelector('#production-front-detail-context');
+    if (context) context.textContent = productionUnitLabel(currentProductionUnit());
+    body.innerHTML = dashboardConsolidatedDetailHtml(sectors, editable);
+    openModal('production-front-detail-modal');
+    return;
+  }
   const meta = statusMeta(entry.status);
   const codes = splitProductionOperations(entry.operation);
   const title = document.querySelector('#production-front-detail-title');
@@ -247,7 +403,6 @@ function dashboardSectorRow(item) {
     <div class="pdash-tile-ops">${operations}</div>
     <div class="pdash-sector-footer">
       ${updated ? `<small>${escapeHtml(updated)}</small>` : ''}${section}
-      <button type="button" class="pdash-sector-detail" data-panel-detail="${item.id}" aria-label="Ver detalhes · ${escapeHtml(place)}">Ver detalhes</button>
     </div>
     ${item.entry ? dashboardSectorNotes(item, false, ['observation']) : ''}
   </section>`;
@@ -267,6 +422,10 @@ function dashboardFrontTile(sectors, shift) {
       <div class="pdash-tile-who">${escapeHtml(productionResponsibleName(front, shift))}</div>
     </header>
     ${ordered.map(dashboardSectorRow).join('')}
+    <footer class="pdash-front-card-footer">
+      <button type="button" class="pdash-sector-detail" data-panel-detail="${ordered[0].id}"
+        aria-label="Ver detalhes · ${escapeHtml(front.service_name || 'frente')}">Ver detalhes${ordered.length > 1 ? ` dos ${ordered.length} setores` : ''}</button>
+    </footer>
   </article>`;
 }
 
@@ -380,8 +539,7 @@ function renderProductionDashboard() {
   renderDashboardGroupSelector(allItems);
   const items = dashboardPanelFilter.group
     ? allItems.filter(item => String(item.group_id) === dashboardPanelFilter.group) : allItems;
-  const blocks = dashboardFrontGroups(dashboardSortTiles(items), item => item.sector_group_id
-    ? `${item.service_front_id}:${item.sector_group_id}` : item.id);
+  const blocks = dashboardFrontGroups(dashboardSortTiles(items), dashboardCardKey);
   const total = blocks.length;
   if (!total) {
     cards.innerHTML = '<p class="production-empty">Nenhuma frente lançada nesta unidade.</p>';

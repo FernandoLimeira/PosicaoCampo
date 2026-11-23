@@ -297,5 +297,11 @@ button.pdash-kpi.is-active { color: #e0e0e0; }
 .pfd-tab:hover { color: #e0e0e0; }
 .pfd-tab.is-active { border-bottom-color: #35a167; color: #e0e0e0; }
 .pfd-tab small { background: #232323; color: #adadad; }
+.pfd-op-line.is-order-missing { color: #d4626b; }
+.pfd-sector { border-left: 4px solid #4f4f4f; background: #2a2a2a; }
+.pfd-sector.is-wet { border-left-color: #c39b38; }
+.pfd-sector.is-stopped { border-left-color: #c6783c; }
+.pfd-sector header strong { color: #e0e0e0; }
+.pfd-actions-note { color: #999999; }
 .production-primary-button.pdash-action { background: linear-gradient(135deg, #3f6f7a 0%, #1b3a41 100%); }
 .production-primary-button.pdash-action:hover:not(:disabled) { background: linear-gradient(135deg, #4a7c87 0%, #22474e 100%); }
