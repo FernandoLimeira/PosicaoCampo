@@ -131,9 +131,12 @@ def handle(req):
             if position_requested:
                 weighing = result["units"][0]
                 code, cutoff = weighing["code"], weighing["position_until"]
-                result["position"] = unit_position_before(code, cutoff)
                 result["period"] = shift_at(cutoff - 1)
-                result["note_summaries"] = front_notes_summary(code, user, before=cutoff)
+                # Dia sem pesagem no arquivo importado: a tela fica vazia, sem puxar a
+                # posição do Preencher (nem observações) de outro dia.
+                has_weighing = weighing["closed_until"] is not None
+                result["position"] = unit_position_before(code, cutoff) if has_weighing else None
+                result["note_summaries"] = front_notes_summary(code, user, before=cutoff) if has_weighing else {}
             return req.json(HTTPStatus.OK, result)
 
         return req.guarded(summary)

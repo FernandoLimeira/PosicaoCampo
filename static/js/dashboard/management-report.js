@@ -1,5 +1,4 @@
 // Visão geral da unidade selecionada, com os indicadores do fechamento.
-// O Excel gerencial continua disponível no botão Exportar Excel.
 let managementReportDate = '';
 let managementReportTime = '';
 let managementClosing = null;
@@ -114,7 +113,10 @@ function managementReportHtml(view) {
   const source = view.error ? 'Fechamento indisponível.'
     : !view.ready ? 'Carregando fechamento…'
     : until ? `Balança até ${escapeHtml(until)}${timeZone === 'America/Sao_Paulo' ? '' : ' (MS)'}${loadCount}`
+    : view.historical ? 'Sem pesagem neste dia no arquivo importado.'
     : view.unit ? 'Sem pesagem no fechamento. Indicadores do Preencher.' : 'Sem pesagem ou posição no fechamento.';
+  // Dia escolhido sem pesagem: fica vazio, sem indicadores de outros dias.
+  const showKpis = view.ready && !(view.historical && !until);
   return `<section class="dashboard-block management-report" aria-labelledby="management-report-title">
     <header class="mr-header">
       <div><h2 id="management-report-title">Visão geral · ${escapeHtml(unit.code)}</h2><p>${source}</p></div>
@@ -124,33 +126,13 @@ function managementReportHtml(view) {
           <input id="management-report-time" type="time" value="${escapeHtml(managementReportTime)}" /></label>
       </div>
     </header>
-    ${view.ready ? `<div class="mr-kpis">${kpis}</div>` : ''}
+    ${showKpis ? `<div class="mr-kpis">${kpis}</div>` : ''}
   </section>`;
 }
 
 function renderManagementReport(view) {
   const overview = document.querySelector('#field-overview');
   if (overview) overview.innerHTML = managementReportHtml(view);
-}
-
-async function exportManagementReport(button) {
-  button.disabled = true;
-  try {
-    const query = managementReportQuery();
-    if (managementReportHistorical()) query.set('position', '1');
-    const response = await fetch(`/api/weighings/report.xlsx?${query}`, { credentials: 'same-origin' });
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || 'Não foi possível gerar o Excel.');
-    }
-    const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || 'Relatorio-gerencial.xlsx';
-    downloadBlobFile(await response.blob(), name);
-  } catch (error) {
-    console.error(error);
-    showToast(error.message || 'Não foi possível gerar o Excel.', true);
-  } finally {
-    button.disabled = false;
-  }
 }
 
 function setupManagementReportEvents() {
@@ -166,9 +148,5 @@ function setupManagementReportEvents() {
       console.error(error);
       showToast(error.message || 'Não foi possível carregar o fechamento.', true);
     }
-  });
-  document.addEventListener('click', event => {
-    const exportButton = event.target.closest?.('#management-report-export');
-    if (exportButton) exportManagementReport(exportButton);
   });
 }
