@@ -153,7 +153,24 @@ function statusOptionsHtml(selectedStatus, detailed = false) {
   `).join('');
 }
 
+// ATR das frentes calculado pela balança (pesagem importada) para a unidade aberta no
+// Preencher: chave canônica da frente -> ATR formatado ("135,15").
+let editorFrontAtr = new Map();
+
+function editorFrontAtrValues(unit) {
+  const weighing = fieldUnitIndicators(unit, weighingSummary);
+  return new Map((weighing.fronts || [])
+    .filter(front => front.atr !== null && front.atr !== undefined && Number.isFinite(Number(front.atr)))
+    .map(front => [canonicalFieldFrontKey(front.front), fieldIndicatorNumber(front.atr, 2)]));
+}
+
+// Sem ATR digitado, o campo já vem com o ATR calculado da frente. Esse valor não é gravado
+// (a próxima importação atualiza sozinha); só um ATR diferente digitado vira correção.
 function frontRowHtml(front = '', sector = '', status = 'EM ATIVIDADE', atr = '') {
+  const calculated = front ? editorFrontAtr.get(canonicalFieldFrontKey(front)) || '' : '';
+  const typed = String(atr ?? '').trim();
+  const value = typed || calculated;
+  const title = calculated ? `ATR da balança: ${calculated}` : 'ATR da frente';
   return `
     <tr class="front-edit-row">
       <td><input class="front-input" type="text" maxlength="12" value="${escapeHtml(front)}" placeholder="Ex.: 402" /></td>
@@ -161,7 +178,7 @@ function frontRowHtml(front = '', sector = '', status = 'EM ATIVIDADE', atr = ''
         <input class="sector-input" type="text" maxlength="24" value="${escapeHtml(sector)}" placeholder="Ex.: 67620" />
       </td>
       <td><select class="status-input" data-original-status="${escapeHtml(normalizeStatus(status))}">${statusOptionsHtml(status)}</select></td>
-      <td><input class="atr-input" type="text" inputmode="decimal" maxlength="12" value="${escapeHtml(atr)}" placeholder="Ex.: 135,5" aria-label="ATR da frente" /></td>
+      <td><input class="atr-input${!typed && calculated ? ' is-calculated' : ''}" type="text" inputmode="decimal" maxlength="12" value="${escapeHtml(value)}" data-calculated="${escapeHtml(calculated)}" placeholder="Ex.: 135,5" title="${escapeHtml(title)}" aria-label="ATR da frente" /></td>
       <td><button class="row-remove remove-front-row" type="button" aria-label="Remover frente">×</button></td>
     </tr>
   `;
@@ -286,6 +303,7 @@ function loadUnitEditor(index) {
   if (supportInput) supportInput.value = unit.support === '-' ? '' : unit.support || '';
   resizeEditorTextareas();
 
+  editorFrontAtr = editorFrontAtrValues(unit);
   renderFrontRows(unit.rows);
   renderMetricsForm(unit);
 }
@@ -297,7 +315,10 @@ function collectFrontRows() {
       const sector = row.querySelector('.sector-input').value.trim();
       const input = row.querySelector('.status-input');
       const status = collectPrimaryFieldStatus(input);
-      const atr = row.querySelector('.atr-input').value.trim();
+      const atrInput = row.querySelector('.atr-input');
+      const value = atrInput.value.trim();
+      // Igual ao calculado pela balança: não grava (segue a pesagem das próximas importações).
+      const atr = value && value === atrInput.dataset.calculated ? '' : value;
       return [front, sector, getStatusColor(status), status, atr];
     })
     .filter(([front, sector]) => front || sector);
@@ -381,6 +402,11 @@ function setupEditorEvents() {
     button.closest('.front-edit-row')?.remove();
     reorderFrontForm();
     refreshEditorSaveStatus();
+  });
+
+  document.querySelector('#front-rows').addEventListener('input', event => {
+    const input = event.target.closest('.atr-input');
+    if (input) input.classList.toggle('is-calculated', input.value.trim() === input.dataset.calculated && input.value.trim() !== '');
   });
 
   document.querySelector('#front-rows').addEventListener('change', event => {

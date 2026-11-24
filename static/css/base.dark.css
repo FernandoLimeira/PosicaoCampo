@@ -46,6 +46,7 @@ input:focus, select:focus, textarea:focus { border-color: #616161; }
 .menu-icon { color: #ffffff; }
 .nav-logout { color: #ffffff; }
 .nav-link.is-active { color: #ffffff; }
+.atr-input.is-calculated { color: #8cd3b0; background: #262626; }
 .confirm-dialog { background: #2a2a2a; border: 1px solid rgba(71, 71, 71, 0.9); }
 .confirm-dialog.is-warning { --tone: #b18333; --tone-soft: #29251d; }
 .confirm-dialog h2 { color: #e0e0e0; }

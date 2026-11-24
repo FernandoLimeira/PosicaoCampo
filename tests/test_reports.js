@@ -182,6 +182,32 @@ async function main() {
   assert.match(pptOverview, /Balança até 18\/11/);
   assert.doesNotMatch(pptOverview, /NRD|880/);
   assert.doesNotMatch(refresh.elements.get('#units-grid').innerHTML, /Painel gerencial · Balança/);
+  // Preencher: o ATR da frente já vem com o calculado pela balança e só é gravado se mudar.
+  const savedSummary = vm.runInContext('weighingSummary', refresh.ctx);
+  vm.runInContext(`weighingSummary = {
+      work_date: '2026-11-18', reference_at: 1795046400,
+      units: [{ code: 'PPT', work_date: '2026-11-18', reference_at: 1795046400, data_until: 1795046400,
+        closed_until: 1795046401, loads_day: 3, fronts: [{ front: '05', atr: 135.15, tons: 60 }, { front: '19', atr: 140.3, tons: 20 }] }]
+    };
+    editorFrontAtr = editorFrontAtrValues(units[0]);`, refresh.ctx);
+  const calculatedRow = refresh.ctx.frontRowHtml('FT 05', '5010', 'EM ATIVIDADE', '');
+  assert.match(calculatedRow, /class="atr-input is-calculated"[^>]*value="135,15"[^>]*data-calculated="135,15"/);
+  assert.match(calculatedRow, /title="ATR da balança: 135,15"/);
+  const typedRow = refresh.ctx.frontRowHtml('FT 19', '1900', 'EM ATIVIDADE', '141');
+  assert.match(typedRow, /class="atr-input"[^>]*value="141"[^>]*data-calculated="140,30"/);
+  assert.match(refresh.ctx.frontRowHtml('FT 77', '7700', 'EM ATIVIDADE', ''), /value="" data-calculated=""/);
+  const fakeRow = (front, atr, calculated) => ({ querySelector: selector => ({
+    '.front-input': { value: front }, '.sector-input': { value: '1' },
+    '.status-input': { value: 'EM ATIVIDADE', dataset: {} },
+    '.atr-input': { value: atr, dataset: { calculated } } })[selector] });
+  const originalQueryAll = refresh.ctx.document.querySelectorAll;
+  refresh.ctx.document.querySelectorAll = selector => selector === '.front-edit-row'
+    ? [fakeRow('FT 05', '135,15', '135,15'), fakeRow('FT 19', '141', '140,30'), fakeRow('FT 77', '', '')]
+    : originalQueryAll(selector);
+  assert.equal(JSON.stringify(refresh.ctx.collectFrontRows().map(row => row[4])), '["","141",""]');
+  refresh.ctx.document.querySelectorAll = originalQueryAll;
+  refresh.ctx.savedSummary = savedSummary;
+  vm.runInContext('weighingSummary = savedSummary; editorFrontAtr = new Map();', refresh.ctx);
   vm.runInContext(`units[0].rows = [['FT 99', '9900', '', 'EM ATIVIDADE', '']];
     units[0].observation = 'Observação atual';`, refresh.ctx);
   refresh.ctx.apiRequest = async path => {

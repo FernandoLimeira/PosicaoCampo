@@ -841,6 +841,8 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 
 .sector-input-cell { vertical-align: top; }
+/* ATR da frente calculado pela balança (não gravado enquanto não for alterado). */
+.atr-input.is-calculated { color: #2f7a55; background: #f2faf5; }
 
 #observation-input,
 #changes-input {
