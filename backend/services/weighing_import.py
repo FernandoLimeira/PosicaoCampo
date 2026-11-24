@@ -49,7 +49,7 @@ HEADER_ALIASES = {
     "level2": {"cd upnivel2", "upnivel2"},
     "front": {"cd fren tran", "frente", "cd frente"},
     "net_kg": {"qt liquido", "peso liquido"},
-    "atr": {"atr"},
+    "atr": {"atr", "atr realizado"},
     "patio_at": {"hr entrada patio"},
     "scale_in_at": {"hr entrada balanca"},
     "scale_out_at": {"hr saida balanca"},
@@ -184,6 +184,8 @@ def _parse_rows(rows):
             "unit_code": unit, "release_no": release, "movement_date": movement_date,
             "truck": values["truck"][:20], "trailer": values["trailer"][:20],
             "front": front, "sector": sector[:20], "section": section[:20],
+            # UPN1 (CD_UPNIVEL1) nas quatro unidades: agrupamento do ATR estimado.
+            "upn1": values["level1"][:20],
             "net_kg": net_kg if out_at is not None else None,
             "atr": atr if atr is not None and 0 < atr < 1000 else None,
             "patio_at": _timestamp(values["patio_at"], tz), "scale_in_at": _timestamp(values["scale_in_at"], tz),

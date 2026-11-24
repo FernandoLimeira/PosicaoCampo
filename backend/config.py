@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -14,3 +15,13 @@ REMEMBER_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60
 MIN_PASSWORD_LENGTH = 8
 MAX_BODY_BYTES = 2 * 1024 * 1024
 DB_BUSY_TIMEOUT_MS = 10_000
+
+# Modalidade do ATR da pesagem: "atual" (padrão: só as cargas com ATR, frente ponderada pelo
+# total processado) ou "estimado_upn1" (ATR estimado — UPN1 / análises próximas, ver
+# backend/services/atr_estimation.py). Não altera os dados importados.
+ATR_MODE_CURRENT = "atual"
+ATR_MODE_ESTIMATED_UPN1 = "estimado_upn1"
+ATR_MODES = (ATR_MODE_CURRENT, ATR_MODE_ESTIMATED_UPN1)
+ATR_MODE = os.environ.get("POSICAO_ATR_MODE", ATR_MODE_CURRENT).strip().lower()
+if ATR_MODE not in ATR_MODES:
+    ATR_MODE = ATR_MODE_CURRENT

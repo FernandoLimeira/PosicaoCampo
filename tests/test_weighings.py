@@ -580,6 +580,44 @@ class WeighingTests(unittest.TestCase):
         self.assertEqual(ppt["atr_weight_t"], 80.0)
         self.assertEqual({front["front"]: front["atr"] for front in ppt["fronts"]}, {"05": 120.0, "19": 140.0})
 
+    def test_estimated_atr_mode_by_upn1_keeps_current_mode_as_default(self):
+        # UPN1 361 (frente 05): análises 120 às 15:05 e 132 às 15:25.
+        # Carga 2 (15:10): D = 300 e 900 s → (120·3 + 132·1) ÷ 4 = 123.
+        # Carga 3 (15:15, ATR 0 inválido): D = 600 e 600 s → (120 + 132) ÷ 2 = 126.
+        # Frente 05 (20 t cada): (120 + 123 + 126 + 132) ÷ 4 = 125,25. Frente 19: 140.
+        # Geral: (501·20 + 140·20) ÷ 100 = 128,2. Modo atual: (126·80 + 140·20) ÷ 100 = 128,8.
+        source = [HEADER + ["DT_EXTRACAO"], *[
+            row + ["14/11/2026 16:20:00"] for row in (
+                load("201", "1", "05", "361", "1173", "20000", "14/11/2026 15:05:00", atr="120"),
+                load("201", "2", "05", "361", "1173", "20000", "14/11/2026 15:10:00"),
+                load("201", "3", "05", "361", "1173", "20000", "14/11/2026 15:15:00", atr="0"),
+                load("201", "4", "19", "300", "3432", "20000", "14/11/2026 15:20:00", atr="140"),
+                load("201", "5", "05", "361", "1173", "20000", "14/11/2026 15:25:00", atr="132"),
+            )
+        ]]
+        parsed = parse_weighing_file(xlsx(source))
+        self.assertEqual({record["upn1"] for record in parsed["records"]}, {"361", "300"})
+        weighings.import_weighings(self.admin["id"], parsed["records"])
+
+        def ppt(**kwargs):
+            return next(unit for unit in weighings.weighing_summary(**kwargs)["units"] if unit["code"] == "PPT")
+
+        current = ppt()
+        self.assertEqual((current["atr_mode"], current["atr"]), (config.ATR_MODE_CURRENT, 128.8))
+        estimated = ppt(atr_mode=config.ATR_MODE_ESTIMATED_UPN1)
+        self.assertEqual(estimated["atr"], 128.2)
+        self.assertEqual((estimated["atr_weight_t"], estimated["atr_sample_kg"]), (100.0, 12820.0))
+        self.assertEqual({front["front"]: front["atr"] for front in estimated["fronts"]}, {"05": 125.25, "19": 140.0})
+        self.assertEqual(estimated["atr_origins"],
+                         {"ANALISADO": 3, "ESTIMADO_UPN1": 2, "ESTIMADO_FRENTE": 0, "SEM_ANALISE": 0})
+        # Os dados importados não mudam: a carga 2 continua sem ATR no banco.
+        with storage.connection() as conn:
+            self.assertIsNone(conn.execute("SELECT atr FROM field_weighings WHERE release_no='2'").fetchone()[0])
+        with patch.object(config, "ATR_MODE", config.ATR_MODE_ESTIMATED_UPN1):
+            self.assertEqual(ppt()["atr"], 128.2)
+        with self.assertRaises(ValueError):
+            weighings.weighing_summary(atr_mode="oficial")
+
     def test_stopped_projection_in_the_latest_close_and_excel(self):
         from backend.models.weighing_report import build_weighing_report
         from backend.services.xlsx_reader import open_archive, plain_cell_value, read_sheet_rows, workbook_sheets

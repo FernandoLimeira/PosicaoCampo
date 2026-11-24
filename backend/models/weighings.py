@@ -30,6 +30,9 @@ Cálculo hora a hora da planilha "Controle de entrega x Moagem":
 - ATR: nem toda carga traz ATR. O ATR da frente é a média ponderada (peso líquido) das cargas
   com ATR; o da unidade pondera o ATR de cada frente pelo total processado da frente (com as
   cargas sem ATR). Frente sem nenhuma carga com ATR fica fora da média.
+- ATR estimado (``config.ATR_MODE = "estimado_upn1"``): cada carga sem análise recebe um ATR
+  estimado pela UPN1 (duas análises mais próximas no tempo) ou pela frente; frente e unidade
+  ponderam o ATR final de cada carga pelo peso líquido. Ver ``services/atr_estimation.py``.
 """
 from __future__ import annotations
 
@@ -41,6 +44,8 @@ from functools import partial
 from typing import Any
 from uuid import uuid4
 
+from .. import config
+from ..services import atr_estimation
 from ..services.front_identifiers import front_key, natural_key
 from ..services.operational_shifts import FIELD_TIMEZONE, MS_UNIT_CODES, unit_timezone
 from .constants import ALLOWED_UNIT_CODES
@@ -60,7 +65,7 @@ MS_SHIFT_HOURS = {"A": range(0, 7), "B": range(7, 15), "C": range(15, 24)}
 
 _COLUMNS = (
     "unit_code", "release_no", "movement_date", "truck", "trailer", "front", "sector", "section",
-    "net_kg", "atr", "patio_at", "scale_in_at", "scale_out_at", "guarita_at", "extracted_at",
+    "net_kg", "atr", "patio_at", "scale_in_at", "scale_out_at", "guarita_at", "extracted_at", "upn1",
 )
 
 
@@ -102,7 +107,7 @@ def import_weighings(user_id: int, records: Any, *, filename: str = "") -> dict[
                 _optional_float(item.get("net_kg")), _optional_float(item.get("atr")),
                 _optional_int(item.get("patio_at")), _optional_int(item.get("scale_in_at")),
                 _optional_int(item.get("scale_out_at")), _optional_int(item.get("guarita_at")),
-                _optional_int(item.get("extracted_at")),
+                _optional_int(item.get("extracted_at")), str(item.get("upn1") or "").strip()[:20],
             ))
         except (KeyError, TypeError, ValueError, AttributeError) as exc:
             raise ValueError(f"Carga {position} com dados inválidos.") from exc
@@ -263,15 +268,33 @@ def _daily_projection(hours, metric, *, by_shift: bool) -> float | None:
     return _round(average * 24) if average is not None else None
 
 
+def _unit_upn1(row) -> str:
+    """UPN1 da carga. Cargas importadas antes da coluna ``upn1``: no Polo MS o setor já é
+    o CD_UPNIVEL1; no Polo SP fica vazia (a estimativa usa a frente)."""
+    upn1 = str(row["upn1"] or "").strip() if "upn1" in row.keys() else ""
+    return upn1 or (str(row["sector"] or "").strip() if row["unit_code"] in MS_UNIT_CODES else "")
+
+
+def _estimated_atr(rows, day: str) -> list[atr_estimation.AtrResult]:
+    """ATR final de cada carga do fechamento (modalidade estimada). O período operacional é
+    o dia do resumo: análises de outros dias não entram."""
+    records = [{**{key: row[key] for key in row.keys()}, "upn1": _unit_upn1(row)} for row in rows]
+    return atr_estimation.estimate_atr(atr_estimation.build_loads(records, period=lambda _row: day))
+
+
 def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time: Any = None,
                      unit_code: str | None = None, include_shift_totals: bool = False,
-                     historical_position: bool = False) -> dict[str, Any]:
+                     historical_position: bool = False, atr_mode: str | None = None) -> dict[str, Any]:
     """Resumo do dia da pesagem importada (sem data: o dia mais recente do arquivo).
 
     As horas vão de 00:00 até a última hora que veio no SELECT importado, independente do
     relógio: a importação vale até a próxima. ``at_time`` ("HH:MM") ou ``now`` (epoch)
     limitam às horas encerradas até aquele momento (hora − 1 h), para conferir com uma
     planilha de fechamento tirada nele."""
+    atr_mode = atr_mode or config.ATR_MODE
+    if atr_mode not in config.ATR_MODES:
+        raise ValueError("Modalidade de ATR inválida.")
+    estimated_mode = atr_mode == config.ATR_MODE_ESTIMATED_UPN1
     if unit_code is not None:
         unit_code = unit_code.strip().upper()
         if unit_code not in ALLOWED_UNIT_CODES:
@@ -463,6 +486,8 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
         fronts: dict[str, list] = {}
         for row in rows:
             fronts.setdefault(row["front"], []).append(row)
+        atr_results = _estimated_atr(rows, day) if estimated_mode else []
+        front_estimates = atr_estimation.atr_by_front(atr_results) if estimated_mode else {}
         front_list = []
         for front, front_rows in sorted(fronts.items(), key=lambda item: natural_key(item[0])):
             latest = max(front_rows, key=lambda row: row["scale_out_at"])
@@ -473,12 +498,24 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
                 "loads": len(front_rows), "tons": _round(_tons(front_rows)),
                 "atr": _weighted_atr(front_rows), "last_at": latest["scale_out_at"],
             }
+            if estimated_mode:
+                estimate = front_estimates.get(str(front or "").strip())
+                entry["atr"] = atr_estimation.round_atr(estimate.atr if estimate else None)
+                entry["atr_origins"] = atr_estimation.origin_counts(
+                    result for result in atr_results if result.load.front == str(front or "").strip())
             front_list.append(entry)
             if entry["external"]:
                 support.append({"front": front, "from_unit": owner, "to_unit": code,
                                 "loads": entry["loads"], "tons": entry["tons"], "atr": entry["atr"]})
         # ATR da unidade: ATR de cada frente × total processado da frente (cargas sem ATR também).
-        atr_weight_t, atr_sample_kg = _fronts_atr_sample(fronts)
+        if estimated_mode:
+            # Geral direto das cargas: Σ(ATR final × peso) ÷ Σ(peso), não a média das frentes.
+            overall = atr_estimation.overall_atr(atr_results)
+            atr_weight_t, atr_sample_kg = float(overall.weight_kg / 1000), float(overall.atr_x_weight / 1000)
+            unit_atr = atr_estimation.round_atr(overall.atr)
+        else:
+            atr_weight_t, atr_sample_kg = _fronts_atr_sample(fronts)
+            unit_atr = round(atr_sample_kg / atr_weight_t, 2) if atr_weight_t else None
         units.append({
             "code": code,
             "work_date": day,
@@ -505,7 +542,9 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
             "delivery_projection_t": _daily_projection(exact, "delivery", by_shift=code == "NRD"),
             "zero_milling_at_latest_close": zero_milling_at_latest_close,
             "stock_loads": len(stock),
-            "atr": round(atr_sample_kg / atr_weight_t, 2) if atr_weight_t else None,
+            "atr": unit_atr,
+            "atr_mode": atr_mode,
+            **({"atr_origins": atr_estimation.origin_counts(atr_results)} if estimated_mode else {}),
             "atr_weight_t": atr_weight_t,
             "atr_sample_kg": atr_sample_kg,
             "hours": hours,
@@ -516,6 +555,7 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
 
     return {
         "work_date": day,
+        "atr_mode": atr_mode,
         "reference_at": reference,
         "shift": {"code": shift_code} if shift_code else None,
         "closed_hours": len(closed_hours),

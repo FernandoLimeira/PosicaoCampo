@@ -326,6 +326,10 @@ def _create_field_weighing_table(conn):
     for column in ("guarita_at", "extracted_at"):
         if column not in weighing_columns:
             conn.execute(f"ALTER TABLE main.field_weighings ADD COLUMN {column} INTEGER")
+    # UPN1 (CD_UPNIVEL1) da carga: agrupamento do ATR estimado. No Polo SP o setor vem do
+    # CD_UPNIVEL2, então a UPN1 precisa de coluna própria.
+    if "upn1" not in weighing_columns:
+        conn.execute("ALTER TABLE main.field_weighings ADD COLUMN upn1 TEXT NOT NULL DEFAULT ''")
     # Consultas SQL da Entrega CTT (o SELECT da pesagem): só guardadas, nunca executadas.
     conn.execute("""
         CREATE TABLE IF NOT EXISTS main.field_sql_queries (
@@ -940,6 +944,7 @@ CREATE TABLE IF NOT EXISTS field_weighings (
     scale_out_at INTEGER,
     guarita_at INTEGER,
     extracted_at INTEGER,
+    upn1 TEXT NOT NULL DEFAULT '',
     import_file TEXT NOT NULL DEFAULT '',
     imported_by INTEGER,
     imported_at INTEGER NOT NULL,
