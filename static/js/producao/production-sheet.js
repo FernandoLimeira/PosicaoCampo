@@ -8,6 +8,7 @@ let productionSheetSequence = 0;
 let productionSheetUnit = '';
 let productionSheetSaving = '';
 let productionSheetSectorBase = []; // setores cadastrados: { sector, section, farm }
+let productionSheetSections = new Map();
 
 // Polo SP (PPT e NRD) trabalha só com setor; no Polo MS (PST e RBR) vários setores
 // dividem a mesma seção, então o popup mostra também a coluna Seção.
@@ -58,6 +59,16 @@ function sheetSectionSectors(section) {
 
 function sheetSectorSelectOptions(row) {
   return productionSectorSelectOptions(productionSheetSectorBase, row.section, row.sector);
+}
+
+function sheetRegisteredSections(row) {
+  return productionSheetSections.get(row.sector.trim().toLocaleLowerCase('pt-BR')) || [];
+}
+
+function sheetSectionChoice(row, disabled = '') {
+  const options = sheetRegisteredSections(row);
+  return options.length > 1 ? `<label class="production-sheet-section-choice">Seção
+    <select data-sheet-field="section" ${disabled}>${productionRegisteredSectionOptions(options, row.section)}</select></label>` : '';
 }
 
 function sheetSplitOperations(value) {
@@ -143,12 +154,13 @@ function sheetRowHtml(row) {
   return `<tr data-sheet-row="${row.key}" class="${row.removed ? 'is-removed' : ''} ${sheetRowChanged(row) && !row.removed ? 'is-changed' : ''}">
     <td><div class="production-sheet-front ${style}">
       <select data-sheet-field="frontId" aria-label="Frente" ${disabled}>${sheetFrontOptions(row)}</select></div></td>
-    <td class="production-sheet-section-cell"><input data-sheet-field="section" value="${escapeHtml(row.section)}" maxlength="32"
-      autocomplete="off" placeholder="Seção" aria-label="Seção" ${disabled} /></td>
+    <td class="production-sheet-section-cell">${sheetShowsSection() ? `<input data-sheet-field="section" value="${escapeHtml(row.section)}" maxlength="32"
+      autocomplete="off" placeholder="Seção" aria-label="Seção" ${disabled} />` : ''}</td>
     <td>${sheetShowsSection()
       ? `<select data-sheet-field="sector" aria-label="Setor" ${disabled}>${sheetSectorSelectOptions(row)}</select>`
       : `<input data-sheet-field="sector" value="${escapeHtml(row.sector)}" maxlength="32" list="${sheetSectorListId(row)}" autocomplete="off"
-        placeholder="Setor" aria-label="Setor" ${disabled} />`}</td>
+        placeholder="Setor" aria-label="Setor" ${disabled} />
+        <div data-sheet-section-choice>${sheetSectionChoice(row, disabled)}</div>`}</td>
     <td><select data-sheet-field="status" aria-label="Status" ${disabled}>${productionStatuses.map(status =>
       `<option value="${escapeHtml(status.code)}" ${status.code === row.status ? 'selected' : ''}>${escapeHtml(status.name)}</option>`).join('')}</select></td>
     <td><div class="production-sheet-operations">
@@ -223,13 +235,24 @@ function renderSheetFilters(preferred = {}) {
 // Base de setores para a lista do campo Setor. A operação é digitada livre (sem lista);
 // o sistema confere com as O.S. ao salvar.
 async function loadProductionSheetSectorBase(unit) {
-  resetSheetSectorLists();
+  let base = [];
   try {
-    productionSheetSectorBase = await loadProductionSectorBase(unit);
+    base = await loadProductionSectorBase(unit, { refresh: !sheetShowsSection(unit) });
   } catch (error) {
     console.error(error);
-    productionSheetSectorBase = [];
   }
+  if (productionSheetUnit !== unit) return;
+  productionSheetSectorBase = base;
+  productionSheetSections = new Map();
+  if (!sheetShowsSection(unit)) {
+    for (const item of base) {
+      if (!item.section) continue;
+      const code = item.sector.toLocaleLowerCase('pt-BR');
+      if (!productionSheetSections.has(code)) productionSheetSections.set(code, []);
+      productionSheetSections.get(code).push(item);
+    }
+  }
+  resetSheetSectorLists();
 }
 
 // Grupo e frente escolhidos no painel da Produção (a frente define o grupo quando só ela vem).
@@ -244,6 +267,11 @@ function productionSheetPanelFilter() {
 async function openProductionSheet() {
   if (!canFillProduction()) return;
   const unit = currentProductionUnit();
+  if (productionSheetUnit !== unit) {
+    productionSheetSectorBase = [];
+    productionSheetSections = new Map();
+    resetSheetSectorLists();
+  }
   productionSheetUnit = unit;
   const label = document.querySelector('#production-sheet-unit');
   if (label) label.textContent = productionUnitLabel(unit).toLocaleUpperCase('pt-BR');
@@ -305,6 +333,15 @@ async function saveProductionSheet(row = null) {
     document.querySelector(`[data-sheet-row="${invalid.key}"] [data-sheet-field="${invalid.frontId ? 'sector' : 'frontId'}"]`)?.focus();
     return;
   }
+  const unconfirmed = pending.find(item => {
+    const options = sheetRegisteredSections(item);
+    return options.length > 1 && !options.some(option => option.section === item.section.trim());
+  });
+  if (unconfirmed) {
+    showToast(`Confirme a seção do setor ${unconfirmed.sector.trim()}.`, true);
+    document.querySelector(`[data-sheet-row="${unconfirmed.key}"] [data-sheet-section-choice] select`)?.focus();
+    return;
+  }
   if (removed.length && !await askConfirmation({
     kicker: 'Produção Agrícola',
     title: `Excluir ${removed.length} ${removed.length === 1 ? 'lançamento' : 'lançamentos'}?`,
@@ -344,8 +381,14 @@ async function saveProductionSheet(row = null) {
     }
     try {
       if (unit === currentProductionUnit()) {
-        if (row) await loadProductionItems(unit);
-        else await refreshProductionPage(unit, { keepFilters: true });
+        if (row) {
+          const data = await loadProductionItems(unit);
+          const saved = data?.items?.find(item => item.id === row.id)?.entry;
+          if (saved && !sheetShowsSection(unit)) {
+            row.section = saved.section || '';
+            row.original = sheetSnapshot(row);
+          }
+        } else await refreshProductionPage(unit, { keepFilters: true });
       }
     } catch (error) {
       console.error(error);
@@ -398,6 +441,7 @@ productionSheetBody?.addEventListener('input', event => {
   const field = event.target.dataset.sheetField;
   const row = field && findSheetRow(event.target);
   if (!row) return;
+  if (field === 'sector' && !sheetShowsSection() && row.sector.trim() !== event.target.value.trim()) row.section = '';
   row[field] = event.target.value;
   event.target.closest('tr')?.classList.toggle('is-changed', sheetRowChanged(row));
   updateProductionSheetStatus();
@@ -407,6 +451,7 @@ productionSheetBody?.addEventListener('change', event => {
   const field = event.target.dataset.sheetField;
   const row = field && findSheetRow(event.target);
   if (!row) return;
+  if (field === 'sector' && !sheetShowsSection() && row.sector.trim() !== event.target.value.trim()) row.section = '';
   row[field] = event.target.value;
   const tr = event.target.closest('tr');
   if (field === 'frontId') {
@@ -426,7 +471,9 @@ productionSheetBody?.addEventListener('change', event => {
     const front = tr?.querySelector('.production-sheet-front');
     if (front) front.className = `production-sheet-front ${statusMeta(row.status).className}`;
   } else if (field === 'sector') {
-    tr?.querySelector('[data-sheet-field="status"]')?.focus();
+    const choice = tr?.querySelector('[data-sheet-section-choice]');
+    if (choice) choice.innerHTML = sheetSectionChoice(row);
+    (choice?.querySelector('select') || tr?.querySelector('[data-sheet-field="status"]'))?.focus();
   }
   if (field !== 'frontId') tr?.classList.toggle('is-changed', sheetRowChanged(row));
   updateProductionSheetStatus();

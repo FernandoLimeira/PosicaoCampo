@@ -137,6 +137,7 @@
 .production-editor-modal { width: min(860px, calc(100vw - 30px)); }
 .production-editor-modal > .modal-header { padding: 20px 24px; align-items: center; }
 .production-editor-modal > .modal-footer { padding: 16px 24px; }
+.production-editor-modal .modal-footer-actions { flex-wrap: wrap; }
 .production-modal-header-actions { display: flex; align-items: center; gap: 8px; }
 .production-config-toggle { min-height: 34px; }
 .production-modal-body { min-height: 0; padding: 20px 24px; overflow-y: auto; overscroll-behavior: contain; background: #f6f8f7; }
@@ -158,7 +159,9 @@
 .production-location-grid { grid-template-columns: minmax(110px, .72fr) minmax(120px, .72fr) minmax(220px, 1.56fr); }
 .production-sector-rows { display: grid; gap: 10px; }
 .production-sector-row { display: grid; min-width: 0; gap: 6px; }
+.production-sector-row + .production-sector-row { border-top: 1px solid var(--line); padding-top: 10px; }
 .production-sector-row > [data-remove-sector] { justify-self: end; }
+#production-remove-front[hidden], #production-entry-removal-note:empty { display: none; }
 .production-sector-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .production-sector-actions .production-secondary-button { min-height: 32px; padding: 0 10px; }
 .production-form-section > .production-status-field { margin: 0 0 14px; }
@@ -599,6 +602,12 @@
 .catalog-group-fronts > :last-child { border-radius: 0 0 var(--data-radius) var(--data-radius); }
 .catalog-group-fronts > .production-empty { padding: 14px 16px; }
 .catalog-front-name-hint { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 12px; }
+.catalog-responsibility-fronts { grid-column: 1 / -1; min-width: 0; margin: 0; padding: 6px 12px 10px; border: 1px solid var(--line); border-radius: var(--control-radius); }
+.catalog-responsibility-fronts legend { padding: 0 4px; font-size: 12px; font-weight: 700; }
+.catalog-responsibility-front-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 8px 14px; max-height: 220px; overflow: auto; }
+.catalog-responsibility-front-choices strong { color: var(--muted); font-size: 12px; }
+.catalog-responsibility-front-choices label { display: flex; align-items: center; gap: 6px; min-height: 30px; font-size: 12px; cursor: pointer; }
+.catalog-responsibility-front-choices input { flex: 0 0 auto; margin: 0; }
 
 
 @media (max-width: 560px) {
@@ -685,6 +694,7 @@
 
 /* Coluna Seção do popup só no Polo MS (PST e RBR). */
 .production-sheet-table:not(.shows-section) .production-sheet-section-cell { display: none; }
+.production-sheet-section-choice { display: grid; gap: 4px; margin-top: 6px; font-size: 11px; }
 
 
 /* Detalhe da O.S. limitado à tela: sem tabela rolável, campos uma vez e talhões em etiquetas. */
@@ -729,10 +739,7 @@
 /* Coluna Operação da tabela e campo de operações do popup de editar. */
 .production-operation-codes { display: flex; flex-wrap: wrap; gap: 4px; }
 .production-operation-codes span { padding: 2px 8px; border: 1px solid #c9d8f0; border-radius: 999px; background: #f1f6fd; color: #24508f; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.production-entry-operations-field { margin-top: 12px; }
-.production-entry-operations-field[hidden] { display: none; }
-.production-entry-operations-field > span small { text-transform: none; font-weight: 500; }
-.production-entry-operations-field .production-sheet-operations { margin-top: 6px; }
+.production-entry-operations-field .production-sheet-operations { margin-top: 2px; }
 .production-entry-operations-field .production-sheet-operation input { min-height: 38px; }
 
 .production-os-state.is-no-operation { color: #a8680d; }

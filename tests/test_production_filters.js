@@ -8,7 +8,7 @@ const elements = new Map();
 const modalEvents = [];
 const requests = [];
 const sectorRows = [];
-const operationInputs = [];
+const sectorEvents = {};
 const toasts = [];
 const confirmations = [];
 const groupEvents = {};
@@ -21,6 +21,7 @@ function element(selector) {
     addEventListener(type, listener) {
       if (selector === '#production-groups-list') groupEvents[type] = listener;
       if (selector === '#production-sheet-rows') sheetEvents[type] = listener;
+      if (selector === '#production-sector-rows') sectorEvents[type] = listener;
       if (selector === '#production-front-detail-body' && type === 'click') detailClicks.push(listener);
       if (selector === '#production-group-tabs' && type === 'click') dashboardGroupClick = listener;
     },
@@ -33,7 +34,7 @@ const document = {
   querySelector: element,
   querySelectorAll(selector) {
     if (selector === '[data-production-sector-row]') return sectorRows;
-    return selector === '#production-operation-inputs [data-entry-op]' ? operationInputs : [];
+    return [];
   },
   addEventListener() {}
 };
@@ -99,7 +100,8 @@ assert.equal(element('#production-item-id').value, '2');
 const productionTemplate = fs.readFileSync(path.join(__dirname, '../templates/producao.html'), 'utf8');
 assert.match(productionTemplate, /id="production-item-id"\s+type="hidden"/);
 assert.match(productionTemplate, /Status da frente\s*<\/span>\s*<div id="production-status-options"[^>]*><\/div>\s*<\/label>\s*<div id="production-sector-rows"/);
-assert.match(productionTemplate, /data-sector-scan[^>]*><\/div>\s*<button[^>]*data-remove-sector[^>]*>[^<]+<\/button>\s*<\/div>\s*<\/div>\s*<div id="production-entry-operations"/);
+assert.match(productionTemplate, /data-production-sector-row[\s\S]+data-entry-operation-inputs[\s\S]+data-remove-sector/);
+assert.match(productionTemplate, /id="production-remove-front"[^>]*>Remover frente inteira/);
 assert.doesNotMatch(productionTemplate, /production-sector-number/);
 assert.equal(element('#production-modal-kicker').textContent, 'Atualizar frente');
 // O título do popup de edição mostra o nome da frente.
@@ -276,14 +278,23 @@ vm.runInContext("productionFilterFront = '8'", context);
 context.renderProductionItems();
 assert.equal(element('#production-empty').hidden, false);
 
-function sectorRow(sector) {
+function sectorRow(sector, operation = '') {
   const fields = { sector: { value: sector, focus() {} }, section: { value: '' }, farm: { value: '' } };
   const scan = { innerHTML: '', textContent: '' };
-  return { fields, scan, querySelector(selector) {
-    if (selector === '[data-sector-scan]') return scan;
-    const match = selector.match(/^\[data-sector-field="(.+)"\]$/);
-    return match ? fields[match[1]] : null;
-  } };
+  const suggestions = { innerHTML: '' };
+  const removeButton = { hidden: true };
+  const operations = [{ value: operation }];
+  return { fields, scan, operations, suggestions, dataset: {},
+    remove() { sectorRows.splice(sectorRows.indexOf(this), 1); },
+    querySelectorAll(selector) { return selector === '[data-entry-op]' ? operations : []; },
+    querySelector(selector) {
+      if (selector === '[data-sector-scan]') return scan;
+      if (selector === '[data-entry-operation-suggestions]') return suggestions;
+      if (selector === '[data-remove-sector]') return removeButton;
+      const match = selector.match(/^\[data-sector-field="(.+)"\]$/);
+      return match ? fields[match[1]] : null;
+    }
+  };
 }
 
 (async () => {
@@ -293,9 +304,11 @@ function sectorRow(sector) {
   context.refreshProductionPage = async () => {};
   element('#production-front-input').value = '7';
   element('[data-production-status-select]').value = 'UMIDO';
-  operationInputs.push({ value: '101' });
-  sectorRows.push(sectorRow('42'), sectorRow('43'));
-  sectorRows[1].dataset = { linkedItemId: '8' };
+  const editedFirst = sectorRow('42', '101');
+  const editedSecond = sectorRow('43', '205');
+  sectorRows.push(editedFirst, editedSecond);
+  editedFirst.dataset.linkedItemId = '2';
+  editedSecond.dataset.linkedItemId = '8';
   await context.submitProductionEntry({ preventDefault() {} });
   const update = requests.at(-1);
   assert.equal(update.url, '/api/production/my-items/2');
@@ -304,9 +317,27 @@ function sectorRow(sector) {
   // A edição não envia as anotações: o servidor mantém a observação e a previsão já salvas.
   assert.ok(!('observation' in updatedSectors[0]) && !('changes' in updatedSectors[0]));
   assert.deepEqual(updatedSectors.map(item => item.status), ['UMIDO', 'UMIDO']);
-  assert.deepEqual(updatedSectors.map(item => item.operation), ['101', '101']);
+  assert.deepEqual(updatedSectors.map(item => item.operation), ['101', '205']);
   assert.equal(updatedSectors[1].id, 8);
-  delete sectorRows[1].dataset;
+
+  context.updateProductionSectorRows();
+  assert.equal(editedFirst.querySelector('[data-remove-sector]').hidden, false);
+  sectorEvents.click({ target: { closest: selector => editedFirst.querySelector(selector)
+    || (selector === '[data-production-sector-row]' ? editedFirst : null) } });
+  assert.deepEqual(sectorRows, [editedSecond]);
+  assert.equal(editedSecond.querySelector('[data-remove-sector]').hidden, true);
+  await context.submitProductionEntry({ preventDefault() {} });
+  const reduced = JSON.parse(requests.at(-1).options.body);
+  assert.deepEqual(reduced.removed_sector_ids, [2]);
+  assert.deepEqual(reduced.sectors.map(({ id, operation }) => [id, operation]), [[8, '205']]);
+  await context.removeProductionFront();
+  assert.equal(requests.at(-1).url, '/api/production/my-items/2?scope=front');
+  assert.deepEqual(JSON.parse(requests.at(-1).options.body).item_ids.sort(), [2, 8]);
+  assert.match(confirmations.at(-1), /todos os setores vinculados/);
+  sectorRows.unshift(editedFirst);
+  delete editedFirst.dataset.linkedItemId;
+  delete editedSecond.dataset.linkedItemId;
+
   await context.removeProductionItem(2);
   assert.equal(requests.at(-1).url, '/api/production/my-items/2');
   assert.equal(requests.at(-1).options.method, 'DELETE');
@@ -317,7 +348,7 @@ function sectorRow(sector) {
   const batch = requests.at(-1);
   assert.equal(batch.url, '/api/production/my-items/batch');
   assert.deepEqual(JSON.parse(batch.options.body).sectors.map(item => [item.sector, item.status, item.operation]),
-    [['42', 'UMIDO', '101'], ['43', 'UMIDO', '101']]);
+    [['42', 'UMIDO', '101'], ['43', 'UMIDO', '205']]);
   sectorRows[1].fields.sector.value = ' 42 ';
   const requestCount = requests.length;
   await context.submitProductionEntry({ preventDefault() {} });
@@ -361,6 +392,17 @@ function sectorRow(sector) {
   assert.equal(first.fields.farm.value, 'Fazenda 200');
   assert.equal(second.fields.farm.value, 'Fazenda 300');
 
+  const ambiguous = sectorRow('1608');
+  ambiguous.fields.section.value = '380';
+  const lookup = context.resolveSectorFromBase(ambiguous, { keep: true });
+  pending.at(-1).resolve({ items: [{ section: '515', farm: 'MUTUM' }, { section: '516', farm: 'MUTUM II' }] });
+  await lookup;
+  assert.equal(ambiguous.fields.section.required, true);
+  assert.equal(ambiguous.fields.section.value, '');
+  assert.match(ambiguous.fields.section.innerHTML, /Confirme a seção/);
+  assert.match(context.dashboardSectionWarning({ section_warning: { saved: '380', choices: ['515'] } }),
+    /Seção gravada 380 · Cadastro 515/);
+
   const concurrentStart = pending.length;
   const oldScan = context.scanProductionSector(first);
   first.fields.sector.value = '201';
@@ -371,12 +413,13 @@ function sectorRow(sector) {
   pending[concurrentStart + 2].resolve({ orders: [{ operation: '205', operation_name: 'Calagem' }] });
   pending[concurrentStart].resolve({ orders: [{ operation: '205', operation_name: 'Calagem' }] });
   await Promise.all([oldScan, newScan, otherScan]);
-  assert.match(element('#production-operation-suggestions').innerHTML, /Gradagem/);
-  assert.doesNotMatch(element('#production-operation-suggestions').innerHTML, /Calagem/);
+  assert.match(first.suggestions.innerHTML, /Gradagem/);
+  assert.doesNotMatch(first.suggestions.innerHTML, /Calagem/);
+  assert.match(second.suggestions.innerHTML, /Calagem/);
   assert.equal(first.scan.textContent, '');
-  assert.match(second.scan.textContent, /Setor 300 sem O\.S\. aberta para a operação 101/);
-  operationInputs[0].value = '0205';
-  context.refreshProductionSectorWarnings();
+  assert.equal(second.scan.textContent, '');
+  first.operations[0].value = '0205';
+  context.refreshProductionSectorWarning(first);
   assert.match(first.scan.textContent, /Setor 201 sem O\.S\. aberta para a operação 0205/);
   assert.equal(second.scan.textContent, '');
   assert.equal(pending.length, concurrentStart + 3);
@@ -384,7 +427,7 @@ function sectorRow(sector) {
   const editScan = context.scanProductionSector(first);
   pending.at(-1).resolve({ orders: [{ operation: '101', operation_name: 'Gradagem' }] });
   await editScan;
-  assert.equal(element('#production-operation-suggestions').innerHTML, '');
+  assert.equal(first.suggestions.innerHTML, '');
   assert.match(first.scan.textContent, /Setor 201 sem O\.S\. aberta para a operação 0205/);
   vm.runInContext('productionEditingItemId = null', context);
 
@@ -515,7 +558,7 @@ function sectorRow(sector) {
 
   const responsibilityForm = element('#production-responsibility-form');
   responsibilityForm.dataset = {};
-  responsibilityForm.elements = Object.fromEntries(['rule_id', 'unit_code', 'role_id', 'service_front_id', 'shift',
+  responsibilityForm.elements = Object.fromEntries(['rule_id', 'unit_code', 'role_id', 'shift',
     'kind', 'work_date', 'responsible_name', 'relief_name'].map(name => [name, { value: '' }]));
   responsibilityForm.elements.unit_code.form = responsibilityForm;
   responsibilityForm.elements.kind.value = 'cycle';
@@ -525,26 +568,38 @@ function sectorRow(sector) {
   context.openProductionResponsibilityForm(null, { keepOpen: true });
   assert.equal(responsibilityForm.elements.unit_code.value, 'NRD');
   assert.match(responsibilityForm.elements.unit_code.innerHTML, /value="PPT"/);
-  assert.match(responsibilityForm.elements.service_front_id.innerHTML, /Preparo/);
+  const frontChoices = responsibilityForm.querySelector('#production-responsibility-fronts');
+  assert.match(frontChoices.innerHTML, /type="checkbox"[^>]+value="7"[\s\S]+Preparo/);
   context.apiRequest = async url => url.includes('/responsibilities?')
     ? { permissions: { edit_schedules: true } }
-    : { groups: [{ name: 'Colheita', fronts: [{ id: 31, name: 'Frente de PPT' }] }] };
+    : { groups: [{ name: 'Colheita', fronts: [{ id: 31, name: 'Frente de PPT' }, { id: 32, name: 'Frente 2 de PPT' }] }] };
   responsibilityForm.elements.unit_code.value = 'PPT';
   await context.changeProductionResponsibilityUnit({ currentTarget: responsibilityForm.elements.unit_code });
   assert.equal(responsibilityForm.dataset.scheduleUnit, 'PPT');
-  assert.match(responsibilityForm.elements.service_front_id.innerHTML, /Frente de PPT/);
-  assert.doesNotMatch(responsibilityForm.elements.service_front_id.innerHTML, /Preparo/);
-  responsibilityForm.elements.service_front_id.value = '31';
+  assert.match(frontChoices.innerHTML, /Frente de PPT/);
+  assert.doesNotMatch(frontChoices.innerHTML, /Preparo/);
+  let checkedFronts = [];
   context.FormData = function (form) {
-    return Object.entries(form.elements).filter(([, field]) => !field.disabled).map(([key, field]) => [key, field.value]);
+    const data = Object.entries(form.elements).filter(([, field]) => !field.disabled).map(([key, field]) => [key, field.value]);
+    data.push(...checkedFronts.map(value => ['service_front_id', value]));
+    data.getAll = name => data.filter(([key]) => key === name).map(([, value]) => value);
+    return data;
   };
-  context.apiRequest = async (url, options) => { requests.push({ url, options }); return { id: 99 }; };
+  context.apiRequest = async (url, options) => { requests.push({ url, options }); return { ids: [99, 100] }; };
+  const beforeEmptySchedule = requests.length;
+  await context.submitProductionResponsibility({ currentTarget: responsibilityForm, preventDefault() {} });
+  assert.equal(requests.length, beforeEmptySchedule);
+  assert.match(toasts.at(-1), /Selecione pelo menos uma frente/);
+  checkedFronts = ['31', '32'];
   await context.submitProductionResponsibility({ currentTarget: responsibilityForm, preventDefault() {} });
   const schedule = requests.at(-1);
   assert.equal(schedule.url, '/api/production/catalog/responsibilities');
   const schedulePayload = JSON.parse(schedule.options.body);
-  assert.deepEqual([schedulePayload.unit_code, schedulePayload.service_front_id], ['PPT', '31']);
+  assert.deepEqual([schedulePayload.unit_code, schedulePayload.service_front_ids], ['PPT', [31, 32]]);
+  assert.ok(!('service_front_id' in schedulePayload));
   assert.equal(context.currentProductionUnit(), 'NRD');
+  context.openProductionResponsibilityForm({ id: 99, service_front_id: 7, kind: 'cycle' });
+  assert.match(frontChoices.innerHTML, /type="radio"[^>]+value="7" checked/);
 
   const [targetRow, draftRow, removedRow] = vm.runInContext(`productionSheetUnit = 'NRD';
     productionSheetRows = productionItems.map(sheetRowFromItem);`, context);
@@ -556,8 +611,13 @@ function sectorRow(sector) {
   const targetTr = { dataset: { sheetRow: targetRow.key }, classList: { toggle() {} }, querySelector() {} };
   const clickRowUpdate = () => sheetEvents.click({ target: { closest: selector =>
     selector === '[data-sheet-action]' ? sheetUpdate : selector === '[data-sheet-row]' ? targetTr : null } });
+  vm.runInContext(`productionSheetSections.set('44', [{ section: '10' }, { section: '20' }]);`, context);
   sheetEvents.change({ target: { value: '44', dataset: { sheetField: 'sector' }, closest: () => targetTr } });
   assert.equal(targetTr.outerHTML, undefined, 'Editing the sector leaves the update button in place');
+  assert.match(context.sheetRowHtml(targetRow), /data-sheet-field="section"/);
+  await clickRowUpdate();
+  assert.equal(toasts.at(-1), 'Confirme a seção do setor 44.');
+  sheetEvents.change({ target: { value: '20', dataset: { sheetField: 'section' }, closest: () => targetTr } });
 
   let finishSheetSave;
   const sheetRefreshes = [];
@@ -574,6 +634,7 @@ function sectorRow(sector) {
   assert.equal(sheetPayload.unit_code, 'NRD');
   assert.deepEqual(sheetPayload.removed, []);
   assert.deepEqual(sheetPayload.rows.map(row => [row.id, row.sector]), [[targetRow.id, '44']]);
+  assert.equal(sheetPayload.rows[0].section, '20');
   assert.equal(element('#production-sheet-save').disabled, true);
   await clickRowUpdate();
   assert.equal(requests.at(-1), sheetRequest);

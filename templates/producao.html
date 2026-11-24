@@ -181,7 +181,10 @@
           <input type="hidden" name="rule_id" />
           <label class="field"><span>Unidade</span><select name="unit_code" required></select></label>
           <label class="field"><span>Tipo de escala</span><select name="kind"><option value="cycle">Ciclo 5×1</option><option value="fixed">Fixo (sem revezamento)</option><option value="replacement">Substituição pontual</option><option value="day_off">Folga por data</option></select></label>
-          <label class="field"><span>Frente / serviço</span><select name="service_front_id" required></select></label>
+          <fieldset class="catalog-responsibility-fronts">
+            <legend>Frente / serviço</legend>
+            <div id="production-responsibility-fronts" class="catalog-responsibility-front-choices"></div>
+          </fieldset>
           <label class="field"><span>Cargo</span><select name="role_id" required></select></label>
           <label class="field"><span>Turno</span><select name="shift" required><option value="">Selecione</option><option value="A">A · 00h–07h20</option><option value="B">B · 07h20–15h40</option><option value="C">C · 15h40–00h</option></select></label>
           <label class="field"><span id="production-responsibility-date-label">Primeiro dia de trabalho</span><input name="work_date" type="date" required /></label>
@@ -463,14 +466,14 @@
                   <input id="production-farm-input" data-sector-field="farm" type="text" maxlength="160" autocomplete="off" placeholder="Nome da fazenda" />
                 </label>
               </div>
+              <div class="field production-entry-operations-field">
+                <span>Operações do setor</span>
+                <div class="production-sheet-operations" data-entry-operation-inputs></div>
+                <div class="production-sector-scan" data-entry-operation-suggestions aria-live="polite"></div>
+              </div>
               <div class="production-sector-scan" data-sector-scan aria-live="polite"></div>
               <button class="production-inline-text-button production-remove-sector" type="button" data-remove-sector hidden>Remover setor</button>
             </div>
-          </div>
-          <div id="production-entry-operations" class="field production-entry-operations-field">
-            <span>Operações em execução</span>
-            <div id="production-operation-inputs" class="production-sheet-operations"></div>
-            <div id="production-operation-suggestions" class="production-sector-scan" aria-live="polite"></div>
           </div>
         </section>
       </form>
@@ -479,9 +482,10 @@
     <footer id="production-entry-footer" class="modal-footer">
       <div class="wizard-footer-info">
         <strong id="production-entry-hint">Enter adiciona</strong>
-        <p>O lançamento fica vinculado à unidade selecionada.</p>
+        <p id="production-entry-removal-note" aria-live="polite"></p>
       </div>
       <div class="modal-footer-actions">
+        <button id="production-remove-front" class="modal-button danger" type="button" hidden>Remover frente inteira</button>
         <button class="modal-button secondary" type="button" data-close-modal="production-entry-modal">Cancelar</button>
         <button id="production-entry-submit" class="modal-button save" type="submit" form="production-entry-form">Adicionar</button>
       </div>

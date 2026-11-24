@@ -1,4 +1,5 @@
 import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -346,6 +347,94 @@ class ServiceOrderTests(unittest.TestCase):
             {"id": item_id, "service_front_id": self.front["id"], "sector": "1577", "status": self.status, "operation": "361"}]})
         item = production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"][0]
         self.assertEqual(item["service_order"]["status"], "ok")
+
+    def test_sp_restores_order_match_after_registered_section_changes(self):
+        db.save_sector_base_item("1608", "380", "MUTUM", self.admin["id"])
+        base = {"unit_code": "PPT", "service_front_id": self.front["id"], "work_date": "2026-11-10",
+                "sector": "1608", "section": "380", "status": self.status, "operation": "327"}
+        item_id = production.save_my_item(self.user["id"], base)["id"]
+        db.delete_sector_base_item("1608", "380", self.admin["id"])
+        db.save_sector_base_item("1608", "515", "MUTUM", self.admin["id"])
+        service_orders.import_service_orders(self.admin["id"], "PPT", [
+            {"number": "332568", "sector": "1608", "section": "515", "operation": "327"},
+        ])
+
+        def item_on(day):
+            return production.list_my_items(self.user["id"], "PPT", day)["items"][0]
+
+        old = item_on("2026-11-10")
+        self.assertEqual(old["section_warning"], {"saved": "380", "choices": ["515"]})
+        self.assertEqual(old["service_order"]["status"], "missing")
+
+        production.save_items_sheet(self.user["id"], {
+            "unit_code": "PPT", "work_date": "2026-11-11", "rows": [{**base, "id": item_id}],
+        })
+        corrected = item_on("2026-11-11")
+        self.assertEqual((corrected["entry"]["section"], corrected["entry"]["farm"]), ("515", "MUTUM"))
+        self.assertEqual(corrected["service_order"]["status"], "ok")
+        self.assertNotIn("section_warning", corrected)
+        self.assertEqual(item_on("2026-11-10")["entry"]["section"], "380")
+
+        corrected = production.save_my_items(self.user["id"], {
+            **base, "work_date": "2026-11-12", "sectors": [base],
+        }, item_id=item_id)[0]
+        self.assertEqual(corrected["entry"]["section"], "515")
+        self.assertEqual(item_on("2026-11-12")["service_order"]["status"], "ok")
+
+    def test_removing_entire_front_via_api_only_removes_its_linked_sectors(self):
+        from backend.app import application
+
+        base = {"unit_code": "PPT", "service_front_id": self.front["id"], "work_date": "2026-11-10"}
+        separate = production.save_my_item(self.user["id"], {**base, "sector": "2100", "status": self.status})
+        linked = production.save_my_items(self.user["id"], {**base, "sectors": [
+            {"sector": "1608", "status": self.status, "operation": "327"},
+            {"sector": "1609", "status": self.status, "operation": "205"},
+        ]})
+        service_orders.import_service_orders(self.admin["id"], "PPT", [
+            {"number": "332568", "sector": "1608", "operation": "327"},
+            {"number": "332569", "sector": "1609", "operation": "205"},
+        ])
+        items = production.list_my_items(self.user["id"], "PPT", base["work_date"])["items"]
+        self.assertEqual({item["entry"]["operation"]: item["service_order"]["status"]
+                          for item in items if item["sector_group_id"]}, {"327": "ok", "205": "ok"})
+
+        ids = [item["id"] for item in linked]
+        cookie = f"{config.SESSION_COOKIE}={db.create_session(self.user['id'])}"
+
+        def delete_front(expected_ids):
+            body = json.dumps({"item_ids": expected_ids}).encode()
+            result = []
+            raw = b"".join(application({
+                "REQUEST_METHOD": "DELETE", "PATH_INFO": f"/api/production/my-items/{ids[0]}", "QUERY_STRING": "scope=front",
+                "CONTENT_TYPE": "application/json", "CONTENT_LENGTH": str(len(body)), "wsgi.input": io.BytesIO(body),
+                "wsgi.url_scheme": "https", "HTTP_HOST": "test.invalid", "REMOTE_ADDR": "127.0.0.1", "HTTP_COOKIE": cookie,
+            }, lambda status, headers: result.append(int(status.split()[0]))))
+            return result[0], json.loads(raw)
+
+        invalid_status, error = delete_front([*ids, separate["id"]])
+        self.assertEqual(invalid_status, 400)
+        self.assertIn("vínculo dos setores mudou", error["error"])
+        self.assertEqual(delete_front(ids), (200, {"ok": True}))
+        items = production.list_my_items(self.user["id"], "PPT", base["work_date"])["items"]
+        self.assertEqual([item["id"] for item in items], [separate["id"]])
+        with storage.connection() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM production_daily_entries WHERE user_item_id IN (?,?)",
+                                          ids).fetchone()[0], 2)
+
+    def test_sp_requires_valid_choice_for_sector_with_multiple_sections(self):
+        db.save_sector_base_item("1608", "515", "MUTUM", self.admin["id"])
+        db.save_sector_base_item("1608", "516", "MUTUM II", self.admin["id"])
+        entry = {"service_front_id": self.front["id"], "sector": "1608", "status": self.status}
+        base = {"unit_code": "PPT", "work_date": "2026-11-10"}
+        with self.assertRaisesRegex(ValueError, "Confirme a seção do setor 1608"):
+            production.save_my_item(self.user["id"], {**base, **entry})
+        with self.assertRaisesRegex(ValueError, "Linha 2: Confirme a seção"):
+            production.save_items_sheet(self.user["id"], {**base, "rows": [
+                {**entry, "sector": "1000"}, {**entry, "section": "380"},
+            ]})
+        self.assertEqual(production.list_my_items(self.user["id"], "PPT", "2026-11-10")["items"], [])
+        item = production.save_my_item(self.user["id"], {**base, **entry, "section": "516"})
+        self.assertEqual((item["entry"]["section"], item["entry"]["farm"]), ("516", "MUTUM II"))
 
     def test_popup_sheet_saves_rows_operation_and_removals_atomically(self):
         db.save_sector_base_item("1577", "10", "EDSON BORGES", self.admin["id"])

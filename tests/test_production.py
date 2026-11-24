@@ -56,7 +56,6 @@ class ProductionTests(unittest.TestCase):
             self.admin["id"],
         )
         db.save_sector_base_item("3392", "10", "SANTA TEREZINHA", self.admin["id"])
-        db.save_sector_base_item("3392", "20", "SANTA TEREZINHA II", self.admin["id"])
 
     def _group(self, name="Fertirrigação"):
         catalog = production.list_catalog(self.admin["id"], include_inactive=True)
@@ -114,6 +113,33 @@ class ProductionTests(unittest.TestCase):
         self.assertEqual(responsibles("NRD", 25), {"B": "Maria"})
         production.save_responsibility_rule(self.admin["id"], {**rule, "relief_name": ""}, rule_id=rule_id)
         self.assertEqual(responsibles("NRD", 25), {"B": ""})
+
+    def test_responsibility_can_be_scheduled_for_several_fronts_in_one_unit(self):
+        admin = self.admin["id"]
+        first, second, third = [self._front(name=name) for name in ("FRENTE A", "FRENTE B", "FRENTE C")]
+        other_unit = self._front(name="FRENTE PPT", units=["PPT"])
+        front_ids = [first["id"], second["id"]]
+        payload = {"unit_code": "NRD", "service_front_ids": front_ids, "shift": "B", "kind": "cycle",
+                   "work_date": "2026-11-20", "responsible_name": "João", "relief_name": "Maria"}
+        with self.assertRaises(PermissionError):
+            production.save_responsibility_rules(self.user["id"], payload)
+        with self.assertRaises(ValueError):
+            production.save_responsibility_rules(admin, {**payload, "service_front_ids": [first["id"], other_unit["id"]]})
+        self.assertEqual(production.get_responsibility_catalog(admin, "NRD")["rules"], [])
+
+        ids = production.save_responsibility_rules(admin, payload)
+        self.assertEqual(len(ids), 2)
+        with self.assertRaisesRegex(ValueError, "Já existe uma escala"):
+            production.save_responsibility_rules(admin, {**payload, "service_front_ids": [third["id"], first["id"]]})
+        rules = production.get_responsibility_catalog(admin, "NRD")["rules"]
+        self.assertEqual({rule["service_front_id"] for rule in rules}, set(front_ids))
+        self.assertTrue(all(rule["responsible_name"] == "João" and rule["relief_name"] == "Maria" for rule in rules))
+        for front_id in front_ids:
+            production.save_my_item(self.user["id"], {"unit_code": "NRD", "service_front_id": front_id,
+                "work_date": "2026-11-20", "sector": "3392", "status": "EM ATIVIDADE"})
+        for date, expected_name in (("2026-11-24", "João"), ("2026-11-25", "Maria")):
+            items = production.list_my_items(self.user["id"], "NRD", date, with_orders=False)["items"]
+            self.assertEqual([item["responsibles"] for item in items], [{"B": expected_name}] * 2)
 
     def test_existing_database_adds_responsibility_table_without_losing_entries(self):
         front = self._front()
@@ -454,6 +480,7 @@ class ProductionTests(unittest.TestCase):
             )
 
     def test_unit_view_consolidates_items_from_multiple_analysts_without_changing_ownership(self):
+        db.save_sector_base_item("3392", "20", "SANTA TEREZINHA II", self.admin["id"])
         other = db.create_user(
             "Analista 2",
             "Analyst-two-42",
@@ -591,6 +618,37 @@ class ProductionTests(unittest.TestCase):
                 production.save_my_items(self.user["id"], {**base, "sectors": sectors})
         self.assertEqual(production.list_my_items(self.user["id"], "NRD", "2026-10-19")["items"], [])
 
+    def test_removing_either_linked_sector_preserves_the_other_sector_and_history(self):
+        for removed_index in range(2):
+            with self.subTest(removed_index=removed_index):
+                front = self._front(name=f"FRENTE REMOÇÃO {removed_index}")
+                base = {"unit_code": "NRD", "service_front_id": front["id"], "work_date": "2026-10-19"}
+                sectors = [
+                    {"sector": "3392", "status": "EM ATIVIDADE", "operation": "101", "observation": "Setor A"},
+                    {"sector": "3400", "status": "EM ATIVIDADE", "operation": "205", "observation": "Setor B"},
+                ]
+                items = production.save_my_items(self.user["id"], {**base, "sectors": sectors})
+                removed_id = items[removed_index]["id"]
+                remaining_index = 1 - removed_index
+                remaining_id = items[remaining_index]["id"]
+                payload = {**base, "work_date": "2026-10-20", "removed_sector_ids": [removed_id],
+                           "sectors": [{"id": remaining_id, "sector": sectors[remaining_index]["sector"],
+                                        "status": "EM ATIVIDADE", "operation": "307"}]}
+                with self.assertRaisesRegex(ValueError, "vínculo dos setores mudou"):
+                    production.save_my_items(self.user["id"], {**payload, "removed_sector_ids": [remaining_id]},
+                                             item_id=items[0]["id"])
+                remaining, = production.save_my_items(self.user["id"], payload, item_id=items[0]["id"])
+                self.assertEqual(remaining["id"], remaining_id)
+                self.assertIsNone(remaining["sector_group_id"])
+                self.assertEqual(remaining["entry"]["operation"], "307")
+                self.assertEqual(remaining["entry"]["observation"], sectors[remaining_index]["observation"])
+                with storage.connection() as conn:
+                    self.assertFalse(conn.execute("SELECT is_active FROM production_user_items WHERE id=?",
+                                                  (removed_id,)).fetchone()["is_active"])
+                    previous = conn.execute("SELECT operation FROM production_daily_entries WHERE user_item_id=?",
+                                            (removed_id,)).fetchone()
+                    self.assertEqual(previous["operation"], sectors[removed_index]["operation"])
+
     def test_other_analyst_updates_existing_item_preserving_authorship_notes_and_history(self):
         front = self._front()
         base = {"unit_code": "NRD", "service_front_id": front["id"], "work_date": "2026-10-18"}
@@ -676,6 +734,7 @@ class ProductionTests(unittest.TestCase):
             production.save_my_item(self.user["id"], {**base, "unit_code": "PPT", "sector": "3392", "status": "EM ATIVIDADE"}, item_id=items[0]["id"])
 
     def test_sector_base_is_read_only_and_fill_permission_is_enforced(self):
+        db.save_sector_base_item("3392", "20", "SANTA TEREZINHA II", self.admin["id"])
         before = None
         with storage.connection() as conn:
             before = [tuple(row) for row in conn.execute(

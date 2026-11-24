@@ -36,6 +36,7 @@ from ...models.production import (
     save_items_sheet as save_production_items_sheet,
     save_my_items as save_production_my_items,
     save_responsibility_rule,
+    save_responsibility_rules,
     save_responsibility_role,
     save_service_front as save_production_service_front,
     save_status as save_production_status,
@@ -183,9 +184,13 @@ def handle(req):
             return req.unauthorized()
         if method == "GET":
             return req.guarded(lambda: req.json(HTTPStatus.OK, get_responsibility_catalog(user["id"], req.param("unit", ""))))
-        return req.guarded(lambda: req.json(HTTPStatus.CREATED, {
-            "id": save_responsibility_rule(user["id"], req.body()),
-        }))
+        def create_responsibility():
+            payload = req.body()
+            if isinstance(payload, dict) and "service_front_ids" in payload:
+                return req.json(HTTPStatus.CREATED, {"ids": save_responsibility_rules(user["id"], payload)})
+            return req.json(HTTPStatus.CREATED, {"id": save_responsibility_rule(user["id"], payload)})
+
+        return req.guarded(create_responsibility)
 
     if path.startswith("/api/production/catalog/responsibilities/") and method in {"PUT", "DELETE"}:
         if not user:
@@ -357,7 +362,12 @@ def handle(req):
                 item = save_production_my_item(user["id"], payload, item_id=item_id)
                 return req.json(HTTPStatus.OK, {"ok": True, "item": item})
             if method == "DELETE":
-                remove_production_my_item(user["id"], item_id)
+                if req.param("scope", "") == "front":
+                    payload = req.body()
+                    remove_production_my_item(user["id"], item_id, entire_front=True,
+                                              expected_ids=payload.get("item_ids") if isinstance(payload, dict) else None)
+                else:
+                    remove_production_my_item(user["id"], item_id)
                 return req.json(HTTPStatus.OK, {"ok": True})
             return None
 

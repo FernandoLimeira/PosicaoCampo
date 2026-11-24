@@ -191,6 +191,7 @@ function dashboardConsolidatedDetailHtml(sectors, editable) {
         </header>
         <p class="pfd-op-line"><b>Fazenda</b>${escapeHtml(entry.farm || '-')}</p>
         <p class="pfd-op-line"><b>Operações</b>${escapeHtml(codes.join(', ') || 'Sem operação')}</p>
+        ${dashboardSectionWarning(item)}
         ${updated ? `<p class="pfd-op-line"><b>Atualização</b>${escapeHtml(updated.replace(/^Atualização /, ''))}</p>` : ''}
         ${editable ? `<div class="pfd-sector-actions"><button class="modal-button danger" type="button" data-panel-remove="${item.id}">Remover setor</button></div>` : ''}
       </article>`;
@@ -298,6 +299,7 @@ function openDashboardFrontDetail(itemId) {
       ${item.is_current_day ? '' : `<span class="pdash-stale">${dashboardIcon('clock')}Não atualizada hoje</span>`}
     </div>
     <dl class="pfd-info">${info.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}</dl>
+    ${dashboardSectionWarning(item)}
     ${entry.sector ? `<div class="pfd-tabs" role="tablist" aria-label="O.S. da frente">
       <button type="button" role="tab" class="pfd-tab is-active" aria-selected="true" data-pfd-tab="operations">Operações${codes.length ? ` <small>${codes.length}</small>` : ''}</button>
       <button type="button" role="tab" class="pfd-tab" aria-selected="false" data-pfd-tab="others">Outras O.S. no setor${others.length ? ` <small>${others.length}</small>` : ''}</button>
@@ -358,6 +360,13 @@ function dashboardSortTiles(items) {
 
 const DASHBOARD_NOTE_FIELDS = { observation: ['Observação', 'Adicionar observação'], changes: ['Previsão de mudança', 'Adicionar previsão'] };
 
+function dashboardSectionWarning(item) {
+  const warning = item.section_warning;
+  if (!warning) return '';
+  const detail = warning.saved ? `Seção gravada ${warning.saved} · Cadastro ${warning.choices.join(', ')}` : 'Confirme a seção no cadastro';
+  return `<span class="pdash-os is-missing">${escapeHtml(detail)}</span>`;
+}
+
 // frontStatus: o status já mostrado no cabeçalho do cartão; o setor só repete o status
 // quando é diferente (ex.: um setor em atividade e outro com solo úmido).
 function dashboardSectorRow(item, frontStatus = null) {
@@ -376,7 +385,7 @@ function dashboardSectorRow(item, frontStatus = null) {
     }).join('')
     : '<span class="pdash-tile-op is-empty"><span class="pdash-op is-empty">Sem operação</span></span>';
   const section = item.service_order?.needs_section
-    ? '<span class="pdash-os is-missing" title="No Polo MS a O.S. confere por setor e seção">Informe a seção</span>' : '';
+    ? '<span class="pdash-os is-missing" title="No Polo MS a O.S. confere por setor e seção">Informe a seção</span>' : dashboardSectionWarning(item);
   const stale = item.is_current_day ? ''
     : `<span class="pdash-stale">${dashboardIcon('clock')}${entry.work_date ? `Último registro ${escapeHtml(formatIsoDateBr(entry.work_date))}` : 'Sem registro'}</span>`;
   const place = productionPlaceLabel(entry);

@@ -398,15 +398,22 @@ def list_sector_options(user_id: int, unit_code: Any, sector: Any) -> list[dict[
     cleaned_sector = _clean_text(sector, "o setor", 32, required=True)
     with connection() as conn:
         _require_access(conn, user_id, unit=unit)
-        rows = conn.execute(
-            """SELECT sector,section,description FROM sector_base
-               WHERE sector=? COLLATE NOCASE ORDER BY section COLLATE NOCASE""",
-            (cleaned_sector,),
-        ).fetchall()
-        return [
-            {"sector": row["sector"], "section": row["section"] or "", "farm": row["description"] or ""}
-            for row in rows
-        ]
+        return _sector_options_by_code(conn, [cleaned_sector]).get(cleaned_sector.casefold(), [])
+
+
+def _sector_options_by_code(conn: sqlite3.Connection, sectors) -> dict[str, list[dict[str, str]]]:
+    codes = list(dict.fromkeys(sector for sector in sectors if sector))
+    options = {}
+    for start in range(0, len(codes), 300):
+        batch = codes[start:start + 300]
+        placeholders = ",".join("?" for _ in batch)
+        rows = conn.execute(f"""SELECT sector,section,description FROM sector_base
+                                WHERE sector COLLATE NOCASE IN ({placeholders}) ORDER BY section COLLATE NOCASE""", batch)
+        for row in rows:
+            options.setdefault(row["sector"].casefold(), []).append({
+                "sector": row["sector"], "section": row["section"] or "", "farm": row["description"] or "",
+            })
+    return options
 
 
 def _catalog_front_for_unit(conn: sqlite3.Connection, front_id: int, unit: str, *, allow_inactive: bool = False) -> sqlite3.Row:

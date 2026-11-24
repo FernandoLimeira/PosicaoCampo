@@ -262,10 +262,15 @@ function updateProductionResponsibilityFields(form) {
 
 let productionResponsibilityFrontRequest = 0;
 
-function renderResponsibilityFrontChoices(select, groups) {
-  select.innerHTML = '<option value="">Selecione</option>' + groups.map(group => `
-    <optgroup label="${escapeHtml(group.name)}">${(group.fronts || []).map(front =>
-      `<option value="${front.id}">${escapeHtml(front.name)}</option>`).join('')}</optgroup>`).join('');
+function renderResponsibilityFrontChoices(container, groups, selected = null) {
+  const type = selected == null ? 'checkbox' : 'radio';
+  container.innerHTML = groups.filter(group => group.is_active !== false).map(group => {
+    const fronts = (group.fronts || []).filter(front => front.is_active !== false);
+    return fronts.length ? `<div><strong>${escapeHtml(group.name)}</strong>${fronts.map(front => `
+      <label><input type="${type}" name="service_front_id" value="${escapeHtml(front.id)}"${front.id === selected ? ' checked' : ''} />
+        <span>${escapeHtml(front.name)}</span></label>`).join('')}</div>` : '';
+  }).join('');
+  return Boolean(container.innerHTML);
 }
 
 function showResponsibilityUnitStatus(message = '') {
@@ -279,11 +284,10 @@ async function changeProductionResponsibilityUnit(event) {
   const unit = event.currentTarget.value;
   const request = ++productionResponsibilityFrontRequest;
   const submit = form.querySelector('button[type="submit"]');
-  const select = form.elements.service_front_id;
+  const choices = form.querySelector('#production-responsibility-fronts');
   form.dataset.scheduleUnit = '';
   submit.disabled = true;
-  select.disabled = true;
-  renderResponsibilityFrontChoices(select, []);
+  renderResponsibilityFrontChoices(choices, []);
   showResponsibilityUnitStatus('Carregando frentes da unidade…');
   try {
     let groups = groupsForEntry();
@@ -300,10 +304,9 @@ async function changeProductionResponsibilityUnit(event) {
       }
       groups = Array.isArray(catalog.groups) ? catalog.groups : [];
     }
-    renderResponsibilityFrontChoices(select, groups);
+    const hasFronts = renderResponsibilityFrontChoices(choices, groups);
     form.dataset.scheduleUnit = unit;
-    select.disabled = false;
-    submit.disabled = !groups.some(group => group.fronts?.length);
+    submit.disabled = !hasFronts;
     showResponsibilityUnitStatus(submit.disabled ? 'Nenhuma frente cadastrada nesta unidade.' : '');
   } catch (error) {
     if (request === productionResponsibilityFrontRequest) showResponsibilityUnitStatus(error.message || 'Não foi possível carregar as frentes.');
@@ -322,14 +325,14 @@ function openProductionResponsibilityForm(rule = null, { keepOpen = false } = {}
   fields.unit_code.innerHTML = allowedProductionUnits().map(unit => `<option value="${escapeHtml(unit)}">${escapeHtml(productionUnitLabel(unit))}</option>`).join('');
   fields.unit_code.value = form.dataset.unit;
   fields.unit_code.disabled = Boolean(rule);
-  fields.service_front_id.disabled = false;
-  form.querySelector('button[type="submit"]').disabled = false;
-  showResponsibilityUnitStatus();
   fields.role_id.innerHTML = '<option value="">Selecione</option>' + productionResponsibilityRoles.map(role =>
     `<option value="${role.id}">${escapeHtml(role.name)}</option>`).join('');
-  renderResponsibilityFrontChoices(fields.service_front_id, groupsForEntry());
+  const hasFronts = renderResponsibilityFrontChoices(form.querySelector('#production-responsibility-fronts'),
+    groupsForEntry(), rule?.service_front_id);
+  form.querySelector('button[type="submit"]').disabled = !hasFronts;
+  showResponsibilityUnitStatus(hasFronts ? '' : 'Nenhuma frente cadastrada nesta unidade.');
   if (rule) {
-    for (const key of ['kind', 'role_id', 'service_front_id', 'shift', 'work_date', 'responsible_name', 'relief_name']) {
+    for (const key of ['kind', 'role_id', 'shift', 'work_date', 'responsible_name', 'relief_name']) {
       fields[key].value = rule[key];
     }
   }
@@ -346,10 +349,20 @@ async function submitProductionResponsibility(event) {
   if (!canEditProductionResponsibility('edit_schedules') || form.dataset.unit !== currentProductionUnit()
     || !unit || form.dataset.scheduleUnit !== unit) return;
   const id = fields.rule_id.value;
-  const payload = Object.fromEntries(new FormData(form));
-  payload.unit_code = unit;
   const button = form.querySelector('button[type="submit"]');
   if (button.disabled) return;
+  const data = new FormData(form);
+  const frontIds = data.getAll('service_front_id').map(Number);
+  if (!frontIds.length) {
+    showToast('Selecione pelo menos uma frente ou serviço.', true);
+    form.querySelector('#production-responsibility-fronts input')?.focus();
+    return;
+  }
+  const payload = { ...Object.fromEntries(data), unit_code: unit };
+  if (!id) {
+    delete payload.service_front_id;
+    payload.service_front_ids = frontIds;
+  }
   const request = ++productionResponsibilityFrontRequest;
   fields.unit_code.disabled = true;
   button.disabled = true;
@@ -357,7 +370,8 @@ async function submitProductionResponsibility(event) {
     await apiRequest(`/api/production/catalog/responsibilities${id ? `/${id}` : ''}`, {
       method: id ? 'PUT' : 'POST', body: JSON.stringify(payload)
     });
-    showToast(`Escala salva em ${productionUnitLabel(unit)}.`);
+    showToast(frontIds.length === 1 ? `Escala salva em ${productionUnitLabel(unit)}.`
+      : `Escala salva para ${frontIds.length} frentes em ${productionUnitLabel(unit)}.`);
     if (request === productionResponsibilityFrontRequest) openProductionResponsibilityForm();
     if (unit === currentProductionUnit()) {
       await loadProductionResponsibilities(unit);

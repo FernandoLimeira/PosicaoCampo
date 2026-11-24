@@ -4,9 +4,11 @@
 
 const productionSectorOptions = new WeakMap();
 let productionSectorSequence = 0;
+let productionOriginalSectorRow = null;
+const productionRemovedSectorIds = new Set();
 
-function renderEntryOperations(operations = ['']) {
-  const container = document.querySelector('#production-operation-inputs');
+function renderEntryOperations(row, operations = ['']) {
+  const container = row?.querySelector('[data-entry-operation-inputs]');
   if (!container) return;
   container.innerHTML = operations.map((value, index) => `<div class="production-sheet-operation">
       <input data-entry-op="${index}" value="${escapeHtml(value)}" maxlength="40"
@@ -16,8 +18,8 @@ function renderEntryOperations(operations = ['']) {
       aria-label="Adicionar operação" ${operations.length >= 10 ? 'disabled' : ''}>+</button>`;
 }
 
-function productionEntryOperationValues() {
-  return [...document.querySelectorAll('#production-operation-inputs [data-entry-op]')].map(input => input.value);
+function productionEntryOperationValues(row) {
+  return [...row.querySelectorAll('[data-entry-op]')].map(input => input.value);
 }
 
 const productionSectorScans = new WeakMap();
@@ -29,10 +31,8 @@ function clearProductionSectorScan(row) {
     target.textContent = '';
     target.classList?.remove('is-missing');
   }
-  if (row === productionSectorRows()[0]) {
-    const suggestions = document.querySelector('#production-operation-suggestions');
-    if (suggestions) suggestions.innerHTML = '';
-  }
+  const suggestions = row?.querySelector('[data-entry-operation-suggestions]');
+  if (suggestions) suggestions.innerHTML = '';
 }
 
 function renderProductionSectorWarning(row, codes) {
@@ -48,9 +48,8 @@ function renderProductionSectorWarning(row, codes) {
   target.classList?.toggle('is-missing', Boolean(message));
 }
 
-function refreshProductionSectorWarnings() {
-  const codes = productionEntryOperationValues().flatMap(splitProductionOperations);
-  productionSectorRows().forEach(row => renderProductionSectorWarning(row, codes));
+function refreshProductionSectorWarning(row) {
+  renderProductionSectorWarning(row, productionEntryOperationValues(row).flatMap(splitProductionOperations));
 }
 
 async function scanProductionSector(row) {
@@ -59,8 +58,9 @@ async function scanProductionSector(row) {
   clearProductionSectorScan(row);
   const unit = document.querySelector('#production-unit-input')?.value || currentProductionUnit();
   const sector = productionSectorField(row, 'sector').value.trim();
-  const section = productionSectorField(row, 'section').value.trim();
-  if (!sector || (productionUnitUsesSection(unit) && !section)) return;
+  const sectionField = productionSectorField(row, 'section');
+  const section = sectionField.value.trim();
+  if (!sector || ((productionUnitUsesSection(unit) || sectionField.required) && !section)) return;
   const request = {};
   productionSectorScans.set(row, request);
   target.textContent = 'Consultando O.S. abertas…';
@@ -74,9 +74,9 @@ async function scanProductionSector(row) {
       if (key && !operations.has(key)) operations.set(key, order);
     }
     request.operations = operations;
-    renderProductionSectorWarning(row, productionEntryOperationValues().flatMap(splitProductionOperations));
-    if (productionEditingItemId !== null || row !== productionSectorRows()[0] || !operations.size) return;
-    const suggestions = document.querySelector('#production-operation-suggestions');
+    refreshProductionSectorWarning(row);
+    if (productionEditingItemId !== null || !operations.size) return;
+    const suggestions = row.querySelector('[data-entry-operation-suggestions]');
     if (!suggestions) return;
     const frontId = document.querySelector('#production-front-input')?.value;
     const defaults = productionFrontDefaultOperations(frontId).map(productionOperationKey);
@@ -150,8 +150,16 @@ function productionSectorRows() {
 }
 
 function updateProductionSectorRows() {
+  const rows = productionSectorRows();
   const add = document.querySelector('#production-add-sector');
-  if (add) add.disabled = productionSectorRows().length >= 100;
+  if (add) add.disabled = rows.length >= 100;
+  rows.forEach(row => {
+    const remove = row.querySelector('[data-remove-sector]');
+    if (remove) remove.hidden = rows.length <= 1;
+  });
+  const note = document.querySelector('#production-entry-removal-note');
+  const count = productionRemovedSectorIds.size;
+  if (note) note.textContent = count ? `${count} ${count === 1 ? 'setor será removido' : 'setores serão removidos'} ao atualizar.` : '';
 }
 
 function addProductionSector(item = null) {
@@ -161,19 +169,17 @@ function addProductionSector(item = null) {
   const suffix = `-${++productionSectorSequence}`;
   row.querySelectorAll('[id]').forEach(element => { element.id += suffix; });
   row.querySelectorAll('label[for]').forEach(label => { label.htmlFor += suffix; });
-  const remove = row.querySelector('[data-remove-sector]');
-  remove.hidden = false;
+  delete row.dataset.linkedItemId;
   clearProductionSectorScan(row);
   document.querySelector('#production-sector-rows').append(row);
   updateProductionSectorRows();
   if (item) {
-    row.dataset.linkedItemId = String(item.id);
-    remove.textContent = 'Separar setor';
     fillProductionSectorRow(row, item);
     return;
   }
   productionSectorField(row, 'sector').value = '';
   productionSectorField(row, 'farm').value = '';
+  renderEntryOperations(row);
   resetSectorFields(row);
   productionSectorField(row, productionEntryUsesSection() ? 'section' : 'sector').focus();
 }
@@ -186,35 +192,56 @@ function resetSectorFields(row = document) {
     renderProductionSectorChoices(row);
     return;
   }
-  if (section) section.innerHTML = '<option value="">Sem seção</option>';
+  if (section) {
+    section.innerHTML = '<option value="">Sem seção</option>';
+    showProductionSectionChoice(row, section, false);
+  }
 }
 
-async function resolveSectorFromBase(row = document) {
+function productionRegisteredSectionOptions(options, selected = '') {
+  return '<option value="">Confirme a seção</option>' + options.map(item =>
+    `<option value="${escapeHtml(item.section)}"${item.section === selected ? ' selected' : ''}>${escapeHtml(item.section)}${item.farm ? ` — ${escapeHtml(item.farm)}` : ''}</option>`
+  ).join('');
+}
+
+function showProductionSectionChoice(row, section, visible) {
+  const label = section.closest?.('label');
+  if (label) label.hidden = !visible;
+  section.required = visible;
+  row.classList?.toggle('shows-section', visible);
+}
+
+async function resolveSectorFromBase(row = document, { keep = false } = {}) {
   const unit = document.querySelector('#production-unit-input')?.value || currentProductionUnit();
   const input = productionSectorField(row, 'sector');
   const sector = input?.value.trim() || '';
   const section = productionSectorField(row, 'section');
   const farm = productionSectorField(row, 'farm');
+  const previous = keep ? section?.value || '' : '';
   const request = {};
+  if (!keep) {
+    resetSectorFields(row);
+    if (farm) farm.value = '';
+  }
   productionSectorOptions.set(row, request);
-  if (section) section.innerHTML = '<option value="">Sem seção</option>';
-  if (farm) farm.value = '';
   if (!sector) return;
   try {
     request.promise = apiRequest(`/api/production/sector-options?unit=${encodeURIComponent(unit)}&sector=${encodeURIComponent(sector)}`);
     const data = await request.promise;
     if (productionSectorOptions.get(row) !== request || input.value.trim() !== sector ||
         document.querySelector('#production-unit-input')?.value !== unit) return;
-    const sectorOptions = Array.isArray(data.items) ? data.items : [];
-    productionSectorOptions.set(row, sectorOptions);
+    const options = Array.isArray(data.items) ? data.items : [];
+    const sections = options.filter(item => item.section);
+    productionSectorOptions.set(row, sections);
     if (!section) return;
-    section.innerHTML = '<option value="">Sem seção</option>' + sectorOptions.map(item =>
-      `<option value="${escapeHtml(item.section)}">${escapeHtml(item.section || 'Sem seção')}${item.farm ? ` — ${escapeHtml(item.farm)}` : ''}</option>`
-    ).join('');
-    if (sectorOptions.length) {
-      const first = sectorOptions[0];
-      if (sectorOptions.length === 1) section.value = first.section || '';
-      if (farm) farm.value = first.farm || '';
+    showProductionSectionChoice(row, section, sections.length > 1);
+    if (sections.length) {
+      const selected = sections.length === 1 ? sections[0] : sections.find(item => item.section === previous);
+      section.innerHTML = productionRegisteredSectionOptions(sections, selected?.section);
+      section.value = selected?.section || '';
+      if (farm && (selected?.section !== previous || !farm.value)) farm.value = selected?.farm || '';
+    } else if (farm && !farm.value) {
+      farm.value = options[0]?.farm || '';
     }
   } catch (error) {
     console.warn(error);
@@ -235,12 +262,15 @@ function productionEntryUsesSection() {
 
 // Base de setores da unidade ({ sector, section, farm }), carregada uma vez por unidade.
 const productionSectorBaseCache = new Map();
-function loadProductionSectorBase(unit) {
+function loadProductionSectorBase(unit, { refresh = false } = {}) {
   const key = String(unit || '').toUpperCase();
-  if (!productionSectorBaseCache.has(key)) {
+  if (refresh || !productionSectorBaseCache.has(key)) {
     const promise = apiRequest(`/api/production/sector-base?unit=${encodeURIComponent(key)}`)
       .then(base => (Array.isArray(base?.items) ? base.items : []))
-      .catch(error => { productionSectorBaseCache.delete(key); throw error; });
+      .catch(error => {
+        if (productionSectorBaseCache.get(key) === promise) productionSectorBaseCache.delete(key);
+        throw error;
+      });
     productionSectorBaseCache.set(key, promise);
   }
   return productionSectorBaseCache.get(key);
@@ -375,18 +405,25 @@ function setProductionEntryEditMode(isEditing) {
 
   const submit = document.querySelector('#production-entry-submit');
   if (submit) submit.textContent = isEditing ? 'Atualizar' : 'Adicionar';
+  const removeFront = document.querySelector('#production-remove-front');
+  if (removeFront) removeFront.hidden = !isEditing;
 
   const hint = document.querySelector('#production-entry-hint');
   if (hint) hint.textContent = isEditing ? 'Enter atualiza' : 'Enter adiciona';
 }
 
 function clearEntryForm(defaultUnit = selectedNavbarProductionUnit()) {
-  const [first, ...additional] = productionSectorRows();
-  productionSectorRows().forEach(row => {
+  const rows = productionSectorRows();
+  productionOriginalSectorRow ||= rows[0];
+  const first = productionOriginalSectorRow;
+  rows.forEach(row => {
     productionSectorOptions.delete(row);
     clearProductionSectorScan(row);
+    if (row !== first) row.remove();
   });
-  additional.forEach(row => row.remove());
+  if (first && !rows.includes(first)) document.querySelector('#production-sector-rows').prepend(first);
+  if (first?.dataset) delete first.dataset.linkedItemId;
+  productionRemovedSectorIds.clear();
   updateProductionSectorRows();
   const form = document.querySelector('#production-entry-form');
   form?.reset();
@@ -400,12 +437,17 @@ function clearEntryForm(defaultUnit = selectedNavbarProductionUnit()) {
   renderEntryGroups();
   setSelectedStatus(defaultStatusCode());
   if (first) resetSectorFields(first);
-  renderEntryOperations();
+  renderEntryOperations(first);
   setProductionEntryEditMode(false);
 }
 
 function fillProductionSectorRow(row, item) {
   const entry = item.entry || {};
+  if (row !== document) {
+    row.dataset.linkedItemId = String(item.id);
+    const operations = splitProductionOperations(entry.operation);
+    renderEntryOperations(row, operations.length ? operations : ['']);
+  }
   const section = productionSectorField(row, 'section');
   productionSectorField(row, 'sector').value = entry.sector || '';
   productionSectorField(row, 'farm').value = entry.farm || '';
@@ -416,6 +458,12 @@ function fillProductionSectorRow(row, item) {
     resetSectorFields(row);
     section.innerHTML = `<option value="${escapeHtml(entry.section || '')}">${escapeHtml(entry.section || 'Sem seção')}</option>`;
     section.value = entry.section || '';
+    if (entry.sector) {
+      resolveSectorFromBase(row, { keep: true }).then(() => {
+        if (row.isConnected) scanProductionSector(row);
+      });
+      return;
+    }
   }
   scanProductionSector(row);
 }
@@ -434,9 +482,6 @@ function openEditProductionItem(itemId) {
   setProductionEntryUnit(currentProductionUnit());
   applyProductionLocationMode();
   renderEntryGroups(item.group_id, item.service_front_id, item);
-  let operations = splitProductionOperations(entry.operation);
-  if (!operations.length && !item.sector_group_id) operations = productionFrontDefaultOperations(item.service_front_id);
-  renderEntryOperations(operations.length ? operations : ['']);
   const [row = document] = productionSectorRows();
   fillProductionSectorRow(row, item);
   setSelectedStatus(entry.status || defaultStatusCode());
@@ -493,6 +538,7 @@ async function submitProductionEntry(event) {
     return;
   }
   payload.sectors = sectors;
+  if (itemId) payload.removed_sector_ids = [...productionRemovedSectorIds];
   try {
     await apiRequest(itemId ? `/api/production/my-items/${itemId}` : '/api/production/my-items/batch', {
       method: itemId ? 'PUT' : 'POST',
@@ -520,7 +566,6 @@ function collectProductionSectors() {
   const rows = productionSectorRows();
   const status = selectedStatus();
   if (!status) throw new Error('Selecione o status da frente.');
-  const operation = productionEntryOperationValues().map(value => value.trim()).filter(Boolean).join(', ');
   const seen = new Set();
   return rows.map(row => {
     const input = productionSectorField(row, 'sector');
@@ -530,12 +575,57 @@ function collectProductionSectors() {
       throw new Error(sector ? `O setor ${sector} está repetido nesta frente.` : 'Informe o setor.');
     }
     seen.add(sector.toLocaleUpperCase('pt-BR'));
+    const section = productionSectorField(row, 'section');
+    if (section.required && !section.value.trim()) {
+      section.focus();
+      throw new Error(`Confirme a seção do setor ${sector}.`);
+    }
     const linkedItemId = row.dataset?.linkedItemId;
-    return { sector, section: productionSectorField(row, 'section').value.trim(),
+    const operation = productionEntryOperationValues(row).map(value => value.trim()).filter(Boolean).join(', ');
+    return { sector, section: section.value.trim(),
       farm: productionSectorField(row, 'farm').value.trim(), status,
       ...(linkedItemId ? { id: Number(linkedItemId) } : {}),
-      ...(operation || productionEditingItemId || rows.length > 1 ? { operation } : {}) };
+      ...(operation || linkedItemId ? { operation } : {}) };
   });
+}
+
+async function removeProductionFront() {
+  const itemId = productionEditingItemId;
+  const item = findProductionItem(itemId);
+  const submit = document.querySelector('#production-entry-submit');
+  const button = document.querySelector('#production-remove-front');
+  if (!item || !canFillProduction() || !submit || !button || submit.disabled) return;
+  const unit = currentProductionUnit();
+  const itemIds = new Set([itemId, ...productionRemovedSectorIds]);
+  for (const row of productionSectorRows()) {
+    if (row.dataset.linkedItemId) itemIds.add(Number(row.dataset.linkedItemId));
+  }
+  submit.disabled = true;
+  button.disabled = true;
+  try {
+    if (!await askConfirmation({
+      kicker: 'Produção Agrícola', title: 'Remover a frente inteira?',
+      message: `Remover ${item.service_name} e todos os setores vinculados a este lançamento em ${productionUnitLabel(unit)}? O histórico será preservado.`,
+      confirmLabel: 'Remover frente inteira'
+    })) return;
+    await apiRequest(`/api/production/my-items/${itemId}?scope=front`, {
+      method: 'DELETE', body: JSON.stringify({ item_ids: [...itemIds] })
+    });
+    closeModal('production-entry-modal');
+    showToast('Frente removida da unidade.');
+    try {
+      if (unit === currentProductionUnit()) await refreshProductionPage(unit, { keepFilters: true });
+    } catch (error) {
+      console.error(error);
+      showToast(PRODUCTION_REFRESH_WARNING, true);
+    }
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || 'Não foi possível remover a frente.', true);
+  } finally {
+    submit.disabled = false;
+    button.disabled = false;
+  }
 }
 
 document.querySelector('#production-entry-form')?.addEventListener('submit', submitProductionEntry);
@@ -544,27 +634,30 @@ document.querySelector('#production-status-options')?.addEventListener('change',
 document.querySelector('#production-group-input')?.addEventListener('change', () => renderEntryFronts());
 
 document.querySelector('#production-add-sector')?.addEventListener('click', () => addProductionSector());
+document.querySelector('#production-remove-front')?.addEventListener('click', removeProductionFront);
 
 document.querySelector('#production-sector-rows')?.addEventListener('click', event => {
   const row = event.target.closest('[data-production-sector-row]');
   if (!row) return;
   const button = event.target.closest('[data-remove-sector]');
-  if (button && row !== productionSectorRows()[0]) {
+  if (button && productionSectorRows().length > 1 && !document.querySelector('#production-entry-submit')?.disabled) {
+    if (row.dataset.linkedItemId) productionRemovedSectorIds.add(Number(row.dataset.linkedItemId));
     productionSectorOptions.delete(row);
     clearProductionSectorScan(row);
     row.remove();
     updateProductionSectorRows();
+    productionSectorField(productionSectorRows()[0], 'sector')?.focus();
     return;
   }
-  if (event.target.closest('[data-retry-sector-scan]')) scanProductionSector(row);
-});
-
-document.querySelector('#production-entry-operations')?.addEventListener('click', event => {
+  if (event.target.closest('[data-retry-sector-scan]')) {
+    scanProductionSector(row);
+    return;
+  }
   const add = event.target.closest('[data-entry-op-add]');
   const remove = event.target.closest('[data-entry-op-remove]');
   const suggestion = event.target.closest('[data-sector-operation]');
   if (!add && !remove && !suggestion) return;
-  const operations = productionEntryOperationValues();
+  const operations = productionEntryOperationValues(row);
   if (remove) operations.splice(Number(remove.dataset.entryOpRemove), 1);
   else if (suggestion) {
     const code = suggestion.dataset.sectorOperation;
@@ -574,20 +667,21 @@ document.querySelector('#production-entry-operations')?.addEventListener('click'
     else if (operations.length < 10) operations.push(code);
     else return;
   } else if (operations.length < 10) operations.push('');
-  renderEntryOperations(operations);
-  refreshProductionSectorWarnings();
-  if (add) event.currentTarget.querySelector(`[data-entry-op="${operations.length - 1}"]`)?.focus();
+  renderEntryOperations(row, operations);
+  renderProductionSectorWarning(row, operations.flatMap(splitProductionOperations));
+  if (add) row.querySelector(`[data-entry-op="${operations.length - 1}"]`)?.focus();
 });
 
-document.querySelector('#production-operation-inputs')?.addEventListener('input', refreshProductionSectorWarnings);
-
 document.querySelector('#production-sector-rows')?.addEventListener('input', event => {
-  if (!event.target.matches('input[data-sector-field="sector"], input[data-sector-field="section"]')) return;
   const row = event.target.closest('[data-production-sector-row]');
-  if (row) {
-    productionSectorOptions.delete(row);
-    clearProductionSectorScan(row);
+  if (!row) return;
+  if (event.target.matches('[data-entry-op]')) {
+    refreshProductionSectorWarning(row);
+    return;
   }
+  if (!event.target.matches('input[data-sector-field="sector"], input[data-sector-field="section"]')) return;
+  productionSectorOptions.delete(row);
+  clearProductionSectorScan(row);
 });
 
 document.querySelector('#production-sector-rows')?.addEventListener('change', async event => {
@@ -605,6 +699,10 @@ document.querySelector('#production-sector-rows')?.addEventListener('change', as
     }
     if (field === 'sector') syncFarmFromSectorChoice(row);
   } else if (field === 'sector') await resolveSectorFromBase(row);
+  else if (field === 'section') {
+    const options = productionSectorOptions.get(row);
+    if (Array.isArray(options)) productionSectorField(row, 'farm').value = options.find(item => item.section === value)?.farm || '';
+  }
   if ((field === 'sector' || field === 'section') && row.isConnected && event.target.value === value) scanProductionSector(row);
 });
 

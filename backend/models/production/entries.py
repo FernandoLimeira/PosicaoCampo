@@ -7,6 +7,7 @@ import uuid
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from ...services.operational_shifts import MS_UNIT_CODES
 from ..constants import ALLOWED_UNIT_CODES
 from ..storage import connection, validate_actor
 from .common import (
@@ -17,7 +18,7 @@ from .common import (
     _normalize_work_date,
 )
 from .access import _require_access
-from .catalog import _catalog_front_for_unit, _validate_status_code
+from .catalog import _catalog_front_for_unit, _sector_options_by_code, _validate_status_code
 from .responsibilities import _scheduled_responsibles
 
 
@@ -79,6 +80,7 @@ def list_my_items(user_id: int, unit_code: Any, work_date: Any, *, scope: str = 
                 (unit, selected_date, unit),
             )
         }
+        section_options = _sector_options_by_code(conn, (entry["sector"] for entry in latest_entries.values())) if unit not in MS_UNIT_CODES else {}
         responsibles = _scheduled_responsibles(conn, unit, selected_date)
         items = []
         for row in rows:
@@ -98,6 +100,12 @@ def list_my_items(user_id: int, unit_code: Any, work_date: Any, *, scope: str = 
                 "catalog_active": bool(row["service_active"]) and bool(row["group_active"]),
                 "entry": entry, "is_current_day": bool(entry and entry["work_date"] == selected_date),
             })
+            if entry:
+                sections = [option["section"] for option in section_options.get(entry["sector"].casefold(), []) if option["section"]]
+                if sections and (entry["section"] or len(sections) > 1) and all(
+                    entry["section"].casefold() != section.casefold() for section in sections
+                ):
+                    items[-1]["section_warning"] = {"saved": entry["section"], "choices": sections}
         # Import local: service_orders importa este módulo.
         if with_orders:
             from ..service_orders import attach_service_order_status
@@ -232,6 +240,21 @@ def _normalize_entry_data(payload: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _apply_registered_section(entry: dict[str, str], options: list[dict[str, str]]) -> None:
+    sections = [option for option in options if option["section"]]
+    if not sections:
+        return
+    previous = entry["section"].casefold()
+    selected = sections[0] if len(sections) == 1 else next(
+        (option for option in sections if option["section"].casefold() == previous), None
+    )
+    if selected is None:
+        raise ValueError(f"Confirme a seção do setor {entry['sector']} no Cadastro de Setores.")
+    entry["section"] = selected["section"]
+    if selected["farm"] and (not entry["farm"] or (previous and previous != selected["section"].casefold())):
+        entry["farm"] = selected["farm"]
+
+
 def _active_front_entries(conn: sqlite3.Connection, unit: str, front_id: int, work_date: str | None = None):
     return conn.execute(
         """SELECT ui.id,ui.sector_group_id,e.sector FROM production_user_items ui
@@ -297,12 +320,22 @@ def save_my_items(user_id: int, payload: Any, *, item_id: int | None = None) -> 
     return _save_my_items(user_id, payload, sectors, item_id=item_id, edit_sectors=True)
 
 
+def _sector_item_ids(values: Any) -> set[int]:
+    if not isinstance(values, list) or len(values) > 100 or any(type(value) is not int or value <= 0 for value in values):
+        raise ValueError("Lançamentos de setores inválidos.")
+    return set(values)
+
+
 def _save_my_items(
     user_id: int, payload: Any, sectors: list[Any], *, item_id: int | None = None, edit_sectors: bool = False,
 ) -> list[dict[str, Any]]:
     """Grava um ou vários setores na mesma transação, preservando o histórico individual."""
     if not isinstance(payload, dict):
         raise ValueError("Dados do apontamento inválidos.")
+    explicit_sectors = edit_sectors and "removed_sector_ids" in payload
+    removed_ids = _sector_item_ids(payload["removed_sector_ids"]) if explicit_sectors else set()
+    if explicit_sectors and item_id is None:
+        raise ValueError("Selecione a frente que deseja editar.")
     unit = _normalize_unit(payload.get("unit_code"))
     try:
         front_id = int(payload.get("service_front_id"))
@@ -326,23 +359,35 @@ def _save_my_items(
         _require_access(conn, user_id, permission="fill", unit=unit)
         validate_actor(conn, user_id)
         front = _catalog_front_for_unit(conn, front_id, unit, allow_inactive=item_id is not None and len(entries) == 1)
+        section_options = _sector_options_by_code(conn, (entry["sector"] for entry in entries)) if unit not in MS_UNIT_CODES else {}
         existing = _active_front_entries(conn, unit, front_id, entries[0]["work_date"])
         by_id = {row["id"]: row for row in existing}
         edited = by_id.get(item_id)
         previous_group = edited["sector_group_id"] if edited else None
+        if explicit_sectors:
+            linked_ids = {row["id"] for row in existing if row["id"] == item_id
+                          or (previous_group and row["sector_group_id"] == previous_group)}
+            retained_ids = _sector_item_ids([source["id"] for source in sectors if "id" in source])
+            if not edited or (retained_ids & removed_ids) or (retained_ids | removed_ids) != linked_ids:
+                raise ValueError("O vínculo dos setores mudou. Reabra a frente para editar.")
         existing_sectors = {}
         for row in existing:
+            if row["id"] in removed_ids:
+                continue
             existing_sectors.setdefault(row["sector"].strip().upper(), []).append(row["id"])
         for index, (entry, source) in enumerate(zip(entries, sectors)):
             entry["status"] = _validate_status_code(conn, entry["status"])
+            _apply_registered_section(entry, section_options.get(entry["sector"].casefold(), []))
             matching_ids = existing_sectors.get(entry["sector"].upper(), [])
-            target_id = item_id if index == 0 else None
-            if item_id is not None and index > 0 and source.get("id") is not None:
+            target_id = item_id if index == 0 and not explicit_sectors else None
+            if explicit_sectors:
+                target_id = source.get("id")
+            elif item_id is not None and index > 0 and source.get("id") is not None:
                 linked = by_id.get(source["id"]) if type(source["id"]) is int else None
                 if not previous_group or not linked or linked["sector_group_id"] != previous_group or linked["id"] == item_id:
                     raise ValueError("O vínculo dos setores mudou. Reabra a frente para editar.")
                 target_id = linked["id"]
-            if item_id is not None and index > 0 and target_id is None:
+            if item_id is not None and target_id is None:
                 # Uma linha adicionada à edição pode vincular um setor já lançado separadamente.
                 target_id = next((candidate for candidate in matching_ids if candidate != item_id
                                   and not by_id[candidate]["sector_group_id"]), None)
@@ -368,6 +413,7 @@ def _save_my_items(
             group_id = (previous_group or uuid.uuid4().hex) if len(item_ids) > 1 else None
             conn.executemany("UPDATE production_user_items SET sector_group_id=? WHERE id=?",
                              [(group_id, saved_id) for saved_id in item_ids])
+        _deactivate_items(conn, list(removed_ids), now)
     result = list_my_items(user_id, unit, entries[0]["work_date"], scope="all", with_orders=False)
     by_id = {item["id"]: item for item in result["items"]}
     return [by_id[saved_id] for saved_id in item_ids]
@@ -447,6 +493,7 @@ def save_items_sheet(user_id: int, payload: Any) -> dict[str, Any]:
         conn.execute("BEGIN IMMEDIATE")
         _require_access(conn, user_id, permission="fill", unit=unit)
         validate_actor(conn, user_id)
+        section_options = _sector_options_by_code(conn, (entry["sector"] for _, _, _, entry, _ in prepared)) if unit not in MS_UNIT_CODES else {}
         for item_id in removed_ids:
             item = conn.execute(
                 "SELECT unit_code FROM production_user_items WHERE id=? AND is_active=1", (item_id,),
@@ -458,6 +505,7 @@ def save_items_sheet(user_id: int, payload: Any) -> dict[str, Any]:
             try:
                 front = _catalog_front_for_unit(conn, front_id, unit, allow_inactive=item_id is not None)
                 entry["status"] = _validate_status_code(conn, entry["status"])
+                _apply_registered_section(entry, section_options.get(entry["sector"].casefold(), []))
             except ValueError as exc:
                 raise ValueError(f"Linha {index}: {exc}") from exc
             matching_ids = [row["id"] for row in _active_front_entries(conn, unit, front_id, work_date)
@@ -536,18 +584,26 @@ def _save_my_item(
     return item_id
 
 
-def remove_my_item(user_id: int, item_id: int) -> None:
+def remove_my_item(user_id: int, item_id: int, *, entire_front: bool = False, expected_ids: Any = None) -> None:
     now = int(time.time())
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         item = conn.execute(
-            "SELECT id,unit_code,service_front_id FROM production_user_items WHERE id=? AND is_active=1",
+            "SELECT id,unit_code,service_front_id,sector_group_id FROM production_user_items WHERE id=? AND is_active=1",
             (item_id,),
         ).fetchone()
         if not item:
             raise ValueError("Lançamento da frente não encontrado.")
         _require_access(conn, user_id, permission="fill", unit=item["unit_code"])
         entries = _active_front_entries(conn, item["unit_code"], item["service_front_id"])
+        if entire_front:
+            group_id = item["sector_group_id"]
+            linked_ids = {entry["id"] for entry in entries if group_id and entry["sector_group_id"] == group_id}
+            linked_ids.add(item_id)
+            if _sector_item_ids(expected_ids) != linked_ids:
+                raise ValueError("O vínculo dos setores mudou. Reabra a frente para removê-la.")
+            _deactivate_items(conn, list(linked_ids), now)
+            return
         target = next((entry for entry in entries if entry["id"] == item_id), None)
         item_ids = [entry["id"] for entry in entries if target and entry["sector"].strip().upper() == target["sector"].strip().upper()]
         _deactivate_items(conn, item_ids or [item_id], now)
