@@ -262,15 +262,47 @@ function updateProductionResponsibilityFields(form) {
 
 let productionResponsibilityFrontRequest = 0;
 
-function renderResponsibilityFrontChoices(container, groups, selected = null) {
-  const type = selected == null ? 'checkbox' : 'radio';
-  container.innerHTML = groups.filter(group => group.is_active !== false).map(group => {
+function renderResponsibilityFrontChoices(form, groups, selected = null) {
+  const select = form.querySelector('#production-responsibility-fronts');
+  let frontCount = 0;
+  select.innerHTML = '<option value="">Selecione</option>' + groups.filter(group => group.is_active !== false).map(group => {
     const fronts = (group.fronts || []).filter(front => front.is_active !== false);
-    return fronts.length ? `<div><strong>${escapeHtml(group.name)}</strong>${fronts.map(front => `
-      <label><input type="${type}" name="service_front_id" value="${escapeHtml(front.id)}"${front.id === selected ? ' checked' : ''} />
-        <span>${escapeHtml(front.name)}</span></label>`).join('')}</div>` : '';
+    frontCount += fronts.length;
+    return fronts.length ? `<optgroup label="${escapeHtml(group.name)}">${fronts.map(front =>
+      `<option value="${escapeHtml(front.id)}">${escapeHtml(front.name)}</option>`).join('')}</optgroup>` : '';
   }).join('');
-  return Boolean(container.innerHTML);
+  select.value = selected == null ? '' : String(selected);
+  form.querySelector('#production-responsibility-extra-fronts').replaceChildren();
+  const add = form.querySelector('#production-responsibility-front-add');
+  add.hidden = frontCount < 2 || Boolean(form.elements.rule_id.value);
+  add.disabled = false;
+  return frontCount > 0;
+}
+
+function addProductionResponsibilityFront(form) {
+  const add = form.querySelector('#production-responsibility-front-add');
+  if (add.hidden || add.disabled || form.elements.rule_id.value) return;
+  const first = form.querySelector('#production-responsibility-fronts');
+  const extra = form.querySelector('#production-responsibility-extra-fronts');
+  const row = document.createElement('div');
+  const select = first.cloneNode(true);
+  select.removeAttribute('id');
+  select.setAttribute('aria-label', 'Frente / serviço adicional');
+  select.value = '';
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'production-inline-text-button';
+  remove.textContent = 'Remover';
+  remove.setAttribute('aria-label', 'Remover este seletor de frente');
+  remove.addEventListener('click', () => {
+    row.remove();
+    add.disabled = false;
+    add.focus();
+  });
+  row.append(select, remove);
+  extra.append(row);
+  add.disabled = extra.children.length >= first.options.length - 2;
+  select.focus();
 }
 
 function showResponsibilityUnitStatus(message = '') {
@@ -284,10 +316,9 @@ async function changeProductionResponsibilityUnit(event) {
   const unit = event.currentTarget.value;
   const request = ++productionResponsibilityFrontRequest;
   const submit = form.querySelector('button[type="submit"]');
-  const choices = form.querySelector('#production-responsibility-fronts');
   form.dataset.scheduleUnit = '';
   submit.disabled = true;
-  renderResponsibilityFrontChoices(choices, []);
+  renderResponsibilityFrontChoices(form, []);
   showResponsibilityUnitStatus('Carregando frentes da unidade…');
   try {
     let groups = groupsForEntry();
@@ -304,7 +335,7 @@ async function changeProductionResponsibilityUnit(event) {
       }
       groups = Array.isArray(catalog.groups) ? catalog.groups : [];
     }
-    const hasFronts = renderResponsibilityFrontChoices(choices, groups);
+    const hasFronts = renderResponsibilityFrontChoices(form, groups);
     form.dataset.scheduleUnit = unit;
     submit.disabled = !hasFronts;
     showResponsibilityUnitStatus(submit.disabled ? 'Nenhuma frente cadastrada nesta unidade.' : '');
@@ -327,8 +358,7 @@ function openProductionResponsibilityForm(rule = null, { keepOpen = false } = {}
   fields.unit_code.disabled = Boolean(rule);
   fields.role_id.innerHTML = '<option value="">Selecione</option>' + productionResponsibilityRoles.map(role =>
     `<option value="${role.id}">${escapeHtml(role.name)}</option>`).join('');
-  const hasFronts = renderResponsibilityFrontChoices(form.querySelector('#production-responsibility-fronts'),
-    groupsForEntry(), rule?.service_front_id);
+  const hasFronts = renderResponsibilityFrontChoices(form, groupsForEntry(), rule?.service_front_id);
   form.querySelector('button[type="submit"]').disabled = !hasFronts;
   showResponsibilityUnitStatus(hasFronts ? '' : 'Nenhuma frente cadastrada nesta unidade.');
   if (rule) {
@@ -355,7 +385,11 @@ async function submitProductionResponsibility(event) {
   const frontIds = data.getAll('service_front_id').map(Number);
   if (!frontIds.length) {
     showToast('Selecione pelo menos uma frente ou serviço.', true);
-    form.querySelector('#production-responsibility-fronts input')?.focus();
+    form.querySelector('#production-responsibility-fronts').focus();
+    return;
+  }
+  if (new Set(frontIds).size !== frontIds.length) {
+    showToast('Selecione uma frente diferente em cada campo.', true);
     return;
   }
   const payload = { ...Object.fromEntries(data), unit_code: unit };
@@ -509,6 +543,8 @@ if (productionCatalogPageActive()) {
   responsibilityForm?.addEventListener('submit', submitProductionResponsibility);
   responsibilityForm?.elements?.kind?.addEventListener('change', () => updateProductionResponsibilityFields(responsibilityForm));
   responsibilityForm?.elements?.unit_code?.addEventListener('change', changeProductionResponsibilityUnit);
+  responsibilityForm?.querySelector('#production-responsibility-front-add')?.addEventListener('click', () =>
+    addProductionResponsibilityFront(responsibilityForm));
   document.querySelector('#production-responsibility-clear')?.addEventListener('click', () => openProductionResponsibilityForm());
   document.querySelector('#production-responsibility-retry')?.addEventListener('click', () => loadProductionResponsibilities());
   document.querySelector('#production-responsibility-role-form')?.addEventListener('submit', submitProductionResponsibilityRole);
