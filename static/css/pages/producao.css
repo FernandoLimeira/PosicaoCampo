@@ -602,10 +602,29 @@
 .catalog-group-fronts > :last-child { border-radius: 0 0 var(--data-radius) var(--data-radius); }
 .catalog-group-fronts > .production-empty { padding: 14px 16px; }
 .catalog-front-name-hint { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 12px; }
-#production-responsibility-form { align-items: start; }
 .catalog-responsibility-fronts { min-width: 0; }
-.catalog-responsibility-extra-fronts > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px; margin-top: 6px; }
-#production-responsibility-front-add { margin-top: 4px; }
+.catalog-responsibility-front-picker { position: relative; }
+.catalog-responsibility-front-picker > summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 38px; padding: 0 10px;
+  border: 1px solid var(--control-border); border-radius: var(--control-radius); background: var(--data-surface);
+  color: var(--text); list-style: none; cursor: pointer;
+}
+.catalog-responsibility-front-picker > summary::-webkit-details-marker { display: none; }
+.catalog-responsibility-front-picker > summary > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.catalog-responsibility-front-picker > summary::after { content: ''; flex: 0 0 6px; height: 6px; border: solid currentColor; border-width: 0 1px 1px 0; rotate: 45deg; }
+.catalog-responsibility-front-picker[open] > summary::after { rotate: 225deg; }
+.catalog-responsibility-front-choices {
+  position: absolute; inset: calc(100% + 2px) 0 auto; z-index: 2; max-height: 176px; overflow-y: auto;
+  padding: 4px; border: 1px solid var(--control-border); border-radius: var(--control-radius);
+  background: var(--data-surface); box-shadow: var(--data-shadow); scrollbar-width: thin; scrollbar-gutter: stable;
+}
+.catalog-responsibility-front-choices strong { display: block; padding: 4px 5px 2px; color: var(--muted); font-size: 11px; }
+.catalog-responsibility-front-choices label { display: flex; align-items: center; gap: 7px; min-height: 27px; padding: 2px 5px; font-size: 12px; cursor: pointer; overflow-wrap: anywhere; }
+.catalog-responsibility-front-choices label:hover, .catalog-responsibility-front-choices label:focus-within { background: var(--data-hover); }
+.catalog-responsibility-front-choices input { flex: 0 0 14px; width: 14px; height: 14px; margin: 0; padding: 0; }
+@media (max-width: 520px), (max-height: 480px) {
+  .catalog-responsibility-front-choices { position: static; margin-top: 2px; }
+}
 
 
 @media (max-width: 560px) {

@@ -182,9 +182,15 @@
           <label class="field"><span>Unidade</span><select name="unit_code" required></select></label>
           <label class="field"><span>Tipo de escala</span><select name="kind"><option value="cycle">Ciclo 5×1</option><option value="fixed">Fixo (sem revezamento)</option><option value="replacement">Substituição pontual</option><option value="day_off">Folga por data</option></select></label>
           <div class="catalog-responsibility-fronts">
-            <label class="field"><span>Frente / serviço</span><select id="production-responsibility-fronts" name="service_front_id" required></select></label>
-            <div id="production-responsibility-extra-fronts" class="catalog-responsibility-extra-fronts"></div>
-            <button id="production-responsibility-front-add" class="production-inline-text-button" type="button" hidden>+ Adicionar frente</button>
+            <div class="field">
+              <span id="production-responsibility-front-label">Frente / serviço</span>
+              <details id="production-responsibility-front-picker" class="catalog-responsibility-front-picker">
+                <summary aria-labelledby="production-responsibility-front-label production-responsibility-front-summary">
+                  <span id="production-responsibility-front-summary">Selecione</span>
+                </summary>
+                <div id="production-responsibility-fronts" class="catalog-responsibility-front-choices" role="group" aria-labelledby="production-responsibility-front-label"></div>
+              </details>
+            </div>
           </div>
           <label class="field"><span>Cargo</span><select name="role_id" required></select></label>
           <label class="field"><span>Turno</span><select name="shift" required><option value="">Selecione</option><option value="A">A · 00h–07h20</option><option value="B">B · 07h20–15h40</option><option value="C">C · 15h40–00h</option></select></label>

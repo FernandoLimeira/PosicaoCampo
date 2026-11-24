@@ -563,20 +563,20 @@ function sectorRow(sector, operation = '') {
   responsibilityForm.elements.unit_code.form = responsibilityForm;
   responsibilityForm.elements.kind.value = 'cycle';
   const frontChoices = responsibilityForm.querySelector('#production-responsibility-fronts');
-  const extraFronts = responsibilityForm.querySelector('#production-responsibility-extra-fronts');
-  const addFront = responsibilityForm.querySelector('#production-responsibility-front-add');
-  extraFronts.children = [];
-  extraFronts.replaceChildren = () => { extraFronts.children = []; };
-  extraFronts.append = row => extraFronts.children.push(row);
+  const picker = responsibilityForm.querySelector('#production-responsibility-front-picker');
+  const summary = responsibilityForm.querySelector('#production-responsibility-front-summary');
+  responsibilityForm.querySelectorAll = () => [...frontChoices.innerHTML.matchAll(/value="(\d+)" checked \/>\s*<span>([^<]+)<\/span>/g)]
+    .map(([, value, textContent]) => ({ value, nextElementSibling: { textContent } }));
   vm.runInContext(`productionAccess.units = ['NRD','PPT'];
     productionResponsibilityUnit = 'NRD'; productionResponsibilityState = 'ready';
     productionResponsibilityPermissions = {edit_schedules: true};`, context);
   context.openProductionResponsibilityForm(null, { keepOpen: true });
   assert.equal(responsibilityForm.elements.unit_code.value, 'NRD');
   assert.match(responsibilityForm.elements.unit_code.innerHTML, /value="PPT"/);
-  assert.match(productionTemplate, /<select id="production-responsibility-fronts" name="service_front_id" required>/);
-  assert.match(frontChoices.innerHTML, /<option value="7">Preparo<\/option>/);
-  assert.equal(extraFronts.children.length, 0);
+  assert.match(productionTemplate, /<details id="production-responsibility-front-picker"[^>]*>\s*<summary[\s\S]*?<div id="production-responsibility-fronts"/);
+  assert.match(frontChoices.innerHTML, /type="checkbox"[^>]*value="7"[\s\S]*?<span>Preparo<\/span>/);
+  assert.equal(picker.open, false);
+  assert.equal(summary.textContent, 'Selecione');
   context.apiRequest = async url => url.includes('/responsibilities?')
     ? { permissions: { edit_schedules: true } }
     : { groups: [{ name: 'Colheita', fronts: [{ id: 31, name: 'Frente de PPT' }, { id: 32, name: 'Frente 2 de PPT' }] }] };
@@ -585,15 +585,9 @@ function sectorRow(sector, operation = '') {
   assert.equal(responsibilityForm.dataset.scheduleUnit, 'PPT');
   assert.match(frontChoices.innerHTML, /Frente de PPT/);
   assert.doesNotMatch(frontChoices.innerHTML, /Preparo/);
-  frontChoices.options = [{ value: '' }, { value: '31' }, { value: '32' }];
-  frontChoices.cloneNode = () => ({ value: frontChoices.value, removeAttribute() {}, setAttribute() {}, focus() {} });
-  document.createElement = tag => tag === 'div' ? {
-    append(...children) { this.children = children; }, remove() { extraFronts.replaceChildren(); }
-  } : { setAttribute() {}, addEventListener(type, listener) { this[type] = listener; } };
   context.FormData = function (form) {
     const data = Object.entries(form.elements).filter(([, field]) => !field.disabled).map(([key, field]) => [key, field.value]);
-    const choices = [frontChoices, ...extraFronts.children.map(row => row.children[0])];
-    data.push(...choices.filter(choice => choice.value).map(choice => ['service_front_id', choice.value]));
+    data.push(...form.querySelectorAll('#production-responsibility-fronts input:checked').map(choice => ['service_front_id', choice.value]));
     data.getAll = name => data.filter(([key]) => key === name).map(([, value]) => value);
     return data;
   };
@@ -602,21 +596,10 @@ function sectorRow(sector, operation = '') {
   await context.submitProductionResponsibility({ currentTarget: responsibilityForm, preventDefault() {} });
   assert.equal(requests.length, beforeEmptySchedule);
   assert.match(toasts.at(-1), /Selecione pelo menos uma frente/);
-  frontChoices.value = '31';
-  context.addProductionResponsibilityFront(responsibilityForm);
-  assert.equal(extraFronts.children.length, 1);
-  assert.equal(addFront.disabled, true);
-  const [extraSelect, removeExtra] = extraFronts.children[0].children;
-  assert.equal(extraSelect.value, '');
-  extraSelect.value = '31';
-  await context.submitProductionResponsibility({ currentTarget: responsibilityForm, preventDefault() {} });
-  assert.equal(requests.length, beforeEmptySchedule);
-  assert.match(toasts.at(-1), /frente diferente/);
-  removeExtra.click();
-  assert.equal(extraFronts.children.length, 0);
-  assert.equal(addFront.disabled, false);
-  context.addProductionResponsibilityFront(responsibilityForm);
-  extraFronts.children[0].children[0].value = '32';
+  assert.equal(picker.open, true);
+  frontChoices.innerHTML = frontChoices.innerHTML.replace(/value="(31|32)"/g, 'value="$1" checked');
+  context.updateResponsibilityFrontSummary(responsibilityForm);
+  assert.equal(summary.textContent, '2 frentes selecionadas');
   await context.submitProductionResponsibility({ currentTarget: responsibilityForm, preventDefault() {} });
   const schedule = requests.at(-1);
   assert.equal(schedule.url, '/api/production/catalog/responsibilities');
@@ -625,9 +608,9 @@ function sectorRow(sector, operation = '') {
   assert.ok(!('service_front_id' in schedulePayload));
   assert.equal(context.currentProductionUnit(), 'NRD');
   context.openProductionResponsibilityForm({ id: 99, service_front_id: 7, kind: 'cycle' });
-  assert.equal(frontChoices.value, '7');
-  assert.equal(extraFronts.children.length, 0);
-  assert.equal(addFront.hidden, true);
+  assert.match(frontChoices.innerHTML, /type="radio"[^>]*value="7" checked/);
+  assert.equal(summary.textContent, 'Preparo');
+  assert.equal(picker.open, false);
 
   const [targetRow, draftRow, removedRow] = vm.runInContext(`productionSheetUnit = 'NRD';
     productionSheetRows = productionItems.map(sheetRowFromItem);`, context);

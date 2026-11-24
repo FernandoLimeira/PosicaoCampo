@@ -262,47 +262,26 @@ function updateProductionResponsibilityFields(form) {
 
 let productionResponsibilityFrontRequest = 0;
 
-function renderResponsibilityFrontChoices(form, groups, selected = null) {
-  const select = form.querySelector('#production-responsibility-fronts');
-  let frontCount = 0;
-  select.innerHTML = '<option value="">Selecione</option>' + groups.filter(group => group.is_active !== false).map(group => {
-    const fronts = (group.fronts || []).filter(front => front.is_active !== false);
-    frontCount += fronts.length;
-    return fronts.length ? `<optgroup label="${escapeHtml(group.name)}">${fronts.map(front =>
-      `<option value="${escapeHtml(front.id)}">${escapeHtml(front.name)}</option>`).join('')}</optgroup>` : '';
-  }).join('');
-  select.value = selected == null ? '' : String(selected);
-  form.querySelector('#production-responsibility-extra-fronts').replaceChildren();
-  const add = form.querySelector('#production-responsibility-front-add');
-  add.hidden = frontCount < 2 || Boolean(form.elements.rule_id.value);
-  add.disabled = false;
-  return frontCount > 0;
+function updateResponsibilityFrontSummary(form) {
+  const selected = form.querySelectorAll('#production-responsibility-fronts input:checked');
+  form.querySelector('#production-responsibility-front-summary').textContent = selected.length === 1
+    ? selected[0].nextElementSibling.textContent
+    : selected.length ? `${selected.length} frentes selecionadas` : 'Selecione';
 }
 
-function addProductionResponsibilityFront(form) {
-  const add = form.querySelector('#production-responsibility-front-add');
-  if (add.hidden || add.disabled || form.elements.rule_id.value) return;
-  const first = form.querySelector('#production-responsibility-fronts');
-  const extra = form.querySelector('#production-responsibility-extra-fronts');
-  const row = document.createElement('div');
-  const select = first.cloneNode(true);
-  select.removeAttribute('id');
-  select.setAttribute('aria-label', 'Frente / serviço adicional');
-  select.value = '';
-  const remove = document.createElement('button');
-  remove.type = 'button';
-  remove.className = 'production-inline-text-button';
-  remove.textContent = 'Remover';
-  remove.setAttribute('aria-label', 'Remover este seletor de frente');
-  remove.addEventListener('click', () => {
-    row.remove();
-    add.disabled = false;
-    add.focus();
-  });
-  row.append(select, remove);
-  extra.append(row);
-  add.disabled = extra.children.length >= first.options.length - 2;
-  select.focus();
+function renderResponsibilityFrontChoices(form, groups, selected = null) {
+  const choices = form.querySelector('#production-responsibility-fronts');
+  const picker = form.querySelector('#production-responsibility-front-picker');
+  const type = form.elements.rule_id.value ? 'radio' : 'checkbox';
+  picker.open = false;
+  choices.innerHTML = groups.filter(group => group.is_active !== false).map(group => {
+    const fronts = (group.fronts || []).filter(front => front.is_active !== false);
+    return fronts.length ? `<div><strong>${escapeHtml(group.name)}</strong>${fronts.map(front => `
+      <label><input type="${type}" name="service_front_id" value="${escapeHtml(front.id)}"${front.id === selected ? ' checked' : ''} />
+        <span>${escapeHtml(front.name)}</span></label>`).join('')}</div>` : '';
+  }).join('');
+  updateResponsibilityFrontSummary(form);
+  return Boolean(choices.innerHTML);
 }
 
 function showResponsibilityUnitStatus(message = '') {
@@ -385,11 +364,8 @@ async function submitProductionResponsibility(event) {
   const frontIds = data.getAll('service_front_id').map(Number);
   if (!frontIds.length) {
     showToast('Selecione pelo menos uma frente ou serviço.', true);
-    form.querySelector('#production-responsibility-fronts').focus();
-    return;
-  }
-  if (new Set(frontIds).size !== frontIds.length) {
-    showToast('Selecione uma frente diferente em cada campo.', true);
+    form.querySelector('#production-responsibility-front-picker').open = true;
+    form.querySelector('#production-responsibility-fronts input')?.focus();
     return;
   }
   const payload = { ...Object.fromEntries(data), unit_code: unit };
@@ -543,8 +519,17 @@ if (productionCatalogPageActive()) {
   responsibilityForm?.addEventListener('submit', submitProductionResponsibility);
   responsibilityForm?.elements?.kind?.addEventListener('change', () => updateProductionResponsibilityFields(responsibilityForm));
   responsibilityForm?.elements?.unit_code?.addEventListener('change', changeProductionResponsibilityUnit);
-  responsibilityForm?.querySelector('#production-responsibility-front-add')?.addEventListener('click', () =>
-    addProductionResponsibilityFront(responsibilityForm));
+  const frontPicker = responsibilityForm?.querySelector('#production-responsibility-front-picker');
+  frontPicker?.addEventListener('change', () => updateResponsibilityFrontSummary(responsibilityForm));
+  frontPicker?.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !frontPicker.open) return;
+    event.stopPropagation();
+    frontPicker.open = false;
+    frontPicker.querySelector('summary').focus();
+  });
+  responsibilityForm?.addEventListener('click', event => {
+    if (frontPicker?.open && !frontPicker.contains(event.target)) frontPicker.open = false;
+  });
   document.querySelector('#production-responsibility-clear')?.addEventListener('click', () => openProductionResponsibilityForm());
   document.querySelector('#production-responsibility-retry')?.addEventListener('click', () => loadProductionResponsibilities());
   document.querySelector('#production-responsibility-role-form')?.addEventListener('submit', submitProductionResponsibilityRole);
