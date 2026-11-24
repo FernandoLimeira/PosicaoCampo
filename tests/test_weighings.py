@@ -536,7 +536,7 @@ class WeighingTests(unittest.TestCase):
             self.assertEqual((turns[code][3], turns[code][6]), ("90.2", "22.6"))
         self.assertEqual((turns["RBR"][3], turns["RBR"][6]), ("90.1", "30"))
 
-    def test_report_atr_weights_each_front_by_its_processed_cane_and_rounds_the_total(self):
+    def test_report_atr_weights_by_analyzed_cane_and_rounds_the_total(self):
         from backend.models.weighing_report import build_weighing_report
         from backend.services.xlsx_reader import open_archive, plain_cell_value, read_sheet_rows, workbook_sheets
 
@@ -549,23 +549,23 @@ class WeighingTests(unittest.TestCase):
         ]]
         weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx(source))["records"])
         summary = {unit["code"]: unit for unit in weighings.weighing_summary()["units"]}
-        # A frente 05 tem 2 cargas e só uma com ATR: o ATR da frente (100,005) vale para as 50 t
-        # processadas por ela, não só para os 25 t da carga com ATR.
-        self.assertEqual((summary["PPT"]["milling_day_t"], summary["PPT"]["atr_weight_t"]), (50.0, 50.0))
-        self.assertAlmostEqual(summary["PPT"]["atr_sample_kg"], 100.005 * 50)
+        # Como o PIMS: a frente 05 tem 2 cargas e só uma com ATR; o ATR pesa pelas 25 t
+        # analisadas, não pelas 50 t processadas.
+        self.assertEqual((summary["PPT"]["milling_day_t"], summary["PPT"]["atr_weight_t"]), (50.0, 25.0))
+        self.assertAlmostEqual(summary["PPT"]["atr_sample_kg"], 100.005 * 25)
         self.assertEqual((summary["NRD"]["milling_day_t"], summary["NRD"]["atr_weight_t"]), (75.0, 75.0))
         content, _ = build_weighing_report()
         with open_archive(content, "inválido") as archive:
             path = dict(workbook_sheets(archive))["Resumo"]
             rows = dict((row[0], row) for row, _ in read_sheet_rows(
                 archive, path, lambda cell: plain_cell_value(cell, []), max_rows=50, max_columns=24, keep_empty_rows=False))
-        # (100,005 × 50 + 120,005 × 75) ÷ 125 = 112,005 → 112,01.
-        self.assertEqual(rows["Total"][11], "112.01")
+        # (100,005 × 25 + 120,005 × 75) ÷ 100 = 115,005 → 115,01.
+        self.assertEqual(rows["Total"][11], "115.01")
 
-    def test_unit_atr_uses_front_atr_over_all_processed_cane(self):
-        # Frente 05: 3 cargas (60 t), só a primeira com ATR 120. Frente 19: 1 carga (20 t), ATR 140.
-        # Pela carga: (120 × 20 + 140 × 20) ÷ 40 = 130. Pela frente (correto): a frente 05 vale
-        # 120 nas 60 t processadas: (120 × 60 + 140 × 20) ÷ 80 = 125.
+    def test_unit_atr_weights_fronts_by_analyzed_cane_like_pims(self):
+        # Frente 05: 3 cargas (60 t), só a primeira com ATR 120 (ATR 0 é inválido). Frente 19:
+        # 1 carga (20 t), ATR 140. Como o relatório do PIMS, o ATR de cada frente pesa pela
+        # tonelagem analisada: (120 × 20 + 140 × 20) ÷ 40 = 130 (não 125 pela cana processada).
         source = [HEADER + ["DT_EXTRACAO"], *[
             row + ["14/11/2026 16:20:00"] for row in (
                 load("201", "1", "05", "361", "1173", "20000", "14/11/2026 15:05:00", atr="120"),
@@ -576,8 +576,8 @@ class WeighingTests(unittest.TestCase):
         ]]
         weighings.import_weighings(self.admin["id"], parse_weighing_file(xlsx(source))["records"])
         ppt = next(unit for unit in weighings.weighing_summary()["units"] if unit["code"] == "PPT")
-        self.assertEqual(ppt["atr"], 125.0)
-        self.assertEqual(ppt["atr_weight_t"], 80.0)
+        self.assertEqual(ppt["atr"], 130.0)
+        self.assertEqual(ppt["atr_weight_t"], 40.0)
         self.assertEqual({front["front"]: front["atr"] for front in ppt["fronts"]}, {"05": 120.0, "19": 140.0})
 
     def test_estimated_atr_mode_by_upn1_keeps_current_mode_as_default(self):
@@ -585,7 +585,7 @@ class WeighingTests(unittest.TestCase):
         # Carga 2 (15:10): D = 300 e 900 s → (120·3 + 132·1) ÷ 4 = 123.
         # Carga 3 (15:15, ATR 0 inválido): D = 600 e 600 s → (120 + 132) ÷ 2 = 126.
         # Frente 05 (20 t cada): (120 + 123 + 126 + 132) ÷ 4 = 125,25. Frente 19: 140.
-        # Geral: (501·20 + 140·20) ÷ 100 = 128,2. Modo atual: (126·80 + 140·20) ÷ 100 = 128,8.
+        # Geral: (501·20 + 140·20) ÷ 100 = 128,2. Modo atual (PIMS): (120 + 140 + 132) ÷ 3 = 130,67.
         source = [HEADER + ["DT_EXTRACAO"], *[
             row + ["14/11/2026 16:20:00"] for row in (
                 load("201", "1", "05", "361", "1173", "20000", "14/11/2026 15:05:00", atr="120"),
@@ -603,7 +603,7 @@ class WeighingTests(unittest.TestCase):
             return next(unit for unit in weighings.weighing_summary(**kwargs)["units"] if unit["code"] == "PPT")
 
         current = ppt()
-        self.assertEqual((current["atr_mode"], current["atr"]), (config.ATR_MODE_CURRENT, 128.8))
+        self.assertEqual((current["atr_mode"], current["atr"]), (config.ATR_MODE_CURRENT, 130.67))
         estimated = ppt(atr_mode=config.ATR_MODE_ESTIMATED_UPN1)
         self.assertEqual(estimated["atr"], 128.2)
         self.assertEqual((estimated["atr_weight_t"], estimated["atr_sample_kg"]), (100.0, 12820.0))

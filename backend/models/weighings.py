@@ -27,9 +27,10 @@ Cálculo hora a hora da planilha "Controle de entrega x Moagem":
 - Frente de outra unidade (troca de cana): a frente é procurada nas frentes da Posição de
   Campo de cada unidade; se pertence a outra, conta como ATR recebido nesta e apoio daquela.
   O ATR dessa cana entra na média da unidade que recebeu (onde foi pesada), nunca na da dona.
-- ATR: nem toda carga traz ATR. O ATR da frente é a média ponderada (peso líquido) das cargas
-  com ATR; o da unidade pondera o ATR de cada frente pelo total processado da frente (com as
-  cargas sem ATR). Frente sem nenhuma carga com ATR fica fora da média.
+- ATR (como o relatório do PIMS): nem toda carga traz ATR. O ATR da frente é a média ponderada
+  (peso líquido) das cargas com ATR; o da unidade pondera o ATR de cada frente pela tonelagem
+  analisada dela (TC × % analisado), ou seja, Σ(ATR × peso) ÷ Σ(peso) das cargas com ATR.
+  Cargas sem ATR não entram na média. Frente sem nenhuma carga com ATR fica fora.
 - ATR estimado (``config.ATR_MODE = "estimado_upn1"``): cada carga sem análise recebe um ATR
   estimado pela UPN1 (duas análises mais próximas no tempo) ou pela frente; frente e unidade
   ponderam o ATR final de cada carga pelo peso líquido. Ver ``services/atr_estimation.py``.
@@ -191,22 +192,6 @@ def _atr_sample(rows) -> tuple[float, float]:
 def _weighted_atr(rows) -> float | None:
     tons, atr_kg = _atr_sample(rows)
     return round(atr_kg / tons, 2) if tons else None
-
-
-def _fronts_atr_sample(fronts: dict[str, list]) -> tuple[float, float]:
-    """ATR da unidade pela frente de colheita: nem toda carga traz ATR, então o ATR de cada
-    frente (média ponderada das cargas que têm ATR) vale para toda a cana que ela entregou e
-    é ponderado pelo total processado da frente, com as cargas sem ATR. Frente sem nenhuma
-    carga com ATR fica fora. Devolve (toneladas ponderadas, soma de ATR × toneladas)."""
-    weight_t = sample = 0.0
-    for front_rows in fronts.values():
-        atr_tons, atr_kg = _atr_sample(front_rows)
-        if not atr_tons:
-            continue
-        total_t = _tons(front_rows)
-        weight_t += total_t
-        sample += atr_kg / atr_tons * total_t
-    return weight_t, sample
 
 
 def _round(value: float | None, digits: int = 1) -> float | None:
@@ -507,14 +492,15 @@ def weighing_summary(work_date: Any = None, *, now: float | None = None, at_time
             if entry["external"]:
                 support.append({"front": front, "from_unit": owner, "to_unit": code,
                                 "loads": entry["loads"], "tons": entry["tons"], "atr": entry["atr"]})
-        # ATR da unidade: ATR de cada frente × total processado da frente (cargas sem ATR também).
+        # ATR da unidade: Σ(ATR × peso) ÷ Σ(peso) das cargas com ATR (tonelagem analisada).
         if estimated_mode:
             # Geral direto das cargas: Σ(ATR final × peso) ÷ Σ(peso), não a média das frentes.
             overall = atr_estimation.overall_atr(atr_results)
             atr_weight_t, atr_sample_kg = float(overall.weight_kg / 1000), float(overall.atr_x_weight / 1000)
             unit_atr = atr_estimation.round_atr(overall.atr)
         else:
-            atr_weight_t, atr_sample_kg = _fronts_atr_sample(fronts)
+            # Como o PIMS: ATR das frentes ponderado pela tonelagem analisada.
+            atr_weight_t, atr_sample_kg = _atr_sample(rows)
             unit_atr = round(atr_sample_kg / atr_weight_t, 2) if atr_weight_t else None
         units.append({
             "code": code,

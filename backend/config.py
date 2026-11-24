@@ -16,8 +16,8 @@ MIN_PASSWORD_LENGTH = 8
 MAX_BODY_BYTES = 2 * 1024 * 1024
 DB_BUSY_TIMEOUT_MS = 10_000
 
-# Modalidade do ATR da pesagem: "atual" (padrão: só as cargas com ATR, frente ponderada pelo
-# total processado) ou "estimado_upn1" (ATR estimado — UPN1 / análises próximas, ver
+# Modalidade do ATR da pesagem: "atual" (padrão, como o PIMS: só as cargas com ATR, ponderadas
+# pela tonelagem analisada) ou "estimado_upn1" (ATR estimado — UPN1 / análises próximas, ver
 # backend/services/atr_estimation.py). Não altera os dados importados.
 ATR_MODE_CURRENT = "atual"
 ATR_MODE_ESTIMATED_UPN1 = "estimado_upn1"
