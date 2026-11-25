@@ -635,7 +635,7 @@ function sectorRow(sector, operation = '') {
   assert.equal((schedulesHtml.match(/<article/g) || []).length, 2);
   assert.match(schedulesHtml, /data-responsibility-group-edit="101"[^>]*>Editar em conjunto/);
   assert.match(schedulesHtml, /<summary>2 frentes<\/summary>[\s\S]*?data-responsibility-edit="102"/);
-  assert.match(schedulesHtml, /<strong>Renato<a class="whatsapp-link"[^>]*href="https:\/\/wa\.me\/5518991234567"[\s\S]*?<span class="whatsapp-number">\(18\) 99123-4567<\/span>/);
+  assert.match(schedulesHtml, /<strong>Renato<a class="whatsapp-link"[^>]*href="https:\/\/web\.whatsapp\.com\/send\?phone=5518991234567"[\s\S]*?<span class="whatsapp-number">\(18\) 99123-4567<\/span>/);
   context.openProductionResponsibilityForm(groupedSchedule[0], { keepOpen: true, batch: groupedSchedule });
   assert.equal(responsibilityForm.elements.responsible_whatsapp.value, '(18) 99123-4567');
   const batchFronts = responsibilityForm.querySelector('#production-responsibility-batch-fronts');
@@ -746,7 +746,7 @@ function sectorRow(sector, operation = '') {
     { role_name: 'Encarregado', role_type: 'lead', name: 'João', whatsapp: '5518991234567', day_off: false },
     { role_name: 'Ponto focal', role_type: 'support', name: 'Bia', whatsapp: '', day_off: false }] } };
   const who = context.productionResponsibleHtml(team, 'B');
-  assert.match(who, /^Encarregado João<a class="whatsapp-link has-tooltip" data-whatsapp-link href="https:\/\/wa\.me\/5518991234567" target="_blank"\s+rel="noopener noreferrer"/);
+  assert.match(who, /^Encarregado João<a class="whatsapp-link has-tooltip" data-whatsapp-link href="https:\/\/web\.whatsapp\.com\/send\?phone=5518991234567" target="_blank"\s+rel="noopener noreferrer"/);
   assert.match(who, /aria-label="Conversar no WhatsApp com João: \(18\) 99123-4567"/);
   // No cartão: só o ícone, com o número no balão (sem o title nativo do navegador).
   assert.match(who, /<span class="whatsapp-tooltip" role="tooltip"><small>WhatsApp · João<\/small><strong>\(18\) 99123-4567<\/strong><em>Clique para abrir a conversa<\/em><\/span>/);
@@ -756,5 +756,10 @@ function sectorRow(sector, operation = '') {
   assert.match(detailWho, /<span class="whatsapp-number">\(18\) 99123-4567<\/span><\/a>/);
   assert.doesNotMatch(detailWho, /whatsapp-tooltip/);
   assert.equal(context.productionResponsibleHtml({ responsibles: { B: 'Ana' } }, 'B'), 'Ana');
+  // Celular: wa.me (abre o aplicativo); computador: WhatsApp Web direto na conversa.
+  context.navigator = { userAgent: 'Mozilla/5.0 (Linux; Android 14) Mobile' };
+  assert.equal(context.whatsappChatUrl('5518991234567'), 'https://wa.me/5518991234567');
+  context.navigator = { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131' };
+  assert.equal(context.whatsappChatUrl('5518991234567'), 'https://web.whatsapp.com/send?phone=5518991234567');
   console.log('OK: frentes dentro dos grupos, inclusão com grupo selecionado, busca e consulta sem edição.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

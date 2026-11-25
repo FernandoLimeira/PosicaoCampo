@@ -374,7 +374,17 @@ function formatWhatsapp(value) {
   return local;
 }
 
-// Ícone que abre a conversa (wa.me) em outra aba. Sem ``showNumber`` (cartões do painel), o
+// Endereço da conversa. No computador, o WhatsApp Web abre a conversa direto (sem a página
+// "Continuar para a conversa" do wa.me); no celular, o wa.me abre o aplicativo.
+function whatsappIsMobile() {
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(globalThis.navigator?.userAgent || '');
+}
+
+function whatsappChatUrl(digits) {
+  return whatsappIsMobile() ? `https://wa.me/${digits}` : `https://web.whatsapp.com/send?phone=${digits}`;
+}
+
+// Ícone que abre a conversa em outra aba. Sem ``showNumber`` (cartões do painel), o
 // número aparece num balão ao passar o mouse ou focar; com ``showNumber``, ao lado do ícone.
 function whatsappLinkHtml(value, name = '', showNumber = false) {
   const digits = String(value || '').replace(/\D/g, '');
@@ -385,9 +395,20 @@ function whatsappLinkHtml(value, name = '', showNumber = false) {
     ? `<span class="whatsapp-number">${escapeHtml(number)}</span>`
     : `<span class="whatsapp-tooltip" role="tooltip"><small>WhatsApp${name ? ` · ${escapeHtml(name)}` : ''}</small>`
       + `<strong>${escapeHtml(number)}</strong><em>Clique para abrir a conversa</em></span>`;
-  return `<a class="whatsapp-link${showNumber ? '' : ' has-tooltip'}" data-whatsapp-link href="https://wa.me/${digits}" target="_blank"
+  return `<a class="whatsapp-link${showNumber ? '' : ' has-tooltip'}" data-whatsapp-link href="${whatsappChatUrl(digits)}" target="_blank"
     rel="noopener noreferrer" aria-label="${escapeHtml(label)}">${WHATSAPP_ICON}${content}</a>`;
 }
+
+// No computador, todas as conversas abrem na mesma aba do WhatsApp Web (ele funciona em uma
+// aba por vez). Ctrl/Shift/clique do meio seguem o padrão do navegador.
+document.addEventListener('click', event => {
+  const link = event.target.closest?.('a[data-whatsapp-link]');
+  if (!link || whatsappIsMobile() || event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  const chat = window.open(link.href, 'whatsapp-web');
+  if (chat) chat.opener = null;
+  else window.open(link.href, '_blank', 'noopener');
+});
 
 // Mesmo texto de productionResponsibleName, com o ícone do WhatsApp na frente de cada nome.
 function productionResponsibleHtml(item, shift = dashboardCurrentShift().name, showNumber = false) {
