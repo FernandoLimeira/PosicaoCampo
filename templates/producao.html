@@ -165,7 +165,7 @@
 
     <section class="catalog-section" data-catalog-section="responsibilities" role="tabpanel" hidden>
       <header class="catalog-section-header">
-        <h2>Responsáveis por frente</h2>
+        <h2>Escalas por responsável</h2>
         <div class="catalog-responsibility-buttons">
           <button id="production-responsibility-add" class="production-primary-button catalog-new" type="button" data-catalog-new="responsibilities" data-responsibility-permission="edit_schedules" disabled>+ Cadastrar responsável</button>
           <button id="production-responsibility-role-add" class="production-secondary-button catalog-new" type="button" data-catalog-new="responsibility-roles" data-responsibility-permission="edit_roles" disabled>+ Cadastrar cargo</button>
@@ -190,6 +190,7 @@
                 </summary>
                 <div id="production-responsibility-fronts" class="catalog-responsibility-front-choices" role="group" aria-labelledby="production-responsibility-front-label"></div>
               </details>
+              <div id="production-responsibility-batch-fronts" class="catalog-responsibility-batch-fronts" hidden></div>
             </div>
           </div>
           <label class="field"><span>Cargo</span><select name="role_id" required></select></label>

@@ -23,6 +23,7 @@ let productionFilterFront = '';
 // Grupo e Frente filtrados ficam salvos na aba (por conta e unidade) para não voltarem a "Todos" ao atualizar.
 const PRODUCTION_FILTERS_KEY = `posicao-campo-production-filters:${(typeof currentUser !== 'undefined' && currentUser?.id) || 'anonymous'}`;
 let productionPageEpoch = 0;
+let productionItemsRequest = 0;
 
 function isCurrentProductionRequest(unit, epoch) {
   return unit === currentProductionUnit() && epoch === productionPageEpoch;
@@ -121,9 +122,11 @@ async function loadProductionStatuses({ includeInactive = false } = {}) {
 }
 
 async function loadProductionItems(unit, epoch = productionPageEpoch) {
+  if (!isCurrentProductionRequest(unit, epoch)) return null;
+  const request = ++productionItemsRequest;
   const workDate = saoPauloIsoDate();
   const data = await apiRequest(`/api/production/my-items?unit=${encodeURIComponent(unit)}&date=${encodeURIComponent(workDate)}&scope=all`);
-  if (!isCurrentProductionRequest(unit, epoch) || workDate !== saoPauloIsoDate()) return null;
+  if (request !== productionItemsRequest || !isCurrentProductionRequest(unit, epoch) || workDate !== saoPauloIsoDate()) return null;
   productionItems = Array.isArray(data.items) ? data.items : [];
   renderProductionFilters();
   saveProductionFilters(unit);

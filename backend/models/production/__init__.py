@@ -59,6 +59,7 @@ from .responsibilities import (  # noqa: F401
     save_responsibility_role,
     save_responsibility_rule,
     save_responsibility_rules,
+    update_responsibility_rules,
 )
 from .entries import (  # noqa: F401
     PRESERVED_ENTRY_FIELDS,

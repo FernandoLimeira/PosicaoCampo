@@ -598,6 +598,7 @@ function sectorRow(sector, operation = '') {
   assert.match(toasts.at(-1), /Selecione pelo menos uma frente/);
   assert.equal(picker.open, true);
   frontChoices.innerHTML = frontChoices.innerHTML.replace(/value="(31|32)"/g, 'value="$1" checked');
+  responsibilityForm.elements.work_date.value = '2099-11-25';
   context.updateResponsibilityFrontSummary(responsibilityForm);
   assert.equal(summary.textContent, '2 frentes selecionadas');
   await context.submitProductionResponsibility({ currentTarget: responsibilityForm, preventDefault() {} });
@@ -606,11 +607,46 @@ function sectorRow(sector, operation = '') {
   const schedulePayload = JSON.parse(schedule.options.body);
   assert.deepEqual([schedulePayload.unit_code, schedulePayload.service_front_ids], ['PPT', [31, 32]]);
   assert.ok(!('service_front_id' in schedulePayload));
+  assert.match(toasts.at(-1), /Vigência programada para 25\/11\/2099/);
   assert.equal(context.currentProductionUnit(), 'NRD');
   context.openProductionResponsibilityForm({ id: 99, service_front_id: 7, kind: 'cycle' });
   assert.match(frontChoices.innerHTML, /type="radio"[^>]*value="7" checked/);
   assert.equal(summary.textContent, 'Preparo');
   assert.equal(picker.open, false);
+
+  const groupedSchedule = vm.runInContext(`
+    const scheduleSource = { kind: 'cycle', role_id: 1, role_name: 'Encarregado', shift: 'C',
+      work_date: '2026-11-25', responsible_name: 'Renato', relief_name: '' };
+    productionResponsibilities = [
+      { ...scheduleSource, id: 101, service_front_id: 7, service_name: 'Preparo' },
+      { ...scheduleSource, id: 102, service_front_id: 8, service_name: 'Sulcação' },
+      { ...scheduleSource, id: 103, service_front_id: 7, service_name: 'Preparo', shift: 'A' }
+    ];
+    renderProductionResponsibilities();
+    groupedResponsibilityRules()[0];`, context);
+  const schedulesHtml = element('#production-responsibilities-list').innerHTML;
+  assert.equal((schedulesHtml.match(/<article/g) || []).length, 2);
+  assert.match(schedulesHtml, /data-responsibility-group-edit="101"[^>]*>Editar em conjunto/);
+  assert.match(schedulesHtml, /<summary>2 frentes<\/summary>[\s\S]*?data-responsibility-edit="102"/);
+  context.openProductionResponsibilityForm(groupedSchedule[0], { keepOpen: true, batch: groupedSchedule });
+  const batchFronts = responsibilityForm.querySelector('#production-responsibility-batch-fronts');
+  assert.equal(batchFronts.textContent, 'Preparo, Sulcação');
+  assert.equal(picker.hidden, true);
+  assert.match(responsibilityForm.querySelector('button[type="submit"]').textContent, /Salvar para 2 frentes/);
+  responsibilityForm.elements.work_date.value = '2026-11-24';
+  context.apiRequest = async (url, options) => {
+    requests.push({ url, options });
+    return options?.method === 'PUT' ? { ids: [101, 102] }
+      : { rules: [], roles: [], permissions: { edit_schedules: true, edit_roles: true } };
+  };
+  await context.submitProductionResponsibility({ currentTarget: responsibilityForm, preventDefault() {} });
+  const editRequest = requests.findLast(request => request.options?.method === 'PUT');
+  assert.equal(editRequest.url, '/api/production/catalog/responsibilities');
+  const editPayload = JSON.parse(editRequest.options.body);
+  assert.deepEqual(editPayload.targets, [{ id: 101, service_front_id: 7 }, { id: 102, service_front_id: 8 }]);
+  assert.equal(editPayload.previous.work_date, '2026-11-25');
+  assert.equal(editPayload.work_date, '2026-11-24');
+  assert.equal(picker.hidden, false);
 
   const [targetRow, draftRow, removedRow] = vm.runInContext(`productionSheetUnit = 'NRD';
     productionSheetRows = productionItems.map(sheetRowFromItem);`, context);

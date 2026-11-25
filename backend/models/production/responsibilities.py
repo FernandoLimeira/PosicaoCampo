@@ -13,6 +13,8 @@ from .common import _clean_text, _normalize_unit, _normalize_work_date
 from .access import _require_access
 from .catalog import _catalog_front_for_unit
 
+_SCHEDULE_FIELDS = ("kind", "role_id", "shift", "work_date", "responsible_name", "relief_name")
+
 
 def _responsibility_permissions(access: dict[str, Any]) -> dict[str, bool]:
     configure = access["can_configure"] and set(access["units"]) == set(ALLOWED_UNIT_CODES)
@@ -86,13 +88,43 @@ def save_responsibility_rules(user_id: int, payload: Any) -> list[int]:
     return _save_responsibility_rules(user_id, payload, fronts)
 
 
-def _save_responsibility_rules(user_id: int, payload: dict, front_ids: list, *, rule_id: int | None = None) -> list[int]:
+def update_responsibility_rules(user_id: int, payload: Any) -> list[int]:
+    if not isinstance(payload, dict):
+        raise ValueError("Escala inválida.")
+    if "role_id" not in payload:
+        raise ValueError("Selecione o cargo.")
+    return _save_responsibility_rules(user_id, payload, None)
+
+
+def _responsibility_update_targets(conn: sqlite3.Connection, unit: str, payload: dict) -> list[tuple[int, int]]:
+    targets = payload.get("targets")
+    previous = payload.get("previous")
+    if not isinstance(targets, list) or not targets or not isinstance(previous, dict):
+        raise ValueError("Selecione a escala que deseja alterar.")
+    assignments = {}
+    for target in targets:
+        if not isinstance(target, dict):
+            raise ValueError("Vínculo de frente inválido.")
+        rule_id, front_id = target.get("id"), target.get("service_front_id")
+        if any(type(value) is not int or not 0 < value < 2 ** 62 for value in (rule_id, front_id)) or rule_id in assignments:
+            raise ValueError("Vínculo de frente inválido.")
+        current = conn.execute(
+            """SELECT service_front_id,kind,role_id,shift,work_date,responsible_name,relief_name
+               FROM production_front_responsibilities WHERE unit_code=? AND id=?""", (unit, rule_id),
+        ).fetchone()
+        if not current or current["service_front_id"] != front_id or any(current[field] != previous.get(field) for field in _SCHEDULE_FIELDS):
+            raise ValueError("Uma das escalas foi alterada. Atualize o cadastro e abra a escala novamente.")
+        assignments[rule_id] = front_id
+    return [(front_id, rule_id) for rule_id, front_id in assignments.items()]
+
+
+def _save_responsibility_rules(user_id: int, payload: dict, front_ids: list | None, *, rule_id: int | None = None) -> list[int]:
     unit = _normalize_unit(payload.get("unit_code"))
     try:
-        front_ids = list(dict.fromkeys(int(front_id) for front_id in front_ids))
+        front_ids = list(dict.fromkeys(int(front_id) for front_id in front_ids)) if front_ids is not None else None
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("Selecione a frente/serviço.") from exc
-    if any(not 0 < front_id < 2 ** 62 for front_id in front_ids):
+    if any(not 0 < front_id < 2 ** 62 for front_id in (front_ids or [])):
         raise ValueError("Frente/serviço inválida.")
     try:
         role_id = int(payload.get("role_id", DEFAULT_PRODUCTION_RESPONSIBILITY_ROLE_ID))
@@ -112,7 +144,8 @@ def _save_responsibility_rules(user_id: int, payload: dict, front_ids: list, *, 
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         _require_responsibility_edit(conn, user_id, "edit_schedules", unit=unit)
-        fronts = [_catalog_front_for_unit(conn, front_id, unit) for front_id in front_ids]
+        targets = (_responsibility_update_targets(conn, unit, payload) if front_ids is None
+                   else [(front_id, rule_id) for front_id in front_ids])
         if rule_id is not None and "role_id" not in payload:
             original = conn.execute("SELECT role_id FROM production_front_responsibilities WHERE unit_code=? AND id=?",
                                     (unit, rule_id)).fetchone()
@@ -122,10 +155,11 @@ def _save_responsibility_rules(user_id: int, payload: dict, front_ids: list, *, 
             raise ValueError("Cargo não encontrado.")
         saved = []
         now = int(time.time())
-        for front in fronts:
-            values = (front["id"], role_id, shift, kind, work_date, name, relief, user_id, now, unit)
+        for front_id, target_id in targets:
+            front = _catalog_front_for_unit(conn, front_id, unit)
+            values = (front_id, role_id, shift, kind, work_date, name, relief, user_id, now, unit)
             try:
-                if rule_id is None:
+                if target_id is None:
                     cursor = conn.execute(
                         """INSERT INTO production_front_responsibilities
                            (service_front_id,role_id,shift,kind,work_date,responsible_name,relief_name,updated_by,updated_at,unit_code)
@@ -136,11 +170,11 @@ def _save_responsibility_rules(user_id: int, payload: dict, front_ids: list, *, 
                     cursor = conn.execute(
                         """UPDATE production_front_responsibilities SET service_front_id=?,role_id=?,shift=?,kind=?,work_date=?,
                            responsible_name=?,relief_name=?,updated_by=?,updated_at=? WHERE unit_code=? AND id=?""",
-                        (*values, rule_id),
+                        (*values, target_id),
                     )
                     if not cursor.rowcount:
                         raise ValueError("Escala não encontrada nesta unidade.")
-                    saved.append(rule_id)
+                    saved.append(target_id)
             except sqlite3.IntegrityError as exc:
                 raise ValueError(f"Já existe uma escala ou exceção do mesmo tipo para {front['name']}, neste cargo, turno e data.") from exc
         return saved

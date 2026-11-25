@@ -452,19 +452,26 @@ function startProductionResponsibilityClock() {
   if (!/^\/producao\/?$/.test(window.location?.pathname || '') || typeof window.setInterval !== 'function') return;
   const periodKey = () => `${saoPauloIsoDate()} ${dashboardCurrentShift().name}`;
   let period = periodKey();
-  let loadingPeriod = false;
-  window.setInterval(async () => {
+  let loading = false;
+  async function refreshResponsibilityPanel(force = false) {
     const nextPeriod = periodKey();
-    if (document.hidden || loadingPeriod || nextPeriod === period) return;
-    loadingPeriod = true;
+    if (document.hidden || loading || (!force && nextPeriod === period)) return;
+    loading = true;
     try {
       if (await loadProductionItems(currentProductionUnit())) period = nextPeriod;
     } catch (error) {
       console.error(error);
     } finally {
-      loadingPeriod = false;
+      loading = false;
     }
-  }, 15000);
+  }
+  const resume = () => refreshResponsibilityPanel(true);
+  window.setInterval(() => refreshResponsibilityPanel(), 15000);
+  window.addEventListener('focus', resume);
+  document.addEventListener('visibilitychange', resume);
+  window.addEventListener('pageshow', event => {
+    if (event.persisted) return resume();
+  });
 }
 document.addEventListener('production-page-ready', startProductionResponsibilityClock, { once: true });
 

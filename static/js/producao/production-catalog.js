@@ -7,6 +7,8 @@ let productionResponsibilityRoles = [];
 let productionResponsibilityPermissions = {};
 let productionResponsibilityUnit = '';
 let productionResponsibilityState = 'loading';
+let productionResponsibilityBatch = [];
+const RESPONSIBILITY_SCHEDULE_FIELDS = ['kind', 'role_id', 'shift', 'work_date', 'responsible_name', 'relief_name'];
 
 function productionCatalogPageActive() {
   return String(globalThis.location?.pathname || '').startsWith('/producao/cadastros');
@@ -189,25 +191,45 @@ async function submitProductionResponsibilityRole(event) {
   }
 }
 
+function groupedResponsibilityRules() {
+  const groups = new Map();
+  for (const rule of productionResponsibilities) {
+    const key = JSON.stringify(RESPONSIBILITY_SCHEDULE_FIELDS.map(field => rule[field]));
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(rule);
+  }
+  return [...groups.values()].sort(([first], [second]) => first.responsible_name.localeCompare(second.responsible_name, 'pt-BR'));
+}
+
 function renderProductionResponsibilities() {
   const list = document.querySelector('#production-responsibilities-list');
   if (!list) return;
   const editable = canEditProductionResponsibility('edit_schedules');
-  list.innerHTML = productionResponsibilities.map(rule => {
+  list.innerHTML = groupedResponsibilityRules().map(rules => {
+    const [rule] = rules;
+    const grouped = rules.length > 1;
     const date = formatIsoDateBr(rule.work_date);
     const details = {
-      replacement: `Substituição em ${date} · ${rule.responsible_name}`,
-      day_off: `Folga em ${date} · ${rule.responsible_name ? `Cobertura de ${rule.responsible_name}` : 'Sem cobertura'}`,
-      fixed: `Fixo desde ${date} · ${rule.responsible_name}`,
-      cycle: `Ciclo 5×1 desde ${date} · Titular ${rule.responsible_name} · Folguista ${rule.relief_name || 'sem cobertura'}`
+      replacement: `Substituição em ${date}`,
+      day_off: `Folga em ${date}`,
+      fixed: `Fixo · Início em ${date}`,
+      cycle: `Ciclo 5×1 · Início em ${date} · Folguista ${rule.relief_name || 'sem cobertura'}`
     }[rule.kind];
-    return `<div class="production-config-list-item">
-      <div class="production-config-list-item-copy"><strong>${escapeHtml(rule.service_name)} · ${escapeHtml(rule.role_name)} · Turno ${escapeHtml(rule.shift)}</strong>
-        <span>${escapeHtml(details)}</span></div>
-      ${editable ? `<div class="production-config-list-actions" data-responsibility-actions>
-        <button class="icon-edit-button" type="button" data-responsibility-edit="${rule.id}" title="Editar escala" aria-label="Editar escala de ${escapeHtml(rule.service_name)}">${PENCIL_ICON}</button>
-        <button class="icon-delete-button" type="button" data-responsibility-delete="${rule.id}" title="Remover escala" aria-label="Remover escala de ${escapeHtml(rule.service_name)}">${TRASH_ICON}</button>
-      </div>` : ''}</div>`;
+    const fronts = rules.map(front => `<div class="catalog-responsibility-front-row">
+      <span>${escapeHtml(front.service_name)}</span>
+      ${editable ? `<div class="catalog-responsibility-front-actions" data-responsibility-actions>
+        ${grouped ? `<button class="production-inline-text-button" type="button" data-responsibility-edit="${front.id}" aria-label="Editar escala de ${escapeHtml(front.service_name)}">Editar só esta</button>` : ''}
+        <button class="production-inline-text-button" type="button" data-responsibility-delete="${front.id}" aria-label="Remover escala de ${escapeHtml(front.service_name)}">Remover</button>
+      </div>` : ''}</div>`).join('');
+    return `<article class="production-config-list-item catalog-responsibility-record">
+      <header class="catalog-responsibility-record-header">
+        <div class="production-config-list-item-copy"><strong>${escapeHtml(rule.responsible_name || 'Folga sem cobertura')}</strong>
+          <span>${escapeHtml(rule.role_name)} · Turno ${escapeHtml(rule.shift)} · ${escapeHtml(details)}</span>
+        </div>
+        ${editable ? `<button class="production-secondary-button" type="button" ${grouped ? 'data-responsibility-group-edit' : 'data-responsibility-edit'}="${rule.id}">${grouped ? 'Editar em conjunto' : 'Editar escala'}</button>` : ''}
+      </header>
+      ${grouped ? `<details class="catalog-responsibility-front-list"><summary>${rules.length} frentes</summary>${fronts}</details>` : fronts}
+    </article>`;
   }).join('') || '<p class="production-empty">Nenhuma escala cadastrada nesta unidade.</p>';
 }
 
@@ -323,12 +345,13 @@ async function changeProductionResponsibilityUnit(event) {
   }
 }
 
-function openProductionResponsibilityForm(rule = null, { keepOpen = false } = {}) {
+function openProductionResponsibilityForm(rule = null, { keepOpen = false, batch = [] } = {}) {
   const form = document.querySelector('#production-responsibility-form');
   if (!form) return;
   const fields = form.elements;
   ++productionResponsibilityFrontRequest;
   form.reset();
+  productionResponsibilityBatch = batch;
   form.dataset.unit = currentProductionUnit();
   form.dataset.scheduleUnit = form.dataset.unit;
   fields.rule_id.value = rule?.id ?? '';
@@ -337,15 +360,23 @@ function openProductionResponsibilityForm(rule = null, { keepOpen = false } = {}
   fields.unit_code.disabled = Boolean(rule);
   fields.role_id.innerHTML = '<option value="">Selecione</option>' + productionResponsibilityRoles.map(role =>
     `<option value="${role.id}">${escapeHtml(role.name)}</option>`).join('');
-  const hasFronts = renderResponsibilityFrontChoices(form, groupsForEntry(), rule?.service_front_id);
-  form.querySelector('button[type="submit"]').disabled = !hasFronts;
+  const editingBatch = batch.length > 0;
+  const hasFronts = renderResponsibilityFrontChoices(form, editingBatch ? [] : groupsForEntry(), rule?.service_front_id) || editingBatch;
+  const selectedFronts = form.querySelector('#production-responsibility-batch-fronts');
+  selectedFronts.hidden = !editingBatch;
+  selectedFronts.textContent = batch.map(item => item.service_name).join(', ');
+  form.querySelector('#production-responsibility-front-picker').hidden = editingBatch;
+  const submit = form.querySelector('button[type="submit"]');
+  submit.disabled = !hasFronts;
+  submit.textContent = editingBatch ? `Salvar para ${batch.length} frentes` : 'Salvar';
   showResponsibilityUnitStatus(hasFronts ? '' : 'Nenhuma frente cadastrada nesta unidade.');
   if (rule) {
-    for (const key of ['kind', 'role_id', 'shift', 'work_date', 'responsible_name', 'relief_name']) {
+    for (const key of RESPONSIBILITY_SCHEDULE_FIELDS) {
       fields[key].value = rule[key];
     }
   }
-  document.querySelector('#production-responsibility-title').textContent = rule ? 'Editar responsável ou escala' : 'Cadastrar responsável';
+  document.querySelector('#production-responsibility-title').textContent = editingBatch ? `Editar escala · ${batch.length} frentes`
+    : rule ? 'Editar escala' : 'Cadastrar responsável';
   updateProductionResponsibilityFields(form);
   document.querySelector('#production-responsibility-editor').open = keepOpen;
 }
@@ -358,18 +389,23 @@ async function submitProductionResponsibility(event) {
   if (!canEditProductionResponsibility('edit_schedules') || form.dataset.unit !== currentProductionUnit()
     || !unit || form.dataset.scheduleUnit !== unit) return;
   const id = fields.rule_id.value;
+  const batch = productionResponsibilityBatch;
+  const editingBatch = batch.length > 0;
   const button = form.querySelector('button[type="submit"]');
   if (button.disabled) return;
   const data = new FormData(form);
   const frontIds = data.getAll('service_front_id').map(Number);
-  if (!frontIds.length) {
+  if (!editingBatch && !frontIds.length) {
     showToast('Selecione pelo menos uma frente ou serviço.', true);
     form.querySelector('#production-responsibility-front-picker').open = true;
     form.querySelector('#production-responsibility-fronts input')?.focus();
     return;
   }
   const payload = { ...Object.fromEntries(data), unit_code: unit };
-  if (!id) {
+  if (editingBatch) {
+    payload.targets = batch.map(({ id, service_front_id }) => ({ id, service_front_id }));
+    payload.previous = Object.fromEntries(RESPONSIBILITY_SCHEDULE_FIELDS.map(field => [field, batch[0][field]]));
+  } else if (!id) {
     delete payload.service_front_id;
     payload.service_front_ids = frontIds;
   }
@@ -377,11 +413,14 @@ async function submitProductionResponsibility(event) {
   fields.unit_code.disabled = true;
   button.disabled = true;
   try {
-    await apiRequest(`/api/production/catalog/responsibilities${id ? `/${id}` : ''}`, {
+    await apiRequest(`/api/production/catalog/responsibilities${id && !editingBatch ? `/${id}` : ''}`, {
       method: id ? 'PUT' : 'POST', body: JSON.stringify(payload)
     });
-    showToast(frontIds.length === 1 ? `Escala salva em ${productionUnitLabel(unit)}.`
-      : `Escala salva para ${frontIds.length} frentes em ${productionUnitLabel(unit)}.`);
+    const count = editingBatch ? batch.length : frontIds.length;
+    const message = count === 1 ? `Escala salva em ${productionUnitLabel(unit)}.`
+      : `Escala salva para ${count} frentes em ${productionUnitLabel(unit)}.`;
+    const future = payload.work_date > saoPauloIsoDate() ? ` Vigência programada para ${formatIsoDateBr(payload.work_date)}.` : '';
+    showToast(message + future);
     if (request === productionResponsibilityFrontRequest) openProductionResponsibilityForm();
     if (unit === currentProductionUnit()) {
       await loadProductionResponsibilities(unit);
@@ -399,7 +438,8 @@ async function submitProductionResponsibility(event) {
 async function removeProductionResponsibility(rule) {
   const unit = productionResponsibilityUnit;
   if (unit !== currentProductionUnit() || !await askConfirmation({
-    kicker: 'Responsáveis por frente', title: 'Remover escala?', message: `${rule.service_name} · ${rule.role_name} · Turno ${rule.shift}.`,
+    kicker: 'Responsáveis por frente', title: 'Remover escala desta frente?',
+    message: [rule.service_name, rule.responsible_name, rule.role_name, `Turno ${rule.shift}`].filter(Boolean).join(' · '),
     confirmLabel: 'Remover'
   })) return;
   try {
@@ -541,8 +581,13 @@ if (productionCatalogPageActive()) {
     if (role) openProductionResponsibilityRoleForm(role, { keepOpen: true });
   });
   document.querySelector('#production-responsibilities-list')?.addEventListener('click', event => {
-    const button = event.target.closest('[data-responsibility-edit], [data-responsibility-delete]');
+    const button = event.target.closest('[data-responsibility-group-edit], [data-responsibility-edit], [data-responsibility-delete]');
     if (!button || !canEditProductionResponsibility('edit_schedules')) return;
+    if (button.dataset.responsibilityGroupEdit) {
+      const batch = groupedResponsibilityRules().find(([rule]) => rule.id === Number(button.dataset.responsibilityGroupEdit));
+      if (batch) openProductionResponsibilityForm(batch[0], { keepOpen: true, batch });
+      return;
+    }
     const id = Number(button.dataset.responsibilityEdit || button.dataset.responsibilityDelete);
     const rule = productionResponsibilities.find(item => item.id === id);
     if (!rule) return;

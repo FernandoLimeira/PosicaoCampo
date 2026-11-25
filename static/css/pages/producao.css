@@ -555,6 +555,16 @@
 .catalog-responsibility-roles > summary { padding: 12px 22px; color: var(--text); font-size: 13px; font-weight: 750; cursor: pointer; }
 .catalog-responsibility-roles > summary span { margin-left: 6px; color: var(--muted); font-size: 12px; }
 .catalog-responsibility-roles[open] > summary { background: var(--data-alternate); }
+.catalog-list .catalog-responsibility-record { display: grid; gap: 8px; align-items: stretch; }
+.catalog-responsibility-record-header, .catalog-responsibility-front-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; }
+.catalog-responsibility-record-header .production-config-list-item-copy { overflow-wrap: anywhere; }
+.catalog-responsibility-front-list summary { width: fit-content; color: var(--control-text); font-size: 12px; font-weight: 700; cursor: pointer; }
+.catalog-responsibility-front-row { padding: 6px 0; font-size: 12px; }
+.catalog-responsibility-front-list[open] .catalog-responsibility-front-row { margin-left: 12px; border-bottom: 1px solid var(--line); }
+.catalog-responsibility-front-list[open] .catalog-responsibility-front-row:last-child { border-bottom: 0; }
+.catalog-responsibility-front-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.catalog-responsibility-front-actions [data-responsibility-delete] { color: var(--status-stop-text); }
+.catalog-responsibility-batch-fronts { min-height: 38px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--control-radius); color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 
 /* Formulário em painel destacado, aberto por "Novo" ou "Editar". */
 .catalog-editor { margin: 0; border: 0; border-bottom: 1px solid #e5eaec; border-radius: 0; background: #f5faf7; }

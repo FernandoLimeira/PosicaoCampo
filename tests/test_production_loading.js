@@ -74,6 +74,33 @@ async function main() {
   assert.equal(s.state().productionItems[0].latest, true);
   assert.notEqual(s.state().productionCatalog.groups[0].name, 'obsolete');
 
+  const panel = setup();
+  const windowEvents = new Map();
+  const documentEvents = new Map();
+  let periodCheck;
+  panel.context.window = {
+    location: { pathname: '/producao' }, setInterval(callback) { periodCheck = callback; },
+    addEventListener(type, callback) { windowEvents.set(type, callback); }
+  };
+  panel.context.document.addEventListener = (type, callback) => documentEvents.set(type, callback);
+  panel.context.dashboardCurrentShift = () => ({ name: 'C' });
+  panel.context.startProductionResponsibilityClock();
+  await periodCheck();
+  assert.equal(panel.pending.length, 0, 'The clock waits for a shift change while the panel remains open');
+  panel.context.document.hidden = true;
+  await documentEvents.get('visibilitychange')();
+  assert.equal(panel.pending.length, 0);
+  panel.context.document.hidden = false;
+  const resumed = documentEvents.get('visibilitychange')();
+  await windowEvents.get('focus')();
+  assert.equal(panel.pending.length, 1, 'Returning to the tab reloads the current shift once');
+  const newerItems = panel.context.loadProductionItems('PPT');
+  panel.pending[1].resolve({ items: [{ responsibles: { C: 'Novo encarregado' } }] });
+  await newerItems;
+  panel.pending[0].resolve({ items: [{ responsibles: {} }] });
+  await resumed;
+  assert.equal(panel.state().productionItems[0].responsibles.C, 'Novo encarregado');
+
   const catalog = setup();
   const { context } = catalog;
   context.document.body = { dataset: { page: 'production_catalog' } };

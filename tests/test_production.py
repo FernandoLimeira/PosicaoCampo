@@ -141,6 +141,38 @@ class ProductionTests(unittest.TestCase):
             items = production.list_my_items(self.user["id"], "NRD", date, with_orders=False)["items"]
             self.assertEqual([item["responsibles"] for item in items], [{"B": expected_name}] * 2)
 
+    def test_editing_grouped_responsibilities_is_atomic_and_checks_current_assignments(self):
+        admin = self.admin["id"]
+        first, second = [self._front(name=name, units=["NRD", "PPT"]) for name in ("FRENTE A", "FRENTE B")]
+        front_ids = [first["id"], second["id"]]
+        previous = {"kind": "cycle", "role_id": 1, "shift": "C", "work_date": "2026-11-25",
+                    "responsible_name": "Renato", "relief_name": ""}
+        ids = production.save_responsibility_rules(admin, {**previous, "unit_code": "NRD", "service_front_ids": front_ids})
+        targets = [{"id": rule_id, "service_front_id": front_id} for rule_id, front_id in zip(ids, front_ids)]
+        change = {**previous, "unit_code": "NRD", "targets": targets, "previous": previous,
+                  "work_date": "2026-11-24", "relief_name": "Maria"}
+        other = production.save_responsibility_rule(admin, {**previous, "unit_code": "PPT", "service_front_id": first["id"]})
+        production.save_responsibility_rule(admin, {**previous, "unit_code": "NRD", "service_front_id": second["id"],
+                                                     "work_date": "2026-11-24"})
+        with self.assertRaises(PermissionError):
+            production.update_responsibility_rules(self.user["id"], change)
+        with self.assertRaisesRegex(ValueError, "Já existe uma escala.*FRENTE B"):
+            production.update_responsibility_rules(admin, change)
+        rules = {rule["id"]: rule for rule in production.get_responsibility_catalog(admin, "NRD")["rules"]}
+        self.assertTrue(all(rules[rule_id]["work_date"] == "2026-11-25" for rule_id in ids))
+        with self.assertRaisesRegex(ValueError, "Uma das escalas foi alterada"):
+            production.update_responsibility_rules(admin, {**change, "unit_code": "PPT"})
+
+        saved = production.update_responsibility_rules(admin, {**change, "work_date": "2026-11-26"})
+        self.assertEqual(saved, ids)
+        rules = {rule["id"]: rule for rule in production.get_responsibility_catalog(admin, "NRD")["rules"]}
+        self.assertEqual([(rules[rule_id]["service_front_id"], rules[rule_id]["work_date"], rules[rule_id]["relief_name"])
+                          for rule_id in ids], [(front_id, "2026-11-26", "Maria") for front_id in front_ids])
+        ppt, = production.get_responsibility_catalog(admin, "PPT")["rules"]
+        self.assertEqual((ppt["id"], ppt["work_date"], ppt["relief_name"]), (other, "2026-11-25", ""))
+        with self.assertRaisesRegex(ValueError, "Uma das escalas foi alterada"):
+            production.update_responsibility_rules(admin, change)
+
     def test_existing_database_adds_responsibility_table_without_losing_entries(self):
         front = self._front()
         day = "2026-11-22"

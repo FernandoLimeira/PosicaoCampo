@@ -37,6 +37,7 @@ from ...models.production import (
     save_my_items as save_production_my_items,
     save_responsibility_rule,
     save_responsibility_rules,
+    update_responsibility_rules,
     save_responsibility_role,
     save_service_front as save_production_service_front,
     save_status as save_production_status,
@@ -179,11 +180,13 @@ def handle(req):
 
         return req.guarded(catalog, bad_request=ValueError)
 
-    if path == "/api/production/catalog/responsibilities" and method in {"GET", "POST"}:
+    if path == "/api/production/catalog/responsibilities" and method in {"GET", "POST", "PUT"}:
         if not user:
             return req.unauthorized()
         if method == "GET":
             return req.guarded(lambda: req.json(HTTPStatus.OK, get_responsibility_catalog(user["id"], req.param("unit", ""))))
+        if method == "PUT":
+            return req.guarded(lambda: req.json(HTTPStatus.OK, {"ids": update_responsibility_rules(user["id"], req.body())}))
         def create_responsibility():
             payload = req.body()
             if isinstance(payload, dict) and "service_front_ids" in payload:
