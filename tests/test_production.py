@@ -114,6 +114,37 @@ class ProductionTests(unittest.TestCase):
         production.save_responsibility_rule(self.admin["id"], {**rule, "relief_name": ""}, rule_id=rule_id)
         self.assertEqual(responsibles("NRD", 25), {"B": ""})
 
+    def test_responsibility_whatsapp_is_normalized_and_shown_for_who_is_on_shift(self):
+        front = self._front()
+        rule = {"unit_code": "NRD", "service_front_id": front["id"], "shift": "B", "kind": "cycle",
+                "work_date": "2026-11-20", "responsible_name": "João", "relief_name": "Maria",
+                "responsible_whatsapp": "(18) 99123-4567", "relief_whatsapp": "+55 18 3333-4444"}
+        self.assertEqual(production.normalize_whatsapp("18991234567", "x"), "5518991234567")
+        for invalid in ("1234", "(00) 99123-4567", "+1 555 123 4567"):
+            with self.assertRaisesRegex(ValueError, "WhatsApp"):
+                production.save_responsibility_rule(self.admin["id"], {**rule, "responsible_whatsapp": invalid})
+        rule_id = production.save_responsibility_rule(self.admin["id"], rule)
+        saved = production.get_responsibility_catalog(self.admin["id"], "NRD")["rules"][0]
+        self.assertEqual((saved["responsible_whatsapp"], saved["relief_whatsapp"]), ("5518991234567", "551833334444"))
+        production.save_my_item(self.user["id"], {"unit_code": "NRD", "service_front_id": front["id"],
+            "work_date": "2026-11-20", "sector": "3392", "status": "EM ATIVIDADE"})
+
+        def on_shift(day):
+            item = production.list_my_items(self.user["id"], "NRD", f"2026-11-{day}", with_orders=False)["items"][0]
+            return [(person["name"], person["whatsapp"]) for person in item["responsibility_team"]["B"]]
+
+        self.assertEqual(on_shift(24), [("João", "5518991234567")])
+        self.assertEqual(on_shift(25), [("Maria", "551833334444")])  # folga do ciclo: o folguista
+        # Substituição sem número: usa o WhatsApp da mesma pessoa em outra escala da unidade.
+        production.save_responsibility_rule(self.admin["id"], {
+            **rule, "kind": "replacement", "work_date": "2026-11-26", "responsible_name": "maria",
+            "responsible_whatsapp": "", "relief_whatsapp": ""})
+        self.assertEqual(on_shift(26), [("maria", "551833334444")])
+        # Sem folguista, o WhatsApp dele não é gravado.
+        production.save_responsibility_rule(self.admin["id"], {**rule, "kind": "fixed", "relief_name": ""}, rule_id=rule_id)
+        saved = production.get_responsibility_catalog(self.admin["id"], "NRD")["rules"]
+        self.assertEqual(next(item for item in saved if item["id"] == rule_id)["relief_whatsapp"], "")
+
     def test_responsibility_can_be_scheduled_for_several_fronts_in_one_unit(self):
         admin = self.admin["id"]
         first, second, third = [self._front(name=name) for name in ("FRENTE A", "FRENTE B", "FRENTE C")]

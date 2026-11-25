@@ -8,7 +8,8 @@ let productionResponsibilityPermissions = {};
 let productionResponsibilityUnit = '';
 let productionResponsibilityState = 'loading';
 let productionResponsibilityBatch = [];
-const RESPONSIBILITY_SCHEDULE_FIELDS = ['kind', 'role_id', 'shift', 'work_date', 'responsible_name', 'relief_name'];
+const RESPONSIBILITY_SCHEDULE_FIELDS = ['kind', 'role_id', 'shift', 'work_date', 'responsible_name', 'relief_name',
+  'responsible_whatsapp', 'relief_whatsapp'];
 
 function productionCatalogPageActive() {
   return String(globalThis.location?.pathname || '').startsWith('/producao/cadastros');
@@ -215,6 +216,7 @@ function renderProductionResponsibilities() {
       fixed: `Fixo · Início em ${date}`,
       cycle: `Ciclo 5×1 · Início em ${date} · Folguista ${rule.relief_name || 'sem cobertura'}`
     }[rule.kind];
+    const reliefWhatsapp = rule.kind === 'cycle' ? whatsappLinkHtml(rule.relief_whatsapp, rule.relief_name, true) : '';
     const fronts = rules.map(front => `<div class="catalog-responsibility-front-row">
       <span>${escapeHtml(front.service_name)}</span>
       ${editable ? `<div class="catalog-responsibility-front-actions" data-responsibility-actions>
@@ -223,8 +225,8 @@ function renderProductionResponsibilities() {
       </div>` : ''}</div>`).join('');
     return `<article class="production-config-list-item catalog-responsibility-record">
       <header class="catalog-responsibility-record-header">
-        <div class="production-config-list-item-copy"><strong>${escapeHtml(rule.responsible_name || 'Folga sem cobertura')}</strong>
-          <span>${escapeHtml(rule.role_name)} · Turno ${escapeHtml(rule.shift)} · ${escapeHtml(details)}</span>
+        <div class="production-config-list-item-copy"><strong>${escapeHtml(rule.responsible_name || 'Folga sem cobertura')}${whatsappLinkHtml(rule.responsible_whatsapp, rule.responsible_name, true)}</strong>
+          <span>${escapeHtml(rule.role_name)} · Turno ${escapeHtml(rule.shift)} · ${escapeHtml(details)}${reliefWhatsapp}</span>
         </div>
         ${editable ? `<button class="production-secondary-button" type="button" ${grouped ? 'data-responsibility-group-edit' : 'data-responsibility-edit'}="${rule.id}">${grouped ? 'Editar em conjunto' : 'Editar escala'}</button>` : ''}
       </header>
@@ -278,8 +280,14 @@ function updateProductionResponsibilityFields(form) {
     cycle: 'Titular', fixed: 'Pessoa escalada', replacement: 'Substituto', day_off: 'Quem cobre a folga (opcional)'
   }[kind];
   form.elements.responsible_name.required = kind !== 'day_off';
+  document.querySelector('#production-responsibility-whatsapp-label').textContent = {
+    cycle: 'WhatsApp do titular (opcional)', fixed: 'WhatsApp (opcional)', replacement: 'WhatsApp do substituto (opcional)',
+    day_off: 'WhatsApp de quem cobre (opcional)'
+  }[kind];
   document.querySelector('#production-responsibility-relief').hidden = !cycle;
   form.elements.relief_name.disabled = !cycle;
+  document.querySelector('#production-responsibility-relief-whatsapp').hidden = !cycle;
+  form.elements.relief_whatsapp.disabled = !cycle;
 }
 
 let productionResponsibilityFrontRequest = 0;
@@ -372,7 +380,7 @@ function openProductionResponsibilityForm(rule = null, { keepOpen = false, batch
   showResponsibilityUnitStatus(hasFronts ? '' : 'Nenhuma frente cadastrada nesta unidade.');
   if (rule) {
     for (const key of RESPONSIBILITY_SCHEDULE_FIELDS) {
-      fields[key].value = rule[key];
+      fields[key].value = key.endsWith('whatsapp') ? formatWhatsapp(rule[key]) : rule[key] ?? '';
     }
   }
   document.querySelector('#production-responsibility-title').textContent = editingBatch ? `Editar escala · ${batch.length} frentes`

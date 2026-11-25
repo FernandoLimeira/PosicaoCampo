@@ -211,7 +211,7 @@ function dashboardConsolidatedDetailHtml(sectors, editable) {
     </div>
     <dl class="pfd-info">
       <div><dt>Setores</dt><dd>${escapeHtml(sectors.map(item => item.entry?.sector || '-').join(', '))}</dd></div>
-      <div><dt>Equipe do turno</dt><dd>${escapeHtml(productionResponsibleName(front))}</dd></div>
+      <div><dt>Equipe do turno</dt><dd>${productionResponsibleHtml(front, undefined, true)}</dd></div>
     </dl>
     <div class="pfd-tabs" role="tablist" aria-label="Detalhe da frente">
       ${tab('operations', 'Operações', operations.size, true)}
@@ -260,7 +260,7 @@ function openDashboardFrontDetail(itemId) {
     ...(productionUnitUsesSection(currentProductionUnit()) ? [['Seção', entry.section || '-']] : []),
     ['Fazenda', entry.farm || '-'],
     ['Atualização', entry.work_date ? formatIsoDateBr(entry.work_date) : 'Sem registro'],
-    ['Equipe do turno', productionResponsibleName(item)]
+    ['Equipe do turno', { html: productionResponsibleHtml(item, undefined, true) }]
   ];
   const okCount = codes.filter(code => productionOperationTone(item, code) === 'is-order-ok').length;
   const operations = codes.map(code => {
@@ -298,7 +298,7 @@ function openDashboardFrontDetail(itemId) {
       ${check}
       ${item.is_current_day ? '' : `<span class="pdash-stale">${dashboardIcon('clock')}Não atualizada hoje</span>`}
     </div>
-    <dl class="pfd-info">${info.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}</dl>
+    <dl class="pfd-info">${info.map(([label, value]) => `<div><dt>${label}</dt><dd>${value?.html ?? escapeHtml(value)}</dd></div>`).join('')}</dl>
     ${dashboardSectionWarning(item)}
     ${entry.sector ? `<div class="pfd-tabs" role="tablist" aria-label="O.S. da frente">
       <button type="button" role="tab" class="pfd-tab is-active" aria-selected="true" data-pfd-tab="operations">Operações${codes.length ? ` <small>${codes.length}</small>` : ''}</button>
@@ -424,7 +424,7 @@ function dashboardFrontTile(sectors, shift) {
         <i class="pdash-status-icon ${meta.className}">${dashboardSvg(DASHBOARD_STATUS_ICONS[meta.className] || DASHBOARD_STATUS_ICONS['is-waiting'], meta.className !== 'is-waiting')}</i>
         <h4>${escapeHtml(front.service_name || '-')}</h4>
       </div>
-      <div class="pdash-tile-who">${escapeHtml(productionResponsibleName(front, shift))}</div>
+      <div class="pdash-tile-who">${productionResponsibleHtml(front, shift)}</div>
       <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
     </header>
     ${ordered.map(item => dashboardSectorRow(item, front.entry?.status)).join('')}
@@ -740,6 +740,8 @@ document.querySelector('#production-front-cards')?.addEventListener('click', eve
     renderProductionDashboard();
     return;
   }
+  // O ícone do WhatsApp abre a conversa, sem abrir o detalhe do cartão.
+  if (event.target.closest('[data-whatsapp-link]')) return;
   const edit = event.target.closest('[data-panel-card-edit]');
   if (edit) {
     openEditProductionItem(Number(edit.dataset.panelCardEdit));

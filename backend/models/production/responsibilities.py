@@ -13,7 +13,24 @@ from .common import _clean_text, _normalize_unit, _normalize_work_date
 from .access import _require_access
 from .catalog import _catalog_front_for_unit
 
-_SCHEDULE_FIELDS = ("kind", "role_id", "shift", "work_date", "responsible_name", "relief_name")
+_SCHEDULE_FIELDS = ("kind", "role_id", "shift", "work_date", "responsible_name", "relief_name",
+                    "responsible_whatsapp", "relief_whatsapp")
+
+
+def normalize_whatsapp(value: Any, label: str) -> str:
+    """WhatsApp opcional: só os dígitos, com o DDI 55 ("(18) 99123-4567" -> "5518991234567").
+    Aceita DDD + número (10 ou 11 dígitos) ou já com o 55 na frente (12 ou 13 dígitos)."""
+    digits = "".join(char for char in str(value or "") if char.isdigit())
+    if not digits:
+        return ""
+    if len(digits) in (10, 11) and not digits.startswith("0"):
+        digits = "55" + digits
+    local = digits[4:]
+    # DDD sem zero; celular com 9 dígitos começa com 9, fixo com 8 dígitos começa de 2 a 8.
+    if (len(digits) not in (12, 13) or not digits.startswith("55") or digits[2] == "0"
+            or (len(local) == 9 and local[0] != "9") or (len(local) == 8 and local[0] not in "2345678")):
+        raise ValueError(f"Informe o WhatsApp {label} com DDD, por exemplo (18) 99123-4567.")
+    return digits
 
 
 def _responsibility_permissions(access: dict[str, Any]) -> dict[str, bool]:
@@ -34,7 +51,7 @@ def get_responsibility_catalog(user_id: int, unit_code: Any) -> dict[str, Any]:
             "SELECT id,name,role_type FROM production_responsibility_roles ORDER BY role_type,id")]
         rules = [dict(row) for row in conn.execute(
             """SELECT r.id,r.service_front_id,r.role_id,r.shift,r.kind,r.work_date,r.responsible_name,r.relief_name,
-                      f.name AS service_name,c.name AS role_name
+                      r.responsible_whatsapp,r.relief_whatsapp,f.name AS service_name,c.name AS role_name
                FROM production_front_responsibilities r
                JOIN production_service_fronts f ON f.id=r.service_front_id
                JOIN production_responsibility_roles c ON c.id=r.role_id
@@ -109,10 +126,13 @@ def _responsibility_update_targets(conn: sqlite3.Connection, unit: str, payload:
         if any(type(value) is not int or not 0 < value < 2 ** 62 for value in (rule_id, front_id)) or rule_id in assignments:
             raise ValueError("Vínculo de frente inválido.")
         current = conn.execute(
-            """SELECT service_front_id,kind,role_id,shift,work_date,responsible_name,relief_name
+            f"""SELECT service_front_id,{",".join(_SCHEDULE_FIELDS)}
                FROM production_front_responsibilities WHERE unit_code=? AND id=?""", (unit, rule_id),
         ).fetchone()
-        if not current or current["service_front_id"] != front_id or any(current[field] != previous.get(field) for field in _SCHEDULE_FIELDS):
+        # WhatsApp ausente no "previous" (cliente antigo) vale como vazio.
+        if not current or current["service_front_id"] != front_id or any(
+                current[field] != previous.get(field, "" if field.endswith("whatsapp") else None)
+                for field in _SCHEDULE_FIELDS):
             raise ValueError("Uma das escalas foi alterada. Atualize o cadastro e abra a escala novamente.")
         assignments[rule_id] = front_id
     return [(front_id, rule_id) for rule_id, front_id in assignments.items()]
@@ -141,6 +161,8 @@ def _save_responsibility_rules(user_id: int, payload: dict, front_ids: list | No
     relief = _clean_text(payload.get("relief_name"), "o folguista", 80) if kind == "cycle" else ""
     if relief and relief.casefold() == name.casefold():
         raise ValueError("Titular e folguista devem ser pessoas diferentes.")
+    whatsapp = normalize_whatsapp(payload.get("responsible_whatsapp"), "do responsável") if name else ""
+    relief_whatsapp = normalize_whatsapp(payload.get("relief_whatsapp"), "do folguista") if relief else ""
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         _require_responsibility_edit(conn, user_id, "edit_schedules", unit=unit)
@@ -157,19 +179,21 @@ def _save_responsibility_rules(user_id: int, payload: dict, front_ids: list | No
         now = int(time.time())
         for front_id, target_id in targets:
             front = _catalog_front_for_unit(conn, front_id, unit)
-            values = (front_id, role_id, shift, kind, work_date, name, relief, user_id, now, unit)
+            values = (front_id, role_id, shift, kind, work_date, name, relief, whatsapp, relief_whatsapp, user_id, now, unit)
             try:
                 if target_id is None:
                     cursor = conn.execute(
                         """INSERT INTO production_front_responsibilities
-                           (service_front_id,role_id,shift,kind,work_date,responsible_name,relief_name,updated_by,updated_at,unit_code)
-                           VALUES (?,?,?,?,?,?,?,?,?,?)""", values,
+                           (service_front_id,role_id,shift,kind,work_date,responsible_name,relief_name,
+                            responsible_whatsapp,relief_whatsapp,updated_by,updated_at,unit_code)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""", values,
                     )
                     saved.append(int(cursor.lastrowid))
                 else:
                     cursor = conn.execute(
                         """UPDATE production_front_responsibilities SET service_front_id=?,role_id=?,shift=?,kind=?,work_date=?,
-                           responsible_name=?,relief_name=?,updated_by=?,updated_at=? WHERE unit_code=? AND id=?""",
+                           responsible_name=?,relief_name=?,responsible_whatsapp=?,relief_whatsapp=?,updated_by=?,updated_at=?
+                           WHERE unit_code=? AND id=?""",
                         (*values, target_id),
                     )
                     if not cursor.rowcount:
@@ -193,6 +217,16 @@ def delete_responsibility_rule(user_id: int, unit_code: Any, rule_id: int) -> No
 
 def _scheduled_responsibles(conn: sqlite3.Connection, unit: str, work_date: str) -> dict[int, dict[str, list[dict[str, Any]]]]:
     day = date.fromisoformat(work_date)
+    # WhatsApp por pessoa na unidade (a escala mais recente com número): a mesma pessoa
+    # cadastrada em outra escala sem o número também mostra o WhatsApp.
+    phones: dict[str, str] = {}
+    for row in conn.execute(
+        """SELECT responsible_name,responsible_whatsapp,relief_name,relief_whatsapp
+           FROM production_front_responsibilities WHERE unit_code=? ORDER BY updated_at,id""", (unit,),
+    ):
+        for name_field, phone_field in (("responsible_name", "responsible_whatsapp"), ("relief_name", "relief_whatsapp")):
+            if row[name_field] and row[phone_field]:
+                phones[row[name_field].strip().casefold()] = row[phone_field]
     assignments: dict[int, dict[str, dict[int, dict[str, Any]]]] = {}
     for row in conn.execute(
         """SELECT r.*,c.name AS role_name,c.role_type FROM production_front_responsibilities r
@@ -208,9 +242,11 @@ def _scheduled_responsibles(conn: sqlite3.Connection, unit: str, work_date: str)
         if row["role_id"] in roles:
             continue
         cycle_day_off = row["kind"] == "cycle" and (day - date.fromisoformat(row["work_date"])).days % 6 == 5
+        name = row["relief_name"] if cycle_day_off else row["responsible_name"]
+        phone = row["relief_whatsapp"] if cycle_day_off else row["responsible_whatsapp"]
         roles[row["role_id"]] = {
             "role_id": row["role_id"], "role_name": row["role_name"], "role_type": row["role_type"],
-            "name": row["relief_name"] if cycle_day_off else row["responsible_name"],
+            "name": name, "whatsapp": (phone or phones.get(name.strip().casefold(), "")) if name else "",
             "day_off": cycle_day_off or row["kind"] == "day_off",
         }
     return {front: {shift: list(roles.values()) for shift, roles in shifts.items()} for front, shifts in assignments.items()}

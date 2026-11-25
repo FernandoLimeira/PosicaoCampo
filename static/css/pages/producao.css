@@ -1193,3 +1193,11 @@ button.pdash-note { padding: 2px 0; border: 0; background: transparent; color: v
 }
 .pfd-notes-scope { margin: 0; color: #7a8489; font-size: 12px; }
 .pfd-note-text { white-space: pre-wrap; }
+
+/* WhatsApp do responsável: ícone na frente do nome que abre a conversa (wa.me). */
+.whatsapp-link { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; color: #128c4a; font-weight: 700; text-decoration: none; vertical-align: middle; white-space: nowrap; }
+.whatsapp-link svg { width: 16px; height: 16px; flex: none; }
+.whatsapp-link .whatsapp-icon-bubble { fill: #25d366; }
+.whatsapp-link .whatsapp-icon-phone { fill: #ffffff; }
+.whatsapp-link:hover span, .whatsapp-link:focus-visible span { text-decoration: underline; }
+.whatsapp-link:focus-visible { outline: 2px solid #25d366; outline-offset: 2px; border-radius: 4px; }

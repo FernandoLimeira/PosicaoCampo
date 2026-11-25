@@ -361,6 +361,41 @@ function productionResponsibleName(item, shift = dashboardCurrentShift().name) {
   return item.responsibles?.[shift] || 'Sem responsável escalado';
 }
 
+// WhatsApp do responsável: gravado só com dígitos e DDI 55 ("5518991234567").
+const WHATSAPP_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+  + '<path class="whatsapp-icon-bubble" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2z"/>'
+  + '<path class="whatsapp-icon-phone" d="M8.6 7.2c.3-.3.8-.3 1 .1l.9 1.9c.2.4.1.8-.2 1.1l-.5.5c.6 1.2 1.6 2.2 2.8 2.8l.5-.5c.3-.3.7-.4 1.1-.2l1.9.9c.4.2.5.7.1 1l-.8.8c-.6.6-1.6.8-2.4.4a10 10 0 0 1-5.2-5.2c-.4-.8-.2-1.8.4-2.4z"/></svg>';
+
+function formatWhatsapp(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  const local = digits.startsWith('55') && digits.length >= 12 ? digits.slice(2) : digits;
+  if (local.length === 11) return `(${local.slice(0, 2)}) ${local.slice(2, 7)}-${local.slice(7)}`;
+  if (local.length === 10) return `(${local.slice(0, 2)}) ${local.slice(2, 6)}-${local.slice(6)}`;
+  return local;
+}
+
+// Ícone que abre a conversa (wa.me) em outra aba; o número aparece ao passar o mouse e, com
+// ``showNumber``, ao lado do ícone.
+function whatsappLinkHtml(value, name = '', showNumber = false) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!digits) return '';
+  const number = formatWhatsapp(digits);
+  const label = `Conversar no WhatsApp${name ? ` com ${name}` : ''}: ${number}`;
+  return `<a class="whatsapp-link" data-whatsapp-link href="https://wa.me/${digits}" target="_blank" rel="noopener noreferrer"
+    title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${WHATSAPP_ICON}${showNumber ? `<span>${escapeHtml(number)}</span>` : ''}</a>`;
+}
+
+// Mesmo texto de productionResponsibleName, com o ícone do WhatsApp na frente de cada nome.
+function productionResponsibleHtml(item, shift = dashboardCurrentShift().name, showNumber = false) {
+  const team = item.responsibility_team?.[shift];
+  if (!team?.length) return escapeHtml(productionResponsibleName(item, shift));
+  const labels = team.map(person => person.name
+    ? `${escapeHtml(`${person.role_name} ${person.name}${person.day_off ? ' (cobertura)' : ''}`)}${whatsappLinkHtml(person.whatsapp, person.name, showNumber)}`
+    : escapeHtml(`${person.role_name} em folga sem cobertura`));
+  if (!team.some(person => person.role_type === 'lead')) labels.unshift(escapeHtml('Sem responsável escalado'));
+  return labels.join(' · ');
+}
+
 function renderProductionItems(data) {
   const body = document.querySelector('#production-items-body');
   const empty = document.querySelector('#production-empty');

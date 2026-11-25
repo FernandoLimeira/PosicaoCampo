@@ -367,6 +367,8 @@ CREATE TABLE IF NOT EXISTS main.production_front_responsibilities (
     work_date TEXT NOT NULL,
     responsible_name TEXT NOT NULL,
     relief_name TEXT NOT NULL DEFAULT '',
+    responsible_whatsapp TEXT NOT NULL DEFAULT '',
+    relief_whatsapp TEXT NOT NULL DEFAULT '',
     updated_by INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     FOREIGN KEY (service_front_id) REFERENCES production_service_fronts(id) ON DELETE CASCADE,
@@ -395,6 +397,11 @@ def _upgrade_production_responsibilities(conn):
             conn.execute("DELETE FROM main.sqlite_sequence WHERE name='production_front_responsibilities'")
             conn.execute("INSERT INTO main.sqlite_sequence(name,seq) VALUES ('production_front_responsibilities',?)", (sequence[0],))
         conn.execute("DROP TABLE main.production_front_responsibilities_v6")
+    # WhatsApp do titular e do folguista (só dígitos, com DDI 55), incluído depois.
+    columns = {row[1] for row in conn.execute("PRAGMA main.table_info(production_front_responsibilities)")}
+    for column in ("responsible_whatsapp", "relief_whatsapp"):
+        if column not in columns:
+            conn.execute(f"ALTER TABLE main.production_front_responsibilities ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
     # Para o mesmo cargo, pode haver uma escala vigente e uma exceção na mesma data.
     conn.execute("""CREATE UNIQUE INDEX IF NOT EXISTS main.idx_production_responsibility_date
                     ON production_front_responsibilities(unit_code,service_front_id,role_id,shift,work_date,

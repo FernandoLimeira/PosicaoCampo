@@ -197,7 +197,9 @@
           <label class="field"><span>Turno</span><select name="shift" required><option value="">Selecione</option><option value="A">A · 00h–07h20</option><option value="B">B · 07h20–15h40</option><option value="C">C · 15h40–00h</option></select></label>
           <label class="field"><span id="production-responsibility-date-label">Primeiro dia de trabalho</span><input name="work_date" type="date" required /></label>
           <label class="field"><span id="production-responsibility-name-label">Titular</span><input name="responsible_name" type="text" maxlength="80" required /></label>
+          <label class="field"><span id="production-responsibility-whatsapp-label">WhatsApp do titular (opcional)</span><input name="responsible_whatsapp" type="tel" inputmode="tel" maxlength="20" placeholder="(18) 99123-4567" autocomplete="off" /></label>
           <label id="production-responsibility-relief" class="field"><span>Folguista (opcional)</span><input name="relief_name" type="text" maxlength="80" /></label>
+          <label id="production-responsibility-relief-whatsapp" class="field"><span>WhatsApp do folguista (opcional)</span><input name="relief_whatsapp" type="tel" inputmode="tel" maxlength="20" placeholder="(18) 99123-4567" autocomplete="off" /></label>
           <p id="production-responsibility-unit-status" class="catalog-front-name-hint" role="status" hidden></p>
           <div class="production-config-form-actions">
             <button class="production-secondary-button" type="button" id="production-responsibility-clear">Cancelar</button>

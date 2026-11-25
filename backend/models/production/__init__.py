@@ -56,6 +56,7 @@ from .responsibilities import (  # noqa: F401
     _scheduled_responsibles,
     delete_responsibility_rule,
     get_responsibility_catalog,
+    normalize_whatsapp,
     save_responsibility_role,
     save_responsibility_rule,
     save_responsibility_rules,

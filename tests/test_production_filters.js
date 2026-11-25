@@ -138,15 +138,19 @@ const teamTile = vm.runInContext(`dashboardFrontTile([{ ...findProductionItem(2)
   {role_name: 'Ponto focal', role_type: 'support', name: 'Maria', day_off: false}
 ] } }], 'B')`, context);
 assert.match(teamTile, /Encarregado Ana \(cobertura\) · Ponto focal Maria/);
-const schedulingForm = { elements: { kind: { value: 'day_off' }, responsible_name: {}, relief_name: {} } };
+const schedulingForm = { elements: { kind: { value: 'day_off' }, responsible_name: {}, relief_name: {}, relief_whatsapp: {} } };
 context.updateProductionResponsibilityFields(schedulingForm);
 assert.equal(element('#production-responsibility-date-label').textContent, 'Data da folga');
 assert.equal(schedulingForm.elements.responsible_name.required, false);
 assert.equal(schedulingForm.elements.relief_name.disabled, true);
+assert.equal(schedulingForm.elements.relief_whatsapp.disabled, true);
+assert.equal(element('#production-responsibility-whatsapp-label').textContent, 'WhatsApp de quem cobre (opcional)');
 schedulingForm.elements.kind.value = 'cycle';
 context.updateProductionResponsibilityFields(schedulingForm);
 assert.equal(schedulingForm.elements.responsible_name.required, true);
 assert.equal(schedulingForm.elements.relief_name.disabled, false);
+assert.equal(schedulingForm.elements.relief_whatsapp.disabled, false);
+assert.equal(element('#production-responsibility-relief-whatsapp').hidden, false);
 // A mesma frente pode ter lançamentos separados, mesmo na mesma fazenda.
 vm.runInContext(`Object.assign(productionItems[0].entry, { sector: '4', farm: 'IZAURA', observation: '<teste>' });
   Object.assign(productionItems[1].entry, { sector: '6', farm: 'IZAURA' });`, context);
@@ -559,7 +563,7 @@ function sectorRow(sector, operation = '') {
   const responsibilityForm = element('#production-responsibility-form');
   responsibilityForm.dataset = {};
   responsibilityForm.elements = Object.fromEntries(['rule_id', 'unit_code', 'role_id', 'shift',
-    'kind', 'work_date', 'responsible_name', 'relief_name'].map(name => [name, { value: '' }]));
+    'kind', 'work_date', 'responsible_name', 'relief_name', 'responsible_whatsapp', 'relief_whatsapp'].map(name => [name, { value: '' }]));
   responsibilityForm.elements.unit_code.form = responsibilityForm;
   responsibilityForm.elements.kind.value = 'cycle';
   const frontChoices = responsibilityForm.querySelector('#production-responsibility-fronts');
@@ -599,6 +603,7 @@ function sectorRow(sector, operation = '') {
   assert.equal(picker.open, true);
   frontChoices.innerHTML = frontChoices.innerHTML.replace(/value="(31|32)"/g, 'value="$1" checked');
   responsibilityForm.elements.work_date.value = '2099-11-25';
+  responsibilityForm.elements.responsible_whatsapp.value = '(18) 99123-4567';
   context.updateResponsibilityFrontSummary(responsibilityForm);
   assert.equal(summary.textContent, '2 frentes selecionadas');
   await context.submitProductionResponsibility({ currentTarget: responsibilityForm, preventDefault() {} });
@@ -607,6 +612,7 @@ function sectorRow(sector, operation = '') {
   const schedulePayload = JSON.parse(schedule.options.body);
   assert.deepEqual([schedulePayload.unit_code, schedulePayload.service_front_ids], ['PPT', [31, 32]]);
   assert.ok(!('service_front_id' in schedulePayload));
+  assert.equal(schedulePayload.responsible_whatsapp, '(18) 99123-4567');
   assert.match(toasts.at(-1), /Vigência programada para 25\/11\/2099/);
   assert.equal(context.currentProductionUnit(), 'NRD');
   context.openProductionResponsibilityForm({ id: 99, service_front_id: 7, kind: 'cycle' });
@@ -616,7 +622,8 @@ function sectorRow(sector, operation = '') {
 
   const groupedSchedule = vm.runInContext(`
     const scheduleSource = { kind: 'cycle', role_id: 1, role_name: 'Encarregado', shift: 'C',
-      work_date: '2026-11-25', responsible_name: 'Renato', relief_name: '' };
+      work_date: '2026-11-25', responsible_name: 'Renato', relief_name: '',
+      responsible_whatsapp: '5518991234567', relief_whatsapp: '' };
     productionResponsibilities = [
       { ...scheduleSource, id: 101, service_front_id: 7, service_name: 'Preparo' },
       { ...scheduleSource, id: 102, service_front_id: 8, service_name: 'Sulcação' },
@@ -628,7 +635,9 @@ function sectorRow(sector, operation = '') {
   assert.equal((schedulesHtml.match(/<article/g) || []).length, 2);
   assert.match(schedulesHtml, /data-responsibility-group-edit="101"[^>]*>Editar em conjunto/);
   assert.match(schedulesHtml, /<summary>2 frentes<\/summary>[\s\S]*?data-responsibility-edit="102"/);
+  assert.match(schedulesHtml, /<strong>Renato<a class="whatsapp-link"[^>]*href="https:\/\/wa\.me\/5518991234567"[\s\S]*?<span>\(18\) 99123-4567<\/span>/);
   context.openProductionResponsibilityForm(groupedSchedule[0], { keepOpen: true, batch: groupedSchedule });
+  assert.equal(responsibilityForm.elements.responsible_whatsapp.value, '(18) 99123-4567');
   const batchFronts = responsibilityForm.querySelector('#production-responsibility-batch-fronts');
   assert.equal(batchFronts.textContent, 'Preparo, Sulcação');
   assert.equal(picker.hidden, true);
@@ -645,6 +654,7 @@ function sectorRow(sector, operation = '') {
   const editPayload = JSON.parse(editRequest.options.body);
   assert.deepEqual(editPayload.targets, [{ id: 101, service_front_id: 7 }, { id: 102, service_front_id: 8 }]);
   assert.equal(editPayload.previous.work_date, '2026-11-25');
+  assert.equal(editPayload.previous.responsible_whatsapp, '5518991234567');
   assert.equal(editPayload.work_date, '2026-11-24');
   assert.equal(picker.hidden, false);
 
@@ -728,5 +738,19 @@ function sectorRow(sector, operation = '') {
   await context.openProductionSheet();
   assert.equal(element('#production-sheet-group').value, '2');
   assert.equal(element('#production-sheet-front').value, '');
+  // WhatsApp do responsável: número formatado e ícone que abre a conversa, na frente do nome.
+  assert.equal(context.formatWhatsapp('5518991234567'), '(18) 99123-4567');
+  assert.equal(context.formatWhatsapp('551833334444'), '(18) 3333-4444');
+  assert.equal(context.whatsappLinkHtml(''), '');
+  const team = { responsibility_team: { B: [
+    { role_name: 'Encarregado', role_type: 'lead', name: 'João', whatsapp: '5518991234567', day_off: false },
+    { role_name: 'Ponto focal', role_type: 'support', name: 'Bia', whatsapp: '', day_off: false }] } };
+  const who = context.productionResponsibleHtml(team, 'B');
+  assert.match(who, /^Encarregado João<a class="whatsapp-link" data-whatsapp-link href="https:\/\/wa\.me\/5518991234567" target="_blank" rel="noopener noreferrer"/);
+  assert.match(who, /title="Conversar no WhatsApp com João: \(18\) 99123-4567"/);
+  assert.doesNotMatch(who, /<span>\(18\)/);  // no cartão só o ícone
+  assert.match(who, /<\/a> · Ponto focal Bia$/);
+  assert.match(context.productionResponsibleHtml(team, 'B', true), /<span>\(18\) 99123-4567<\/span><\/a>/);
+  assert.equal(context.productionResponsibleHtml({ responsibles: { B: 'Ana' } }, 'B'), 'Ana');
   console.log('OK: frentes dentro dos grupos, inclusão com grupo selecionado, busca e consulta sem edição.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
