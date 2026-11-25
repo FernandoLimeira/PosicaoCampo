@@ -448,30 +448,19 @@ function dashboardCurrentShift(now = new Date()) {
   return { name };
 }
 
+// Sem atualização automática: os dados do painel só são buscados ao abrir a página, ao trocar
+// de unidade/data e depois de salvar (nada recarrega ao voltar para a janela ou para a aba).
+// Na troca de turno o painel só é redesenhado com os dados já carregados: a equipe de cada
+// turno já vem na consulta, então nenhuma requisição é feita.
 function startProductionResponsibilityClock() {
   if (!/^\/producao\/?$/.test(window.location?.pathname || '') || typeof window.setInterval !== 'function') return;
-  const periodKey = () => `${saoPauloIsoDate()} ${dashboardCurrentShift().name}`;
-  let period = periodKey();
-  let loading = false;
-  async function refreshResponsibilityPanel(force = false) {
-    const nextPeriod = periodKey();
-    if (document.hidden || loading || (!force && nextPeriod === period)) return;
-    loading = true;
-    try {
-      if (await loadProductionItems(currentProductionUnit())) period = nextPeriod;
-    } catch (error) {
-      console.error(error);
-    } finally {
-      loading = false;
-    }
-  }
-  const resume = () => refreshResponsibilityPanel(true);
-  window.setInterval(() => refreshResponsibilityPanel(), 15000);
-  window.addEventListener('focus', resume);
-  document.addEventListener('visibilitychange', resume);
-  window.addEventListener('pageshow', event => {
-    if (event.persisted) return resume();
-  });
+  let shift = dashboardCurrentShift().name;
+  window.setInterval(() => {
+    const next = dashboardCurrentShift().name;
+    if (next === shift) return;
+    shift = next;
+    renderProductionDashboard();
+  }, 60000);
 }
 document.addEventListener('production-page-ready', startProductionResponsibilityClock, { once: true });
 

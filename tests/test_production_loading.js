@@ -74,32 +74,32 @@ async function main() {
   assert.equal(s.state().productionItems[0].latest, true);
   assert.notEqual(s.state().productionCatalog.groups[0].name, 'obsolete');
 
+  // Painel sem atualização automática: voltar para a janela/aba não busca nada; a troca de
+  // turno só redesenha com os dados já carregados.
   const panel = setup();
   const windowEvents = new Map();
   const documentEvents = new Map();
   let periodCheck;
+  let interval;
+  let redraws = 0;
   panel.context.window = {
-    location: { pathname: '/producao' }, setInterval(callback) { periodCheck = callback; },
+    location: { pathname: '/producao' }, setInterval(callback, ms) { periodCheck = callback; interval = ms; },
     addEventListener(type, callback) { windowEvents.set(type, callback); }
   };
   panel.context.document.addEventListener = (type, callback) => documentEvents.set(type, callback);
-  panel.context.dashboardCurrentShift = () => ({ name: 'C' });
+  panel.context.renderProductionDashboard = () => { redraws += 1; };
+  let shiftName = 'C';
+  panel.context.dashboardCurrentShift = () => ({ name: shiftName });
   panel.context.startProductionResponsibilityClock();
-  await periodCheck();
-  assert.equal(panel.pending.length, 0, 'The clock waits for a shift change while the panel remains open');
-  panel.context.document.hidden = true;
-  await documentEvents.get('visibilitychange')();
-  assert.equal(panel.pending.length, 0);
-  panel.context.document.hidden = false;
-  const resumed = documentEvents.get('visibilitychange')();
-  await windowEvents.get('focus')();
-  assert.equal(panel.pending.length, 1, 'Returning to the tab reloads the current shift once');
-  const newerItems = panel.context.loadProductionItems('PPT');
-  panel.pending[1].resolve({ items: [{ responsibles: { C: 'Novo encarregado' } }] });
-  await newerItems;
-  panel.pending[0].resolve({ items: [{ responsibles: {} }] });
-  await resumed;
-  assert.equal(panel.state().productionItems[0].responsibles.C, 'Novo encarregado');
+  assert.equal(interval, 60000);
+  assert.deepEqual([...windowEvents.keys(), ...documentEvents.keys()], [], 'No reload on focus, visibility or pageshow');
+  periodCheck();
+  assert.equal(redraws, 0, 'Same shift: nothing happens');
+  shiftName = 'A';
+  periodCheck();
+  periodCheck();
+  assert.equal(redraws, 1, 'Shift change redraws once');
+  assert.equal(panel.pending.length, 0, 'The panel never requests data by itself');
 
   const catalog = setup();
   const { context } = catalog;
