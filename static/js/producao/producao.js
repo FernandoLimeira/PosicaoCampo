@@ -374,15 +374,19 @@ function formatWhatsapp(value) {
   return local;
 }
 
-// Ícone que abre a conversa (wa.me) em outra aba; o número aparece ao passar o mouse e, com
-// ``showNumber``, ao lado do ícone.
+// Ícone que abre a conversa (wa.me) em outra aba. Sem ``showNumber`` (cartões do painel), o
+// número aparece num balão ao passar o mouse ou focar; com ``showNumber``, ao lado do ícone.
 function whatsappLinkHtml(value, name = '', showNumber = false) {
   const digits = String(value || '').replace(/\D/g, '');
   if (!digits) return '';
   const number = formatWhatsapp(digits);
   const label = `Conversar no WhatsApp${name ? ` com ${name}` : ''}: ${number}`;
-  return `<a class="whatsapp-link" data-whatsapp-link href="https://wa.me/${digits}" target="_blank" rel="noopener noreferrer"
-    title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${WHATSAPP_ICON}${showNumber ? `<span>${escapeHtml(number)}</span>` : ''}</a>`;
+  const content = showNumber
+    ? `<span class="whatsapp-number">${escapeHtml(number)}</span>`
+    : `<span class="whatsapp-tooltip" role="tooltip"><small>WhatsApp${name ? ` · ${escapeHtml(name)}` : ''}</small>`
+      + `<strong>${escapeHtml(number)}</strong><em>Clique para abrir a conversa</em></span>`;
+  return `<a class="whatsapp-link${showNumber ? '' : ' has-tooltip'}" data-whatsapp-link href="https://wa.me/${digits}" target="_blank"
+    rel="noopener noreferrer" aria-label="${escapeHtml(label)}">${WHATSAPP_ICON}${content}</a>`;
 }
 
 // Mesmo texto de productionResponsibleName, com o ícone do WhatsApp na frente de cada nome.

@@ -1195,9 +1195,33 @@ button.pdash-note { padding: 2px 0; border: 0; background: transparent; color: v
 .pfd-note-text { white-space: pre-wrap; }
 
 /* WhatsApp do responsável: ícone na frente do nome que abre a conversa (wa.me). */
-.whatsapp-link { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; color: #128c4a; font-weight: 700; text-decoration: none; vertical-align: middle; white-space: nowrap; }
-.whatsapp-link svg { width: 16px; height: 16px; flex: none; }
+.whatsapp-link { position: relative; display: inline-flex; align-items: center; gap: 4px; margin-left: 5px; color: #128c4a; font-weight: 700; text-decoration: none; vertical-align: middle; white-space: nowrap; }
+.whatsapp-link svg { width: 16px; height: 16px; flex: none; transition: transform .15s ease; }
 .whatsapp-link .whatsapp-icon-bubble { fill: #25d366; }
 .whatsapp-link .whatsapp-icon-phone { fill: #ffffff; }
-.whatsapp-link:hover span, .whatsapp-link:focus-visible span { text-decoration: underline; }
+.whatsapp-link:hover svg, .whatsapp-link:focus-visible svg { transform: scale(1.15); }
+.whatsapp-link:hover .whatsapp-number, .whatsapp-link:focus-visible .whatsapp-number { text-decoration: underline; }
 .whatsapp-link:focus-visible { outline: 2px solid #25d366; outline-offset: 2px; border-radius: 4px; }
+/* Balão com o número (cartões do painel): aparece ao passar o mouse ou focar o ícone. */
+.whatsapp-tooltip {
+  position: absolute; left: 50%; bottom: calc(100% + 10px); z-index: 30;
+  display: flex; flex-direction: column; gap: 2px; min-width: 168px; padding: 9px 12px 10px;
+  border: 1px solid #d7efe1; border-left: 4px solid #25d366; border-radius: 10px;
+  background: #ffffff; color: #1f262a; text-align: left; white-space: nowrap;
+  box-shadow: 0 10px 28px rgba(14, 29, 33, .18), 0 2px 6px rgba(14, 29, 33, .08);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transform: translate(-50%, 6px); transition: opacity .16s ease, transform .16s ease, visibility .16s;
+}
+.whatsapp-tooltip::after {
+  content: ""; position: absolute; left: 50%; top: 100%; width: 10px; height: 10px; margin: -6px 0 0 -5px;
+  border-right: 1px solid #d7efe1; border-bottom: 1px solid #d7efe1; background: #ffffff; transform: rotate(45deg);
+}
+.whatsapp-tooltip small { color: #5f8a72; font-size: 10px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; }
+.whatsapp-tooltip strong { color: #1f262a; font-size: 16px; font-weight: 800; letter-spacing: .2px; font-variant-numeric: tabular-nums; }
+.whatsapp-tooltip em { color: #128c4a; font-size: 11px; font-style: normal; font-weight: 600; }
+.whatsapp-link.has-tooltip:hover .whatsapp-tooltip, .whatsapp-link.has-tooltip:focus-visible .whatsapp-tooltip {
+  opacity: 1; visibility: visible; transform: translate(-50%, 0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .whatsapp-link svg, .whatsapp-tooltip { transition: none; }
+}

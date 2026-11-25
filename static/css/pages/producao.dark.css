@@ -316,5 +316,10 @@ button.pdash-kpi.is-active { color: #e0e0e0; }
 .whatsapp-link { color: #89e1b1; }
 .whatsapp-link .whatsapp-icon-bubble { fill: #5cd68a; }
 .whatsapp-link:focus-visible { outline: 2px solid #38c06b; }
+.whatsapp-tooltip { border: 1px solid #3f4a43; border-left: 4px solid #38c06b; background: #2a2a2a; color: #e0e0e0; }
+.whatsapp-tooltip::after { border-right: 1px solid #3f4a43; border-bottom: 1px solid #3f4a43; background: #2a2a2a; }
+.whatsapp-tooltip small { color: #86ac97; }
+.whatsapp-tooltip strong { color: #e0e0e0; }
+.whatsapp-tooltip em { color: #89e1b1; }
 .production-primary-button.pdash-action { background: linear-gradient(135deg, #3f6f7a 0%, #1b3a41 100%); }
 .production-primary-button.pdash-action:hover:not(:disabled) { background: linear-gradient(135deg, #4a7c87 0%, #22474e 100%); }
