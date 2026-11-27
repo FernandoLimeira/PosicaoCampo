@@ -17,20 +17,43 @@ _SCHEDULE_FIELDS = ("kind", "role_id", "shift", "work_date", "responsible_name",
                     "responsible_whatsapp", "relief_whatsapp")
 
 
-def normalize_whatsapp(value: Any, label: str) -> str:
+# DDD de cada unidade: número digitado sem DDD usa o da unidade da escala.
+UNIT_AREA_CODES = {"PPT": "18", "NRD": "18", "RBR": "67", "PST": "67"}
+
+
+def normalize_whatsapp(value: Any, label: str, unit: str | None = None) -> str:
     """WhatsApp opcional: só os dígitos, com o DDI 55 ("(18) 99123-4567" -> "5518991234567").
-    Aceita DDD + número (10 ou 11 dígitos) ou já com o 55 na frente (12 ou 13 dígitos)."""
+
+    Aceita os jeitos comuns de escrever o número:
+    - com DDI: "+55 67 99123-4567", "0055 67 99123-4567";
+    - com DDD: "(67) 99123-4567", "67991234567", "067 99123-4567" (zero antes do DDD);
+    - com código de operadora: "0 15 67 99123-4567", "015 67 99123-4567";
+    - sem DDD: "99123-4567" (usa o DDD da unidade);
+    - celular antigo, sem o 9: "(67) 9912-3456" vira "(67) 99912-3456".
+    Celular tem 9 dígitos começando com 9; fixo tem 8 dígitos começando de 2 a 5.
+    """
     digits = "".join(char for char in str(value or "") if char.isdigit())
     if not digits:
         return ""
-    if len(digits) in (10, 11) and not digits.startswith("0"):
-        digits = "55" + digits
-    local = digits[4:]
-    # DDD sem zero; celular com 9 dígitos começa com 9, fixo com 8 dígitos começa de 2 a 8.
-    if (len(digits) not in (12, 13) or not digits.startswith("55") or digits[2] == "0"
-            or (len(local) == 9 and local[0] != "9") or (len(local) == 8 and local[0] not in "2345678")):
-        raise ValueError(f"Informe o WhatsApp {label} com DDD, por exemplo (18) 99123-4567.")
-    return digits
+    if digits.startswith("0055"):        # discagem internacional: 00 + 55 ...
+        digits = digits[2:]
+    if digits.startswith("55") and len(digits) in (12, 13):
+        national = digits[2:]
+    else:
+        # Um zero antes do DDD ou da operadora; "00" sem o 55 é DDD inválido.
+        national = digits[1:] if digits.startswith("0") and not digits.startswith("00") else digits
+        if len(national) in (12, 13):    # código de operadora (2 dígitos) + DDD + número
+            national = national[2:]
+        if len(national) in (8, 9) and unit in UNIT_AREA_CODES:
+            national = UNIT_AREA_CODES[unit] + national
+    area, local = national[:2], national[2:]
+    if len(local) == 8 and local[0] in "6789":  # celular escrito sem o 9 na frente
+        local = "9" + local
+    valid_area = len(area) == 2 and area[0] != "0" and area[1] != "0"
+    valid_local = (len(local) == 9 and local[0] == "9") or (len(local) == 8 and local[0] in "2345")
+    if len(national) not in (10, 11) or not valid_area or not valid_local:
+        raise ValueError(f"WhatsApp {label} inválido ({value}). Informe com DDD, por exemplo (67) 99123-4567.")
+    return "55" + area + local
 
 
 def _responsibility_permissions(access: dict[str, Any]) -> dict[str, bool]:
@@ -161,8 +184,8 @@ def _save_responsibility_rules(user_id: int, payload: dict, front_ids: list | No
     relief = _clean_text(payload.get("relief_name"), "o folguista", 80) if kind == "cycle" else ""
     if relief and relief.casefold() == name.casefold():
         raise ValueError("Titular e folguista devem ser pessoas diferentes.")
-    whatsapp = normalize_whatsapp(payload.get("responsible_whatsapp"), "do responsável") if name else ""
-    relief_whatsapp = normalize_whatsapp(payload.get("relief_whatsapp"), "do folguista") if relief else ""
+    whatsapp = normalize_whatsapp(payload.get("responsible_whatsapp"), "do responsável", unit) if name else ""
+    relief_whatsapp = normalize_whatsapp(payload.get("relief_whatsapp"), "do folguista", unit) if relief else ""
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         _require_responsibility_edit(conn, user_id, "edit_schedules", unit=unit)

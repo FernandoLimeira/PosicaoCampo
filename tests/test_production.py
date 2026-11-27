@@ -120,6 +120,17 @@ class ProductionTests(unittest.TestCase):
                 "work_date": "2026-11-20", "responsible_name": "João", "relief_name": "Maria",
                 "responsible_whatsapp": "(18) 99123-4567", "relief_whatsapp": "+55 18 3333-4444"}
         self.assertEqual(production.normalize_whatsapp("18991234567", "x"), "5518991234567")
+        # Jeitos comuns de escrever o número (Polo MS: DDD 67), todos para o mesmo WhatsApp.
+        for typed in ("(67) 99123-4567", "067 99123-4567", "0 15 67 99123-4567", "015 67 99123-4567",
+                      "+55 67 99123-4567", "0055 67 99123-4567", "5567991234567", "99123-4567"):
+            with self.subTest(typed=typed):
+                self.assertEqual(production.normalize_whatsapp(typed, "x", "RBR"), "5567991234567")
+        self.assertEqual(production.normalize_whatsapp("(67) 9912-3456", "x"), "5567999123456")  # celular sem o 9
+        self.assertEqual(production.normalize_whatsapp("67 3411-2233", "x"), "556734112233")    # fixo
+        with self.assertRaisesRegex(ValueError, "99123-4567"):  # sem DDD e sem unidade: não adivinha
+            production.normalize_whatsapp("99123-4567", "x")
+        # Sem DDD, a escala usa o DDD da unidade (NRD: 18).
+        self.assertEqual(production.normalize_whatsapp("99123-4567", "x", "NRD"), "5518991234567")
         for invalid in ("1234", "(00) 99123-4567", "+1 555 123 4567"):
             with self.assertRaisesRegex(ValueError, "WhatsApp"):
                 production.save_responsibility_rule(self.admin["id"], {**rule, "responsible_whatsapp": invalid})
