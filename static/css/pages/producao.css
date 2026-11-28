@@ -1225,3 +1225,268 @@ button.pdash-note { padding: 2px 0; border: 0; background: transparent; color: v
 @media (prefers-reduced-motion: reduce) {
   .whatsapp-link svg, .whatsapp-tooltip { transition: none; }
 }
+
+/* ===== Fertirrigação (Polo SP): dimensionamento de CVs por frente ===== */
+.fert-panel { gap: 14px; }
+.fert-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.fert-kpis[hidden], .fert-section[hidden] { display: none; }
+.fert-kpi { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid var(--data-border); border-left: 5px solid var(--slate); border-radius: 10px; background: #fff; box-shadow: 0 1px 2px rgba(14, 29, 33, .04); }
+.fert-kpi small { color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; }
+.fert-kpi strong { color: var(--ink); font-size: 28px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.fert-kpi strong em { color: var(--muted); font-size: 13px; font-style: normal; font-weight: 700; }
+.fert-kpi span { color: var(--muted); font-size: 12px; }
+.fert-kpi.is-short { border-left-color: var(--status-stop); background: var(--status-stop-soft); }
+.fert-kpi.is-short strong { color: var(--status-stop-text); }
+.fert-kpi.is-ok { border-left-color: var(--status-ok); }
+.fert-kpi.is-over { border-left-color: var(--status-wet); }
+.fert-meta { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.fert-table-scroll { overflow-x: auto; }
+.fert-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.fert-table th { padding: 10px 12px; border-bottom: 1px solid var(--data-border); background: var(--data-alternate); color: #4d5a61; font-size: 11px; font-weight: 800; text-align: left; text-transform: uppercase; white-space: nowrap; }
+.fert-table td { padding: 10px 12px; border-bottom: 1px solid #edf2ef; color: var(--ink); vertical-align: top; }
+.fert-table td small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
+.fert-table td.is-number { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fert-table td.is-strong { font-size: 16px; font-weight: 800; }
+.fert-table tbody tr { cursor: pointer; }
+.fert-table tbody tr:hover { background: #f5f8f6; }
+.fert-table tbody tr:focus-visible { outline: 3px solid var(--status-ok); outline-offset: -3px; }
+.fert-table tbody tr.is-short td:first-child { box-shadow: inset 4px 0 0 var(--status-stop); }
+.fert-balance { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.fert-balance.is-short { background: var(--status-stop-soft); color: var(--status-stop-text); }
+.fert-balance.is-ok { background: var(--status-ok-soft); color: var(--status-ok-text); }
+.fert-balance.is-over { background: var(--status-wet-soft); color: var(--status-wet-text); }
+.fert-balance.is-pending { color: var(--muted); }
+.fert-missing { color: var(--status-stop-text) !important; font-weight: 700; }
+/* Popup do plano da frente. */
+.fert-plan-modal { width: min(860px, calc(100vw - 30px)); }
+.fert-plan-form { display: grid; gap: 14px; padding: 18px 24px; overflow-y: auto; }
+.fert-plan-section { display: grid; gap: 10px; }
+.fert-plan-section h3 { margin: 0; color: #4d5a61; font-size: 11px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; }
+.fert-os-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px 16px; margin: 0; padding: 12px 14px; border: 1px solid var(--data-border); border-radius: 8px; background: var(--data-alternate); }
+.fert-os-grid dt { color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.fert-os-grid dd { margin: 2px 0 0; color: var(--ink); font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+.fert-products { display: flex; gap: 8px; margin: 0; color: #303c42; font-size: 12px; }
+.fert-products b { color: var(--muted); }
+.fert-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px 14px; align-items: end; }
+.fert-field { margin: 0; }
+.fert-input { display: flex; align-items: center; gap: 6px; }
+.fert-input input { flex: 1; min-width: 0; }
+.fert-input em { color: var(--muted); font-size: 12px; font-style: normal; font-weight: 700; }
+.fert-params summary { color: #4d5a61; font-size: 11px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; cursor: pointer; }
+.fert-params summary small { color: var(--muted); font-weight: 600; letter-spacing: 0; text-transform: none; }
+.fert-params[open] summary { margin-bottom: 10px; }
+.fert-check { display: flex; align-items: center; gap: 8px; color: #303c42; font-size: 13px; font-weight: 700; }
+.fert-plan-status { margin: 0; color: var(--status-stop-text); font-size: 12px; }
+/* Frota e raio. */
+.fert-fleet-modal { width: min(760px, calc(100vw - 30px)); }
+.fert-fleet-body { display: grid; gap: 16px; padding: 18px 24px 22px; overflow-y: auto; }
+.fert-equipment-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; align-items: end; }
+.fert-equipment-form .field { margin: 0; }
+.fert-fleet-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.fert-fleet-columns h3, .fert-radius-box h3 { margin: 0 0 8px; color: #4d5a61; font-size: 11px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; }
+.fert-fleet-columns h3 small { padding: 1px 7px; border-radius: 999px; background: #eef3f1; }
+.fert-fleet-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border: 1px solid var(--data-border); border-radius: 8px; overflow: hidden; }
+.fert-fleet-list li { display: grid; grid-template-columns: 70px 1fr auto 32px; gap: 8px; align-items: center; padding: 6px 10px; background: #fff; }
+.fert-fleet-list li + li { border-top: 1px solid #edf2ef; }
+.fert-fleet-list li span { color: var(--muted); font-size: 12px; }
+.fert-fleet-list li.is-workshop { background: var(--status-wet-soft); }
+.fert-fleet-list li.is-inactive { opacity: .6; }
+.fert-fleet-list select { min-height: 30px; font-size: 12px; }
+.fert-radius-box p { margin: 0 0 8px; color: #303c42; font-size: 13px; }
+.fert-radius-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+@media (max-width: 640px) {
+  .fert-equipment-form { grid-template-columns: 1fr 1fr; }
+  .fert-kpi strong { font-size: 22px; }
+}
+
+/* Fertirrigação: situação dos equipamentos, quadro da frota e movimentações. */
+#production-fert-board[hidden], #production-fert-events[hidden] { display: none; }
+.fert-status { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; background: #eef3f1; color: #4d5a61; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.fert-status b { font-size: 13px; }
+.fert-status.is-active { background: var(--status-ok-soft); color: var(--status-ok-text); }
+.fert-status.is-available { background: #e6eef6; color: #2b5677; }
+.fert-status.is-workshop { background: var(--status-stop-soft); color: var(--status-stop-text); }
+.fert-status.is-no_driver, .fert-status.is-support { background: var(--status-wet-soft); color: var(--status-wet-text); }
+.fert-status.is-inactive { background: #eceeef; color: #6b7378; }
+.fert-status-strip { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 12px; }
+.fert-board-header { align-items: center; }
+.fert-kind-tabs { display: inline-flex; gap: 4px; padding: 3px; border: 1px solid var(--data-border); border-radius: 9px; background: var(--data-alternate); }
+.fert-kind-tabs button { padding: 6px 12px; border: 0; border-radius: 7px; background: transparent; color: #4d5a61; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
+.fert-kind-tabs button.is-active { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(14, 29, 33, .12); }
+.fert-kind-tabs small { margin-left: 4px; color: var(--muted); }
+.fert-board-table tbody tr { cursor: default; }
+.fert-board-table tbody tr:hover { background: transparent; }
+.fert-board-table select { min-height: 32px; font-size: 12px; }
+.fert-board-table tr.is-workshop td:first-child { box-shadow: inset 4px 0 0 var(--status-stop); }
+.fert-board-table tr.is-no_driver td:first-child, .fert-board-table tr.is-support td:first-child { box-shadow: inset 4px 0 0 var(--status-wet); }
+.fert-board-table tr.is-inactive { opacity: .6; }
+.fert-rec-cell { max-width: 280px; font-size: 12px; line-height: 1.4; }
+.fert-events { display: grid; gap: 0; margin: 0; padding: 0 16px 16px; list-style: none; }
+.fert-events li { display: grid; grid-template-columns: 48px 90px 120px 1fr auto; gap: 10px; align-items: baseline; padding: 8px 0; border-top: 1px solid #edf2ef; font-size: 13px; }
+.fert-events time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.fert-events small { color: var(--muted); }
+.fert-event-type { justify-self: start; padding: 2px 8px; border-radius: 999px; background: #eef3f1; color: #4d5a61; font-size: 11px; font-weight: 800; }
+.fert-event-type.is-move { background: #e6eef6; color: #2b5677; }
+.fert-event-type.is-allocate { background: var(--status-ok-soft); color: var(--status-ok-text); }
+.fert-event-type.is-release { background: var(--status-wet-soft); color: var(--status-wet-text); }
+.fert-event-type.is-status { background: #f1ecf7; color: #5b3f80; }
+.fert-plan-status.is-error { font-weight: 700; }
+.fert-plan-status:not(.is-error) { color: var(--muted); }
+.fert-plan-section h3 .fert-meta { margin-left: 6px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+@media (max-width: 720px) {
+  .fert-events li { grid-template-columns: 44px 1fr; }
+  .fert-events li > span, .fert-events li > small { grid-column: 2; }
+}
+.fert-rec { display: block; color: var(--ink); font-size: 12px; font-weight: 700; line-height: 1.4; }
+.fert-rec b { padding: 0 6px; border-radius: 999px; background: #eef3f1; color: #4d5a61; font-size: 11px; }
+.fert-rec-cell { min-width: 190px; }
+.fert-rec-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.fert-rec-list li { padding: 4px 10px; border: 1px solid var(--data-border); border-radius: 999px; background: #fff; color: var(--ink); font-size: 12px; font-weight: 700; }
+
+/* Fertirrigação: indicadores numa linha e o ciclo dos CVs (base → frente). */
+@media (min-width: 1100px) { .fert-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.fert-cycle[hidden] { display: none; }
+.fert-cycle, .fert-plan-modal, .fert-cv-modal { --cv-loading: #d99a1b; --cv-loading-soft: #fdf1d8; --cv-loaded: #2e8b6e; --cv-loaded-soft: #e1f2ea;
+  --cv-unloading: #2f6fa8; --cv-unloading-soft: #e3eef8; --cv-empty: #7d878c; --cv-empty-soft: #eef1f2; }
+.fert-cycle-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 0 16px 14px; }
+.fert-cycle-count { display: grid; grid-template-columns: 12px auto; grid-template-rows: auto auto; column-gap: 10px; align-items: center; padding: 10px 14px; border: 1px solid var(--data-border); border-radius: 10px; background: #fff; }
+.fert-cycle-count i { grid-row: span 2; width: 12px; height: 40px; border-radius: 6px; }
+.fert-cycle-count strong { color: var(--ink); font-size: 26px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.fert-cycle-count span { color: var(--muted); font-size: 12px; font-weight: 700; }
+.fert-cycle-count.is-loading i { background: var(--cv-loading); }
+.fert-cycle-count.is-loaded i { background: var(--cv-loaded); }
+.fert-cycle-count.is-unloading i { background: var(--cv-unloading); }
+.fert-cycle-count.is-empty i { background: var(--cv-empty); }
+.fert-lanes { display: grid; gap: 10px; padding: 0 16px 16px; }
+.fert-lane { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--data-border); border-radius: 10px; background: #fff; cursor: pointer; }
+.fert-lane:hover { box-shadow: 0 4px 12px rgba(14, 29, 33, .08); }
+.fert-lane:focus-visible { outline: 3px solid var(--status-ok); outline-offset: 2px; }
+.fert-lane.is-pending { cursor: default; background: var(--data-alternate); }
+.fert-lane-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; color: var(--muted); font-size: 12px; }
+.fert-lane-head strong { color: var(--ink); font-size: 15px; font-weight: 800; }
+.fert-lane-trucks { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; color: var(--ink); font-weight: 800; }
+.fert-route { display: grid; grid-template-columns: 150px minmax(0, 1fr) 150px; gap: 10px; align-items: stretch; }
+.fert-stop { display: grid; align-content: start; gap: 2px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--data-border); }
+.fert-stop small { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; }
+.fert-stop b { color: var(--ink); font-size: 12px; overflow-wrap: anywhere; }
+.fert-stop.is-base { background: var(--cv-loading-soft); border-color: #f0d9a6; }
+.fert-stop.is-front { background: var(--cv-unloading-soft); border-color: #bfd5ea; }
+.fert-stop-cvs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.fert-stop-cvs em { color: var(--muted); font-size: 12px; font-style: normal; }
+.fert-road { display: grid; grid-template-rows: 1fr 1fr; gap: 6px; padding: 4px 0; }
+.fert-track { position: relative; min-height: 30px; border-radius: 999px; }
+.fert-track.is-go { background: linear-gradient(90deg, var(--cv-loaded-soft), #d2ecdf); }
+.fert-track.is-back { background: var(--cv-empty-soft); }
+.fert-track::after { content: ""; position: absolute; left: 12px; right: 12px; top: 50%; border-top: 2px dashed rgba(14, 29, 33, .15); }
+.fert-track-label { position: absolute; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; z-index: 1; }
+.fert-track.is-go .fert-track-label { right: 12px; }
+.fert-track.is-back .fert-track-label { left: 12px; }
+.fert-cv { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; height: 24px; padding: 0 6px; border-radius: 6px; color: #fff; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; box-shadow: 0 1px 3px rgba(14, 29, 33, .25); }
+.fert-track .fert-cv { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; transition: left .6s ease; }
+.fert-cv.is-loading { background: var(--cv-loading); }
+.fert-cv.is-loaded { background: var(--cv-loaded); }
+.fert-cv.is-unloading { background: var(--cv-unloading); }
+.fert-cv.is-empty { background: var(--cv-empty); }
+@media (prefers-reduced-motion: reduce) { .fert-track .fert-cv { transition: none; } }
+@media (max-width: 760px) {
+  .fert-cycle-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fert-route { grid-template-columns: 1fr; }
+  .fert-road { min-height: 70px; }
+  .fert-lane-trucks { margin-left: 0; }
+}
+
+/* Fertirrigação: gás dos CVs, resumo da frente e ficha do CV. */
+.fert-prefix { padding: 0; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 800; text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
+.fert-prefix:hover { color: var(--status-ok-text); }
+.fert-fuel { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #eceeef; color: #4d5a61; font-size: 11px; font-weight: 800; }
+.fert-fuel.is-gas { background: #e3eef8; color: #2f6fa8; }
+.fert-gas { display: grid; grid-template-columns: auto auto; gap: 4px 8px; align-items: center; justify-content: start; }
+.fert-gas-input { display: inline-flex; align-items: center; gap: 3px; }
+.fert-gas-input input { width: 64px; min-height: 30px; padding: 0 6px; font-size: 13px; font-weight: 700; text-align: right; }
+.fert-gas-input em { color: var(--muted); font-size: 12px; font-style: normal; font-weight: 700; }
+.fert-gas-bar { --gas: 0%; grid-column: 1 / -1; display: block; width: 120px; height: 6px; border-radius: 999px;
+  background: linear-gradient(90deg, var(--gas-color, #2f6fa8) var(--gas), #e3e8ea var(--gas)); }
+.fert-gas.is-ok .fert-gas-bar { --gas-color: #2e8b6e; }
+.fert-gas.is-mid .fert-gas-bar { --gas-color: #d99a1b; }
+.fert-gas.is-low .fert-gas-bar { --gas-color: #c4454f; }
+.fert-gas-trips { grid-column: 1 / -1; color: var(--muted); font-size: 11px; font-weight: 700; }
+.fert-gas-trips.is-low { color: var(--status-stop-text); }
+.fert-cv.is-gas { outline: 2px solid #9cc3e6; outline-offset: 1px; }
+.fert-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 16px; margin: 0; }
+.fert-summary-grid dt { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; }
+.fert-summary-grid dd { margin: 3px 0 0; color: var(--ink); font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+.fert-summary-grid select { min-height: 32px; font-size: 13px; }
+.fert-link { padding: 0; border: 0; background: transparent; color: #2f6fa8; font: inherit; font-weight: 800; text-decoration: underline; cursor: pointer; }
+.fert-cv-modal { width: min(720px, calc(100vw - 30px)); }
+.fert-cv-body { display: grid; gap: 16px; padding: 18px 24px 22px; overflow-y: auto; }
+.fert-cv-body .fert-events { padding: 0; }
+.fert-cv-body .fert-events li { grid-template-columns: 48px 120px 1fr auto; }
+
+/* Fertirrigação: planejamento da semana. */
+#production-fert-week[hidden] { display: none; }
+.fert-budget { display: inline-flex; align-items: center; gap: 6px; color: #4d5a61; font-size: 12px; font-weight: 800; }
+.fert-budget input { width: 72px; min-height: 32px; text-align: right; font-weight: 700; }
+.fert-week-table th[scope="row"] { position: sticky; left: 0; z-index: 1; background: #fff; text-align: left; white-space: nowrap; }
+.fert-week-table thead th { text-align: center; }
+.fert-week-table thead th small { display: block; color: var(--muted); font-size: 10px; font-weight: 700; }
+.fert-week-cell { min-width: 120px; padding: 6px !important; vertical-align: top; }
+.fert-week-cell button, .fert-week-cell > div { display: grid; gap: 2px; width: 100%; min-height: 72px; padding: 8px; border: 1px solid var(--data-border); border-radius: 8px; background: #fff; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.fert-week-cell button:hover { border-color: var(--status-ok); }
+.fert-week-cell.is-today button, .fert-week-cell.is-today > div { background: var(--data-alternate); border-style: dashed; }
+.fert-week-cell.is-empty button { place-items: center; color: var(--muted); font-size: 20px; border-style: dashed; }
+.fert-week-cell strong { font-size: 14px; }
+.fert-week-cell small, .fert-week-meta { color: var(--muted); font-size: 11px; }
+.fert-week-cvs { justify-self: start; margin-top: 2px; padding: 1px 8px; border-radius: 999px; background: #e3eef8; color: #2f6fa8; font-size: 11px; font-weight: 800; }
+.fert-week-table tfoot th, .fert-week-table tfoot td { border-top: 2px solid var(--data-border); background: var(--data-alternate); }
+.fert-radius-diff.is-over { color: var(--status-stop-text) !important; font-weight: 800; }
+.fert-radius-diff.is-ok { color: var(--status-ok-text) !important; font-weight: 800; }
+.fert-week-modal { width: min(620px, calc(100vw - 30px)); }
+.fert-speed-hint { grid-column: 1 / -1; margin: 0; }
+
+/* Fertirrigação: plano do dia da frente (topo fixo, abas Equipe / Local e O.S. / Parâmetros). */
+.fert-plan-form { gap: 12px; padding-top: 0; }
+.fert-plan-head { position: sticky; top: 0; z-index: 3; display: grid; gap: 10px; margin: 0 -24px; padding: 14px 24px 12px; border-bottom: 1px solid var(--data-border); background: #fff; }
+.fert-plan-place { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.fert-plan-place strong { color: var(--ink); font-size: 14px; font-weight: 800; }
+.fert-plan-kpis { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.fert-plan-kpi { display: inline-grid; gap: 1px; min-width: 74px; padding: 6px 10px; border: 1px solid var(--data-border); border-radius: 8px; background: var(--data-alternate); }
+.fert-plan-kpi small { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; }
+.fert-plan-kpi b { color: var(--ink); font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fert-plan-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--data-border); }
+.fert-plan-tab { margin-bottom: -1px; padding: 8px 14px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #66737a; font: inherit; font-size: 13px; font-weight: 800; white-space: nowrap; cursor: pointer; }
+.fert-plan-tab:hover { color: #1f262a; }
+.fert-plan-tab.is-active { border-bottom-color: #2f8f5b; color: #1f262a; }
+.fert-plan-panel { display: grid; gap: 12px; }
+.fert-plan-panel[hidden] { display: none; }
+.fert-team-block { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--data-border); border-radius: 10px; background: #fff; }
+.fert-team-block > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.fert-team-block h3 { margin: 0; color: #4d5a61; font-size: 11px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; }
+.fert-team-block h3 small { margin-left: 4px; padding: 1px 7px; border-radius: 999px; background: #eef3f1; color: #4d5a61; font-size: 11px; letter-spacing: 0; }
+.fert-team-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.fert-team-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.fert-team-row { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 4px 6px 4px 6px; border: 1px solid var(--data-border); border-radius: 8px; background: var(--data-alternate); }
+.fert-team-row small { flex: 1; min-width: 0; color: #4d5a61; font-size: 11px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fert-team-remove { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #66737a; font: inherit; font-size: 17px; line-height: 1; cursor: pointer; }
+.fert-team-remove:hover { border-color: #f0c3c7; background: var(--status-stop-soft); color: var(--status-stop-text); }
+.fert-cv.is-new { background: #4d5a61; }
+.fert-picker { display: grid; gap: 6px; padding: 10px 12px; border: 1px dashed #b9c4c8; border-radius: 8px; background: var(--data-alternate); }
+.fert-picker-title { margin: 0; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; }
+.fert-picks { display: flex; flex-wrap: wrap; gap: 6px; }
+.fert-pick { display: inline-grid; justify-items: center; min-width: 64px; padding: 5px 10px; border: 1px solid var(--data-border); border-radius: 8px; background: #fff; color: var(--ink); font: inherit; cursor: pointer; }
+.fert-pick b { font-size: 13px; font-weight: 800; }
+.fert-pick small { color: var(--muted); font-size: 10px; font-weight: 700; }
+.fert-pick:hover { border-color: var(--status-ok); background: var(--status-ok-soft); }
+.fert-new { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px 12px; align-items: end; padding: 10px 12px; border: 1px solid #bfd5ea; border-radius: 8px; background: #f4f8fc; }
+.fert-new .field { margin: 0; }
+.fert-new-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; grid-column: 1 / -1; }
+.fert-new-status { grid-column: 1 / -1; margin: 0; color: var(--status-stop-text); font-size: 12px; font-weight: 700; }
+.fert-new-status:empty { display: none; }
+.fert-plan-footer { align-items: center; }
+.fert-plan-foot { display: grid; gap: 2px; flex: 1; min-width: 0; margin-right: auto; }
+.fert-plan-foot-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; color: #303c42; font-size: 13px; }
+.fert-plan-foot-preview b { font-size: 16px; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) {
+  .fert-plan-head { margin: 0 -16px; padding: 12px 16px 10px; }
+  .fert-plan-tabs { overflow-x: auto; }
+  .fert-team-list { grid-template-columns: 1fr; }
+}

@@ -17,6 +17,7 @@ PAGE_ROUTES = {
     "/producao/ordens-servico": ("producao.html", "service_orders"),
     "/producao/consultas": ("producao.html", "production_queries"),
     "/producao/cadastros": ("producao.html", "production_catalog"),
+    "/producao/fertirrigacao": ("producao.html", "production_fert"),
     "/setores": ("setores.html", "sectors"),
     "/relatorios": ("relatorios.html", "reports"),
     "/retornos": ("retornos.html", "returns"),
@@ -56,13 +57,14 @@ def handle(req):
             return _redirect(start_response, "/login")
         if path in {"/usuarios", "/usuarios/cadastro"} and not user_can(user, "users", "view"):
             return req.error(HTTPStatus.FORBIDDEN, "Sem acesso ao módulo Usuários.")
-        if path in {"/producao", "/producao/ordens-servico", "/producao/consultas", "/producao/cadastros"} and not user.get("production_access", {}).get("enabled"):
+        if path in {"/producao", "/producao/ordens-servico", "/producao/consultas", "/producao/cadastros",
+                    "/producao/fertirrigacao"} and not user.get("production_access", {}).get("enabled"):
             return req.error(HTTPStatus.FORBIDDEN, "Você não possui acesso à Produção Agrícola.")
         page_key = PAGE_ROUTES[path][1]
         # Consultas SQL da Entrega CTT fazem parte do módulo Posição de Campo (CTT).
         if page_key == "delivery_queries" and not user_can(user, "dashboard"):
             return req.error(HTTPStatus.FORBIDDEN, "Você não possui acesso à Entrega CTT.")
-        if page_key != "delivery_queries" and page_key not in {"production", "service_orders", "production_queries", "production_catalog", "users"} and not user_can(user, page_key):
+        if page_key != "delivery_queries" and page_key not in {"production", "service_orders", "production_queries", "production_catalog", "production_fert", "users"} and not user_can(user, page_key):
             return req.error(HTTPStatus.FORBIDDEN, "Você não possui acesso a este módulo.")
         if path == "/usuarios/cadastro":
             return _redirect(start_response, "/usuarios?novo=1")

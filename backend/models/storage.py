@@ -24,6 +24,8 @@ PRODUCTION_TABLES = (
     "production_responsibility_roles", "production_front_responsibilities",
     "production_user_items", "production_daily_entries", "production_daily_summaries",
     "production_service_orders", "production_operations", "production_sql_queries",
+    "production_fert_equipment", "production_fert_radius", "production_fert_plans", "production_fert_events",
+    "production_fert_week", "production_fert_settings",
 )
 DATA_TABLES = CORE_DATA_TABLES + ("return_analysis_soil_wet", "field_front_notes", "field_weighings", "field_sql_queries") + PRODUCTION_TABLES
 USER_REFERENCES = (
@@ -44,6 +46,11 @@ OPTIONAL_USER_REFERENCES = (
     ("production_service_orders", "imported_by"),
     ("production_operations", "created_by"), ("production_operations", "updated_by"),
     ("production_sql_queries", "created_by"), ("production_sql_queries", "updated_by"),
+    ("production_fert_equipment", "created_by"), ("production_fert_equipment", "updated_by"),
+    ("production_fert_radius", "imported_by"), ("production_fert_plans", "updated_by"),
+    ("production_fert_equipment", "status_changed_by"), ("production_fert_events", "created_by"),
+    ("production_fert_equipment", "gas_updated_by"), ("production_fert_week", "updated_by"),
+    ("production_fert_settings", "updated_by"),
 )
 ALL_USER_REFERENCES = USER_REFERENCES + OPTIONAL_USER_REFERENCES
 _INIT_LOCK = threading.Lock()
@@ -575,6 +582,90 @@ def _create_production_tables(conn):
             updated_at INTEGER NOT NULL
         )
         """,
+        # Fertirrigação (Polo SP): frota (tratores e CVs), raio setor × base e plano do dia por frente.
+        """
+        CREATE TABLE IF NOT EXISTS main.production_fert_equipment (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            unit_code TEXT NOT NULL COLLATE NOCASE,
+            kind TEXT NOT NULL CHECK (kind IN ('tractor', 'truck')),
+            prefix TEXT NOT NULL COLLATE NOCASE,
+            capacity_m3 REAL,
+            status TEXT NOT NULL DEFAULT 'available' CHECK (status IN ('active', 'available', 'workshop', 'no_driver', 'support', 'inactive')),
+            notes TEXT NOT NULL DEFAULT '',
+            status_changed_by INTEGER,
+            status_changed_at INTEGER,
+            fuel TEXT NOT NULL DEFAULT 'diesel' CHECK (fuel IN ('diesel', 'gas')),
+            gas_level_pct REAL,
+            gas_updated_by INTEGER,
+            gas_updated_at INTEGER,
+            created_by INTEGER,
+            updated_by INTEGER,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            UNIQUE (unit_code, kind, prefix)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS main.production_fert_radius (
+            sector_key TEXT NOT NULL,
+            sector TEXT NOT NULL,
+            farm TEXT NOT NULL DEFAULT '',
+            municipality TEXT NOT NULL DEFAULT '',
+            base TEXT NOT NULL COLLATE NOCASE,
+            radius_km REAL NOT NULL,
+            imported_by INTEGER,
+            imported_at INTEGER NOT NULL,
+            PRIMARY KEY (sector_key, base)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS main.production_fert_plans (
+            unit_code TEXT NOT NULL COLLATE NOCASE,
+            work_date TEXT NOT NULL,
+            service_front_id INTEGER NOT NULL,
+            params_json TEXT NOT NULL DEFAULT '{}',
+            updated_by INTEGER,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (unit_code, work_date, service_front_id)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS main.production_fert_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            unit_code TEXT NOT NULL COLLATE NOCASE,
+            work_date TEXT NOT NULL,
+            equipment_id INTEGER,
+            prefix TEXT NOT NULL DEFAULT '',
+            kind TEXT NOT NULL DEFAULT '',
+            action TEXT NOT NULL,
+            detail TEXT NOT NULL DEFAULT '',
+            created_by INTEGER,
+            created_at INTEGER NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS main.production_fert_week (
+            unit_code TEXT NOT NULL COLLATE NOCASE,
+            work_date TEXT NOT NULL,
+            service_front_id INTEGER NOT NULL,
+            sector TEXT NOT NULL,
+            flow_m3_ha REAL,
+            tractors INTEGER,
+            updated_by INTEGER,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (unit_code, work_date, service_front_id)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS main.production_fert_settings (
+            unit_code TEXT PRIMARY KEY COLLATE NOCASE,
+            budget_radius_km REAL NOT NULL DEFAULT 30,
+            updated_by INTEGER,
+            updated_at INTEGER NOT NULL
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS main.idx_production_fert_events_day ON production_fert_events(unit_code, work_date, id)",
+        "CREATE INDEX IF NOT EXISTS main.idx_production_fert_plans_front ON production_fert_plans(unit_code, service_front_id, work_date)",
         "CREATE INDEX IF NOT EXISTS main.idx_production_front_units_unit ON production_service_front_units(unit_code, service_front_id)",
         "CREATE INDEX IF NOT EXISTS main.idx_production_user_items_owner_unit ON production_user_items(owner_user_id, unit_code, is_active, position, id)",
         # Lista da unidade (todas as frentes) e lançamentos ativos de uma frente.
@@ -1103,6 +1194,81 @@ CREATE TABLE IF NOT EXISTS production_operations (
     updated_by INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS production_fert_equipment (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    unit_code TEXT NOT NULL COLLATE NOCASE,
+    kind TEXT NOT NULL CHECK (kind IN ('tractor', 'truck')),
+    prefix TEXT NOT NULL COLLATE NOCASE,
+    capacity_m3 REAL,
+    status TEXT NOT NULL DEFAULT 'available' CHECK (status IN ('active', 'available', 'workshop', 'no_driver', 'support', 'inactive')),
+    notes TEXT NOT NULL DEFAULT '',
+    status_changed_by INTEGER,
+    status_changed_at INTEGER,
+    fuel TEXT NOT NULL DEFAULT 'diesel' CHECK (fuel IN ('diesel', 'gas')),
+    gas_level_pct REAL,
+    gas_updated_by INTEGER,
+    gas_updated_at INTEGER,
+    created_by INTEGER,
+    updated_by INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE (unit_code, kind, prefix)
+);
+
+CREATE TABLE IF NOT EXISTS production_fert_radius (
+    sector_key TEXT NOT NULL,
+    sector TEXT NOT NULL,
+    farm TEXT NOT NULL DEFAULT '',
+    municipality TEXT NOT NULL DEFAULT '',
+    base TEXT NOT NULL COLLATE NOCASE,
+    radius_km REAL NOT NULL,
+    imported_by INTEGER,
+    imported_at INTEGER NOT NULL,
+    PRIMARY KEY (sector_key, base)
+);
+
+CREATE TABLE IF NOT EXISTS production_fert_week (
+    unit_code TEXT NOT NULL COLLATE NOCASE,
+    work_date TEXT NOT NULL,
+    service_front_id INTEGER NOT NULL,
+    sector TEXT NOT NULL,
+    flow_m3_ha REAL,
+    tractors INTEGER,
+    updated_by INTEGER,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (unit_code, work_date, service_front_id)
+);
+
+CREATE TABLE IF NOT EXISTS production_fert_settings (
+    unit_code TEXT PRIMARY KEY COLLATE NOCASE,
+    budget_radius_km REAL NOT NULL DEFAULT 30,
+    updated_by INTEGER,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS production_fert_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    unit_code TEXT NOT NULL COLLATE NOCASE,
+    work_date TEXT NOT NULL,
+    equipment_id INTEGER,
+    prefix TEXT NOT NULL DEFAULT '',
+    kind TEXT NOT NULL DEFAULT '',
+    action TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    created_by INTEGER,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS production_fert_plans (
+    unit_code TEXT NOT NULL COLLATE NOCASE,
+    work_date TEXT NOT NULL,
+    service_front_id INTEGER NOT NULL,
+    params_json TEXT NOT NULL DEFAULT '{}',
+    updated_by INTEGER,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (unit_code, work_date, service_front_id)
 );
 
 CREATE TABLE IF NOT EXISTS production_sql_queries (

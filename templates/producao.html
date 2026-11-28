@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if page == 'service_orders' %}Ordem de serviço{% elif page == 'production_queries' %}Consultas SQL{% elif page == 'production_catalog' %}Cadastros{% else %}Produção Agrícola{% endif %} · Posição de Campo{% endblock %}
+{% block title %}{% if page == 'production_fert' %}Fertirrigação{% elif page == 'service_orders' %}Ordem de serviço{% elif page == 'production_queries' %}Consultas SQL{% elif page == 'production_catalog' %}Cadastros{% else %}Produção Agrícola{% endif %} · Posição de Campo{% endblock %}
 {% block styles %}
   <link rel="stylesheet" href="/css/pages/producao.css?v={{ asset_version }}-compact-sectors" />
   <link rel="stylesheet" href="/css/pages/producao.dark.css?v={{ asset_version }}-compact-sectors" media="(prefers-color-scheme: dark)" />
@@ -9,8 +9,8 @@
 <section class="production-page" aria-labelledby="production-title">
   <header class="module-standard-header production-page-header">
     <div>
-      <span class="production-kicker">{% if page in ('service_orders', 'production_queries', 'production_catalog') %}Produção Agrícola{% else %}Atualização operacional{% endif %}</span>
-      <h1 id="production-title">{% if page == 'service_orders' %}Ordem de serviço{% elif page == 'production_queries' %}Consultas SQL{% elif page == 'production_catalog' %}Cadastros{% else %}Produção Agrícola{% endif %}</h1>
+      <span class="production-kicker">{% if page in ('service_orders', 'production_queries', 'production_catalog', 'production_fert') %}Produção Agrícola{% else %}Atualização operacional{% endif %}</span>
+      <h1 id="production-title">{% if page == 'production_fert' %}Fertirrigação{% elif page == 'service_orders' %}Ordem de serviço{% elif page == 'production_queries' %}Consultas SQL{% elif page == 'production_catalog' %}Cadastros{% else %}Produção Agrícola{% endif %}</h1>
     </div>
     <div class="production-page-actions">
       <div class="production-current-context">
@@ -24,7 +24,7 @@
   <div id="production-access-message" class="production-access-message" hidden></div>
 
   {# Lançamentos (/producao) e Ordem de serviço (/producao/ordens-servico) usam a mesma página. #}
-  <div id="production-entries-panel" class="production-tab-panel"{% if page in ('service_orders', 'production_queries', 'production_catalog') %} hidden{% endif %}>
+  <div id="production-entries-panel" class="production-tab-panel"{% if page in ('service_orders', 'production_queries', 'production_catalog', 'production_fert') %} hidden{% endif %}>
   <div class="pdash-sector-bar">
     <form id="production-sector-form" class="pdash-sector-form" role="search" aria-label="Ordens de serviço por setor">
       <label for="production-sector-search">Buscar O.S. por setor</label>
@@ -280,6 +280,28 @@
       <div id="production-status-list" class="production-config-list catalog-list" data-catalog-list="status"></div>
     </section>
   </div>
+  {# Fertirrigação (Polo SP): dimensionamento de CVs por frente e frota. #}
+  <div id="production-fert-panel" class="production-tab-panel fert-panel"{% if page != 'production_fert' %} hidden{% endif %}>
+    <div id="production-fert-message" class="production-access-message" hidden></div>
+    <section id="production-fert-kpis" class="fert-kpis" aria-label="Resumo da fertirrigação"></section>
+    <section id="production-fert-cycle" class="catalog-section fert-cycle" aria-label="Ciclo dos CVs"></section>
+    <section class="catalog-section fert-section">
+      <header class="catalog-section-header">
+        <div><h2>Dimensionamento das frentes</h2><p id="production-fert-meta" class="fert-meta"></p></div>
+        <button id="production-fert-fleet" class="production-secondary-button" type="button">Frota e raio</button>
+      </header>
+      <div class="fert-table-scroll"><table class="fert-table">
+        <thead><tr><th>Frente</th><th>Setor</th><th>Recomendação</th><th>Base · raio</th><th>Vazão</th><th>Tratores</th><th>ha/dia</th>
+          <th>m³/dia</th><th>Ciclo</th><th>Saída a cada</th><th>CVs nec.</th><th>Alocados</th><th>Saldo</th></tr></thead>
+        <tbody id="production-fert-body"></tbody>
+      </table></div>
+      <p id="production-fert-empty" class="production-empty" hidden>Nenhuma frente com fertirrigação (operação 509 ou 524) lançada nesta unidade.</p>
+    </section>
+    <section id="production-fert-week" class="catalog-section fert-week" aria-label="Planejamento da semana"></section>
+    <section id="production-fert-board" class="catalog-section fert-section-board" aria-label="Frota do dia"></section>
+    <section id="production-fert-events" class="catalog-section fert-section-events" aria-label="Movimentações do dia"></section>
+  </div>
+
   <div id="production-queries-panel" class="production-tab-panel"{% if page != 'production_queries' %} hidden{% endif %}>
     <section class="catalog-section">
       <header class="catalog-section-header">
@@ -293,6 +315,86 @@
 {% endblock %}
 
 {% block modals %}
+<div id="production-fert-plan-modal" class="modal-backdrop" hidden>
+  <section class="editor-modal fert-plan-modal" role="dialog" aria-modal="true" aria-labelledby="production-fert-plan-title">
+    <header class="modal-header production-modal-header">
+      <div>
+        <span class="modal-kicker">Plano do dia · fertirrigação</span>
+        <h2 id="production-fert-plan-title">Frente</h2>
+        <p id="production-fert-plan-context" class="production-order-modal-context"></p>
+      </div>
+      <button class="modal-close" type="button" data-close-modal="production-fert-plan-modal" aria-label="Fechar">×</button>
+    </header>
+    <form id="production-fert-plan-form" class="fert-plan-form"></form>
+    <footer class="modal-footer fert-plan-footer">
+      <div class="fert-plan-foot">
+        <div id="production-fert-plan-preview" class="fert-plan-foot-preview" aria-live="polite"></div>
+        <p id="production-fert-plan-status" class="fert-plan-status" aria-live="polite"></p>
+      </div>
+      <div class="modal-footer-actions">
+        <button class="modal-button secondary" type="button" data-close-modal="production-fert-plan-modal">Cancelar</button>
+        <button id="production-fert-plan-save" class="modal-button save" type="submit" form="production-fert-plan-form">Salvar plano</button>
+      </div>
+    </footer>
+  </section>
+</div>
+
+<div id="production-fert-week-modal" class="modal-backdrop" hidden>
+  <section class="editor-modal fert-week-modal" role="dialog" aria-modal="true" aria-labelledby="production-fert-week-title">
+    <header class="modal-header production-modal-header">
+      <div>
+        <span class="modal-kicker">Planejamento da semana</span>
+        <h2 id="production-fert-week-title">Frente</h2>
+        <p id="production-fert-week-context" class="production-order-modal-context"></p>
+      </div>
+      <button class="modal-close" type="button" data-close-modal="production-fert-week-modal" aria-label="Fechar">×</button>
+    </header>
+    <form id="production-fert-week-form" class="fert-plan-form">
+      <div class="fert-grid">
+        <label class="field fert-field"><span>Setor</span><input name="sector" maxlength="32" autocomplete="off" placeholder="Ex.: 3424" /></label>
+        <label class="field fert-field"><span>Vazão (opcional)</span><div class="fert-input"><input name="flow_m3_ha" inputmode="decimal" autocomplete="off" placeholder="da O.S. do setor" /><em>m³/ha</em></div></label>
+        <label class="field fert-field"><span>Tratores (opcional)</span><input name="tractors" type="number" min="0" max="20" step="1" inputmode="numeric" placeholder="os da frente" /></label>
+      </div>
+      <p class="fert-meta">Sem vazão, vale a da O.S. do setor; sem tratores, os que estão na frente hoje. Setor vazio apaga o dia.</p>
+    </form>
+    <footer class="modal-footer">
+      <p id="production-fert-week-status" class="fert-plan-status" aria-live="polite"></p>
+      <div class="modal-footer-actions">
+        <button class="modal-button secondary" type="button" data-close-modal="production-fert-week-modal">Cancelar</button>
+        <button id="production-fert-week-save" class="modal-button save" type="submit" form="production-fert-week-form">Salvar dia</button>
+      </div>
+    </footer>
+  </section>
+</div>
+
+<div id="production-fert-cv-modal" class="modal-backdrop" hidden>
+  <section class="editor-modal fert-cv-modal" role="dialog" aria-modal="true" aria-labelledby="production-fert-cv-title">
+    <header class="modal-header production-modal-header">
+      <div>
+        <span class="modal-kicker">Ficha do equipamento · fertirrigação</span>
+        <h2 id="production-fert-cv-title">CV</h2>
+        <p id="production-fert-cv-context" class="production-order-modal-context"></p>
+      </div>
+      <button class="modal-close" type="button" data-close-modal="production-fert-cv-modal" aria-label="Fechar">×</button>
+    </header>
+    <div id="production-fert-cv-body" class="fert-cv-body"></div>
+  </section>
+</div>
+
+<div id="production-fert-fleet-modal" class="modal-backdrop" hidden>
+  <section class="editor-modal fert-fleet-modal" role="dialog" aria-modal="true" aria-labelledby="production-fert-fleet-title">
+    <header class="modal-header production-modal-header">
+      <div>
+        <span class="modal-kicker">Fertirrigação</span>
+        <h2 id="production-fert-fleet-title">Frota e raio</h2>
+        <p class="production-order-modal-context">Tratores e CVs da unidade e o raio de cada setor por base de carregamento.</p>
+      </div>
+      <button class="modal-close" type="button" data-close-modal="production-fert-fleet-modal" aria-label="Fechar">×</button>
+    </header>
+    <div id="production-fert-fleet-body" class="fert-fleet-body"></div>
+  </section>
+</div>
+
 <div id="production-query-modal" class="modal-backdrop" hidden>
   <section class="editor-modal production-query-modal" role="dialog" aria-modal="true" aria-labelledby="production-query-modal-title">
     <header class="modal-header production-modal-header">
@@ -515,4 +617,8 @@
   <script src="/js/producao/production-dashboard.js?v={{ asset_version }}-compact-sectors"></script>
   <script src="/js/producao/production-catalog.js?v={{ asset_version }}"></script>
   <script src="/js/producao/production-queries.js?v={{ asset_version }}"></script>
+  <script src="/js/producao/production-fert.js?v={{ asset_version }}"></script>
+  <script src="/js/producao/production-fert-week.js?v={{ asset_version }}"></script>
+  <script src="/js/producao/production-fert-plan.js?v={{ asset_version }}"></script>
+  <script src="/js/producao/production-fert-fleet.js?v={{ asset_version }}"></script>
 {% endblock %}

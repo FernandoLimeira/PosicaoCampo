@@ -492,7 +492,9 @@ class PageTests(unittest.TestCase):
                                  "producao/producao.js", "producao/service-orders.js",
                                  "producao/production-sheet.js", "producao/production-dashboard.js",
                                  "producao/production-catalog.js",
-                                 "producao/production-queries.js"],
+                                 "producao/production-queries.js", "producao/production-fert.js",
+                                 "producao/production-fert-week.js", "producao/production-fert-plan.js",
+                                 "producao/production-fert-fleet.js"],
             "/emitir-posicao-global": core + [
                 "core/field-fronts.js", "core/field-indicators.js", "reports-export/shared-drawing.js", "reports-export/field-report-data.js",
                 "reports-export/global-report.js", "reports-export/sacarose-export.js",

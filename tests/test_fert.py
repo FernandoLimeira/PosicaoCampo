@@ -1,0 +1,329 @@
+"""Fertirrigação do Polo SP: painel, plano da frente, frota (situação e histórico), troca de CV
+só com a mesma recomendação, vazão e recomendação da O.S. e raio por base."""
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from backend import config
+from backend.models import database as db
+from backend.models import production
+from backend.models import service_orders
+from backend.models.production import fert
+from backend.services.fert_radius_import import parse_radius_file, parse_radius_rows
+from tests.test_service_orders import xlsx
+
+DAY = "2026-11-27"
+COLUMNS = ["CD_UNIMED", "QT_RECURSO", "DE_COMPO", "CCUSTO_TRATOS"]
+
+
+def order(number, sector, products, opened_on="2026-11-20"):
+    """O.S. de fertirrigação com os componentes (como o SELECT do PIMS com a recomendação)."""
+    return {"number": number, "sector": sector, "operation": "509", "operation_name": "FERTIRRIGACAO LOCALIZADA",
+            "plots": ["1", "2"], "opened_on": opened_on, "columns": COLUMNS,
+            "rows": [{"CD_UNIMED": unit, "QT_RECURSO": quantity, "DE_COMPO": name, "CCUSTO_TRATOS": "TRATOS SOQUEIRA"}
+                     for name, quantity, unit in products]}
+
+
+SAME = [("FERTILIZANTE LIQUEFERTIL", "35", "M3"), ("FERTILIZANTE FEVL 10.00.06+MIX", "670", "L")]
+OTHER = [("FERTILIZANTE LIQUEFERTIL", "30", "M3"), ("FERTILIZANTE FEVL 14.00.00+B,ZN", "340", "L")]
+
+
+class FertTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        root = Path(self.temporary.name)
+        for name, value in {
+            "DATA_DIR": root, "AUTH_DB_PATH": root / "usuarios.db",
+            "OPERATIONS_DB_PATH": root / "dados.db", "LEGACY_DB_PATH": root / "legacy.db",
+        }.items():
+            patcher = patch.object(config, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        db.init_db()
+        self.admin = db.create_or_update_admin("Admin", "Admin-pass-42")
+        self.user = db.create_user(
+            "Analista", "Analyst-pass-42", role="analyst", base_unit="NRD",
+            production_access={"enabled": True, "permissions": {"fill": True}, "units": ["NRD"]},
+        )
+        self.viewer = db.create_user(
+            "Consulta", "Viewer-pass-42", role="analyst", base_unit="NRD",
+            production_access={"enabled": True, "permissions": {"fill": False}, "units": ["NRD"]},
+        )
+        group = production.list_catalog(self.admin["id"], include_inactive=True)["groups"][0]
+        self.fronts = [production.save_service_front(self.admin["id"], {
+            "name": name, "group_id": group["id"], "display_style": "front", "units": ["NRD"]})
+            for name in ("FT.54", "FT.56", "FT.57", "PREPARO 01")]
+        self.status = production.list_statuses(self.admin["id"])["statuses"][0]["code"]
+        for front, sector, operation in ((self.fronts[0], "3335", "509"), (self.fronts[1], "870", "509"),
+                                         (self.fronts[2], "3803", "509"), (self.fronts[3], "4000", "338")):
+            production.save_items_sheet(self.user["id"], {"unit_code": "NRD", "work_date": DAY, "rows": [
+                {"service_front_id": front["id"], "sector": sector, "status": self.status, "operation": operation}]})
+        # FT.54 e FT.57 com a mesma recomendação; FT.56 com outra.
+        service_orders.import_service_orders(self.admin["id"], "NRD", [
+            order("332553", "3335", SAME), order("330537", "3803", SAME), order("330133", "870", OTHER),
+            order("300000", "3335", OTHER, opened_on="2026-10-01"),  # O.S. antiga do setor: não vale
+        ])
+        fert.import_fert_radius(self.admin["id"], parse_radius_rows([
+            ["SETOR", "FAZENDA", "MUNICIPIO", "BASE CARREGAMENTO", "RAIO SGPA (km)"],
+            ["3335", "EL SHADDAI", "NARANDIBA", "SANTA CRUZ", "42"],
+            ["870", "OSCAR ANTUNE", "IEPE", "BIE", "55,84"],
+            ["870", "OSCAR ANTUNE", "IEPE", "SANTA CRUZ", "44.98"],
+        ]))
+
+    def equipment(self, kind, prefix, **extra):
+        return fert.save_fert_equipment(self.user["id"], {"unit_code": "NRD", "kind": kind, "prefix": prefix,
+                                                          "work_date": DAY, **extra})["id"]
+
+    def plan(self, index, **extra):
+        return fert.save_fert_plan(self.user["id"], {"unit_code": "NRD", "work_date": DAY,
+                                                     "service_front_id": self.fronts[index]["id"], **extra})
+
+    def overview(self, day=DAY):
+        return fert.fert_overview(self.user["id"], "NRD", day)
+
+    def front(self, overview, index):
+        return next(item for item in overview["fronts"] if item["service_front_id"] == self.fronts[index]["id"])
+
+    def test_overview_dimensions_the_fert_fronts_like_the_spreadsheet(self):
+        tractors = [self.equipment("tractor", prefix) for prefix in ("846", "847", "1056")]
+        trucks = [self.equipment("truck", prefix, capacity_m3=53) for prefix in ("612", "615")]
+        self.plan(0, params={"unload_h": 0}, tractors=tractors, trucks=trucks)
+        overview = self.overview()
+        # Só as frentes com operação 509/524 (a PREPARO 01, com 338, fica fora).
+        self.assertEqual({item["name"] for item in overview["fronts"]}, {"FT.54", "FT.56", "FT.57"})
+        ft54 = self.front(overview, 0)
+        self.assertEqual((ft54["flow_m3_ha"], ft54["flow_source"]), (35.0, "O.S."))
+        self.assertEqual((ft54["base"], ft54["radius_km"], ft54["radius_source"]), ("SANTA CRUZ", 42.0, "tabela"))
+        self.assertEqual(ft54["orders"]["tratos"], "TRATOS SOQUEIRA")
+        # Recomendação: a da O.S. mais recente do setor.
+        self.assertEqual(ft54["orders"]["recommendation"],
+                         ["FERTILIZANTE FEVL 10.00.06+MIX = 670 L", "FERTILIZANTE LIQUEFERTIL = 35 M3"])
+        self.assertEqual(ft54["orders"]["products"], ["FERTILIZANTE FEVL 10.00.06+MIX = 670 L"])
+        # Mesmos números da planilha (FT.54): 68,709 ha/dia, ciclo 3,7006 h e 7 CVs, com 2 alocados.
+        self.assertAlmostEqual(ft54["calc"]["yield_ha"], 68.709, places=9)
+        self.assertAlmostEqual(ft54["calc"]["cycle_h"], 3.7005820921075152, places=9)
+        self.assertEqual((ft54["calc"]["trucks_needed"], ft54["calc"]["trucks"], ft54["calc"]["balance"]), (7, 2, -5))
+        # Bases: as da unidade (com o raio quando a tabela tem) e as do raio importado.
+        ft56 = self.front(overview, 1)
+        self.assertEqual([(item["base"], item["radius_km"]) for item in ft56["base_options"]],
+                         [("SANTA CRUZ", 44.98), ("BIÉ", 55.84), ("CASA BRANCA", None)])
+        # Setor com duas bases com raio: não escolhe sozinho (raio pendente).
+        self.assertEqual((ft56["base"], ft56["radius_km"], ft56["calc"]["trucks_needed"]), ("", None, None))
+        self.assertEqual(overview["totals"]["incomplete"], 2)
+        # "BIÉ" com acento é a mesma base "BIE" da tabela de raio.
+        self.plan(1, params={"base": "BIÉ", "flow_m3_ha": 30})
+        ft56 = self.front(self.overview(), 1)
+        self.assertEqual((ft56["radius_km"], ft56["flow_m3_ha"], ft56["flow_source"]), (55.84, 30.0, "plano"))
+        # Base sem raio na tabela: raio digitado no plano.
+        self.plan(2, params={"base": "CASA BRANCA", "radius_km": 44.2})
+        self.assertEqual(self.front(self.overview(), 2)["radius_km"], 44.2)
+
+    def test_cv_moves_only_between_fronts_with_the_same_recommendation(self):
+        trucks = [self.equipment("truck", prefix) for prefix in ("612", "615")]
+        self.plan(0, trucks=trucks)
+        # Mesma recomendação (FT.54 → FT.57): o analista leva o CV direto, sem tirar de lá antes.
+        self.assertEqual(self.plan(2, trucks=[trucks[0]])["moved"], 1)
+        overview = self.overview()
+        self.assertEqual((self.front(overview, 0)["trucks"], self.front(overview, 2)["trucks"]), ([trucks[1]], [trucks[0]]))
+        # Recomendação diferente (FT.57 → FT.56): não muda.
+        with self.assertRaisesRegex(ValueError, "612 não pode ir da FT.57 para a FT.56: a recomendação é diferente"):
+            self.plan(1, trucks=[trucks[0]])
+        # Histórico do dia: alocação e troca, com o analista.
+        events = [(item["prefix"], item["action"], item["detail"], item["user"]) for item in self.overview()["events"]]
+        self.assertIn(("612", "move", "FT.54 → FT.57", "Analista"), events)
+        self.assertIn(("615", "allocate", "Alocado na FT.54", "Analista"), events)
+        # Situação automática: alocado vira "operando"; ao sair da frente, "disponível".
+        status = {item["prefix"]: item["status"] for item in self.overview()["equipment"]}
+        self.assertEqual(status, {"612": "active", "615": "active"})
+        self.plan(0, trucks=[])
+        self.assertEqual({item["prefix"]: item["status"] for item in self.overview()["equipment"]}["615"], "available")
+
+    def test_status_changes_remove_from_the_front_and_carry_over(self):
+        trucks = [self.equipment("truck", prefix) for prefix in ("612", "615")]
+        workshop = self.equipment("truck", "621", status="workshop", notes="PMEU")
+        self.plan(0, trucks=trucks)
+        with self.assertRaisesRegex(ValueError, "621 está em oficina"):
+            self.plan(0, trucks=trucks + [workshop])
+        # Sem plano no dia seguinte, a frente usa o último plano salvo (copiado).
+        ft54 = self.front(self.overview("2026-11-28"), 0)
+        self.assertEqual((ft54["trucks"], ft54["plan_carried"], ft54["plan_date"]), (trucks, True, DAY))
+        # CV que vai para "sem motorista" sai da frente no dia, com registro de quem mudou.
+        fert.save_fert_equipment(self.user["id"], {"unit_code": "NRD", "kind": "truck", "prefix": "615",
+                                                   "status": "no_driver", "work_date": DAY}, equipment_id=trucks[1])
+        overview = self.overview()
+        self.assertEqual(self.front(overview, 0)["trucks"], [trucks[0]])
+        cv = next(item for item in overview["equipment"] if item["prefix"] == "615")
+        self.assertEqual((cv["status"], cv["status_changed_by"], cv["front"]), ("no_driver", "Analista", None))
+        self.assertEqual(overview["fleet"]["truck"]["no_driver"], 1)
+        details = [item["detail"] for item in overview["events"] if item["prefix"] == "615"]
+        self.assertIn("Operando → Sem motorista", details)
+        self.assertIn("Saiu da FT.54 (sem motorista)", details)
+
+    def test_gas_cv_level_and_trips(self):
+        # CV a gás na FT.54 (raio 42 km): consumo por viagem = 42 × 0,85% = 35,7% do tanque.
+        gas = self.equipment("truck", "603", fuel="gas", gas_level_pct="80")
+        diesel = self.equipment("truck", "612")
+        self.plan(0, trucks=[gas, diesel])
+        overview = self.overview()
+        ft54 = self.front(overview, 0)
+        self.assertAlmostEqual(ft54["gas_pct_per_trip"], 35.7, places=9)
+        cvs = {item["prefix"]: item for item in overview["equipment"]}
+        self.assertEqual((cvs["603"]["fuel"], cvs["603"]["gas_level_pct"], cvs["603"]["gas_trips"]), ("gas", 80.0, 2))
+        self.assertEqual((cvs["612"]["fuel"], cvs["612"]["gas_trips"]), ("diesel", None))
+        # O analista atualiza o gás (e só o gás: situação e combustível ficam como estão).
+        fert.save_fert_equipment(self.user["id"], {"unit_code": "NRD", "kind": "truck", "prefix": "603",
+                                                   "status": "active", "gas_level_pct": "30", "work_date": DAY}, equipment_id=gas)
+        overview = self.overview()
+        cv = next(item for item in overview["equipment"] if item["prefix"] == "603")
+        self.assertEqual((cv["fuel"], cv["gas_level_pct"], cv["gas_trips"], cv["gas_updated_by"]), ("gas", 30.0, 0, "Analista"))
+        self.assertIn(("603", "gas", "Gás 80% → 30%"), [(e["prefix"], e["action"], e["detail"]) for e in overview["events"]])
+        # Consumo informado no plano (planilha: FT.54 = 39% por viagem) vale no lugar da estimativa.
+        self.plan(0, trucks=[gas, diesel], params={"gas_pct_per_trip": 39})
+        self.assertEqual(self.front(self.overview(), 0)["gas_pct_per_trip"], 39.0)
+        for bad in ("120", "-1", "abc"):
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "% do tanque"):
+                fert.save_fert_equipment(self.user["id"], {"unit_code": "NRD", "kind": "truck", "prefix": "603",
+                                                           "gas_level_pct": bad}, equipment_id=gas)
+
+    def test_ha_per_hour_from_application_speed(self):
+        # FT.54: vazão 35 m³/ha → 5 km/h (BASE GERAL); simples (1,5 m × 10 seções) → 7,5 ha/h.
+        tractors = [self.equipment("tractor", prefix) for prefix in ("846", "847", "1056")]
+        self.plan(0, tractors=tractors)
+        ft54 = self.front(self.overview(), 0)
+        self.assertEqual((ft54["spacing"], ft54["ha_mode"], ft54["application_speed"], ft54["ha_per_hour_speed"]),
+                         ("simples", "typed", 5, 7.5))
+        self.assertAlmostEqual(ft54["calc"]["yield_ha"], 3.7 * 3 * 6.19, places=9)  # padrão: ha/h digitado
+        self.plan(0, tractors=tractors, params={"ha_mode": "speed", "spacing": "combinado"})
+        ft54 = self.front(self.overview(), 0)
+        self.assertEqual(ft54["ha_per_hour_speed"], 6.0)                             # 2,4 m × 5 seções
+        self.assertAlmostEqual(ft54["calc"]["yield_ha"], 3.7 * 3 * 6.0, places=9)
+        with self.assertRaisesRegex(ValueError, "Espaçamento"):
+            self.plan(0, params={"spacing": "duplo"})
+
+    def test_week_plan_projects_trucks_and_radius(self):
+        tractors = [self.equipment("tractor", prefix) for prefix in ("846", "847", "1056")]
+        self.plan(0, tractors=tractors, params={"unload_h": 0})
+        self.plan(1, params={"base": "SANTA CRUZ", "flow_m3_ha": 30})
+        tomorrow = "2026-11-28"
+        # Amanhã a FT.54 vai para o setor 870 (base Santa Cruz: 44,98 km); a vazão vem da O.S. (30).
+        fert.save_fert_week(self.user["id"], {"unit_code": "NRD", "work_date": tomorrow,
+                                              "service_front_id": self.fronts[0]["id"], "sector": "870"})
+        week = self.overview()["week"]
+        self.assertEqual(week["days"][:2], [DAY, tomorrow])
+        self.assertEqual(week["budget_radius_km"], 30.0)
+        row = next(item for item in week["rows"] if item["name"] == "FT.54")
+        today, next_day = row["cells"][DAY], row["cells"][tomorrow]
+        self.assertEqual((today["sector"], today["saved"], today["trucks_needed"]), ("3335", False, 7))  # hoje = o lançado
+        self.assertEqual((next_day["sector"], next_day["farm"], next_day["radius_km"], next_day["flow_m3_ha"], next_day["tractors"]),
+                         ("870", "OSCAR ANTUNE", 44.98, 30.0, 3))
+        # CVs do dia seguinte pela mesma conta (30 m³/ha, 44,98 km, sem descarregamento no plano da frente).
+        from backend.services.fert_dimensioning import calculate
+        expected = calculate(tractors=3, trucks=0, flow_m3_ha=30, radius_km=44.98, unload_h=0)["trucks_needed"]
+        self.assertEqual(next_day["trucks_needed"], expected)
+        # Raio planejado de hoje: média dos raios ponderada pela vazão (FT.54 42 km/35; FT.56 44,98 km/30).
+        self.assertAlmostEqual(week["totals"][DAY]["planned_radius_km"], (42 * 35 + 44.98 * 30) / 65, places=9)
+        self.assertAlmostEqual(week["totals"][DAY]["radius_difference_km"], (42 * 35 + 44.98 * 30) / 65 - 30, places=9)
+        fert.save_fert_settings(self.user["id"], {"unit_code": "NRD", "budget_radius_km": "40"})
+        self.assertEqual(self.overview()["week"]["budget_radius_km"], 40.0)
+        # Setor vazio apaga o dia.
+        fert.save_fert_week(self.user["id"], {"unit_code": "NRD", "work_date": tomorrow,
+                                              "service_front_id": self.fronts[0]["id"], "sector": ""})
+        row = next(item for item in self.overview()["week"]["rows"] if item["name"] == "FT.54")
+        self.assertNotIn(tomorrow, row["cells"])
+        with self.assertRaisesRegex(ValueError, "tratores"):
+            fert.save_fert_week(self.user["id"], {"unit_code": "NRD", "work_date": tomorrow,
+                                                  "service_front_id": self.fronts[0]["id"], "sector": "870", "tractors": 99})
+
+    def entry(self, index, sector, operation):
+        production.save_items_sheet(self.user["id"], {"unit_code": "NRD", "work_date": DAY, "rows": [
+            {"service_front_id": self.fronts[index]["id"], "sector": sector, "status": self.status, "operation": operation}]})
+
+    def test_recommendation_comes_from_the_order_of_the_front_operation(self):
+        # Setor 3335 com O.S. 509 e uma 524 mais nova, de outra recomendação.
+        newer_524 = {**order("340000", "3335", OTHER, opened_on="2026-11-25"), "operation": "524"}
+        service_orders.import_service_orders(self.admin["id"], "NRD", [
+            order("332553", "3335", SAME), order("330537", "3803", SAME), order("330133", "870", OTHER), newer_524])
+        same = ["FERTILIZANTE FEVL 10.00.06+MIX = 670 L", "FERTILIZANTE LIQUEFERTIL = 35 M3"]
+        other = ["FERTILIZANTE FEVL 14.00.00+B,ZN = 340 L", "FERTILIZANTE LIQUEFERTIL = 30 M3"]
+        ft54 = self.front(self.overview(), 0)
+        self.assertEqual((ft54["orders"]["orders"], ft54["orders"]["recommendation"], ft54["flow_m3_ha"]),
+                         (["332553"], same, 35.0))
+        # A frente passa a lançar 524: vale a O.S. 524.
+        self.entry(0, "3335", "524")
+        ft54 = self.front(self.overview(), 0)
+        self.assertEqual((ft54["orders"]["orders"], ft54["orders"]["recommendation"], ft54["flow_m3_ha"]),
+                         (["340000"], other, 30.0))
+
+    def test_front_out_of_fert_does_not_hold_its_equipment(self):
+        truck = self.equipment("truck", "612")
+        self.plan(0, trucks=[truck])
+        # FT.54 sai da fertirrigação (lançou 338): o CV aparece livre e vai para a FT.56, mesmo com
+        # outra recomendação, sem conferência e sem ficar nas duas frentes.
+        self.entry(0, "3335", "338")
+        self.assertIsNone(next(item for item in self.overview()["equipment"] if item["id"] == truck)["front"])
+        self.assertEqual(self.plan(1, trucks=[truck])["moved"], 0)
+        self.entry(0, "3335", "509")
+        overview = self.overview()
+        self.assertEqual((self.front(overview, 0)["trucks"], self.front(overview, 1)["trucks"]), ([], [truck]))
+
+    def test_pims_select_file_feeds_the_fert_panel(self):
+        # Arquivo com as colunas do docs/select-os-fertirrigacao.sql: uma linha por talhão × componente
+        # nas O.S. de fertirrigação, e a O.S. de outra operação sem componentes (colunas vazias).
+        from backend.services.service_order_import import parse_service_order_file
+        header = ["SECAO", "SETOR", "TALHAO", "NO_OS", "OPERACAO", "DESCRICAO_OPERACAO", "CCUSTO", "CCUSTO_TRATOS",
+                  "DT_ABERTURA_OS", "CD_COMPO", "DE_COMPO", "QT_RECURSO", "CD_UNIMED", "RESERVA"]
+        rows = [header]
+        for plot in ("1", "2"):
+            rows += [
+                ["3", "3335", plot, "400001", "509", "FERTIRRIGACAO LOCALIZADA", "305121", "TRATOS SOQUEIRA", "27/11/2026",
+                 "140517", "FERTILIZANTE LIQUEFERTIL", "33", "M3", "RESERVA 12"],
+                ["3", "3335", plot, "400001", "509", "FERTIRRIGACAO LOCALIZADA", "305121", "TRATOS SOQUEIRA", "27/11/2026",
+                 "507", "FERTILIZANTE FEVL 14.00.00+MIX", "380", "L", "RESERVA 12"],
+            ]
+        rows.append(["4", "4000", "7", "400002", "338", "PLANTIO MECANIZADO", "305116", "PLANTIO", "27/11/2026",
+                     "", "", "", "", ""])
+        parsed = parse_service_order_file(xlsx(rows), "select-pims.xlsx")
+        service_orders.import_service_orders(self.admin["id"], "NRD", parsed["records"], filename="select-pims.xlsx")
+        ft54 = self.front(self.overview(), 0)
+        # A frente passa a usar a O.S. nova sozinha: vazão, recomendação, tratos e talhões.
+        self.assertEqual((ft54["orders"]["orders"], ft54["flow_m3_ha"], ft54["flow_source"]), (["400001"], 33.0, "O.S."))
+        self.assertEqual(ft54["orders"]["recommendation"],
+                         ["FERTILIZANTE FEVL 14.00.00+MIX = 380 L", "FERTILIZANTE LIQUEFERTIL = 33 M3"])
+        self.assertEqual((ft54["orders"]["tratos"], ft54["orders"]["plots"]), ("TRATOS SOQUEIRA", ["1", "2"]))
+        # A O.S. da outra operação continua importada (conferência da Produção não muda).
+        listing = service_orders.list_service_orders(self.admin["id"], "NRD", summary=True)
+        self.assertEqual({order["number"] for order in listing["orders"]}, {"400001", "400002"})
+
+    def test_permissions_units_and_validation(self):
+        with self.assertRaises(PermissionError):
+            fert.save_fert_equipment(self.viewer["id"], {"unit_code": "NRD", "kind": "truck", "prefix": "700"})
+        with self.assertRaises(PermissionError):
+            fert.import_fert_radius(self.user["id"], [{"sector": "1", "base": "BIE", "radius_km": 10}])
+        with self.assertRaisesRegex(ValueError, "Polo SP"):
+            fert.fert_overview(self.admin["id"], "PST", DAY)
+        self.assertEqual(fert.fert_overview(self.viewer["id"], "NRD", DAY)["permissions"], {"edit": False, "configure": False})
+        self.equipment("truck", "612")
+        with self.assertRaisesRegex(ValueError, "O CV 612 já está cadastrado"):
+            self.equipment("truck", "612")
+        with self.assertRaisesRegex(ValueError, "Situação inválida"):
+            self.equipment("truck", "613", status="voando")
+        for bad in ({"trucks": [True]}, {"trucks": "612"}, {"params": {"hours": 99}}, {"params": "x"}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                self.plan(0, **bad)
+
+    def test_radius_file_import(self):
+        parsed = parse_radius_file(xlsx([
+            ["SETOR", "FAZENDA", "MUNICIPIO", "BASE CARREGAMENTO", "RAIO SGPA (km)"],
+            ["819", "FADEL", "NANTES", "BIE", "46.6"], ["859", "BELA VISTA", "", "", ""],
+        ]), "raio.xlsx")
+        self.assertEqual(parsed["records"], [{"sector": "819", "base": "BIE", "radius_km": 46.6, "farm": "FADEL", "municipality": "NANTES"}])
+        with self.assertRaisesRegex(ValueError, "SETOR, BASE CARREGAMENTO e RAIO"):
+            parse_radius_file(xlsx([["A", "B"], ["1", "2"]]), "x.xlsx")
+        self.assertEqual({fert.base_key(name) for name in ("BASE STA CRUZ", "Santa Cruz", "SANTA CRUZ")}, {"SANTA CRUZ"})
+        self.assertEqual(fert.base_key("BIÉ"), fert.base_key("BIE"))
+
+
+if __name__ == "__main__":
+    unittest.main()
