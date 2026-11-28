@@ -95,12 +95,39 @@ function renderFertTeam() {
   renderFertPreview();
 }
 
+// Item da recomendação para a tela: "FERTILIZANTE SOLO H1 · 0,5 L/ha" (dose no padrão brasileiro).
+function fertRecLabel(label) {
+  const match = String(label).match(/^(.*) = ([\d.]+) (\S+)$/);
+  if (!match) return label;
+  const amount = Number(match[2]);
+  const unit = { M3: 'm³/ha', L: 'L/ha', KG: 'kg/ha' }[match[3]] || match[3];
+  return `${match[1]} · ${fertNumber(amount, amount % 1 ? (Math.round(amount * 10) === amount * 10 ? 1 : 2) : 0)} ${unit}`;
+}
+
+function fertOrderOption(front, number) {
+  return front.orders.options?.find(item => item.order === number) || front.orders;
+}
+
+// O que vem da O.S. escolhida: setor, fazenda, tratos, vazão, talhões e a recomendação completa.
+function fertAutoHtml(front, info) {
+  const auto = (label, value) => `<div><dt>${escapeHtml(label)}</dt><dd>${value}</dd></div>`;
+  return `<dl class="fert-os-grid">
+      ${auto('Setor', escapeHtml(front.sector || '—'))}${auto('Fazenda', escapeHtml(front.farm || '—'))}
+      ${auto('Tratos', escapeHtml(info.tratos || '—'))}
+      ${auto('Vazão', info.flow_m3_ha !== null && info.flow_m3_ha !== undefined ? `${fertNumber(info.flow_m3_ha, 0)} m³/ha` : '<span class="fert-missing">sem vazão na O.S.</span>')}
+      ${auto('Talhões', escapeHtml(info.plots?.join(', ') || '—'))}
+    </dl>
+    ${info.recommendation?.length ? `<ul class="fert-rec-list">${info.recommendation.map(item => `<li>${escapeHtml(fertRecLabel(item))}</li>`).join('')}</ul>`
+      : '<p class="fert-missing">Sem componentes na O.S.: os CVs não podem trocar de frente.</p>'}`;
+}
+
 function fertFormState() {
   const form = document.querySelector('#production-fert-plan-form');
   const field = name => form.querySelector(`[name="${name}"]`)?.value ?? '';
   const params = Object.fromEntries(FERT_PARAM_FIELDS.map(([key]) => [key, field(key).trim().replace(',', '.')]));
   return {
     base: field('base'), flow: field('flow_m3_ha').trim().replace(',', '.'), radius: field('radius_km').trim().replace(',', '.'),
+    order: field('order_number'),
     roundTrip: Boolean(form.querySelector('[name="round_trip"]')?.checked), params,
     gasPerTrip: field('gas_pct_per_trip').trim().replace(',', '.'),
     spacing: field('spacing') || 'simples', haMode: form.querySelector('[name="ha_mode"]')?.checked ? 'speed' : 'typed',
@@ -115,7 +142,8 @@ function renderFertPreview() {
   const foot = document.querySelector('#production-fert-plan-preview');
   if (!front || !head) return;
   const state = fertFormState();
-  const flow = state.flow !== '' ? Number(state.flow) : front.orders.flow_m3_ha;
+  const info = fertOrderOption(front, state.order);
+  const flow = state.flow !== '' ? Number(state.flow) : info.flow_m3_ha ?? null;
   const radius = state.radius !== '' ? Number(state.radius) : null;
   const active = ids => ids.filter(id => ['active', 'available'].includes(fertData.equipment.find(item => item.id === id)?.status)).length;
   const speed = fertApplicationSpeed(flow);
@@ -125,7 +153,7 @@ function renderFertPreview() {
     : `Vazão ${fertNumber(flow, 0)} m³/ha → ${fertNumber(speed, 1)} km/h → ${fertNumber(speedHa, 2)} ha/h por trator.`;
   const params = state.haMode === 'speed' && speedHa !== null ? { ...state.params, ha_per_hour: speedHa } : state.params;
   const calc = fertCalculate({ tractors: active(state.tractors), trucks: active(state.trucks), flow, radius,
-    tratos: front.orders.tratos, roundTrip: state.roundTrip, params }, fertData.defaults);
+    tratos: info.tratos || '', roundTrip: state.roundTrip, params }, fertData.defaults);
   const kpi = (label, value) => `<span class="fert-plan-kpi"><small>${escapeHtml(label)}</small><b>${value}</b></span>`;
   head.innerHTML = `${kpi('CVs', `${calc.trucks} de ${calc.needed ?? '—'}`)}${fertBalanceHtml(calc.balance)}
     ${kpi('Tratores', calc.tractors)}${kpi('Área', `${fertNumber(calc.yieldHa, 1)} ha`)}${kpi('Volume', `${fertNumber(calc.volume, 0)} m³`)}
@@ -178,7 +206,6 @@ function openFertPlan(frontId) {
   const input = (name, label, unit, value, placeholder) => `<label class="field fert-field"><span>${escapeHtml(label)}</span>
       <div class="fert-input"><input name="${name}" ${name === 'radius_km' ? 'id="production-fert-radius"' : ''} inputmode="decimal" autocomplete="off"
         value="${escapeHtml(value ?? '')}" placeholder="${escapeHtml(placeholder)}" ${editable ? '' : 'disabled'} /><em>${escapeHtml(unit)}</em></div></label>`;
-  const auto = (label, value) => `<div><dt>${escapeHtml(label)}</dt><dd>${value}</dd></div>`;
   const firstStep = front.base && front.radius_km !== null ? 'team' : 'place';
   form.innerHTML = `<div class="fert-plan-head">
       <div class="fert-plan-place">
@@ -208,14 +235,11 @@ function openFertPlan(frontId) {
       </section>
       <section class="fert-auto">
         <h3>Vem do sistema <small>lançamento da frente e O.S. do PIMS</small></h3>
-        <dl class="fert-os-grid">
-          ${auto('Setor', escapeHtml(front.sector || '—'))}${auto('Fazenda', escapeHtml(front.farm || '—'))}
-          ${auto('O.S.', escapeHtml(orders.orders.join(', ') || 'Sem O.S. de fertirrigação'))}${auto('Tratos', escapeHtml(orders.tratos || '—'))}
-          ${auto('Vazão', orders.flow_m3_ha !== null ? `${fertNumber(orders.flow_m3_ha, 0)} m³/ha` : '<span class="fert-missing">sem vazão na O.S.</span>')}
-          ${auto('Talhões', escapeHtml(orders.plots.join(', ') || '—'))}
-        </dl>
-        ${orders.recommendation.length ? `<ul class="fert-rec-list">${orders.recommendation.map(item => `<li>${escapeHtml(item.replace(/ = /, ' · ').replace(/ M3$/, ' m³/ha').replace(/ L$/, ' L/ha'))}</li>`).join('')}</ul>`
-          : '<p class="fert-missing">Sem componentes na O.S.: os CVs não podem trocar de frente.</p>'}
+        ${orders.options?.length > 1 ? `<label class="field fert-field fert-order-pick"><span>O.S. em aplicação <small>${orders.options.length} O.S. de fert abertas no setor</small></span>
+          <select name="order_number" ${editable ? '' : 'disabled'}>${orders.options.map(option => `<option value="${escapeHtml(option.order)}"${option.order === orders.order ? ' selected' : ''}>${escapeHtml(option.order)} · aberta ${escapeHtml(option.opened_on ? formatIsoDateBr(option.opened_on) : '—')} · ${option.plots.length} ${option.plots.length === 1 ? 'talhão' : 'talhões'}${option.recommendation_key === orders.recommendation_key ? '' : ' · outra receita'}</option>`).join('')}</select></label>`
+          : `<input type="hidden" name="order_number" value="${escapeHtml(orders.order || '')}" /><p class="fert-meta">O.S. ${escapeHtml(orders.order || '— (sem O.S. de fertirrigação no setor)')}</p>`}
+        ${orders.missing_order ? `<p class="fert-col-warn">A O.S. ${escapeHtml(orders.missing_order)} escolhida antes não está mais aberta${orders.order ? `: usando a ${escapeHtml(orders.order)} (mais recente do setor). Salve para confirmar.` : '.'}</p>` : ''}
+        <div id="production-fert-auto">${fertAutoHtml(front, orders)}</div>
         <details class="fert-more"${front.flow_source === 'plano' || orders.flow_m3_ha === null ? ' open' : ''}><summary>Corrigir a vazão${orders.flow_m3_ha === null ? ' (obrigatório sem O.S.)' : ''}</summary>
           <div class="fert-grid">${input('flow_m3_ha', 'Vazão', 'm³/ha', front.flow_source === 'plano' ? front.flow_m3_ha : '', orders.flow_m3_ha !== null ? `${fertNumber(orders.flow_m3_ha, 0)} (O.S.)` : 'Informe a vazão')}</div>
         </details>
@@ -288,7 +312,8 @@ async function saveFertPlan(event) {
   try {
     const result = await apiRequest('/api/production/fert/plan', { method: 'PUT', body: JSON.stringify({
       unit_code: fertData.unit, work_date: fertData.work_date, service_front_id: front.service_front_id,
-      params: { ...state.params, base: state.base, flow_m3_ha: state.flow, radius_km: state.radius, round_trip: state.roundTrip,
+      version: front.plan_version || '',
+      params: { ...state.params, base: state.base, order_number: state.order, flow_m3_ha: state.flow, radius_km: state.radius, round_trip: state.roundTrip,
         gas_pct_per_trip: state.gasPerTrip, spacing: state.spacing, ha_mode: state.haMode },
       tractors: state.tractors, trucks: state.trucks
     }) });
@@ -309,6 +334,10 @@ document.querySelector('#production-fert-plan-next')?.addEventListener('click', 
 document.querySelector('#production-fert-plan-form')?.addEventListener('input', renderFertPreview);
 // Trocar a base traz o raio já guardado do setor até ela (ou deixa em branco para digitar).
 document.querySelector('#production-fert-plan-form')?.addEventListener('change', event => {
+  if (event.target.name === 'order_number' && fertEditing) {
+    const box = document.querySelector('#production-fert-auto');
+    if (box) box.innerHTML = fertAutoHtml(fertEditing, fertOrderOption(fertEditing, event.target.value));
+  }
   if (event.target.name === 'base' && fertEditing) {
     const option = fertEditing.base_options.find(item => fertPlain(item.base) === fertPlain(event.target.value));
     const radius = document.querySelector('#production-fert-radius');

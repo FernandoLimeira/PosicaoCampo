@@ -11,7 +11,8 @@ from backend.models import production
 from backend.models import service_orders
 from backend.models.production import fert
 from backend.models.production.fert.sources import save_sector_radius
-from backend.models.storage import connection
+from backend.models.module_access import write_module_access
+from backend.models.storage import auth_connection, connection
 from tests.test_service_orders import xlsx
 
 DAY = "2026-11-27"
@@ -52,6 +53,9 @@ class FertTests(unittest.TestCase):
             "Consulta", "Viewer-pass-42", role="analyst", base_unit="NRD",
             production_access={"enabled": True, "permissions": {"fill": False}, "units": ["NRD"]},
         )
+        # Módulo Fertirrigação (tela de Usuários): o analista edita, o consulta só vê.
+        self.grant_fert(self.user["id"], edit=True)
+        self.grant_fert(self.viewer["id"], edit=False)
         group = production.list_catalog(self.admin["id"], include_inactive=True)["groups"][0]
         self.fronts = [production.save_service_front(self.admin["id"], {
             "name": name, "group_id": group["id"], "display_style": "front", "units": ["NRD"]})
@@ -70,6 +74,11 @@ class FertTests(unittest.TestCase):
             for sector, base, radius, farm in (("3335", "SANTA CRUZ", 42, "EL SHADDAI"), ("870", "BIE", 55.84, "OSCAR ANTUNE"),
                                                ("870", "SANTA CRUZ", 44.98, "OSCAR ANTUNE")):
                 save_sector_radius(conn, sector, base, radius, self.admin["id"], farm=farm)
+
+    @staticmethod
+    def grant_fert(user_id, *, view=True, edit=False):
+        with auth_connection() as conn:
+            write_module_access(conn, user_id, {"fert": {"view": view, "edit": edit}})
 
     def equipment(self, kind, prefix, **extra):
         return fert.save_fert_equipment(self.user["id"], {"unit_code": "NRD", "kind": kind, "prefix": prefix,
@@ -94,12 +103,12 @@ class FertTests(unittest.TestCase):
         self.assertEqual({item["name"] for item in overview["fronts"]}, {"FT.54", "FT.56", "FT.57"})
         ft54 = self.front(overview, 0)
         self.assertEqual((ft54["flow_m3_ha"], ft54["flow_source"]), (35.0, "O.S."))
-        self.assertEqual((ft54["base"], ft54["radius_km"], ft54["radius_source"]), ("SANTA CRUZ", 42.0, "tabela"))
+        self.assertEqual((ft54["base"], ft54["radius_km"]), ("SANTA CRUZ", 42.0))
         self.assertEqual(ft54["orders"]["tratos"], "TRATOS SOQUEIRA")
         # Recomendação: a da O.S. mais recente do setor.
         self.assertEqual(ft54["orders"]["recommendation"],
                          ["FERTILIZANTE FEVL 10.00.06+MIX = 670 L", "FERTILIZANTE LIQUEFERTIL = 35 M3"])
-        self.assertEqual(ft54["orders"]["products"], ["FERTILIZANTE FEVL 10.00.06+MIX = 670 L"])
+        self.assertEqual(ft54["orders"]["flow_m3_ha"], 35.0)
         # Mesmos números da planilha (FT.54): 68,709 ha/dia, ciclo 3,7006 h e 7 CVs, com 2 alocados.
         self.assertAlmostEqual(ft54["calc"]["yield_ha"], 68.709, places=9)
         self.assertAlmostEqual(ft54["calc"]["cycle_h"], 3.7005820921075152, places=9)
@@ -339,7 +348,7 @@ class FertTests(unittest.TestCase):
             fert.save_fert_equipment(self.viewer["id"], {"unit_code": "NRD", "kind": "truck", "prefix": "700"})
         with self.assertRaisesRegex(ValueError, "Polo SP"):
             fert.fert_overview(self.admin["id"], "PST", DAY)
-        self.assertEqual(fert.fert_overview(self.viewer["id"], "NRD", DAY)["permissions"], {"edit": False, "configure": False})
+        self.assertEqual(fert.fert_overview(self.viewer["id"], "NRD", DAY)["permissions"], {"edit": False})
         self.equipment("truck", "612")
         with self.assertRaisesRegex(ValueError, "O CV 612 já está cadastrado"):
             self.equipment("truck", "612")
@@ -375,6 +384,134 @@ class FertTests(unittest.TestCase):
             self.allocate(truck)
         with self.assertRaisesRegex(ValueError, "não está com fertirrigação"):
             self.allocate(truck, 3)
+
+    def test_front_uses_the_chosen_service_order(self):
+        # Setor 3335 com duas O.S. abertas (como na planilha, a O.S. é escolhida por frente): sem
+        # escolha vale a mais recente; escolhida, recomendação, vazão, talhões e receita são só dela.
+        service_orders.import_service_orders(self.admin["id"], "NRD", [
+            order("332553", "3335", SAME), order("330537", "3803", SAME), order("330133", "870", OTHER),
+            {**order("300000", "3335", OTHER, opened_on="2026-10-01"), "plots": ["7", "8"]},
+        ])
+        ft54 = self.front(self.overview(), 0)
+        self.assertEqual((ft54["orders"]["order"], ft54["orders"]["orders"], ft54["flow_m3_ha"], ft54["orders"]["plots"]),
+                         ("332553", ["332553", "300000"], 35.0, ["1", "2"]))
+        self.assertEqual([option["order"] for option in ft54["orders"]["options"]], ["332553", "300000"])
+        self.plan(0, params={"base": "SANTA CRUZ", "order_number": "300000"})
+        ft54 = self.front(self.overview(), 0)
+        self.assertEqual((ft54["orders"]["order"], ft54["flow_m3_ha"], ft54["orders"]["plots"]), ("300000", 30.0, ["7", "8"]))
+        self.assertEqual(ft54["orders"]["recommendation"],
+                         ["FERTILIZANTE FEVL 14.00.00+B,ZN = 340 L", "FERTILIZANTE LIQUEFERTIL = 30 M3"])
+        # A receita da O.S. escolhida vale na troca de CV: agora a FT.54 recebe o CV da FT.56.
+        truck = self.equipment("truck", "612")
+        self.plan(1, trucks=[truck])
+        self.assertEqual(self.allocate(truck, 0)["moved"], 1)
+        # O.S. que não está mais aberta: volta para a mais recente.
+        self.plan(0, params={"base": "SANTA CRUZ", "order_number": "999999"})
+        orders = self.front(self.overview(), 0)["orders"]
+        self.assertEqual((orders["order"], orders["missing_order"]), ("332553", "999999"))
+
+    def test_audit_rules(self):
+        groups = production.list_catalog(self.admin["id"], include_inactive=True)["groups"]
+        fert_group = next(item for item in groups if "FERTIRRIG" in item["name"].upper())
+        # Fert convencional (346/342) fica no grupo Fertirrigação, mas não entra no dimensionamento;
+        # frente do grupo sem operação nenhuma entra.
+        conventional = production.save_service_front(self.admin["id"], {
+            "name": "FERT CONV 01", "group_id": fert_group["id"], "display_style": "front", "units": ["NRD"],
+            "default_operations": "346, 342"})
+        empty = production.save_service_front(self.admin["id"], {
+            "name": "FT.70", "group_id": fert_group["id"], "display_style": "front", "units": ["NRD"]})
+        production.save_items_sheet(self.user["id"], {"unit_code": "NRD", "work_date": DAY, "rows": [
+            {"service_front_id": conventional["id"], "sector": "3335", "status": self.status, "operation": "346"},
+            {"service_front_id": empty["id"], "sector": "3803", "status": self.status, "operation": ""}]})
+        names = {item["name"] for item in self.overview()["fronts"]}
+        self.assertIn("FT.70", names)
+        self.assertNotIn("FERT CONV 01", names)
+        # O tipo do equipamento não muda depois do cadastro.
+        truck = self.equipment("truck", "612")
+        with self.assertRaisesRegex(ValueError, "tipo"):
+            fert.save_fert_equipment(self.user["id"], {"unit_code": "NRD", "kind": "tractor", "prefix": "612"},
+                                     equipment_id=truck)
+        # Excluir tira o CV da frente e a frente continua aceitando alocação.
+        other = self.equipment("truck", "615")
+        self.plan(0, params={"base": "SANTA CRUZ"}, trucks=[truck])
+        fert.delete_fert_equipment(self.user["id"], "NRD", truck)
+        self.assertEqual(self.front(self.overview(), 0)["trucks"], [])
+        self.allocate(other, 0)
+        self.assertEqual(self.front(self.overview(), 0)["trucks"], [other])
+        # ha/hora pela velocidade não vira "ha/hora digitado" no popup.
+        self.plan(0, params={"base": "SANTA CRUZ", "ha_mode": "speed"}, trucks=[other])
+        ft54 = self.front(self.overview(), 0)
+        self.assertIsNone(ft54["params"]["ha_per_hour"])
+        self.assertAlmostEqual(ft54["calc"]["yield_ha"], 3.7 * 0 * 7.5)
+
+    def test_simultaneous_edit_of_the_same_front(self):
+        # Dois analistas abrem a FT.54; o primeiro salva; o segundo não sobrescreve sem ver.
+        version = self.front(self.overview(), 0)["plan_version"]
+        truck = self.equipment("truck", "612")
+        self.plan(0, params={"base": "SANTA CRUZ"}, trucks=[truck], version=version)
+        with self.assertRaisesRegex(ValueError, "alterada por Analista"):
+            self.plan(0, params={"base": "SANTA CRUZ"}, trucks=[], version=version)
+        self.assertEqual(self.front(self.overview(), 0)["trucks"], [truck])
+        # Com a versão atual (reaberto), grava.
+        current = self.front(self.overview(), 0)["plan_version"]
+        self.plan(0, params={"base": "SANTA CRUZ"}, trucks=[], version=current)
+        # Uma troca de CV feita por outro (arrastar) também muda a versão da frente de origem.
+        self.plan(0, params={"base": "SANTA CRUZ"}, trucks=[truck])
+        before = self.front(self.overview(), 0)["plan_version"]
+        self.allocate(truck)
+        self.assertNotEqual(self.front(self.overview(), 0)["plan_version"], before)
+
+    def test_busy_database_answers_try_again(self):
+        # Banco ocupado além da espera: aviso para tentar de novo (503), não erro genérico.
+        import io
+        import sqlite3
+        from backend.controllers import application_controller as app
+        captured = {}
+
+        def start_response(status, headers):
+            captured["status"] = status
+
+        environ = {"REQUEST_METHOD": "GET", "PATH_INFO": "/api/production/fert", "QUERY_STRING": "",
+                   "wsgi.input": io.BytesIO(b""), "HTTP_HOST": "localhost", "wsgi.url_scheme": "http"}
+        with patch.object(app, "_handle", side_effect=sqlite3.OperationalError("database is locked")):
+            body = b"".join(app.application(environ, start_response)).decode("utf-8")
+        self.assertTrue(captured["status"].startswith("503"))
+        self.assertIn("tente de novo", body)
+        with patch.object(app, "_handle", side_effect=sqlite3.OperationalError("no such table: x")):
+            with self.assertRaises(sqlite3.OperationalError):
+                app.application(environ, start_response)
+
+    def test_fert_module_permission(self):
+        # Sem o módulo Fertirrigação, quem tem a Produção Agrícola não entra; Consultar só vê;
+        # Editar configura e aloca; a unidade continua a liberada na Produção.
+        self.grant_fert(self.user["id"], view=False)
+        with self.assertRaisesRegex(PermissionError, "acesso à Fertirrigação"):
+            self.overview()
+        with self.assertRaisesRegex(PermissionError, "acesso à Fertirrigação"):
+            self.equipment("truck", "700")
+        self.grant_fert(self.user["id"], edit=False)
+        self.assertEqual(self.overview()["permissions"], {"edit": False})
+        with self.assertRaisesRegex(PermissionError, "somente para consulta na Fertirrigação"):
+            self.plan(0, params={"base": "SANTA CRUZ"})
+        self.grant_fert(self.user["id"], edit=True)
+        self.assertEqual(self.overview()["permissions"], {"edit": True})
+        with self.assertRaisesRegex(PermissionError, "PPT não está liberada"):
+            fert.fert_overview(self.user["id"], "PPT", DAY)
+        self.assertEqual(fert.fert_overview(self.admin["id"], "NRD", DAY)["permissions"], {"edit": True})
+
+    def test_stale_equipment_table_is_upgraded(self):
+        # Banco de uma versão intermediária: frota sem situação/gás. Vazia, é recriada.
+        from backend.models import storage
+        with connection() as conn:
+            conn.execute("DROP TABLE main.production_fert_equipment")
+            conn.execute("""CREATE TABLE main.production_fert_equipment (id INTEGER PRIMARY KEY, unit_code TEXT, kind TEXT,
+                prefix TEXT, capacity_m3 REAL, status TEXT, notes TEXT, created_by INTEGER, updated_by INTEGER,
+                created_at INTEGER, updated_at INTEGER)""")
+            storage._reset_stale_fert_tables(conn)
+            storage._create_production_tables(conn)
+            columns = {row[1] for row in conn.execute("PRAGMA main.table_info(production_fert_equipment)")}
+        self.assertTrue({"status_changed_by", "fuel", "gas_level_pct", "gas_updated_at"} <= columns)
+        self.equipment("truck", "612", fuel="gas", gas_level_pct=50)
 
     def test_base_names(self):
         self.assertEqual({fert.base_key(name) for name in ("BASE STA CRUZ", "Santa Cruz", "SANTA CRUZ")}, {"SANTA CRUZ"})

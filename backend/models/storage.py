@@ -725,6 +725,23 @@ def _upgrade_front_default_operations(conn):
     conn.execute("INSERT INTO main.schema_info(key,value) VALUES ('production_front_default_operations','1')")
 
 
+def _reset_stale_fert_tables(conn):
+    """Bancos de teste criados por uma versão intermediária da Fertirrigação têm a frota sem as
+    colunas de situação e de gás. Vazia, a tabela é recriada no formato atual; com dados, ganha as
+    colunas que faltam (a situação antiga continua valendo)."""
+    columns = {row[1] for row in conn.execute("PRAGMA main.table_info(production_fert_equipment)")}
+    if not columns or "gas_updated_at" in columns:
+        return
+    if not conn.execute("SELECT 1 FROM main.production_fert_equipment LIMIT 1").fetchone():
+        conn.execute("DROP TABLE main.production_fert_equipment")
+        return
+    for column, kind in (("status_changed_by", "INTEGER"), ("status_changed_at", "INTEGER"),
+                         ("fuel", "TEXT NOT NULL DEFAULT 'diesel'"), ("gas_level_pct", "REAL"),
+                         ("gas_updated_by", "INTEGER"), ("gas_updated_at", "INTEGER")):
+        if column not in columns:
+            conn.execute(f"ALTER TABLE main.production_fert_equipment ADD COLUMN {column} {kind}")
+
+
 def _upgrade_operational_schema(conn):
     """Migrações idempotentes dos dados operacionais sem perder registros existentes."""
     # Import local: front_notes importa storage (connection) no nível superior.
@@ -732,6 +749,7 @@ def _upgrade_operational_schema(conn):
     initialize_front_notes(conn)
     _create_return_soil_wet_table(conn)
     _create_field_weighing_table(conn)
+    _reset_stale_fert_tables(conn)
     _create_production_tables(conn)
     if not conn.execute(
         "SELECT 1 FROM main.schema_info WHERE key='production_status_labels_version'"

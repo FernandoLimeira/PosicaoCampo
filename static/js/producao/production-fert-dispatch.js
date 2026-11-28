@@ -54,7 +54,8 @@ function fertDispatchFrontHtml(front, recipes, byId, editable) {
     || a.prefix.localeCompare(b.prefix, 'pt-BR', { numeric: true }));
   const calc = front.calc;
   const needed = calc.trucks_needed;
-  const missing = [!front.base && 'a base', front.radius_km === null && 'o raio', front.flow_m3_ha === null && 'a vazão'].filter(Boolean);
+  const missing = [!front.base && 'a base', front.radius_km === null && 'o raio', front.flow_m3_ha === null && 'a vazão',
+    front.orders.missing_order && `a O.S. (${front.orders.missing_order} não está aberta)`].filter(Boolean);
   const tone = calc.balance === null ? '' : calc.balance < 0 ? ' is-short' : calc.balance > 0 ? ' is-over' : ' is-ok';
   return `<article class="fert-col${tone}" data-fert-drop="${front.service_front_id}">
       <header class="fert-col-head">
@@ -64,7 +65,7 @@ function fertDispatchFrontHtml(front, recipes, byId, editable) {
         <div class="fert-col-meter"><span>CVs <b>${calc.trucks}</b> de ${needed ?? '—'}</span>${fertBalanceHtml(calc.balance)}</div>
         <i class="fert-meter" data-meter="${needed ? Math.min(100, (calc.trucks / needed) * 100) : 0}" aria-hidden="true"></i>
       </header>
-      ${missing.length ? `<p class="fert-col-warn">Falta ${missing.join(', ')}.</p>` : ''}
+      ${missing.length ? `<p class="fert-col-warn">Falta ${escapeHtml(missing.join(', '))}.</p>` : ''}
       <ul class="fert-col-list">${trucks.map(item => fertDispatchCvHtml(item, stageOf.get(item.id), front, true)).join('')
         || `<li class="fert-col-empty">${editable ? 'Arraste um CV para cá' : 'Nenhum CV'}</li>`}</ul>
       <footer><button type="button" class="production-secondary-button" data-fert-configure="${front.service_front_id}">Configurar frente</button></footer>

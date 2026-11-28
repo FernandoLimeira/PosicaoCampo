@@ -1,4 +1,18 @@
 {# Campos de autorização compartilhados pelo cadastro e pela gestão; nenhum estado é duplicado. #}
+{% macro module_row(module) %}
+<div class="user-module-row{% if module.key == 'sectors_purge' %} is-sensitive{% endif %}" data-module-row="{{ module.key }}">
+  <div class="user-module-description">
+    <strong>{{ module.name }}{% if module.key == 'sectors_purge' %} <em class="user-module-badge">Ação sensível</em>{% endif %}</strong>
+    <small>{{ module.description }}</small>
+    {% if module.key == 'sectors_purge' %}<small class="user-module-lock-hint">Libere “Consultar” e “Editar” do Cadastro de Setores para habilitar.</small>{% endif %}
+  </div>
+  <div class="user-module-controls">
+    <label><input type="checkbox" data-module-view="{{ module.key }}" {% if module.key not in ('users', 'sectors_purge', 'fert') %}checked{% endif %} /><span>{% if module.key == 'sectors_purge' %}Permitir{% else %}Consultar{% endif %}</span></label>
+    {% if module.edit %}<label><input type="checkbox" data-module-edit="{{ module.key }}" {% if module.key not in ('users', 'fert') %}checked{% endif %} /><span>{% if module.key == 'users' %}Gerenciar{% else %}Editar{% endif %}</span></label>{% endif %}
+  </div>
+</div>
+{% endmacro %}
+
 {% macro module_panel(group, caption, key, mode) %}
 <section class="user-permission-panel" data-permission-panel="{{ key }}" aria-labelledby="permission-heading-{{ mode }}-{{ key }}" {% if key != 'reports' %}hidden{% endif %}>
   <header class="user-panel-heading">
@@ -8,19 +22,7 @@
   </header>
   <div class="user-permission-section">
     <div class="user-module-grid">
-      {% for module in modules if module.group == group %}
-      <div class="user-module-row{% if module.key == 'sectors_purge' %} is-sensitive{% endif %}" data-module-row="{{ module.key }}">
-        <div class="user-module-description">
-          <strong>{{ module.name }}{% if module.key == 'sectors_purge' %} <em class="user-module-badge">Ação sensível</em>{% endif %}</strong>
-          <small>{{ module.description }}</small>
-          {% if module.key == 'sectors_purge' %}<small class="user-module-lock-hint">Libere “Consultar” e “Editar” do Cadastro de Setores para habilitar.</small>{% endif %}
-        </div>
-        <div class="user-module-controls">
-          <label><input type="checkbox" data-module-view="{{ module.key }}" {% if module.key not in ('users', 'sectors_purge') %}checked{% endif %} /><span>{% if module.key == 'sectors_purge' %}Permitir{% else %}Consultar{% endif %}</span></label>
-          {% if module.edit %}<label><input type="checkbox" data-module-edit="{{ module.key }}" {% if module.key != 'users' %}checked{% endif %} /><span>{% if module.key == 'users' %}Gerenciar{% else %}Editar{% endif %}</span></label>{% endif %}
-        </div>
-      </div>
-      {% endfor %}
+      {% for module in modules if module.group == group %}{{ module_row(module) }}{% endfor %}
     </div>
     {% if group == 'Usuários' %}<p class="user-access-hint">Gerenciar permite criar e alterar contas não administradoras. Gestores delegados só podem conceder acessos que já possuem.</p>{% endif %}
   </div>
@@ -96,6 +98,10 @@
           {% endfor %}
         </div>
         <p data-production-unit-empty class="user-unit-empty" hidden>Nenhuma unidade vinculada. Adicione a unidade base para permitir o acesso.</p>
+      </div>
+      <div class="user-permission-section user-production-modules">
+        <div class="user-unit-toolbar"><div><strong>Módulos da Produção Agrícola</strong><p>Valem para as unidades liberadas acima (a Fertirrigação, para PPT e NRD).</p></div></div>
+        <div class="user-module-grid">{% for module in modules if module.group == 'Produção Agrícola' %}{{ module_row(module) }}{% endfor %}</div>
       </div>
     </section>
     <section class="user-permission-panel" data-permission-panel="emission" aria-labelledby="permission-heading-{{ mode }}-emission" hidden>

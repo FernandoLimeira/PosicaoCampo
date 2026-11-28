@@ -173,8 +173,8 @@ Página **Produção Agrícola → Fertirrigação** (`/producao/fertirrigacao`)
 - **Vazão**: produto em m³ da O.S. mais recente do setor (colunas `CD_UNIMED`, `QT_RECURSO`,
   `DE_COMPO` do SELECT de O.S.); pode ser corrigida no plano. Tratos (`CCUSTO_TRATOS`) e produtos
   em L/KG também vêm da O.S.
-- **Raio**: tabela setor × base (importação da aba RAIO exportada em um arquivo só); o raio é o da
-  base escolhida no plano. Setor com mais de uma base pede a base (não escolhe sozinho).
+- **Raio**: digitado na configuração da frente e guardado por setor × base (ver seção 9). Setor com
+  mais de uma base com raio pede a base (não escolhe sozinho).
 - **Plano do dia por frente**: base, correção de vazão e raio, tratores e CVs alocados (escolhidos
   da frota, não digitados) e os parâmetros da conta (vazio = padrão da planilha). Sem plano no dia,
   vale o último plano salvo. Um equipamento fica em uma frente só por dia; equipamento na oficina
@@ -182,11 +182,15 @@ Página **Produção Agrícola → Fertirrigação** (`/producao/fertirrigacao`)
 - **Conta**: a da planilha, com o descarregamento somado ao ciclo (problema 1). Conferida casa a
   casa com a planilha em `tests/test_fert_dimensioning.py` (servidor) e
   `tests/test_production_fert.js` (prévia do popup).
-- **Permissões**: quem consulta a unidade vê; quem preenche edita o plano e a frota; a importação
-  do raio é de quem configura a Produção.
+- **Permissões**: módulo próprio **Fertirrigação** na tela de Usuários (painel da Produção Agrícola):
+  **Consultar** vê o painel e o quadro de alocação; **Editar** configura as frentes, aloca CVs, digita o
+  raio, planeja a semana e cadastra a frota. Vale para as unidades do Polo SP (PPT e NRD) liberadas na
+  Produção Agrícola. Módulo novo começa negado para todas as contas (o administrador libera); o
+  administrador tem tudo. A barreira das rotas (`required_permission`) e o modelo (`fert_access`) conferem.
 
-Código: `backend/services/fert_dimensioning.py` (conta), `backend/services/fert_radius_import.py`,
-`backend/models/production/fert.py`, `static/js/producao/production-fert.js`.
+Código: `backend/services/fert_dimensioning.py` (conta), pacote `backend/models/production/fert/` e
+`static/js/producao/production-fert*.js` (painel, semana, configuração da frente, frota e quadro de
+alocação).
 
 ## 7. Gestão dos CVs e recomendação (painel único)
 
@@ -203,7 +207,7 @@ Código: `backend/services/fert_dimensioning.py` (conta), `backend/services/fert
 - **Histórico (Movimentações do dia)**: alocação, troca de frente, saída e mudança de situação, com
   quem fez e a hora.
 - **Bases de carregamento**: as da unidade (PPT: Usina e Raposo; NRD: Santa Cruz, Bié e Casa Branca)
-  e as do raio importado, com o raio de cada uma para o setor; base sem raio pede o raio no plano.
+  e as que já têm raio para o setor; base sem raio pede o raio na configuração da frente.
 - **SELECT do PIMS**: `docs/select-os-fertirrigacao.sql` é o SELECT de O.S. que o sistema já usa
   (mesmas instâncias, operações, data e talhão por safra/seção) com os componentes da planilha
   (CD_COMPO, DE_COMPO, QT_RECURSO, CD_UNIMED e RESERVA) por outer join (+) só nas operações 509 e 524;
@@ -234,12 +238,40 @@ Código: `backend/services/fert_dimensioning.py` (conta), `backend/services/fert
 ## 9. Frentes da Posição de Campo e raio digitado
 
 - **Frentes**: as mesmas da Posição de Campo da Produção (itens ativos da unidade, com o último
-  lançamento até o dia). Entra a frente que lançou 509/524, que tem 509/524 como operação padrão no
-  cadastro ou que está num grupo de fertirrigação (nome com "FERT"). O analista só cadastra os
+  lançamento até o dia). Entra a frente que lançou 509/524 ou que tem 509/524 como operação padrão no
+  cadastro. O grupo "Fertirrigação" só puxa a frente sem nenhuma operação (lançada ou padrão): a Fert
+  convencional (346/342) fica no mesmo grupo e não usa CVs, então fica fora. O analista só cadastra os
   equipamentos (tratores e CVs) e escolhe a base; setor, vazão e recomendação vêm do lançamento e da O.S.
 - **O.S.**: a base de O.S. é uma só para todas as unidades (cada importação substitui a base inteira),
   como na conferência da Produção; a fert não filtra pela unidade da importação.
-- **Raio**: digitado no plano da frente e guardado por **setor + base** (não no plano). Volta sozinho
-  quando a frente cair de novo no setor, vale para a semana e não segue a frente quando ela muda de
-  setor. A importação da aba RAIO (opcional) atualiza só os setores + bases do arquivo e mantém os
-  digitados.
+- **Raio**: digitado só na configuração da frente (etapa Local) e guardado por **setor + base** (não
+  no plano). Volta sozinho quando a frente cair de novo no setor, vale para a semana e não segue a
+  frente quando ela muda de setor. Não há importação da aba RAIO (um lugar só).
+
+## 10. Quadro de alocação e configuração em etapas
+
+- **Painel em abas**: Alocação (padrão), Ciclo dos CVs, Frentes, Semana, Frota e Movimentações.
+- **Quadro de alocação**: coluna "Disponíveis" e uma coluna por frente, com a **receita** (frentes com a
+  mesma recomendação de produtos têm a mesma etiqueta e trocam CVs), a meta de CVs (alocados × necessários)
+  e cada CV na etapa do ciclo. Arrastar o CV aloca, troca de frente (só mesma receita) ou libera; a ficha
+  do CV tem "Alocar em" (celular). O servidor (`PUT /api/production/fert/allocate`) confere a regra e muda
+  só a equipe da frente.
+- **Configuração da frente em 3 etapas**: Local (o que vem do sistema × base e raio digitados), Equipe
+  (CVs e tratores, adicionar ou cadastrar) e Conferir (números e ajustes opcionais da conta).
+
+## 11. O.S. em aplicação, edição simultânea e auditoria
+
+- **O.S. em aplicação**: um setor pode ter várias O.S. de fertirrigação abertas, cada uma com seus talhões e
+  sua receita (como na planilha, onde a O.S. é escolhida por frente). Na etapa Local o analista escolhe a O.S.
+  (padrão: a mais recente da mesma operação); recomendação, vazão, talhões, tratos e a receita da troca de CV
+  vêm só dela. O.S. escolhida que não está mais aberta gera aviso e a frente usa a mais recente.
+- **Edição simultânea da mesma frente**: o popup envia a versão do plano que abriu; se outra pessoa gravou a
+  frente depois (plano, arrastar CV, situação), o servidor recusa e pede para reabrir. Arrastar CV é
+  incremental (tira/põe um equipamento) e não sobrescreve o resto do plano.
+- **Gravações ao mesmo tempo (banco)**: cada gravação reserva o banco no início (`BEGIN IMMEDIATE`) e quem
+  chega depois espera a vez (até `DB_BUSY_TIMEOUT_MS`, 10 s); passou disso, nada é gravado pela metade e a
+  tela recebe "o sistema está ocupado, tente de novo" (503). Teste de carga: 8 pessoas × 60 gravações cada,
+  sem erro e sem CV em duas frentes.
+- **Auditoria (28/11/2026)**: aviso de O.S. escapado no quadro (XSS); tipo do equipamento fixo após o
+  cadastro; excluir equipamento tira das frentes; o popup mostra os parâmetros como gravados (o ha/hora pela
+  velocidade não vira digitado); raio só é regravado quando muda; campos e estilos sem uso removidos.

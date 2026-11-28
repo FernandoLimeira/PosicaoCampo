@@ -9,6 +9,7 @@ from typing import Any
 from ....services.fert_dimensioning import DEFAULTS, application_speed, ha_per_hour_from_speed
 from ....services.front_identifiers import natural_key, normalize_label
 from ....services.operational_shifts import FIELD_TIMEZONE
+from ..access import _require_access
 from ..common import _normalize_unit
 
 FERT_UNITS = ("PPT", "NRD")
@@ -34,6 +35,23 @@ def fert_unit(unit_code: Any) -> str:
     if unit not in FERT_UNITS:
         raise ValueError("A fertirrigação está disponível para o Polo SP (PPT e NRD).")
     return unit
+
+
+def fert_access(conn: sqlite3.Connection, user_id: int, unit: str, *, edit: bool = False) -> dict[str, bool]:
+    """Acesso à Fertirrigação: a unidade liberada na Produção Agrícola e o módulo Fertirrigação
+    (Consultar / Editar) na tela de Usuários. Administrador tem tudo."""
+    access = _require_access(conn, user_id, unit=unit)
+    if access["role"] == "admin":
+        return {"view": True, "edit": True}
+    row = conn.execute("SELECT can_view,can_fill FROM auth.user_module_permissions WHERE user_id=? AND module_key='fert'",
+                       (user_id,)).fetchone()
+    view = bool(row and row["can_view"])
+    can_edit = view and bool(row["can_fill"])
+    if not view:
+        raise PermissionError("Você não possui acesso à Fertirrigação.")
+    if edit and not can_edit:
+        raise PermissionError("Você possui acesso somente para consulta na Fertirrigação.")
+    return {"view": True, "edit": can_edit}
 
 
 def today() -> str:

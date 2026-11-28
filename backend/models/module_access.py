@@ -17,6 +17,7 @@ MODULES = (
     {"key": "returns", "name": "Mudanças de área", "description": "Analisar retornos, importar dados e editar layouts.", "edit": True, "group": "Relatório"},
     {"key": "dashboard", "name": "Posição de Campo", "description": "Consultar posições e editar apontamentos de campo.", "edit": True, "group": "CTT"},
     {"key": "sacarose", "name": "Sacarose", "description": "Consultar e atualizar indicadores de sacarose.", "edit": True, "group": "CTT"},
+    {"key": "fert", "name": "Fertirrigação", "description": "Painel, quadro de alocação dos CVs e configuração das frentes do Polo SP. Vale para PPT e NRD liberadas na Produção Agrícola.", "edit": True, "group": "Produção Agrícola"},
     {"key": "emission", "name": "Emissão Global", "description": "Emissão consolidada liberada para todos os analistas.", "edit": False, "group": "Emissão Global"},
     {"key": "sectors", "name": "Cadastro de Setores", "description": "Consultar, cadastrar, importar e excluir setores.", "edit": True, "group": "Cadastro de Setores"},
     {"key": "sectors_purge", "name": "Apagar base de setores", "description": "Apagar toda a base ou substituí-la ao importar o Excel. Requer a edição do cadastro.", "edit": False, "group": "Cadastro de Setores"},
@@ -25,7 +26,7 @@ MODULES = (
 )
 MODULE_BY_KEY = {module["key"]: module for module in MODULES}
 # Módulos que podem faltar no payload (integrações antigas); ausentes valem como negados.
-OPTIONAL_MODULE_KEYS = {"users", "sectors_purge"}
+OPTIONAL_MODULE_KEYS = {"users", "sectors_purge", "fert"}
 # Módulos que existiam antes da personalização de acessos. Somente para eles
 # vale o acesso legado (ver e editar, exceto Usuários); é gravado de forma
 # explícita por materialize_legacy_module_access. Qualquer módulo novo começa
@@ -269,6 +270,11 @@ def required_permission(path: str, method: str):
         return (("reports",), "view")
     if path == "/api/history" and method == "GET":
         return (("history",), "view")
+    # Fertirrigação: módulo próprio (as unidades continuam as liberadas na Produção Agrícola).
+    if path == "/api/production/fert" and method == "GET":
+        return (("fert",), "view")
+    if path.startswith("/api/production/fert/") and method in {"POST", "PUT", "DELETE"}:
+        return (("fert",), "edit")
     return None
 
 

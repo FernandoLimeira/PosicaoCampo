@@ -133,6 +133,16 @@ function applyServerPayload(data) {
   return true;
 }
 
+// Depois de salvar, busca as quatro unidades de novo: quem salvou passa a ver também o que os
+// colegas salvaram nas outras unidades (sem consulta periódica; só quando há um salvamento).
+async function refreshUnitsAfterSave() {
+  try {
+    applyServerPayload(await apiRequest('/api/units', { cache: 'no-store' }));
+  } catch (error) {
+    console.error(error);
+  }
+}
+
 async function loadServerState() {
   const auth = await apiRequest('/api/auth/me');
   const userLabel = document.querySelector('#current-user');

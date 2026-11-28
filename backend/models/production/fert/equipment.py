@@ -7,11 +7,10 @@ from typing import Any
 
 from ....services.fert_dimensioning import clean_params
 from ...storage import connection, validate_actor
-from ..access import _require_access
 from ..common import _clean_text, _normalize_work_date
 from .common import (
-    ALLOCATABLE_STATUSES, EQUIPMENT_KINDS, EQUIPMENT_STATUSES, FUELS, MAX_EQUIPMENT, fert_unit, front_names,
-    log_event, one_equipment, today,
+    ALLOCATABLE_STATUSES, EQUIPMENT_KINDS, EQUIPMENT_STATUSES, FUELS, MAX_EQUIPMENT, fert_access, fert_unit,
+    front_names, log_event, one_equipment, today,
 )
 from .sources import plan_equipment, read_plans, without_equipment, write_plan
 
@@ -96,6 +95,8 @@ def _update(conn: sqlite3.Connection, data: dict[str, Any], equipment_id: int, u
                           (equipment_id, unit)).fetchone()
     if not before:
         raise ValueError("Equipamento não encontrado nesta unidade.")
+    if before["kind"] != data["kind"]:
+        raise ValueError("O tipo (trator ou CV) não muda depois do cadastro: exclua e cadastre de novo.")
     changed = before["status"] != status
     # Sem combustível/gás no envio, mantém o que já estava gravado.
     fuel = data["fuel"] or before["fuel"] or "diesel"
@@ -132,7 +133,7 @@ def save_fert_equipment(user_id: int, payload: Any, *, equipment_id: int | None 
     now = int(time.time())
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        _require_access(conn, user_id, permission="fill", unit=data["unit"])
+        fert_access(conn, user_id, data["unit"], edit=True)
         validate_actor(conn, user_id)
         try:
             if equipment_id is None:
@@ -148,12 +149,14 @@ def delete_fert_equipment(user_id: int, unit_code: Any, equipment_id: int) -> No
     unit = fert_unit(unit_code)
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        _require_access(conn, user_id, permission="fill", unit=unit)
+        fert_access(conn, user_id, unit, edit=True)
         validate_actor(conn, user_id)
         row = conn.execute("SELECT * FROM production_fert_equipment WHERE id=? AND unit_code=?",
                            (equipment_id, unit)).fetchone()
         if not row:
             raise ValueError("Equipamento não encontrado nesta unidade.")
+        item = {"id": equipment_id, "prefix": row["prefix"], "kind": row["kind"]}
+        # Sai das frentes onde estava (senão a frente guarda um equipamento que não existe mais).
+        _release_from_plans(conn, unit, today(), item, "inactive", user_id)
         conn.execute("DELETE FROM production_fert_equipment WHERE id=?", (equipment_id,))
-        log_event(conn, unit, today(), user_id, {"id": equipment_id, "prefix": row["prefix"], "kind": row["kind"]},
-                  "delete", "Excluído da frota")
+        log_event(conn, unit, today(), user_id, item, "delete", "Excluído da frota")

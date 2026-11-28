@@ -124,6 +124,7 @@ async function saveFieldFrontStatus(context, status) {
   const saved = await saveUnitToServer(index, updatedUnit, context.version);
   units[index] = normalizeUnitsCollection(units.map((unit, unitIndex) => unitIndex === index ? saved.unit : unit))[index];
   if (saved.meta) unitMeta[context.unit] = saved.meta;
+  await refreshUnitsAfterSave();
   context.unitSnapshot = clone(units[index]);
   context.version = unitMeta[context.unit]?.version ?? null;
   renderDashboard();

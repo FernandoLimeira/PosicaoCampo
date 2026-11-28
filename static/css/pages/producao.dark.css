@@ -326,8 +326,6 @@ button.pdash-kpi.is-active { color: #e0e0e0; }
 .fert-table td { border-bottom: 1px solid #414141; }
 .fert-table tbody tr:hover { background: #262626; }
 .fert-plan-section h3 { color: #adadad; }
-.fert-products { color: #cbcbcb; }
-.fert-params summary { color: #adadad; }
 .fert-check { color: #cbcbcb; }
 .fert-fleet-columns h3 { color: #adadad; }
 .fert-fleet-columns h3 small { background: #232323; }

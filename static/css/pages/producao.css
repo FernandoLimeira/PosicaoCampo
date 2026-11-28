@@ -1265,16 +1265,11 @@ button.pdash-note { padding: 2px 0; border: 0; background: transparent; color: v
 .fert-os-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px 16px; margin: 0; padding: 12px 14px; border: 1px solid var(--data-border); border-radius: 8px; background: var(--data-alternate); }
 .fert-os-grid dt { color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; }
 .fert-os-grid dd { margin: 2px 0 0; color: var(--ink); font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
-.fert-products { display: flex; gap: 8px; margin: 0; color: #303c42; font-size: 12px; }
-.fert-products b { color: var(--muted); }
 .fert-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px 14px; align-items: end; }
 .fert-field { margin: 0; }
 .fert-input { display: flex; align-items: center; gap: 6px; }
 .fert-input input { flex: 1; min-width: 0; }
 .fert-input em { color: var(--muted); font-size: 12px; font-style: normal; font-weight: 700; }
-.fert-params summary { color: #4d5a61; font-size: 11px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; cursor: pointer; }
-.fert-params summary small { color: var(--muted); font-weight: 600; letter-spacing: 0; text-transform: none; }
-.fert-params[open] summary { margin-bottom: 10px; }
 .fert-check { display: flex; align-items: center; gap: 8px; color: #303c42; font-size: 13px; font-weight: 700; }
 .fert-plan-status { margin: 0; color: var(--status-stop-text); font-size: 12px; }
 /* Frota e raio. */
@@ -1575,3 +1570,5 @@ button.pdash-note { padding: 2px 0; border: 0; background: transparent; color: v
   .fert-steps { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
   .fert-step small { display: none; }
 }
+.fert-order-pick span small { margin-left: 6px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.fert-order-pick select { max-width: 100%; }

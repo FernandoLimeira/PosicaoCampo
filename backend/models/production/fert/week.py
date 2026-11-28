@@ -8,9 +8,8 @@ from typing import Any
 
 from ....services.fert_dimensioning import calculate, clean_params
 from ...storage import connection, validate_actor
-from ..access import _require_access
 from ..common import _clean_text, _normalize_work_date
-from .common import fert_unit, parse_front_id, plan_params, require_unit_front
+from .common import fert_access, fert_unit, parse_front_id, plan_params, require_unit_front
 from .sources import OrderBook, sector_place
 
 WEEK_DAYS = 7
@@ -112,7 +111,7 @@ def save_fert_week(user_id: int, payload: Any) -> dict[str, Any]:
     tractors = _week_tractors(payload.get("tractors"))
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        _require_access(conn, user_id, permission="fill", unit=unit)
+        fert_access(conn, user_id, unit, edit=True)
         validate_actor(conn, user_id)
         require_unit_front(conn, front, unit)
         if not sector:
@@ -140,7 +139,7 @@ def save_fert_settings(user_id: int, payload: Any) -> dict[str, Any]:
         raise ValueError("Informe o raio orçado em km.")
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        _require_access(conn, user_id, permission="fill", unit=unit)
+        fert_access(conn, user_id, unit, edit=True)
         validate_actor(conn, user_id)
         conn.execute(
             """INSERT INTO production_fert_settings(unit_code,budget_radius_km,updated_by,updated_at) VALUES (?,?,?,?)

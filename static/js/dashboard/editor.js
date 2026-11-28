@@ -501,6 +501,7 @@ function setupEditorEvents() {
       editorInitialSnapshot = getEditorSnapshot();
       closeModal('data-modal');
       showToast(`${updatedUnit.code} atualizado e salvo no servidor.`);
+      await refreshUnitsAfterSave();
     } catch (error) {
       console.error(error);
       if (error.status === 409 && error.payload?.current) {

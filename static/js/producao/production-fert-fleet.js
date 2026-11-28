@@ -89,7 +89,7 @@ function openFertCv(equipmentId) {
       ${item.notes ? stat('Observação', escapeHtml(item.notes)) : ''}
     </dl>
     ${front?.orders.recommendation.length ? `<section class="fert-plan-section"><h3>Recomendação que está levando</h3>
-      <ul class="fert-rec-list">${front.orders.recommendation.map(entry => `<li>${escapeHtml(entry.replace(/ = /, ' · '))}</li>`).join('')}</ul></section>` : ''}
+      <ul class="fert-rec-list">${front.orders.recommendation.map(entry => `<li>${escapeHtml(fertRecLabel(entry))}</li>`).join('')}</ul></section>` : ''}
     <section class="fert-plan-section"><h3>Movimentações de hoje</h3>
       ${events.length ? `<ol class="fert-events">${events.map(event => `<li><time>${escapeHtml(fertTime(event.created_at).slice(-5))}</time>
         <span class="fert-event-type is-${escapeHtml(event.action)}">${escapeHtml(FERT_EVENT_LABELS[event.action] || event.action)}</span>

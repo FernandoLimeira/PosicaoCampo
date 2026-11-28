@@ -61,6 +61,8 @@ def handle(req):
                     "/producao/fertirrigacao"} and not user.get("production_access", {}).get("enabled"):
             return req.error(HTTPStatus.FORBIDDEN, "Você não possui acesso à Produção Agrícola.")
         page_key = PAGE_ROUTES[path][1]
+        if page_key == "production_fert" and not user_can(user, "fert"):
+            return req.error(HTTPStatus.FORBIDDEN, "Você não possui acesso à Fertirrigação.")
         # Consultas SQL da Entrega CTT fazem parte do módulo Posição de Campo (CTT).
         if page_key == "delivery_queries" and not user_can(user, "dashboard"):
             return req.error(HTTPStatus.FORBIDDEN, "Você não possui acesso à Entrega CTT.")

@@ -13,6 +13,7 @@ Utilitários HTTP vivem em ``controllers.http`` e sessão/login em
 ``controllers.auth``. Os nomes abaixo continuam importáveis daqui por
 compatibilidade.
 """
+import sqlite3
 from http import HTTPStatus
 
 from ..models.database import init_db
@@ -67,6 +68,26 @@ ROUTE_HANDLERS = (
 
 
 def application(environ, start_response):
+    """Gravações simultâneas: o SQLite grava uma por vez e cada transação espera a vez
+    (``DB_BUSY_TIMEOUT_MS``). Se a espera passar do limite, nada é gravado pela metade
+    (a transação volta) e a tela recebe um aviso para tentar de novo, não um erro genérico."""
+    try:
+        return _handle(environ, start_response)
+    except sqlite3.OperationalError as exc:
+        if not _database_busy(exc):
+            raise
+        return Request(environ, start_response, user=None).error(
+            HTTPStatus.SERVICE_UNAVAILABLE,
+            "O sistema está ocupado com outras gravações neste momento. Nada foi perdido: tente de novo em alguns segundos.",
+        )
+
+
+def _database_busy(exc: sqlite3.OperationalError) -> bool:
+    message = str(exc).lower()
+    return "locked" in message or "busy" in message
+
+
+def _handle(environ, start_response):
     req = Request(environ, start_response, user=_session_user(environ))
 
     if req.method in {"POST", "PUT", "PATCH", "DELETE"} and not _same_origin_request(environ):

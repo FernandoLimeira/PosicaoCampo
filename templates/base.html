@@ -97,7 +97,7 @@
       <div class="nav-report-items">
         <a class="nav-link{% if page == 'production' %} is-active{% endif %}" href="/producao" data-unit-context{% if page == 'production' %} aria-current="page"{% endif %}>{{ icon('production') }}<span>Frentes e serviços</span></a>
         <a class="nav-link{% if page == 'service_orders' %} is-active{% endif %}" href="/producao/ordens-servico" data-unit-context{% if page == 'service_orders' %} aria-current="page"{% endif %}>{{ icon('service-orders') }}<span>Ordem de serviço</span></a>
-        <a class="nav-link{% if page == 'production_fert' %} is-active{% endif %}" href="/producao/fertirrigacao" data-unit-context{% if page == 'production_fert' %} aria-current="page"{% endif %}>{{ icon('fert') }}<span>Fertirrigação</span></a>
+        {% if user.module_access.fert.view %}<a class="nav-link{% if page == 'production_fert' %} is-active{% endif %}" href="/producao/fertirrigacao" data-unit-context{% if page == 'production_fert' %} aria-current="page"{% endif %}>{{ icon('fert') }}<span>Fertirrigação</span></a>{% endif %}
         <a class="nav-link{% if page == 'production_queries' %} is-active{% endif %}" href="/producao/consultas" data-unit-context{% if page == 'production_queries' %} aria-current="page"{% endif %}>{{ icon('sql') }}<span>Consultas SQL</span></a>
         <a class="nav-link{% if page == 'production_catalog' %} is-active{% endif %}" href="/producao/cadastros" data-unit-context{% if page == 'production_catalog' %} aria-current="page"{% endif %}>{{ icon('catalog') }}<span>Cadastros</span></a>
       </div>
