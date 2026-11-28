@@ -18,7 +18,9 @@ from .common import (
     ALLOCATABLE_STATUSES, EQUIPMENT_KINDS, EQUIPMENT_STATUSES, MAX_EQUIPMENT, fert_unit, front_names, log_event,
     parse_front_id, require_unit_front, set_status, unit_equipment,
 )
-from .sources import OrderBook, fert_items, front_operations, plan_equipment, read_plans, without_equipment, write_plan
+from .sources import (
+    OrderBook, fert_items, front_operations, plan_equipment, read_plans, save_sector_radius, without_equipment, write_plan,
+)
 
 
 def _ids(value: Any, field: str) -> list[int]:
@@ -46,11 +48,13 @@ def _clean_plan(payload: Any) -> dict[str, Any]:
     if spacing not in SPACINGS or ha_mode not in {"typed", "speed"}:
         raise ValueError("Espaçamento ou modo do ha/hora inválido.")
     stored = {key: value for key, value in clean_params(raw).items() if value is not None}
+    # O raio não fica no plano: é do setor + base (vale para os próximos dias e para a semana).
+    radius = stored.pop("radius_km", None)
     stored.update({"base": _clean_text(raw.get("base"), "a base", 60), "round_trip": raw.get("round_trip") is True,
                    "spacing": spacing, "ha_mode": ha_mode,
                    "tractors": _ids(payload.get("tractors"), "tratores"), "trucks": _ids(payload.get("trucks"), "CVs")})
     return {"unit": fert_unit(payload.get("unit_code")), "work_date": _normalize_work_date(payload.get("work_date")),
-            "front": parse_front_id(payload.get("service_front_id")), "plan": stored}
+            "front": parse_front_id(payload.get("service_front_id")), "plan": stored, "radius": radius}
 
 
 class _Move:
@@ -58,7 +62,7 @@ class _Move:
 
     def __init__(self, conn: sqlite3.Connection, unit: str, work_date: str, names: dict[int, str]):
         self.items = fert_items(conn, unit, work_date)
-        self.book = OrderBook(conn, unit)
+        self.book = OrderBook(conn)
         self.names = names
 
     def recommendation(self, front: int) -> dict[str, Any] | None:
@@ -129,5 +133,10 @@ def save_fert_plan(user_id: int, payload: Any) -> dict[str, Any]:
         for item_id in selected:
             if equipment[item_id]["status"] == "available":
                 set_status(conn, equipment[item_id], "active", user_id)
+        if clean["radius"] is not None:
+            entry = move.items.get(front) or {}
+            if not entry.get("sector") or not stored["base"]:
+                raise ValueError("Para gravar o raio, a frente precisa do setor lançado e da base de carregamento.")
+            save_sector_radius(conn, entry["sector"], stored["base"], clean["radius"], user_id, farm=entry.get("farm") or "")
         write_plan(conn, unit, work_date, front, stored, user_id)
     return {"ok": True, "moved": len(moved)}

@@ -13,7 +13,7 @@ from .common import (
     ALLOCATABLE_STATUSES, EQUIPMENT_KINDS, EQUIPMENT_STATUSES, FUELS, MAX_EQUIPMENT, base_key, fert_unit, front_names,
     log_event, one_equipment, today,
 )
-from .sources import plan_equipment, read_plans, without_equipment, write_plan
+from .sources import plan_equipment, read_plans, save_sector_radius, without_equipment, write_plan
 
 _UNSET = object()
 
@@ -166,24 +166,17 @@ def require_fert_radius_import(user_id: int) -> None:
 
 
 def import_fert_radius(user_id: int, records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Importa a aba RAIO: atualiza os setores + bases do arquivo e mantém os digitados à mão."""
     from ...service_orders import sector_key
 
     if not isinstance(records, list) or not records:
         raise ValueError("Nenhum raio válido foi encontrado no arquivo.")
-    now = int(time.time())
-    rows = {}
-    for record in records:
-        key = (sector_key(record["sector"]), base_key(record["base"]))
-        rows[key] = (key[0], record["sector"], record.get("farm", ""), record.get("municipality", ""),
-                     record["base"], float(record["radius_km"]), user_id, now)
+    rows = {(sector_key(record["sector"]), base_key(record["base"])): record for record in records}
     with connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         _require_configure(conn, user_id)
         validate_actor(conn, user_id)
-        conn.execute("DELETE FROM production_fert_radius")
-        conn.executemany(
-            """INSERT INTO production_fert_radius(sector_key,sector,farm,municipality,base,radius_km,imported_by,imported_at)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            list(rows.values()),
-        )
+        for record in rows.values():
+            save_sector_radius(conn, record["sector"], record["base"], float(record["radius_km"]), user_id,
+                               farm=record.get("farm", ""), municipality=record.get("municipality", ""))
     return {"imported": len(rows), "sectors": len({key for key, _ in rows})}

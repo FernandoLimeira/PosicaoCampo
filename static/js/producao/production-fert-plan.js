@@ -114,11 +114,8 @@ function renderFertPreview() {
   const foot = document.querySelector('#production-fert-plan-preview');
   if (!front || !head) return;
   const state = fertFormState();
-  const option = front.base_options.find(item => fertPlain(item.base) === fertPlain(state.base));
-  const radiusHint = document.querySelector('#production-fert-radius');
-  if (radiusHint) radiusHint.placeholder = option?.radius_km != null ? `${fertNumber(option.radius_km, 2)} (tabela)` : 'Informe o raio';
   const flow = state.flow !== '' ? Number(state.flow) : front.orders.flow_m3_ha;
-  const radius = state.radius !== '' ? Number(state.radius) : option?.radius_km ?? null;
+  const radius = state.radius !== '' ? Number(state.radius) : null;
   const active = ids => ids.filter(id => ['active', 'available'].includes(fertData.equipment.find(item => item.id === id)?.status)).length;
   const speed = fertApplicationSpeed(flow);
   const speedHa = fertHaPerHourFromSpeed(speed, state.spacing);
@@ -189,7 +186,7 @@ function openFertPlan(frontId) {
             ${hasCurrent ? `<option value="${escapeHtml(front.base)}" selected>${escapeHtml(front.base)}</option>` : ''}
             ${bases.map(item => `<option value="${escapeHtml(item.base)}"${fertPlain(item.base) === fertPlain(front.base) ? ' selected' : ''}>${escapeHtml(item.base)} · ${item.radius_km != null ? `${fertNumber(item.radius_km, 1)} km` : 'sem raio'}</option>`).join('')}
           </select></label>
-        ${input('radius_km', 'Raio (correção)', 'km', front.radius_source === 'plano' ? front.radius_km : '', 'Informe o raio')}
+        ${input('radius_km', 'Raio do setor até a base', 'km', front.radius_km, 'Digite o raio')}
         ${input('flow_m3_ha', 'Vazão (correção)', 'm³/ha', front.flow_source === 'plano' ? front.flow_m3_ha : '', orders.flow_m3_ha !== null ? `${fertNumber(orders.flow_m3_ha, 0)} (O.S.)` : 'Informe a vazão')}
       </div>
       <dl class="fert-os-grid">
@@ -280,7 +277,15 @@ async function saveFertPlan(event) {
 
 document.querySelector('#production-fert-plan-form')?.addEventListener('submit', saveFertPlan);
 document.querySelector('#production-fert-plan-form')?.addEventListener('input', renderFertPreview);
-document.querySelector('#production-fert-plan-form')?.addEventListener('change', renderFertPreview);
+// Trocar a base traz o raio já guardado do setor até ela (ou deixa em branco para digitar).
+document.querySelector('#production-fert-plan-form')?.addEventListener('change', event => {
+  if (event.target.name === 'base' && fertEditing) {
+    const option = fertEditing.base_options.find(item => fertPlain(item.base) === fertPlain(event.target.value));
+    const radius = document.querySelector('#production-fert-radius');
+    if (radius) radius.value = option?.radius_km ?? '';
+  }
+  renderFertPreview();
+});
 document.querySelector('#production-fert-plan-form')?.addEventListener('click', event => {
   const tab = event.target.closest('[data-fert-plan-tab]');
   if (tab) return setFertPlanTab(tab.dataset.fertPlanTab);

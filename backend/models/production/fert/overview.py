@@ -29,7 +29,7 @@ def _front(conn: sqlite3.Connection, unit: str, selected_date: str, front_id: in
     base = plan.get("base") or (with_radius[0]["base"] if len(with_radius) == 1 else "")
     table_radius = next((option["radius_km"] for option in bases if base_key(option["base"]) == base_key(base)), None)
     flow = plan["flow_m3_ha"] if plan.get("flow_m3_ha") is not None else orders["flow_m3_ha"]
-    radius = plan["radius_km"] if plan.get("radius_km") is not None else table_radius
+    radius = table_radius  # raio do setor + base (digitado no plano ou importado)
     params, spacing, speed, speed_ha_h = plan_params(plan, flow)
     tractors = [by_id[i] for i in plan.get("tractors", []) if i in by_id and by_id[i]["kind"] == "tractor"]
     trucks = [by_id[i] for i in plan.get("trucks", []) if i in by_id and by_id[i]["kind"] == "truck"]
@@ -43,7 +43,7 @@ def _front(conn: sqlite3.Connection, unit: str, selected_date: str, front_id: in
         "is_current_day": entry["work_date"] == selected_date,
         "orders": orders, "base_options": bases, "base": base,
         "flow_m3_ha": flow, "flow_source": _source(plan.get("flow_m3_ha"), flow, "O.S."),
-        "radius_km": radius, "radius_source": _source(plan.get("radius_km"), radius, "tabela"),
+        "radius_km": radius, "radius_source": "tabela" if radius is not None else "",
         "params": {**params, "round_trip": bool(plan.get("round_trip")), "gas_pct_per_trip": plan.get("gas_pct_per_trip")},
         "gas_pct_per_trip": gas_pct_per_trip(radius, plan.get("gas_pct_per_trip")),
         "gas_source": "plano" if plan.get("gas_pct_per_trip") is not None else ("raio" if radius else ""),
@@ -79,7 +79,7 @@ def fert_overview(user_id: int, unit_code: Any, work_date: Any) -> dict[str, Any
         equipment = unit_equipment(conn, unit)
         by_id = {item["id"]: item for item in equipment}
         plans = read_plans(conn, unit, selected_date)
-        book = OrderBook(conn, unit)
+        book = OrderBook(conn)
         fronts = []
         for front_id, entry in sorted(fert_items(conn, unit, selected_date).items(),
                                       key=lambda pair: natural_key(pair[1]["front_name"])):

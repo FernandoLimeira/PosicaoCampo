@@ -24,41 +24,67 @@ def _keys():
     return operation_keys, sector_key
 
 
-def front_operations(entry: dict[str, Any]) -> list[str]:
-    """Operações de fertirrigação lançadas na frente (509, 524 ou as duas)."""
+def _fert_keys(value: Any) -> list[str]:
     operation_keys, _ = _keys()
-    return [key for key in operation_keys(entry.get("operation")) if key in FERT_OPERATIONS]
+    return [key for key in operation_keys(value) if key in FERT_OPERATIONS]
+
+
+def front_operations(entry: dict[str, Any]) -> list[str]:
+    """Operações de fertirrigação da frente (509, 524 ou as duas): as lançadas no dia ou, sem
+    elas, as operações padrão da frente no cadastro."""
+    return list(entry.get("fert_operations") or [])
+
+
+def _is_fert_group(name: Any) -> bool:
+    return "FERT" in normalize_label(name).upper()
 
 
 def fert_items(conn: sqlite3.Connection, unit: str, work_date: str) -> dict[int, dict[str, Any]]:
-    """Último lançamento de cada frente com operação 509/524 até o dia (setor, status, operação)."""
-    fronts: dict[int, dict[str, Any]] = {}
-    for row in conn.execute(
-        """SELECT e.*, f.name AS front_name, ui.id AS item_id FROM production_user_items ui
-           JOIN production_daily_entries e ON e.id=(
-             SELECT latest.id FROM production_daily_entries latest
-             WHERE latest.user_item_id=ui.id AND latest.work_date<=?
-             ORDER BY latest.work_date DESC, latest.updated_at DESC, latest.id DESC LIMIT 1)
+    """Frentes da fertirrigação, as mesmas da Posição de Campo da Produção: cada item ativo da
+    unidade com o último lançamento até o dia (setor, seção, status e operação). Entra a frente que
+    lançou 509/524, que tem 509/524 como operação padrão ou que está num grupo de fertirrigação;
+    frente sem setor lançado aparece também (pede o setor)."""
+    items = conn.execute(
+        """SELECT ui.id AS item_id, ui.service_front_id AS front_id, f.name AS front_name,
+                  f.default_operations, g.name AS group_name
+           FROM production_user_items ui
            JOIN production_service_fronts f ON f.id=ui.service_front_id
+           JOIN production_groups g ON g.id=f.group_id
            WHERE ui.unit_code=? AND ui.is_active=1""",
-        (work_date, unit),
-    ):
-        entry = dict(row)
-        if not entry["sector"] or not front_operations(entry):
+        (unit,),
+    ).fetchall()
+    latest = {row["user_item_id"]: dict(row) for row in conn.execute(
+        """SELECT entry.* FROM production_daily_entries entry
+           JOIN (SELECT user_item_id, MAX(work_date) AS work_date FROM production_daily_entries
+                 WHERE unit_code=? AND work_date<=? AND user_item_id IS NOT NULL GROUP BY user_item_id) newest
+             ON newest.user_item_id=entry.user_item_id AND newest.work_date=entry.work_date
+           WHERE entry.unit_code=?""",
+        (unit, work_date, unit),
+    )}
+    fronts: dict[int, dict[str, Any]] = {}
+    for item in items:
+        entry = latest.get(item["item_id"]) or {}
+        operations = _fert_keys(entry.get("operation")) or _fert_keys(item["default_operations"])
+        if not operations and not _is_fert_group(item["group_name"]):
             continue
-        current = fronts.get(int(entry["service_front_id"]))
-        key = (entry["work_date"], entry["updated_at"] or 0)
-        if not current or key > (current["work_date"], current["updated_at"] or 0):
-            fronts[int(entry["service_front_id"])] = entry
+        front = {**entry, "item_id": item["item_id"], "service_front_id": item["front_id"],
+                 "front_name": item["front_name"], "fert_operations": operations,
+                 "sector": entry.get("sector") or "", "work_date": entry.get("work_date") or "",
+                 "updated_at": entry.get("updated_at") or 0}
+        current = fronts.get(item["front_id"])
+        rank = lambda item: (item["work_date"], item["updated_at"], item.get("id") or 0)  # noqa: E731
+        if not current or rank(front) > rank(current):
+            fronts[item["front_id"]] = front
     return fronts
 
 
 class OrderBook:
-    """Leitura das O.S. de fertirrigação de uma unidade, com cache por setor/seção/operação
-    (o painel e a semana pedem o mesmo setor várias vezes na mesma requisição)."""
+    """Leitura das O.S. de fertirrigação, com cache por setor/seção/operação (o painel e a semana
+    pedem o mesmo setor várias vezes na mesma requisição). A base de O.S. é uma só para todas as
+    unidades (cada importação substitui a base inteira), como na conferência da Produção."""
 
-    def __init__(self, conn: sqlite3.Connection, unit: str):
-        self.conn, self.unit, self._cache = conn, unit, {}
+    def __init__(self, conn: sqlite3.Connection):
+        self.conn, self._cache = conn, {}
 
     def details(self, sector: str, section: str = "", operations: list[str] | tuple[str, ...] = ()) -> dict[str, Any]:
         _, sector_key = _keys()
@@ -69,18 +95,20 @@ class OrderBook:
 
     def _load(self, sector: str, section: str, operations) -> dict[str, Any]:
         _, sector_key = _keys()
+        detail: dict[str, Any] = {"orders": [], "flow_m3_ha": None, "flow_label": "", "products": [],
+                                  "recommendation": [], "recommendation_key": "", "tratos": "", "plots": []}
+        if not str(sector or "").strip():
+            return detail  # frente sem setor lançado: nenhuma O.S.
         rows = [row for row in self.conn.execute(
             """SELECT id,order_number,section,operation_key,plots FROM production_service_orders
-               WHERE unit_code=? AND sector_key=? AND operation_key IN ('509','524')
+               WHERE sector_key=? AND operation_key IN ('509','524')
                ORDER BY opened_on DESC, id DESC""",
-            (self.unit, sector_key(sector)),
+            (sector_key(sector),),
         ) if not section or not row["section"] or sector_key(row["section"]) == sector_key(section)]
         # A recomendação é a da O.S. da mesma operação da frente (509 ou 524); sem ela, a de qualquer
         # operação de fertirrigação. Entre as O.S., a mais recente (a que está sendo aplicada).
         same = [row for row in rows if row["operation_key"] in operations]
         rows = same or rows
-        detail: dict[str, Any] = {"orders": [], "flow_m3_ha": None, "flow_label": "", "products": [],
-                                  "recommendation": [], "recommendation_key": "", "tratos": "", "plots": []}
         plots: list[str] = []
         for row in rows:
             if row["order_number"] not in detail["orders"]:
@@ -148,6 +176,30 @@ def sector_place(conn: sqlite3.Connection, sector: str, base: str) -> dict[str, 
         found = conn.execute("SELECT description FROM sector_base WHERE sector=? COLLATE NOCASE LIMIT 1", (sector,)).fetchone()
         farm = found["description"] if found and found["description"] else ""
     return {"farm": farm, "radius_km": chosen["radius_km"] if chosen else None, "base": chosen["base"] if chosen else ""}
+
+
+def save_sector_radius(conn: sqlite3.Connection, sector: str, base: str, radius_km: float, user_id: int,
+                       *, farm: str = "", municipality: str = "") -> None:
+    """Raio de um setor até uma base (digitado no plano ou importado). A mesma base escrita de
+    outro jeito ("BIE"/"BIÉ") atualiza a linha que já existe."""
+    _, sector_key = _keys()
+    key = sector_key(sector)
+    existing = next((row for row in conn.execute(
+        "SELECT base, farm, municipality FROM production_fert_radius WHERE sector_key=?", (key,))
+        if base_key(row["base"]) == base_key(base)), None)
+    if existing:
+        conn.execute(
+            """UPDATE production_fert_radius SET radius_km=?, farm=?, municipality=?, imported_by=?, imported_at=?
+               WHERE sector_key=? AND base=?""",
+            (radius_km, farm or existing["farm"] or "", municipality or existing["municipality"] or "",
+             user_id, int(time.time()), key, existing["base"]),
+        )
+        return
+    conn.execute(
+        """INSERT INTO production_fert_radius(sector_key,sector,farm,municipality,base,radius_km,imported_by,imported_at)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (key, str(sector).strip()[:32], farm, municipality, str(base).strip()[:60], radius_km, user_id, int(time.time())),
+    )
 
 
 def read_plans(conn: sqlite3.Connection, unit: str, work_date: str) -> dict[int, dict[str, Any]]:

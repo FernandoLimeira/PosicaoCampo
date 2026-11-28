@@ -230,3 +230,16 @@ Código: `backend/services/fert_dimensioning.py` (conta), `backend/services/fert
   volume e **raio planejado** = média dos raios ponderada pela vazão (como a planilha), contra o **raio
   orçado** da unidade (padrão 30 km, editável). O raio do setor é o da base da frente (a planilha usava
   a primeira linha da aba RAIO e, na FT.57, o setor da FT.56).
+
+## 9. Frentes da Posição de Campo e raio digitado
+
+- **Frentes**: as mesmas da Posição de Campo da Produção (itens ativos da unidade, com o último
+  lançamento até o dia). Entra a frente que lançou 509/524, que tem 509/524 como operação padrão no
+  cadastro ou que está num grupo de fertirrigação (nome com "FERT"). O analista só cadastra os
+  equipamentos (tratores e CVs) e escolhe a base; setor, vazão e recomendação vêm do lançamento e da O.S.
+- **O.S.**: a base de O.S. é uma só para todas as unidades (cada importação substitui a base inteira),
+  como na conferência da Produção; a fert não filtra pela unidade da importação.
+- **Raio**: digitado no plano da frente e guardado por **setor + base** (não no plano). Volta sozinho
+  quando a frente cair de novo no setor, vale para a semana e não segue a frente quando ela muda de
+  setor. A importação da aba RAIO (opcional) atualiza só os setores + bases do arquivo e mantém os
+  digitados.

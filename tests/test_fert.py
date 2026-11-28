@@ -268,6 +268,46 @@ class FertTests(unittest.TestCase):
         overview = self.overview()
         self.assertEqual((self.front(overview, 0)["trucks"], self.front(overview, 1)["trucks"]), ([], [truck]))
 
+    def test_fronts_come_from_the_field_position(self):
+        # Frentes da Posição de Campo: grupo de fertirrigação (sem operação lançada) e operação padrão
+        # 509 no cadastro também entram.
+        groups = production.list_catalog(self.admin["id"], include_inactive=True)["groups"]
+        group = next((item for item in groups if "FERT" in item["name"].upper()), None) or             production.save_group(self.admin["id"], {"name": "Fert NRD", "position": 9})
+        by_group = production.save_service_front(self.admin["id"], {
+            "name": "FT.60", "group_id": group["id"], "display_style": "front", "units": ["NRD"]})
+        other_group = production.list_catalog(self.admin["id"], include_inactive=True)["groups"][0]
+        by_default = production.save_service_front(self.admin["id"], {
+            "name": "FT.61", "group_id": other_group["id"], "display_style": "front", "units": ["NRD"],
+            "default_operations": "509"})
+        production.save_items_sheet(self.user["id"], {"unit_code": "NRD", "work_date": DAY, "rows": [
+            {"service_front_id": by_group["id"], "sector": "3803", "status": self.status, "operation": ""},
+            {"service_front_id": by_default["id"], "sector": "3335", "status": self.status, "operation": ""}]})
+        fronts = {item["name"]: item for item in self.overview()["fronts"]}
+        self.assertEqual(set(fronts), {"FT.54", "FT.56", "FT.57", "FT.60", "FT.61"})
+        self.assertEqual((fronts["FT.60"]["orders"]["orders"], fronts["FT.60"]["flow_m3_ha"]), (["330537"], 35.0))
+        self.assertEqual((fronts["FT.61"]["orders"]["orders"][0], fronts["FT.61"]["fert_operations"]), ("332553", ["509"]))
+
+    def test_orders_imported_with_another_unit_selected_still_count(self):
+        # A base de O.S. é uma só: importar com PPT selecionado substitui a base de todas as unidades.
+        service_orders.import_service_orders(self.admin["id"], "PPT", [order("332553", "3335", SAME)])
+        self.assertEqual(self.front(self.overview(), 0)["orders"]["orders"], ["332553"])
+
+    def test_typed_radius_belongs_to_the_sector_and_base(self):
+        # Raio digitado no plano fica no setor + base: vale nos próximos dias, a correção atualiza o
+        # mesmo setor + base e a importação do RAIO mantém os digitados.
+        self.plan(2, params={"base": "CASA BRANCA", "radius_km": 44.2})
+        self.assertEqual(self.front(self.overview("2026-11-28"), 2)["radius_km"], 44.2)
+        self.plan(2, params={"base": "CASA BRANCA", "radius_km": 45})
+        fert.import_fert_radius(self.admin["id"], [{"sector": "870", "base": "BIE", "radius_km": 56}])
+        overview = self.overview()
+        self.assertEqual((self.front(overview, 2)["radius_km"], self.front(overview, 0)["radius_km"]), (45.0, 42.0))
+        # A frente que muda de setor não leva o raio do setor anterior.
+        self.plan(1, params={"base": "CASA BRANCA", "radius_km": 50})
+        self.assertEqual(self.front(self.overview(), 1)["radius_km"], 50.0)
+        self.entry(1, "3335", "509")
+        ft56 = self.front(self.overview(), 1)
+        self.assertEqual((ft56["sector"], ft56["base"], ft56["radius_km"]), ("3335", "CASA BRANCA", None))
+
     def test_pims_select_file_feeds_the_fert_panel(self):
         # Arquivo com as colunas do docs/select-os-fertirrigacao.sql: uma linha por talhão × componente
         # nas O.S. de fertirrigação, e a O.S. de outra operação sem componentes (colunas vazias).
