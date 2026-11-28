@@ -400,20 +400,29 @@ async function main() {
   assert.equal(weighted.atrUnits, 2);
   assert.equal(weighted.atrWeighted, true);
   assert(Math.abs(weighted.atr - (118.64 * 11763 + 128.41 * 16498) / 28261) < 1e-9);
-  // A amostra de PPT é de 25 t das 50 t processadas. Usa o ATR da carga antes de arredondar por unidade.
+  // A amostra de PPT é de 25 t das 50 t processadas: a amostra só define o ATR da unidade
+  // (100,005, sem arredondar); no geral cada unidade pesa pela moagem do dia, não pela amostra:
+  // (100,005 × 50 + 120,005 × 75) ÷ 125 = 112,005 (pela amostra daria 115,005).
   const sampledSummary = { reference_at: 1, units: [
-    { code: 'PPT', loads_day: 2, milling_day_t: 50, atr: 100, atr_weight_t: 25, atr_sample_kg: 2500.125 },
-    { code: 'NRD', loads_day: 1, milling_day_t: 75, atr: 120, atr_weight_t: 75, atr_sample_kg: 9000.375 }
+    { code: 'PPT', loads_day: 2, milling_day_t: 50, atr: 100.01, atr_weight_t: 25, atr_sample_kg: 2500.125 },
+    { code: 'NRD', loads_day: 1, milling_day_t: 75, atr: 120.01, atr_weight_t: 75, atr_sample_kg: 9000.375 }
   ] };
   const sampled = standalone.fieldIndicatorTotals([ppt, { ...ppt, code: 'NRD' }]
     .map(unit => standalone.fieldUnitIndicators(unit, sampledSummary)));
-  assert.equal(sampled.atr, 115.005);
-  assert.equal(standalone.fieldIndicatorNumber(sampled.atr, 2), '115,01');
-  // Sem processado do dia (só ATR digitado): média simples das unidades que têm ATR.
+  assert(Math.abs(sampled.atr - 112.005) < 1e-9);
+  assert.equal(standalone.fieldIndicatorNumber(sampled.atr, 2), '112,01');
+  // Correção digitada no ATR da unidade vale no geral, ponderada pela moagem dela.
+  const corrected2 = standalone.fieldIndicatorTotals([{ rows: [], active: 0, day: 50, atr: 110, atrWeight: 25, atrSample: null },
+    { rows: [], active: 0, day: 75, atr: 120, atrWeight: 75, atrSample: 9000 }]);
+  assert(Math.abs(corrected2.atr - (110 * 50 + 120 * 75) / 125) < 1e-9);
+  // Unidade sem moagem no dia não entra na média (não tem cana processada para pesar); sem moagem
+  // em nenhuma, não há ATR geral.
+  const noMilling = standalone.fieldIndicatorTotals([[118.64, 11763], [128.41, 0], [119.8, null]]
+    .map(([atr, day]) => ({ rows: [], active: 0, day, projection: null, atr })));
+  assert.deepEqual([noMilling.atr, noMilling.atrUnits, noMilling.atrWithoutMilling], [118.64, 1, 2]);
   const atrTotals = standalone.fieldIndicatorTotals([118.64, 128.41, 119.8, 113.78, null]
     .map(atr => ({ rows: [], active: 0, day: null, projection: null, atr })));
-  assert.equal(atrTotals.atrUnits, 4);
-  assert(Math.abs(atrTotals.atr - 120.1575) < 1e-9);  // 120,16 no modelo
+  assert.deepEqual([atrTotals.atr, atrTotals.atrUnits, atrTotals.atrWeighted, atrTotals.atrWithoutMilling], [null, 0, false, 4]);
   drawn.length = 0;
   await standalone.generateSacaroseReportImageBlob(['PPT'], { PPT: [{ front: '1', sector: '10' }], NRD: [{ front: '9', sector: '90' }] }, []);
   assert.deepEqual(drawn.map(item => item.code), ['PPT']);

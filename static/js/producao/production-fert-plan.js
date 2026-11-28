@@ -1,14 +1,15 @@
 // Fertirrigação: plano do dia da frente (popup). Depende de production-fert.js.
 
 // ---------------------------------------------------------------------------
-// Plano do dia da frente (popup): topo com os números da frente, abas Equipe / Local e O.S. /
-// Parâmetros e a prévia no rodapé. A Equipe mostra só os tratores e CVs da frente; o "+ Adicionar"
-// lista só o que pode entrar (disponíveis e, de outra frente, o que a regra permite) e o
-// "+ Cadastrar novo" cadastra o equipamento e já coloca na frente.
+// Configuração da frente (popup) em etapas: 1) Local — o que vem do sistema (setor, O.S., vazão,
+// recomendação) e o que o analista preenche (base e raio); 2) Equipe — só os tratores e CVs da
+// frente, com "+ Adicionar" (o que a regra permite) e "+ Cadastrar novo"; 3) Conferir — números da
+// frente e ajustes opcionais da conta. O topo mostra os números ao vivo.
 // ---------------------------------------------------------------------------
 let fertPlanSelection = { tractor: [], truck: [] };
 let fertPlanPicker = null;
 let fertPlanNewKind = null;
+const FERT_PLAN_STEPS = [['place', 'Local', 'base e raio'], ['team', 'Equipe', 'CVs e tratores'], ['params', 'Conferir', 'números e ajustes']];
 
 function fertKindLabel(kind, plural = false) {
   return kind === 'truck' ? (plural ? 'CVs' : 'CV') : (plural ? 'Tratores' : 'Trator');
@@ -129,8 +130,10 @@ function renderFertPreview() {
   head.innerHTML = `${kpi('CVs', `${calc.trucks} de ${calc.needed ?? '—'}`)}${fertBalanceHtml(calc.balance)}
     ${kpi('Tratores', calc.tractors)}${kpi('Área', `${fertNumber(calc.yieldHa, 1)} ha`)}${kpi('Volume', `${fertNumber(calc.volume, 0)} m³`)}
     ${kpi('Ciclo', calc.cycle !== null ? `${fertNumber(calc.cycle, 2)} h` : '—')}${kpi('Saída a cada', calc.interval !== null ? `${fertNumber(calc.interval, 0)} min` : '—')}`;
+  const done = { place: Boolean(state.base) && radius !== null && flow !== null, team: calc.trucks > 0 && calc.tractors > 0, params: calc.needed !== null };
+  document.querySelectorAll('#production-fert-plan-form [data-fert-plan-tab]').forEach(step => step.classList.toggle('is-done', done[step.dataset.fertPlanTab]));
   if (foot) foot.innerHTML = flow === null || radius === null
-    ? `<span class="fert-missing">Sem ${[flow === null ? 'vazão' : '', radius === null ? 'raio' : ''].filter(Boolean).join(' e ')}: veja a aba Local e O.S.</span>`
+    ? `<span class="fert-missing">Falta ${[flow === null ? 'a vazão' : '', radius === null ? 'o raio' : ''].filter(Boolean).join(' e ')}: etapa 1 (Local).</span>`
     : `<span>Necessários <b>${calc.needed}</b></span><span>Alocados <b>${calc.trucks}</b></span>${fertBalanceHtml(calc.balance)}`;
 }
 
@@ -138,11 +141,22 @@ function setFertPlanTab(tab) {
   document.querySelectorAll('#production-fert-plan-form [data-fert-plan-tab]').forEach(button => {
     const active = button.dataset.fertPlanTab === tab;
     button.classList.toggle('is-active', active);
-    button.setAttribute('aria-selected', String(active));
+    button.setAttribute('aria-current', active ? 'step' : 'false');
   });
   document.querySelectorAll('#production-fert-plan-form [data-fert-plan-panel]').forEach(panel => {
     panel.hidden = panel.dataset.fertPlanPanel !== tab;
   });
+  const index = FERT_PLAN_STEPS.findIndex(([key]) => key === tab);
+  const back = document.querySelector('#production-fert-plan-back');
+  const next = document.querySelector('#production-fert-plan-next');
+  if (back) back.hidden = index <= 0;
+  if (next) next.hidden = index >= FERT_PLAN_STEPS.length - 1;
+}
+
+function stepFertPlan(offset) {
+  const current = document.querySelector('#production-fert-plan-form [data-fert-plan-tab].is-active')?.dataset.fertPlanTab;
+  const index = FERT_PLAN_STEPS.findIndex(([key]) => key === current) + offset;
+  if (FERT_PLAN_STEPS[index]) setFertPlanTab(FERT_PLAN_STEPS[index][0]);
 }
 
 function openFertPlan(frontId) {
@@ -164,53 +178,66 @@ function openFertPlan(frontId) {
   const input = (name, label, unit, value, placeholder) => `<label class="field fert-field"><span>${escapeHtml(label)}</span>
       <div class="fert-input"><input name="${name}" ${name === 'radius_km' ? 'id="production-fert-radius"' : ''} inputmode="decimal" autocomplete="off"
         value="${escapeHtml(value ?? '')}" placeholder="${escapeHtml(placeholder)}" ${editable ? '' : 'disabled'} /><em>${escapeHtml(unit)}</em></div></label>`;
-  const tab = (key, label) => `<button type="button" role="tab" class="fert-plan-tab${key === 'team' ? ' is-active' : ''}" data-fert-plan-tab="${key}" aria-selected="${key === 'team'}">${label}</button>`;
+  const auto = (label, value) => `<div><dt>${escapeHtml(label)}</dt><dd>${value}</dd></div>`;
+  const firstStep = front.base && front.radius_km !== null ? 'team' : 'place';
   form.innerHTML = `<div class="fert-plan-head">
       <div class="fert-plan-place">
         <span class="pdash-status ${meta.className}">${escapeHtml(meta.name)}</span>
-        <strong>Setor ${escapeHtml(front.sector)}</strong>${front.farm ? `<span>${escapeHtml(front.farm)}</span>` : ''}
+        <strong>Setor ${escapeHtml(front.sector || '—')}</strong>${front.farm ? `<span>${escapeHtml(front.farm)}</span>` : ''}
         <span>${escapeHtml(front.base || 'sem base')} · ${front.radius_km !== null ? `${fertNumber(front.radius_km, 1)} km` : 'sem raio'}</span>
         ${orders.recommendation.length ? fertRecommendationShortHtml(orders.recommendation) : '<span class="fert-missing">sem recomendação na O.S.</span>'}
       </div>
       <div class="fert-plan-kpis" id="production-fert-plan-kpis" aria-live="polite"></div>
     </div>
-    <div class="fert-plan-tabs" role="tablist" aria-label="Plano da frente">
-      ${tab('team', 'Equipe')}${tab('place', 'Local e O.S.')}${tab('params', 'Parâmetros')}
+    <ol class="fert-steps" aria-label="Etapas da configuração">${FERT_PLAN_STEPS.map(([key, label, hint], index) => `<li>
+      <button type="button" class="fert-step${key === firstStep ? ' is-active' : ''}" data-fert-plan-tab="${key}" aria-current="${key === firstStep ? 'step' : 'false'}">
+        <i aria-hidden="true">${index + 1}</i><span><b>${label}</b><small>${hint}</small></span></button></li>`).join('')}</ol>
+    <div data-fert-plan-panel="place" class="fert-plan-panel"${firstStep === 'place' ? '' : ' hidden'}>
+      <section class="fert-fill">
+        <h3>Você preenche</h3>
+        <div class="fert-grid">
+          <label class="field fert-field"><span>Base de carregamento</span>
+            <select name="base" ${editable ? '' : 'disabled'}>
+              <option value="">Selecione</option>
+              ${hasCurrent ? `<option value="${escapeHtml(front.base)}" selected>${escapeHtml(front.base)}</option>` : ''}
+              ${bases.map(item => `<option value="${escapeHtml(item.base)}"${fertPlain(item.base) === fertPlain(front.base) ? ' selected' : ''}>${escapeHtml(item.base)}${item.radius_km != null ? ` · ${fertNumber(item.radius_km, 1)} km` : ''}</option>`).join('')}
+            </select></label>
+          ${input('radius_km', 'Raio do setor até a base', 'km', front.radius_km, 'Digite o raio')}
+        </div>
+        <p class="fert-meta">O raio fica guardado para este setor e base: na próxima vez que a frente vier para cá, ele já aparece.</p>
+      </section>
+      <section class="fert-auto">
+        <h3>Vem do sistema <small>lançamento da frente e O.S. do PIMS</small></h3>
+        <dl class="fert-os-grid">
+          ${auto('Setor', escapeHtml(front.sector || '—'))}${auto('Fazenda', escapeHtml(front.farm || '—'))}
+          ${auto('O.S.', escapeHtml(orders.orders.join(', ') || 'Sem O.S. de fertirrigação'))}${auto('Tratos', escapeHtml(orders.tratos || '—'))}
+          ${auto('Vazão', orders.flow_m3_ha !== null ? `${fertNumber(orders.flow_m3_ha, 0)} m³/ha` : '<span class="fert-missing">sem vazão na O.S.</span>')}
+          ${auto('Talhões', escapeHtml(orders.plots.join(', ') || '—'))}
+        </dl>
+        ${orders.recommendation.length ? `<ul class="fert-rec-list">${orders.recommendation.map(item => `<li>${escapeHtml(item.replace(/ = /, ' · ').replace(/ M3$/, ' m³/ha').replace(/ L$/, ' L/ha'))}</li>`).join('')}</ul>`
+          : '<p class="fert-missing">Sem componentes na O.S.: os CVs não podem trocar de frente.</p>'}
+        <details class="fert-more"${front.flow_source === 'plano' || orders.flow_m3_ha === null ? ' open' : ''}><summary>Corrigir a vazão${orders.flow_m3_ha === null ? ' (obrigatório sem O.S.)' : ''}</summary>
+          <div class="fert-grid">${input('flow_m3_ha', 'Vazão', 'm³/ha', front.flow_source === 'plano' ? front.flow_m3_ha : '', orders.flow_m3_ha !== null ? `${fertNumber(orders.flow_m3_ha, 0)} (O.S.)` : 'Informe a vazão')}</div>
+        </details>
+      </section>
     </div>
-    <div data-fert-plan-panel="team" class="fert-plan-panel" id="production-fert-team"></div>
-    <div data-fert-plan-panel="place" class="fert-plan-panel" hidden>
-      <div class="fert-grid">
-        <label class="field fert-field"><span>Base de carregamento</span>
-          <select name="base" ${editable ? '' : 'disabled'}>
-            <option value="">Selecione</option>
-            ${hasCurrent ? `<option value="${escapeHtml(front.base)}" selected>${escapeHtml(front.base)}</option>` : ''}
-            ${bases.map(item => `<option value="${escapeHtml(item.base)}"${fertPlain(item.base) === fertPlain(front.base) ? ' selected' : ''}>${escapeHtml(item.base)} · ${item.radius_km != null ? `${fertNumber(item.radius_km, 1)} km` : 'sem raio'}</option>`).join('')}
-          </select></label>
-        ${input('radius_km', 'Raio do setor até a base', 'km', front.radius_km, 'Digite o raio')}
-        ${input('flow_m3_ha', 'Vazão (correção)', 'm³/ha', front.flow_source === 'plano' ? front.flow_m3_ha : '', orders.flow_m3_ha !== null ? `${fertNumber(orders.flow_m3_ha, 0)} (O.S.)` : 'Informe a vazão')}
-      </div>
-      <dl class="fert-os-grid">
-        <div><dt>O.S.</dt><dd>${escapeHtml(orders.orders.join(', ') || 'Sem O.S. de fertirrigação')}</dd></div>
-        <div><dt>Tratos</dt><dd>${escapeHtml(orders.tratos || '-')}</dd></div>
-        <div><dt>Talhões</dt><dd>${escapeHtml(orders.plots.join(', ') || '-')}</dd></div>
-      </dl>
-      ${orders.recommendation.length ? `<ul class="fert-rec-list">${orders.recommendation.map(item => `<li>${escapeHtml(item.replace(/ = /, ' · ').replace(/ M3$/, ' m³/ha').replace(/ L$/, ' L/ha'))}</li>`).join('')}</ul>`
-        : '<p class="fert-missing">Sem componentes na O.S.: os CVs não podem trocar de frente.</p>'}
-    </div>
+    <div data-fert-plan-panel="team" class="fert-plan-panel" id="production-fert-team"${firstStep === 'team' ? '' : ' hidden'}></div>
     <div data-fert-plan-panel="params" class="fert-plan-panel" hidden>
-      <p class="fert-meta">Em branco vale o padrão da planilha.</p>
-      <div class="fert-grid">${FERT_PARAM_FIELDS.map(([key, label, unit]) => input(key, label, unit, front.params[key], fertNumber(fertData.defaults[key], 2))).join('')}
-        ${input('gas_pct_per_trip', 'Gás por viagem (CV a gás)', '% tanque', front.params.gas_pct_per_trip,
-          front.radius_km ? `${fertNumber(front.radius_km * 0.85, 1)} (raio × 0,85)` : 'raio × 0,85')}
-        <label class="field fert-field"><span>Espaçamento</span>
-          <select name="spacing" ${editable ? '' : 'disabled'}>${Object.entries(FERT_SPACINGS).map(([key, item]) =>
-            `<option value="${key}"${front.spacing === key ? ' selected' : ''}>${escapeHtml(item.label)}</option>`).join('')}</select></label>
-      </div>
-      <label class="fert-check"><input type="checkbox" name="round_trip" ${front.params.round_trip ? 'checked' : ''} ${editable ? '' : 'disabled'} />
-        Bate/volta (descarregamento ${fertNumber(fertData.defaults.unload_round_trip_h, 1)} h)</label>
-      <label class="fert-check"><input type="checkbox" name="ha_mode" ${front.ha_mode === 'speed' ? 'checked' : ''} ${editable ? '' : 'disabled'} />
-        Calcular ha/hora pela velocidade da vazão</label>
-      <p class="fert-meta" id="production-fert-speed-hint"></p>
+      <p class="fert-meta">Os números no topo são o resultado da frente. Os ajustes abaixo são opcionais: em branco vale o padrão da planilha.</p>
+      <details class="fert-more"><summary>Ajustes da conta (opcional)</summary>
+        <div class="fert-grid">${FERT_PARAM_FIELDS.map(([key, label, unit]) => input(key, label, unit, front.params[key], fertNumber(fertData.defaults[key], 2))).join('')}
+          ${input('gas_pct_per_trip', 'Gás por viagem (CV a gás)', '% tanque', front.params.gas_pct_per_trip,
+            front.radius_km ? `${fertNumber(front.radius_km * 0.85, 1)} (raio × 0,85)` : 'raio × 0,85')}
+          <label class="field fert-field"><span>Espaçamento</span>
+            <select name="spacing" ${editable ? '' : 'disabled'}>${Object.entries(FERT_SPACINGS).map(([key, item]) =>
+              `<option value="${key}"${front.spacing === key ? ' selected' : ''}>${escapeHtml(item.label)}</option>`).join('')}</select></label>
+        </div>
+        <label class="fert-check"><input type="checkbox" name="round_trip" ${front.params.round_trip ? 'checked' : ''} ${editable ? '' : 'disabled'} />
+          Bate/volta (descarregamento ${fertNumber(fertData.defaults.unload_round_trip_h, 1)} h)</label>
+        <label class="fert-check"><input type="checkbox" name="ha_mode" ${front.ha_mode === 'speed' ? 'checked' : ''} ${editable ? '' : 'disabled'} />
+          Calcular ha/hora pela velocidade da vazão</label>
+        <p class="fert-meta" id="production-fert-speed-hint"></p>
+      </details>
     </div>`;
   document.querySelector('#production-fert-plan-save').hidden = !editable;
   const status = document.querySelector('#production-fert-plan-status');
@@ -218,6 +245,7 @@ function openFertPlan(frontId) {
   status.textContent = front.plan_carried ? `Plano copiado de ${formatIsoDateBr(front.plan_date)}: salve para confirmar o dia.`
     : front.plan_updated_at ? `Atualizado ${fertTime(front.plan_updated_at)}${front.plan_updated_by ? ` por ${front.plan_updated_by}` : ''}.` : '';
   renderFertTeam();
+  setFertPlanTab(firstStep);
   openModal('production-fert-plan-modal');
 }
 
@@ -276,6 +304,8 @@ async function saveFertPlan(event) {
 }
 
 document.querySelector('#production-fert-plan-form')?.addEventListener('submit', saveFertPlan);
+document.querySelector('#production-fert-plan-back')?.addEventListener('click', () => stepFertPlan(-1));
+document.querySelector('#production-fert-plan-next')?.addEventListener('click', () => stepFertPlan(1));
 document.querySelector('#production-fert-plan-form')?.addEventListener('input', renderFertPreview);
 // Trocar a base traz o raio já guardado do setor até ela (ou deixa em branco para digitar).
 document.querySelector('#production-fert-plan-form')?.addEventListener('change', event => {

@@ -329,11 +329,10 @@ button.pdash-kpi.is-active { color: #e0e0e0; }
 .fert-products { color: #cbcbcb; }
 .fert-params summary { color: #adadad; }
 .fert-check { color: #cbcbcb; }
-.fert-fleet-columns h3, .fert-radius-box h3 { color: #adadad; }
+.fert-fleet-columns h3 { color: #adadad; }
 .fert-fleet-columns h3 small { background: #232323; }
 .fert-fleet-list li { background: #2a2a2a; }
 .fert-fleet-list li + li { border-top: 1px solid #414141; }
-.fert-radius-box p { color: #cbcbcb; }
 .fert-status { background: #232323; color: #adadad; }
 .fert-status.is-available { background: #1c2227; color: #8fb8d7; }
 .fert-status.is-inactive { background: #212121; color: #999999; }
@@ -365,9 +364,6 @@ button.pdash-kpi.is-active { color: #e0e0e0; }
 .fert-week-cell button, .fert-week-cell > div { background: #2a2a2a; }
 .fert-week-cvs { background: #1c2227; color: #609cd2; }
 .fert-plan-head { background: #2a2a2a; }
-.fert-plan-tab { color: #999999; }
-.fert-plan-tab:hover { color: #e0e0e0; }
-.fert-plan-tab.is-active { border-bottom-color: #35a167; color: #e0e0e0; }
 .fert-team-block { background: #2a2a2a; }
 .fert-team-block h3 { color: #adadad; }
 .fert-team-block h3 small { background: #232323; color: #adadad; }
@@ -379,5 +375,35 @@ button.pdash-kpi.is-active { color: #e0e0e0; }
 .fert-pick { background: #2a2a2a; }
 .fert-new { border: 1px solid #43494e; background: #272727; }
 .fert-plan-foot-preview { color: #cbcbcb; }
+.fert-view-tabs button { color: #999999; }
+.fert-view-tabs button:hover { color: #e0e0e0; }
+.fert-view-tabs button.is-active { border-bottom-color: #35a167; color: #e0e0e0; }
+.fert-legend { color: #cbcbcb; }
+.fert-dispatch { --cv-loading: #bd9137; --cv-loaded: #309273; --cv-unloading: #306fa7; --cv-empty: #3d3d3d; }
+.fert-col.is-pool { border-top-color: #616161; background: #2a2a2a; }
+.fert-col-count { background: #212121; color: #adadad; }
+.fert-col-meter { color: #cbcbcb; }
+.fert-meter { background: linear-gradient(90deg, var(--status-ok) var(--fill), #323232 var(--fill)); }
+.fert-col.is-short .fert-meter { background: linear-gradient(90deg, var(--status-stop) var(--fill), #323232 var(--fill)); }
+.fert-col-cv { background: #2a2a2a; }
+.fert-col-cv:hover { border-color: #4e585c; }
+.fert-col-gas { background: #1c2227; color: #609cd2; }
+.fert-col-empty { border: 1px dashed #4f4f4f; }
+.fert-cv.is-idle { background: #3d3d3d; }
+.fert-recipe.is-none { background: #212121; color: #999999; }
+.fert-recipe.is-r0 { background: #1a2420; color: #9ce4cd; }
+.fert-recipe.is-r1 { background: #1c2227; color: #609cd2; }
+.fert-recipe.is-r2 { background: #25221b; color: #e2c48d; }
+.fert-recipe.is-r3 { background: #231c27; color: #ab7ac8; }
+.fert-recipe.is-r4 { background: #291d1f; color: #d26871; }
+.fert-recipe.is-r5 { background: #1c2627; color: #8fdae2; }
+.fert-step { background: #2a2a2a; }
+.fert-step i { background: #212121; color: #adadad; }
+.fert-step.is-done i { color: #ffffff; }
+.fert-step.is-active { border-color: #35a167; }
+.fert-step.is-active i { background: #30925d; color: #ffffff; }
+.fert-fill { border-color: #44504a; background: #262626; }
+.fert-fill h3, .fert-auto h3 { color: #adadad; }
+.fert-more > summary { color: #609cd2; }
 .production-primary-button.pdash-action { background: linear-gradient(135deg, #3f6f7a 0%, #1b3a41 100%); }
 .production-primary-button.pdash-action:hover:not(:disabled) { background: linear-gradient(135deg, #4a7c87 0%, #22474e 100%); }

@@ -1,4 +1,4 @@
-// Fertirrigação: frota (quadro do dia, ficha do CV, cadastro) e raio setor × base. Depende de production-fert.js.
+// Fertirrigação: frota (quadro do dia, ficha do CV e cadastro). Depende de production-fert.js.
 
 // Gás do CV: % do tanque (editável pelo analista) e as viagens que ainda faz no raio da frente.
 function fertGasHtml(item, editable) {
@@ -33,7 +33,7 @@ function renderFertBoard() {
         <button type="button" role="tab" data-fert-kind="tractor" aria-selected="${fertFleetKind === 'tractor'}" class="${fertFleetKind === 'tractor' ? 'is-active' : ''}">Tratores <small>${fertData.equipment.filter(item => item.kind === 'tractor').length}</small></button>
       </div>
     </header>
-    <div class="fert-status-strip">${chips || '<span class="fert-meta">Nenhum cadastrado. Use “Frota e raio”.</span>'}</div>
+    <div class="fert-status-strip">${chips || '<span class="fert-meta">Nenhum cadastrado. Use “Cadastro da frota”.</span>'}</div>
     ${items.length ? `<div class="fert-table-scroll"><table class="fert-table fert-board-table">
       <thead><tr><th>Prefixo</th><th>Situação</th><th>Frente</th>${fertFleetKind === 'truck' ? '<th>Combustível</th><th>Recomendação</th>' : ''}<th>Última mudança</th></tr></thead>
       <tbody>${items.map(item => `<tr class="is-${item.status}">
@@ -47,6 +47,19 @@ function renderFertBoard() {
         <td><small>${item.status_changed_at ? `${escapeHtml(fertTime(item.status_changed_at))}${item.status_changed_by ? ` · ${escapeHtml(item.status_changed_by)}` : ''}` : '—'}</small></td>
       </tr>`).join('')}</tbody></table></div>` : ''}`;
   applyFertGasBars(board);
+}
+
+// Destinos que a regra permite: qualquer frente para quem está livre; de uma frente para outra só
+// com a mesma receita (CV); "Disponível" libera.
+function fertAllocateSelectHtml(item, front) {
+  const key = front?.orders.recommendation_key || '';
+  const targets = fertData.fronts.filter(entry => entry.service_front_id !== front?.service_front_id
+    && (!front || item.kind !== 'truck' || (key && entry.orders.recommendation_key === key)));
+  return `<select data-fert-allocate="${item.id}" aria-label="Alocar ${escapeHtml(item.prefix)} em">
+      <option value="">${front ? 'Manter na frente' : 'Escolha a frente'}</option>
+      ${targets.map(entry => `<option value="${entry.service_front_id}">${escapeHtml(entry.name)} · setor ${escapeHtml(entry.sector || '—')}</option>`).join('')}
+      ${front ? '<option value="pool">Disponível (tirar da frente)</option>' : ''}
+    </select>`;
 }
 
 // Ficha do CV (clique no CV): situação, frente, etapa do ciclo, gás, recomendação e histórico do dia.
@@ -67,6 +80,7 @@ function openFertCv(equipmentId) {
       ${stat('Situação', editable ? `<select data-fert-status="${item.id}" aria-label="Situação">${Object.entries(FERT_STATUS_LABELS)
         .map(([key, label]) => `<option value="${key}"${item.status === key ? ' selected' : ''}>${label}</option>`).join('')}</select>` : fertStatusBadge(item.status))}
       ${stat('Frente', front ? `<button type="button" class="fert-link" data-fert-open-front="${front.service_front_id}">${escapeHtml(front.name)} · setor ${escapeHtml(front.sector)}</button>` : 'Sem frente')}
+      ${editable && ['active', 'available'].includes(item.status) ? stat('Alocar em', fertAllocateSelectHtml(item, front)) : ''}
       ${stat('Agora (estimado)', escapeHtml(stageText))}
       ${stat('Base · raio', front ? `${escapeHtml(front.base || '—')} · ${front.radius_km !== null ? `${fertNumber(front.radius_km, 1)} km` : '—'}` : '—')}
       ${item.kind === 'truck' ? stat('Gás', fertGasHtml(item, editable)) : ''}
@@ -115,16 +129,7 @@ function renderFertFleet() {
     <div class="fert-fleet-columns">
       <section><h3>CVs <small>${count('truck')}</small></h3>${list('truck')}</section>
       <section><h3>Tratores <small>${count('tractor')}</small></h3>${list('tractor')}</section>
-    </div>
-    <section class="fert-radius-box">
-      <h3>Raio setor × base</h3>
-      <p>${fertData.radius.sectors ? `${fertData.radius.sectors} setores com raio${fertData.radius.imported_at ? ` · importado em ${escapeHtml(fertTime(fertData.radius.imported_at))}` : ''}.` : 'Nenhum raio importado.'}
-        Use a aba RAIO da planilha (SETOR, FAZENDA, MUNICIPIO, BASE CARREGAMENTO e RAIO), exportada em um arquivo só.</p>
-      ${fertData.permissions.configure ? `<form id="production-fert-radius-form" class="fert-radius-form">
-        <input name="file" type="file" accept=".xlsx,.xlsm" required aria-label="Arquivo com o raio" />
-        <button class="production-secondary-button" type="submit">Importar raio</button>
-      </form>` : '<p class="fert-meta">A importação do raio é feita por quem configura a Produção.</p>'}
-    </section>`;
+    </div>`;
 }
 
 async function fertEquipmentRequest(url, options, success) {
@@ -164,20 +169,6 @@ document.querySelector('#production-fert-fleet-body')?.addEventListener('submit'
     await fertEquipmentRequest('/api/production/fert/equipment', { method: 'POST',
       body: JSON.stringify({ ...data, unit_code: unit, work_date: fertData.work_date }) },
       `${data.kind === 'truck' ? 'CV' : 'Trator'} ${data.prefix} cadastrado.`);
-    return;
-  }
-  if (form.id === 'production-fert-radius-form') {
-    const file = form.querySelector('[type="file"]').files?.[0];
-    if (!file) return;
-    const body = new FormData();
-    body.append('file', file, file.name);
-    try {
-      const result = await apiRequest(`/api/production/fert/radius/import?unit=${encodeURIComponent(unit)}`, { method: 'POST', body });
-      showToast(`Raio importado: ${result.imported} linhas, ${result.sectors} setores.`);
-    } catch (error) {
-      showToast(error.message || 'Não foi possível importar o raio.', true);
-    }
-    await loadFertOverview();
   }
 });
 document.querySelector('#production-fert-fleet-body')?.addEventListener('click', async event => {

@@ -180,7 +180,7 @@ def sector_place(conn: sqlite3.Connection, sector: str, base: str) -> dict[str, 
 
 def save_sector_radius(conn: sqlite3.Connection, sector: str, base: str, radius_km: float, user_id: int,
                        *, farm: str = "", municipality: str = "") -> None:
-    """Raio de um setor até uma base (digitado no plano ou importado). A mesma base escrita de
+    """Raio de um setor até uma base (digitado no plano da frente). A mesma base escrita de
     outro jeito ("BIE"/"BIÉ") atualiza a linha que já existe."""
     _, sector_key = _keys()
     key = sector_key(sector)

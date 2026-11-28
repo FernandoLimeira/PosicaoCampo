@@ -18,7 +18,8 @@ const PAGE_SCRIPTS = {
   '/producao': [...BASE_SCRIPTS, 'producao/production-status-groups.js', 'producao/production-consolidation.js', 'producao/production-config.js',
     'producao/production-entry.js', 'producao/producao.js', 'producao/service-orders.js', 'producao/production-sheet.js', 'producao/production-dashboard.js',
     'producao/production-catalog.js', 'producao/production-queries.js', 'producao/production-fert.js',
-    'producao/production-fert-week.js', 'producao/production-fert-plan.js', 'producao/production-fert-fleet.js'],
+    'producao/production-fert-week.js', 'producao/production-fert-plan.js', 'producao/production-fert-fleet.js',
+    'producao/production-fert-dispatch.js'],
   // Os dois scripts da Produção Agrícola só entram para quem tem acesso a ela.
   '/emitir-posicao-global': [...BASE_SCRIPTS, 'core/field-fronts.js', 'core/field-indicators.js', 'reports-export/shared-drawing.js',
     'reports-export/field-report-data.js', 'reports-export/global-report.js', 'reports-export/sacarose-export.js',

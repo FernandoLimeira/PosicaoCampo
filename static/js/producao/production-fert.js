@@ -132,7 +132,7 @@ function renderFertKpis() {
 function renderFertFronts() {
   const body = document.querySelector('#production-fert-body');
   const meta = document.querySelector('#production-fert-meta');
-  if (meta) meta.textContent = `${fertData.totals.fronts} ${fertData.totals.fronts === 1 ? 'frente' : 'frentes'} · ${formatIsoDateBr(fertData.work_date)} · clique na frente para planejar e mover CVs`;
+  if (meta) meta.textContent = `${fertData.totals.fronts} ${fertData.totals.fronts === 1 ? 'frente' : 'frentes'} · ${formatIsoDateBr(fertData.work_date)} · clique na frente para configurar`;
   body.innerHTML = fertData.fronts.map(front => {
     const calc = front.calc;
     const missing = calc.trucks_needed === null
@@ -266,6 +266,7 @@ function renderFertCycle() {
 function renderFertOverview() {
   if (!fertData || !document.querySelector('#production-fert-body')) return;
   renderFertKpis();
+  renderFertDispatch();
   renderFertCycle();
   renderFertFronts();
   renderFertWeek();
@@ -278,7 +279,7 @@ function showFertMessage(message) {
   if (!box) return;
   box.textContent = message;
   box.hidden = !message;
-  for (const selector of ['#production-fert-kpis', '#production-fert-cycle', '.fert-section', '#production-fert-week', '#production-fert-board', '#production-fert-events']) {
+  for (const selector of ['#production-fert-kpis', '#production-fert-views']) {
     const element = document.querySelector(selector);
     if (element) element.hidden = Boolean(message);
   }

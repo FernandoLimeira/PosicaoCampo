@@ -14,7 +14,7 @@ from ..common import _normalize_work_date
 from .common import (
     ALLOCATABLE_STATUSES, EQUIPMENT_KINDS, EQUIPMENT_STATUSES, base_key, fert_unit, plan_params, unit_equipment,
 )
-from .sources import OrderBook, base_options, fert_items, front_operations, read_plans
+from .sources import OrderBook, base_options, fert_items, front_operations, read_plans, sector_place
 from .week import week_plan
 
 
@@ -38,7 +38,9 @@ def _front(conn: sqlite3.Connection, unit: str, selected_date: str, front_id: in
                      tratos=orders["tratos"], round_trip=bool(plan.get("round_trip")), **params)
     return {
         "service_front_id": front_id, "item_id": int(entry["item_id"]), "name": entry["front_name"],
-        "sector": entry["sector"], "section": entry.get("section") or "", "farm": entry.get("farm") or "",
+        "sector": entry["sector"], "section": entry.get("section") or "",
+        # Fazenda: a do lançamento; sem ela, a do raio do setor ou a da base de setores.
+        "farm": entry.get("farm") or (sector_place(conn, entry["sector"], base)["farm"] if entry["sector"] else ""),
         "status": entry.get("status") or "", "operation": entry.get("operation") or "",
         "is_current_day": entry["work_date"] == selected_date,
         "orders": orders, "base_options": bases, "base": base,

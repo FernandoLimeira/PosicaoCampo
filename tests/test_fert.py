@@ -10,7 +10,8 @@ from backend.models import database as db
 from backend.models import production
 from backend.models import service_orders
 from backend.models.production import fert
-from backend.services.fert_radius_import import parse_radius_file, parse_radius_rows
+from backend.models.production.fert.sources import save_sector_radius
+from backend.models.storage import connection
 from tests.test_service_orders import xlsx
 
 DAY = "2026-11-27"
@@ -65,12 +66,10 @@ class FertTests(unittest.TestCase):
             order("332553", "3335", SAME), order("330537", "3803", SAME), order("330133", "870", OTHER),
             order("300000", "3335", OTHER, opened_on="2026-10-01"),  # O.S. antiga do setor: não vale
         ])
-        fert.import_fert_radius(self.admin["id"], parse_radius_rows([
-            ["SETOR", "FAZENDA", "MUNICIPIO", "BASE CARREGAMENTO", "RAIO SGPA (km)"],
-            ["3335", "EL SHADDAI", "NARANDIBA", "SANTA CRUZ", "42"],
-            ["870", "OSCAR ANTUNE", "IEPE", "BIE", "55,84"],
-            ["870", "OSCAR ANTUNE", "IEPE", "SANTA CRUZ", "44.98"],
-        ]))
+        with connection() as conn:
+            for sector, base, radius, farm in (("3335", "SANTA CRUZ", 42, "EL SHADDAI"), ("870", "BIE", 55.84, "OSCAR ANTUNE"),
+                                               ("870", "SANTA CRUZ", 44.98, "OSCAR ANTUNE")):
+                save_sector_radius(conn, sector, base, radius, self.admin["id"], farm=farm)
 
     def equipment(self, kind, prefix, **extra):
         return fert.save_fert_equipment(self.user["id"], {"unit_code": "NRD", "kind": kind, "prefix": prefix,
@@ -293,12 +292,11 @@ class FertTests(unittest.TestCase):
         self.assertEqual(self.front(self.overview(), 0)["orders"]["orders"], ["332553"])
 
     def test_typed_radius_belongs_to_the_sector_and_base(self):
-        # Raio digitado no plano fica no setor + base: vale nos próximos dias, a correção atualiza o
-        # mesmo setor + base e a importação do RAIO mantém os digitados.
+        # Raio digitado no plano fica no setor + base: vale nos próximos dias e a correção atualiza o
+        # mesmo setor + base (sem mexer no raio dos outros setores).
         self.plan(2, params={"base": "CASA BRANCA", "radius_km": 44.2})
         self.assertEqual(self.front(self.overview("2026-11-28"), 2)["radius_km"], 44.2)
         self.plan(2, params={"base": "CASA BRANCA", "radius_km": 45})
-        fert.import_fert_radius(self.admin["id"], [{"sector": "870", "base": "BIE", "radius_km": 56}])
         overview = self.overview()
         self.assertEqual((self.front(overview, 2)["radius_km"], self.front(overview, 0)["radius_km"]), (45.0, 42.0))
         # A frente que muda de setor não leva o raio do setor anterior.
@@ -339,8 +337,6 @@ class FertTests(unittest.TestCase):
     def test_permissions_units_and_validation(self):
         with self.assertRaises(PermissionError):
             fert.save_fert_equipment(self.viewer["id"], {"unit_code": "NRD", "kind": "truck", "prefix": "700"})
-        with self.assertRaises(PermissionError):
-            fert.import_fert_radius(self.user["id"], [{"sector": "1", "base": "BIE", "radius_km": 10}])
         with self.assertRaisesRegex(ValueError, "Polo SP"):
             fert.fert_overview(self.admin["id"], "PST", DAY)
         self.assertEqual(fert.fert_overview(self.viewer["id"], "NRD", DAY)["permissions"], {"edit": False, "configure": False})
@@ -353,17 +349,36 @@ class FertTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 self.plan(0, **bad)
 
-    def test_radius_file_import(self):
-        parsed = parse_radius_file(xlsx([
-            ["SETOR", "FAZENDA", "MUNICIPIO", "BASE CARREGAMENTO", "RAIO SGPA (km)"],
-            ["819", "FADEL", "NANTES", "BIE", "46.6"], ["859", "BELA VISTA", "", "", ""],
-        ]), "raio.xlsx")
-        self.assertEqual(parsed["records"], [{"sector": "819", "base": "BIE", "radius_km": 46.6, "farm": "FADEL", "municipality": "NANTES"}])
-        with self.assertRaisesRegex(ValueError, "SETOR, BASE CARREGAMENTO e RAIO"):
-            parse_radius_file(xlsx([["A", "B"], ["1", "2"]]), "x.xlsx")
+    def allocate(self, equipment_id, index=None):
+        return fert.allocate_fert_equipment(self.user["id"], {
+            "unit_code": "NRD", "work_date": DAY, "equipment_id": equipment_id,
+            "service_front_id": None if index is None else self.fronts[index]["id"]})
+
+    def test_dispatch_board_allocates_moves_and_releases(self):
+        truck = self.equipment("truck", "612")
+        self.plan(0, params={"base": "SANTA CRUZ", "hours": 5, "round_trip": True})
+        # Arrastar do "Disponíveis" para a FT.54: aloca sem mexer na base e nos parâmetros da frente.
+        self.allocate(truck, 0)
+        ft54 = self.front(self.overview(), 0)
+        self.assertEqual((ft54["trucks"], ft54["base"], ft54["params"]["hours"], ft54["params"]["round_trip"]),
+                         ([truck], "SANTA CRUZ", 5, True))
+        # Para a FT.57 (mesma receita) muda de frente; para a FT.56 (outra receita) não.
+        self.assertEqual(self.allocate(truck, 2)["moved"], 1)
+        with self.assertRaisesRegex(ValueError, "a recomendação é diferente"):
+            self.allocate(truck, 1)
+        # Arrastar de volta para "Disponíveis" libera o CV.
+        self.assertTrue(self.allocate(truck)["released"])
+        overview = self.overview()
+        item = next(entry for entry in overview["equipment"] if entry["id"] == truck)
+        self.assertEqual((self.front(overview, 2)["trucks"], item["front"], item["status"]), ([], None, "available"))
+        with self.assertRaisesRegex(ValueError, "já está disponível"):
+            self.allocate(truck)
+        with self.assertRaisesRegex(ValueError, "não está com fertirrigação"):
+            self.allocate(truck, 3)
+
+    def test_base_names(self):
         self.assertEqual({fert.base_key(name) for name in ("BASE STA CRUZ", "Santa Cruz", "SANTA CRUZ")}, {"SANTA CRUZ"})
         self.assertEqual(fert.base_key("BIÉ"), fert.base_key("BIE"))
-
 
 if __name__ == "__main__":
     unittest.main()

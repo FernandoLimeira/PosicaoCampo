@@ -13,12 +13,10 @@ from ...models.service_orders import (
     save_operation,
 )
 from ...services.service_order_import import MAX_SERVICE_ORDER_UPLOAD_BYTES, parse_service_order_file
-from ...services.fert_radius_import import MAX_RADIUS_UPLOAD_BYTES, parse_radius_file
 from ...models.production.fert import (
+    allocate_fert_equipment,
     delete_fert_equipment,
     fert_overview,
-    import_fert_radius,
-    require_fert_radius_import,
     save_fert_equipment,
     save_fert_plan,
     save_fert_settings,
@@ -79,6 +77,11 @@ def handle(req):
             return req.unauthorized()
         return req.guarded(lambda: req.json(HTTPStatus.OK, save_fert_plan(user["id"], req.body())))
 
+    if path == "/api/production/fert/allocate" and method == "PUT":
+        if not user:
+            return req.unauthorized()
+        return req.guarded(lambda: req.json(HTTPStatus.OK, allocate_fert_equipment(user["id"], req.body())))
+
     if path == "/api/production/fert/week" and method == "PUT":
         if not user:
             return req.unauthorized()
@@ -106,19 +109,6 @@ def handle(req):
             return req.json(HTTPStatus.OK, {"ok": True})
 
         return req.guarded(fert_equipment)
-
-    if path == "/api/production/fert/radius/import" and method == "POST":
-        if not user:
-            return req.unauthorized()
-
-        def import_radius():
-            # Permissão conferida antes de ler o arquivo enviado.
-            require_fert_radius_import(user["id"])
-            filename, file_bytes = _multipart_file(req.environ, max_file_bytes=MAX_RADIUS_UPLOAD_BYTES)
-            parsed = parse_radius_file(file_bytes, filename)
-            return req.json(HTTPStatus.OK, {"ok": True, **import_fert_radius(user["id"], parsed["records"]), "sheet": parsed["sheet"]})
-
-        return req.guarded(import_radius, bad_request=ValueError)
 
     if path == "/api/production/service-orders" and method == "GET":
         if not user:

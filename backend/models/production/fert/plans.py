@@ -84,8 +84,56 @@ class _Move:
                              f"({' + '.join(theirs['recommendation'])} × {' + '.join(mine['recommendation'])}).")
 
 
+def _apply_plan(conn: sqlite3.Connection, unit: str, work_date: str, front: int, stored: dict[str, Any],
+                user_id: int) -> tuple[set[int], _Move]:
+    """Grava o plano da frente: confere a frota, faz as trocas de frente (CV só com a mesma
+    recomendação), atualiza a situação dos equipamentos e registra o histórico."""
+    names = front_names(conn)
+    equipment = {item["id"]: item for item in unit_equipment(conn, unit)}
+    plans = read_plans(conn, unit, work_date)
+    move = _Move(conn, unit, work_date, names)
+    previous = set(plan_equipment(plans.get(front, {})))
+    taken_from: dict[int, set[int]] = {}
+    moved: set[int] = set()
+    for ids, kind in ((stored["tractors"], "tractor"), (stored["trucks"], "truck")):
+        for item_id in ids:
+            item = equipment.get(item_id)
+            if not item or item["kind"] != kind:
+                raise ValueError("Equipamento não encontrado na frota da unidade.")
+            if item_id not in previous and item["status"] not in ALLOCATABLE_STATUSES:
+                raise ValueError(f"{EQUIPMENT_KINDS[kind]} {item['prefix']} está em "
+                                 f"{EQUIPMENT_STATUSES[item['status']].lower()}: mude a situação antes.")
+            for owner, plan in plans.items():
+                if owner == front or item_id not in plan_equipment(plan):
+                    continue
+                if owner in move.items:  # frente com fertirrigação no dia: troca de frente conferida
+                    if kind == "truck":
+                        move.check_truck(item, owner, front)
+                    moved.add(item_id)
+                taken_from.setdefault(owner, set()).add(item_id)
+    # Tira da frente de origem (no plano do dia) o que veio para esta.
+    for owner, ids in taken_from.items():
+        write_plan(conn, unit, work_date, owner, without_equipment(plans[owner], ids), user_id)
+        for item_id in ids & moved:
+            log_event(conn, unit, work_date, user_id, equipment[item_id], "move",
+                      f"{names.get(owner, owner)} → {names.get(front, front)}")
+    selected = set(stored["tractors"]) | set(stored["trucks"])
+    for item_id in selected - previous - moved:
+        log_event(conn, unit, work_date, user_id, equipment[item_id], "allocate", f"Alocado na {names.get(front, front)}")
+    for item_id in previous - selected:
+        if item_id in equipment:
+            log_event(conn, unit, work_date, user_id, equipment[item_id], "release", f"Saiu da {names.get(front, front)}")
+            if equipment[item_id]["status"] == "active":
+                set_status(conn, equipment[item_id], "available", user_id)
+    for item_id in selected:
+        if equipment[item_id]["status"] == "available":
+            set_status(conn, equipment[item_id], "active", user_id)
+    write_plan(conn, unit, work_date, front, stored, user_id)
+    return moved, move
+
+
 def save_fert_plan(user_id: int, payload: Any) -> dict[str, Any]:
-    """Grava o plano do dia da frente, com as trocas de frente e o histórico."""
+    """Grava o plano do dia da frente (popup), com as trocas de frente e o histórico."""
     clean = _clean_plan(payload)
     unit, work_date, front, stored = clean["unit"], clean["work_date"], clean["front"], clean["plan"]
     with connection() as conn:
@@ -93,50 +141,57 @@ def save_fert_plan(user_id: int, payload: Any) -> dict[str, Any]:
         _require_access(conn, user_id, permission="fill", unit=unit)
         validate_actor(conn, user_id)
         require_unit_front(conn, front, unit)
-        names = front_names(conn)
-        equipment = {item["id"]: item for item in unit_equipment(conn, unit)}
-        plans = read_plans(conn, unit, work_date)
-        move = _Move(conn, unit, work_date, names)
-        previous = set(plan_equipment(plans.get(front, {})))
-        taken_from: dict[int, set[int]] = {}
-        moved: set[int] = set()
-        for ids, kind in ((stored["tractors"], "tractor"), (stored["trucks"], "truck")):
-            for item_id in ids:
-                item = equipment.get(item_id)
-                if not item or item["kind"] != kind:
-                    raise ValueError("Equipamento não encontrado na frota da unidade.")
-                if item_id not in previous and item["status"] not in ALLOCATABLE_STATUSES:
-                    raise ValueError(f"{EQUIPMENT_KINDS[kind]} {item['prefix']} está em "
-                                     f"{EQUIPMENT_STATUSES[item['status']].lower()}: mude a situação antes.")
-                for owner, plan in plans.items():
-                    if owner == front or item_id not in plan_equipment(plan):
-                        continue
-                    if owner in move.items:  # frente com fertirrigação no dia: troca de frente conferida
-                        if kind == "truck":
-                            move.check_truck(item, owner, front)
-                        moved.add(item_id)
-                    taken_from.setdefault(owner, set()).add(item_id)
-        # Tira da frente de origem (no plano do dia) o que veio para esta.
-        for owner, ids in taken_from.items():
-            write_plan(conn, unit, work_date, owner, without_equipment(plans[owner], ids), user_id)
-            for item_id in ids & moved:
-                log_event(conn, unit, work_date, user_id, equipment[item_id], "move",
-                          f"{names.get(owner, owner)} → {names.get(front, front)}")
-        selected = set(stored["tractors"]) | set(stored["trucks"])
-        for item_id in selected - previous - moved:
-            log_event(conn, unit, work_date, user_id, equipment[item_id], "allocate", f"Alocado na {names.get(front, front)}")
-        for item_id in previous - selected:
-            if item_id in equipment:
-                log_event(conn, unit, work_date, user_id, equipment[item_id], "release", f"Saiu da {names.get(front, front)}")
-                if equipment[item_id]["status"] == "active":
-                    set_status(conn, equipment[item_id], "available", user_id)
-        for item_id in selected:
-            if equipment[item_id]["status"] == "available":
-                set_status(conn, equipment[item_id], "active", user_id)
+        moved, move = _apply_plan(conn, unit, work_date, front, stored, user_id)
         if clean["radius"] is not None:
             entry = move.items.get(front) or {}
             if not entry.get("sector") or not stored["base"]:
                 raise ValueError("Para gravar o raio, a frente precisa do setor lançado e da base de carregamento.")
             save_sector_radius(conn, entry["sector"], stored["base"], clean["radius"], user_id, farm=entry.get("farm") or "")
-        write_plan(conn, unit, work_date, front, stored, user_id)
+    return {"ok": True, "moved": len(moved)}
+
+
+def _raw_plan(plan: dict[str, Any]) -> dict[str, Any]:
+    """Plano gravado (ou copiado do último dia) sem os campos de leitura, pronto para regravar."""
+    stored = {key: value for key, value in plan.items() if key not in {"work_date", "carried", "updated_at", "updated_by"}}
+    stored.setdefault("base", "")
+    stored["tractors"] = list(stored.get("tractors", []))
+    stored["trucks"] = list(stored.get("trucks", []))
+    return stored
+
+
+def allocate_fert_equipment(user_id: int, payload: Any) -> dict[str, Any]:
+    """Quadro de alocação: leva um CV/trator para uma frente (``service_front_id``) ou o libera
+    (sem frente). Muda só a equipe; base e parâmetros do plano de cada frente ficam como estão."""
+    if not isinstance(payload, dict):
+        raise ValueError("Alocação inválida.")
+    unit = fert_unit(payload.get("unit_code"))
+    work_date = _normalize_work_date(payload.get("work_date"))
+    equipment_id = _ids([payload.get("equipment_id")], "equipamentos")[0]
+    target = payload.get("service_front_id")
+    target = None if target in (None, "") else parse_front_id(target)
+    with connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _require_access(conn, user_id, permission="fill", unit=unit)
+        validate_actor(conn, user_id)
+        item = next((entry for entry in unit_equipment(conn, unit) if entry["id"] == equipment_id), None)
+        if not item:
+            raise ValueError("Equipamento não encontrado na frota da unidade.")
+        key = "trucks" if item["kind"] == "truck" else "tractors"
+        plans = read_plans(conn, unit, work_date)
+        fronts = fert_items(conn, unit, work_date)
+        if target is None:
+            owner = next((front for front, plan in plans.items()
+                          if front in fronts and equipment_id in plan_equipment(plan)), None)
+            if owner is None:
+                raise ValueError(f"{EQUIPMENT_KINDS[item['kind']]} {item['prefix']} já está disponível.")
+            _apply_plan(conn, unit, work_date, owner, without_equipment(_raw_plan(plans[owner]), {equipment_id}), user_id)
+            return {"ok": True, "moved": 0, "released": True}
+        require_unit_front(conn, target, unit)
+        if target not in fronts:
+            raise ValueError("A frente não está com fertirrigação no dia.")
+        stored = _raw_plan(plans.get(target, {}))
+        if equipment_id in stored[key]:
+            return {"ok": True, "moved": 0}
+        stored[key] = [*stored[key], equipment_id]
+        moved, _ = _apply_plan(conn, unit, work_date, target, stored, user_id)
     return {"ok": True, "moved": len(moved)}

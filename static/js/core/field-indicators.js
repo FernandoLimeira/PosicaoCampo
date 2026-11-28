@@ -129,11 +129,33 @@ function fieldIndicatorSum(values) {
   return numbers.length ? numbers.reduce((sum, value) => sum + Number(value), 0) : null;
 }
 
+// ATR médio geral das unidades: o ATR de cada unidade vale para toda a cana que ela moeu, então
+// cada uma pesa pela moagem do dia (processado, já com a correção do analista):
+// Σ(ATR × moagem) ÷ Σ(moagem). A amostra analisada só define o ATR da unidade (usado sem
+// arredondar). Unidade sem moagem no dia não entra; sem moagem em nenhuma, não há ATR geral.
+function fieldUnitsAtr(items) {
+  let weight = 0;
+  let atrTons = 0;
+  let count = 0;
+  let withoutMilling = 0;
+  for (const item of items) {
+    const exact = item.atrSample > 0 && item.atrWeight > 0 ? item.atrSample / item.atrWeight : Number(item.atr);
+    if (!(exact > 0)) continue;
+    if (!(Number(item.day) > 0)) {
+      withoutMilling += 1;
+      continue;
+    }
+    weight += Number(item.day);
+    atrTons += exact * Number(item.day);
+    count += 1;
+  }
+  return { atr: weight > 0 ? atrTons / weight : null, count, weight, withoutMilling };
+}
+
 // Totais das unidades: frentes, indústrias em operação, moagem/entrega/estoque do turno,
-// ATR médio geral ponderado pelo peso das cargas com ATR informado,
-// processado e projeção do dia.
+// ATR médio geral ponderado pela moagem do dia, processado e projeção do dia.
 function fieldIndicatorTotals(items) {
-  const atr = fieldWeightedAtr(items.map(item => [item.atr, item.atrWeight ?? item.day, item.atrSample]));
+  const atr = fieldUnitsAtr(items);
   return {
     units: items.length,
     fronts: items.reduce((sum, item) => sum + item.rows.length, 0),
@@ -145,6 +167,7 @@ function fieldIndicatorTotals(items) {
     atr: atr.atr,
     atrUnits: atr.count,
     atrWeighted: atr.weight > 0,
+    atrWithoutMilling: atr.withoutMilling,
     day: fieldIndicatorSum(items.map(item => item.day)),
     deliveryDay: fieldIndicatorSum(items.map(item => item.deliveryDay)),
     projection: fieldIndicatorSum(items.map(item => item.projection))

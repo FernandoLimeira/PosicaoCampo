@@ -1,4 +1,4 @@
-"""Fertirrigação: frota da unidade (cadastro, situação e gás dos CVs) e raio setor × base."""
+"""Fertirrigação: frota da unidade (cadastro, situação e gás dos CVs)."""
 from __future__ import annotations
 
 import sqlite3
@@ -7,13 +7,13 @@ from typing import Any
 
 from ....services.fert_dimensioning import clean_params
 from ...storage import connection, validate_actor
-from ..access import _require_access, _require_configure
+from ..access import _require_access
 from ..common import _clean_text, _normalize_work_date
 from .common import (
-    ALLOCATABLE_STATUSES, EQUIPMENT_KINDS, EQUIPMENT_STATUSES, FUELS, MAX_EQUIPMENT, base_key, fert_unit, front_names,
+    ALLOCATABLE_STATUSES, EQUIPMENT_KINDS, EQUIPMENT_STATUSES, FUELS, MAX_EQUIPMENT, fert_unit, front_names,
     log_event, one_equipment, today,
 )
-from .sources import plan_equipment, read_plans, save_sector_radius, without_equipment, write_plan
+from .sources import plan_equipment, read_plans, without_equipment, write_plan
 
 _UNSET = object()
 
@@ -157,26 +157,3 @@ def delete_fert_equipment(user_id: int, unit_code: Any, equipment_id: int) -> No
         conn.execute("DELETE FROM production_fert_equipment WHERE id=?", (equipment_id,))
         log_event(conn, unit, today(), user_id, {"id": equipment_id, "prefix": row["prefix"], "kind": row["kind"]},
                   "delete", "Excluído da frota")
-
-
-# Raio setor × base (importado da aba RAIO): substitui a tabela inteira.
-def require_fert_radius_import(user_id: int) -> None:
-    with connection() as conn:
-        _require_configure(conn, user_id)
-
-
-def import_fert_radius(user_id: int, records: list[dict[str, Any]]) -> dict[str, Any]:
-    """Importa a aba RAIO: atualiza os setores + bases do arquivo e mantém os digitados à mão."""
-    from ...service_orders import sector_key
-
-    if not isinstance(records, list) or not records:
-        raise ValueError("Nenhum raio válido foi encontrado no arquivo.")
-    rows = {(sector_key(record["sector"]), base_key(record["base"])): record for record in records}
-    with connection() as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        _require_configure(conn, user_id)
-        validate_actor(conn, user_id)
-        for record in rows.values():
-            save_sector_radius(conn, record["sector"], record["base"], float(record["radius_km"]), user_id,
-                               farm=record.get("farm", ""), municipality=record.get("municipality", ""))
-    return {"imported": len(rows), "sectors": len({key for key, _ in rows})}

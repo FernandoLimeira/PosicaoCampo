@@ -494,7 +494,7 @@ class PageTests(unittest.TestCase):
                                  "producao/production-catalog.js",
                                  "producao/production-queries.js", "producao/production-fert.js",
                                  "producao/production-fert-week.js", "producao/production-fert-plan.js",
-                                 "producao/production-fert-fleet.js"],
+                                 "producao/production-fert-fleet.js", "producao/production-fert-dispatch.js"],
             "/emitir-posicao-global": core + [
                 "core/field-fronts.js", "core/field-indicators.js", "reports-export/shared-drawing.js", "reports-export/field-report-data.js",
                 "reports-export/global-report.js", "reports-export/sacarose-export.js",

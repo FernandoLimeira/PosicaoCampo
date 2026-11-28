@@ -216,14 +216,14 @@ function globalDrawSummary(ctx, units, data) {
   globalDrawText(ctx, `entrega ${fieldIndicatorNumber(delivery)} t/h`, x, top + 77, width - 28, globalFont(11.5, '500'), GLOBAL_COLORS.muted);
   globalDrawText(ctx, `estoque ${fieldIndicatorNumber(stock)} cargas`, x, top + 93, width - 28, globalFont(11.5, '500'), GLOBAL_COLORS.muted);
 
-  // 4. ATR médio geral: média do ATR das unidades com pesagem.
+  // 4. ATR médio geral: ATR das unidades ponderado pela moagem do dia de cada uma.
   const atr = totals.atr;
   x = card(3, GLOBAL_COLORS.card, GLOBAL_COLORS.atrBorder);
   label('ATR MÉDIO GERAL', x, top + 20, GLOBAL_COLORS.atrLabel);
   const atrText = fieldIndicatorNumber(atr, 2);
   globalDrawText(ctx, atrText, x, top + 50, width - 64, bigFont);
   globalDrawText(ctx, 'kg/t', x + Math.min(width - 64, globalTextWidth(ctx, atrText, bigFont)) + 5, top + 54, 34, globalFont(15, 'bold'));
-  const atrNote = totals.atrWeighted ? 'média ponderada pelo peso' : totals.atrUnits ? 'ATR informado' : 'sem ATR informado';
+  const atrNote = totals.atrWeighted ? 'média ponderada pela moagem' : totals.atrWithoutMilling ? 'sem moagem para ponderar' : 'sem ATR informado';
   globalDrawText(ctx, atrNote, x, top + 82,
     width - 28, globalFont(12, '500'), GLOBAL_COLORS.muted);
 
